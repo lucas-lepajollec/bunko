@@ -1,0 +1,234 @@
+import { z } from 'zod';
+import type { FilterChange } from '@/types/shared';
+const text = z.string().max(20_000);
+const id = z.number().int().positive().max(2_147_483_647);
+export const sourceId = z
+  .string()
+  .regex(/^\d{1,19}$/)
+  .refine(
+    (v) => /^\d{1,19}$/.test(v) && BigInt(v) > 0n && BigInt(v) <= 9223372036854775807n,
+    'Source ID must be a positive signed 64-bit decimal string',
+  );
+export const mediaType = z.enum(['MANGA', 'NOVEL', 'ANIME']);
+const httpUrl = z
+  .string()
+  .max(2048)
+  .refine((v) => {
+    try {
+      const u = new URL(v);
+      return (
+        ['http:', 'https:'].includes(u.protocol) &&
+        !u.username &&
+        !u.password &&
+        !u.search &&
+        !u.hash
+      );
+    } catch {
+      return false;
+    }
+  }, 'Use an HTTP(S) base URL without credentials, query or fragment');
+const resourceUrl = z
+  .string()
+  .max(2048)
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+    } catch {
+      return false;
+    }
+  }, 'Use an HTTP(S) resource URL without embedded credentials');
+const nullableUrl = resourceUrl.nullable();
+const sourceImage = z
+  .union([resourceUrl, z.string().max(2048).startsWith('/api/suwayomi/image?path=')])
+  .nullable();
+export const selection = z.object({
+  suwayomiMangaId: id,
+  sourceId,
+  sourceName: z.string().min(1).max(300),
+});
+export const media = z.object({
+  id: z.string().min(1).max(300),
+  type: mediaType,
+  title: z.string().min(1).max(500),
+  altTitles: z.array(text).max(200),
+  anilistId: id.nullable(),
+  mangadexId: z.uuid().nullable(),
+  mangaUpdatesId: z.string().regex(/^\d+$/).max(30).nullable(),
+  coverUrl: nullableUrl,
+  bannerUrl: nullableUrl,
+  synopsis: text.nullable(),
+  genres: z.array(text).max(100),
+  authors: z.array(text).max(100),
+  score: z.number().min(0).max(100).nullable(),
+  status: z.string().max(100).nullable(),
+  chapters: z.number().nonnegative().nullable(),
+  episodes: z.number().nonnegative().nullable(),
+  webUrl: nullableUrl,
+  providers: z.array(z.enum(['anilist', 'mangadex', 'mangaupdates', 'local'])).max(4),
+  sources: z
+    .array(
+      z.object({
+        sourceId,
+        sourceName: z.string().max(300),
+        suwayomiMangaId: id,
+        mangaUrl: z.string().max(2048),
+        thumbnailUrl: sourceImage,
+        lang: z.string().max(10),
+      }),
+    )
+    .max(100),
+  trackedId: id.nullable(),
+  kavitaSeriesId: id.nullable(),
+  format: z
+    .enum(['MANGA', 'MANHWA', 'MANHUA', 'ONE_SHOT', 'LIGHT_NOVEL', 'WEB_NOVEL'])
+    .nullable()
+    .default(null),
+  origin: z.string().max(8).nullable().default(null),
+  year: z.number().int().min(0).max(3000).nullable().default(null),
+  volumes: z.number().nonnegative().nullable().default(null),
+  color: z
+    .string()
+    .regex(/^#[0-9a-f]{6}$/i)
+    .nullable()
+    .default(null),
+  popularity: z.number().nonnegative().nullable().default(null),
+  startDate: z
+    .string()
+    .regex(/^\d{4}(-\d{2}(-\d{2})?)?$/)
+    .nullable()
+    .default(null),
+});
+export const mediaId = z
+  .string()
+  .max(80)
+  .regex(/^(?:anilist|mangadex|mangaupdates|suwayomi):[0-9a-zA-Z-]+$/, 'Unknown media identifier');
+export const discoverQuery = z
+  .object({
+    kind: z.enum(['all', 'manga', 'manhwa', 'manhua', 'novel']).optional(),
+    sort: z.enum(['trending', 'popular', 'score', 'new']).optional(),
+    genre: z.string().max(60).optional(),
+    status: z.enum(['RELEASING', 'FINISHED']).optional(),
+    season: z.enum(['WINTER', 'SPRING', 'SUMMER', 'FALL']).optional(),
+    year: z.coerce.number().int().min(1900).max(2100).optional(),
+    page: z.coerce.number().int().min(1).max(200).optional(),
+    perPage: z.coerce.number().int().min(1).max(50).optional(),
+  })
+  .refine((q) => !q.season || q.year !== undefined, {
+    message: 'Season requires a year',
+    path: ['year'],
+  });
+export const searchParams = z.object({
+  q: z.string().trim().min(1).max(200),
+  type: mediaType.optional(),
+});
+export const settingsPatch = z
+  .object({
+    suwayomiUrl: httpUrl.optional(),
+    suwayomiUsername: z.string().max(300).optional(),
+    suwayomiPassword: z.string().max(2000).optional(),
+    kavitaUrl: z.union([httpUrl, z.literal('')]).optional(),
+    kavitaApiKey: z.string().max(2000).optional(),
+    kavitaAuthMode: z.enum(['api-key', 'jwt']).optional(),
+    sonarrUrl: z.union([httpUrl, z.literal('')]).optional(),
+    sonarrApiKey: z.string().max(2000).optional(),
+    prowlarrUrl: z.union([httpUrl, z.literal('')]).optional(),
+    prowlarrApiKey: z.string().max(2000).optional(),
+    kavitaLibraryPath: z
+      .string()
+      .min(1)
+      .max(2048)
+      .refine(
+        (v) => v.startsWith('/') && !v.split('/').includes('..'),
+        'Use an absolute Kavita container path',
+      )
+      .optional(),
+    favoriteSourceIds: z.array(sourceId).max(100).optional(),
+    extensionRepos: z.array(httpUrl).max(20).optional(),
+    updateIntervalMinutes: z.number().int().min(5).max(1440).optional(),
+  })
+  .strict();
+export const action = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('refresh') }),
+  z.object({ action: z.literal('update_all') }),
+  ...(['install', 'update', 'uninstall'] as const).map((a) =>
+    z.object({ action: z.literal(a), id: z.string().min(1).max(300) }),
+  ),
+]);
+export const enqueueBody = z.object({ chapterIds: z.array(id).min(1).max(500), media });
+export const releaseQuery = z.object({
+  provider: z.enum(['sonarr', 'prowlarr']).optional(),
+  query: z.string().trim().min(1).max(300).optional(),
+  seriesId: z.coerce.number().int().positive().optional(),
+  seasonNumber: z.coerce.number().int().nonnegative().optional(),
+  episodeNumber: z.coerce.number().int().positive().optional(),
+});
+export const grabBody = z.object({
+  provider: z.enum(['sonarr', 'prowlarr']),
+  guid: z.string().min(1).max(4096),
+  indexerId: id,
+});
+export const readingStatus = z.enum(['PLANNING', 'READING', 'PAUSED', 'COMPLETED', 'DROPPED']);
+export const trackBody = z
+  .object({
+    media,
+    status: readingStatus.optional(),
+    autoDownload: z.boolean().optional(),
+    kavitaSeriesId: id.nullable().optional(),
+    sources: z.array(selection).max(20).optional(),
+  })
+  .refine(
+    (v) => !v.autoDownload || (v.sources?.length && v.media.type !== 'ANIME'),
+    'Automatic downloads require manga/novel sources',
+  );
+export const trackPatch = z.object({
+  id,
+  status: readingStatus.optional(),
+  autoDownload: z.boolean().optional(),
+  kavitaSeriesId: id.nullable().optional(),
+  sources: z.array(selection).max(20).optional(),
+});
+
+export const sourcePreferences = z
+  .object({
+    enabledSourceIds: z
+      .array(sourceId)
+      .max(500)
+      .refine((v) => new Set(v).size === v.length, 'Duplicate source IDs'),
+    languages: z
+      .array(z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z]{2,4})?$/))
+      .min(1)
+      .max(50),
+  })
+  .strict();
+// Bound recursion as well as body bytes so malicious nested groups cannot overflow the stack.
+function filterChangeSchema(depth: number): z.ZodType<FilterChange> {
+  return z
+    .object({
+      position: z.number().int().min(0).max(1000),
+      selectState: z.number().int().min(0).max(10000).optional(),
+      textState: z.string().max(2000).optional(),
+      checkBoxState: z.boolean().optional(),
+      triState: z.enum(['IGNORE', 'INCLUDE', 'EXCLUDE']).optional(),
+      sortState: z
+        .object({ index: z.number().int().min(0).max(10000), ascending: z.boolean() })
+        .strict()
+        .optional(),
+      groupChange:
+        depth > 0 ? z.lazy(() => filterChangeSchema(depth - 1)).optional() : z.never().optional(),
+    })
+    .strict()
+    .refine(
+      (v) => Object.keys(v).filter((k) => k !== 'position').length === 1,
+      'Supply exactly one filter state',
+    );
+}
+export const browseBody = z
+  .object({
+    mode: z.enum(['POPULAR', 'LATEST', 'SEARCH']),
+    query: z.string().max(200).optional(),
+    page: z.number().int().min(1).max(10000),
+    filters: z.array(filterChangeSchema(8)).max(100).optional(),
+  })
+  .strict();
+export const downloadControl = z.object({ action: z.enum(['pause', 'resume', 'clear']) }).strict();

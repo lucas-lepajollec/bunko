@@ -1,0 +1,110 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/bricolage-grotesque/index.css';
+@import '@fontsource/instrument-serif/400.css';
+@import '@fontsource/instrument-serif/400-italic.css';
+
+/*
+ * "Cinéma × Librairie": full-bleed artwork and bold display titles, organised like a bookshop
+ * (numbered shelves, serif asides, tables of contents). Chrome stays neutral; colour comes from
+ * the artwork and the per-title accent (`--accent`, AniList cover colour).
+ */
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', var(--font-geist-sans), sans-serif;
+  --font-serif: 'Instrument Serif', Georgia, serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --color-bg: #0b0a09;
+  --color-raised: #151311;
+  --color-hover: #1c1a18;
+  --color-fg: #f2eee8;
+  --color-soft: #e2dbd0;
+  --color-mid: #cfc8bd;
+  --color-muted: #9b958c;
+  --color-faint: #6f6a63;
+  --color-line: rgb(236 231 223 / 0.1);
+  --color-line-strong: rgb(236 231 223 / 0.25);
+  --color-ok: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  @keyframes shimmer {
+    from {
+      background-position: -200% 0;
+    }
+    to {
+      background-position: 200% 0;
+    }
+  }
+}
+
+:root {
+  color-scheme: dark;
+  --accent: #e2dbd0;
+}
+
+html {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scrollbar-color: #2e2a27 transparent;
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--color-bg);
+}
+
+::selection {
+  background: rgb(242 238 232 / 0.2);
+}
+
+/* In the base layer so components (e.g. search fields with their own focus state) can override it. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid #f2eee8;
+    outline-offset: 2px;
+  }
+}
+
+/* Book-on-a-shelf shadow: a thin spine plus a soft drop. */
+.book {
+  border-radius: 4px;
+  box-shadow:
+    5px 0 0 rgb(0 0 0 / 0.25),
+    0 18px 30px rgb(0 0 0 / 0.45);
+}
+
+/* Native search clear buttons clash with the editorial inputs. */
+input[type='search']::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #151311 0%, #211e1b 50%, #151311 100%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.top-numeral {
+  color: var(--color-bg);
+  -webkit-text-stroke: 3px #4b4640;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

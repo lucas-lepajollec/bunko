@@ -1,0 +1,53 @@
+# KaviSeerr with an internal Suwayomi engine and FlareSolverr. Only the app port is published.
+services:
+  kaviseerr:
+    # Published by .github/workflows/docker.yml; `docker compose up --build` builds from source instead.
+    image: ghcr.io/lucas-lepajollec/kaviseer:latest
+    build: .
+    ports:
+      - "2512:2512"
+    environment:
+      SUWAYOMI_URL: http://suwayomi:4567
+    volumes:
+      - app-data:/data
+      - library:/library
+    depends_on:
+      suwayomi:
+        condition: service_started
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+  suwayomi:
+    image: ghcr.io/suwayomi/suwayomi-server:v2.4.2366
+    environment:
+      BIND_IP: 0.0.0.0
+      BIND_PORT: "4567"
+      WEB_UI_ENABLED: "false"
+      AUTO_DOWNLOAD_CHAPTERS: "false"
+      DOWNLOAD_AS_CBZ: "true"
+      FLARESOLVERR_ENABLED: "true"
+      FLARESOLVERR_URL: http://flaresolverr:8191
+    volumes:
+      - suwayomi-data:/home/suwayomi/.local/share/Tachidesk
+    depends_on:
+      flaresolverr:
+        condition: service_started
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:v3.5.2
+    environment:
+      LOG_LEVEL: warn
+      TZ: Europe/Paris
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  app-data:
+  suwayomi-data:
+  library:

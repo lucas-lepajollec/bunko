@@ -1,0 +1,19 @@
+node_modules/
+.next/
+.env*
+!.env.example
+data/
+media/
+coverage/
+*.tsbuildinfo
+AGENTS.override.md
+.project-local/
+# local tooling and reports
+.agents/
+.aws/
+.codex/
+playwright-report/
+test-results/
+*.log
+.DS_Store
+*.pem

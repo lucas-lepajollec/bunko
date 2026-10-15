@@ -1,0 +1,15 @@
+.git
+node_modules
+.next
+.env*
+data
+media
+coverage
+*.tsbuildinfo
+.project-local
+.github
+.agents
+.aws
+.codex
+AGENTS.override.md
+*.log

@@ -1,0 +1,472 @@
+'use client';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { SWRConfig, useSWRConfig } from 'swr';
+import type { DownloadBatch, Extension } from '@/types/shared';
+import { I18nProvider, useI18n } from '@/i18n/I18nProvider';
+import { UI_LANGUAGES, type UiLanguage } from '@/i18n/messages';
+import { UNAUTHORIZED_EVENT, send, useApi } from '@/lib/client/api';
+import { cx, errorText, field, primaryButton } from './ui';
+import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
+
+export function Providers({ children }: { children: ReactNode }) {
+  return (
+    <I18nProvider>
+      <SWRConfig value={{ revalidateOnFocus: false }}>
+        <AuthGate>{children}</AuthGate>
+      </SWRConfig>
+    </I18nProvider>
+  );
+}
+
+function AuthGate({ children }: { children: ReactNode }) {
+  const { data, error, isLoading, mutate } = useApi<{ authenticated: boolean }>('/api/auth');
+  const { mutate: mutateAll } = useSWRConfig();
+  useEffect(() => {
+    const onUnauthorized = () => void mutate(undefined, { revalidate: true });
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+  }, [mutate]);
+  if (isLoading) return <div className="min-h-dvh" />;
+  if (error || !data?.authenticated)
+    return (
+      <Login
+        onDone={async () => {
+          await mutateAll(() => true, undefined, { revalidate: true });
+        }}
+      />
+    );
+  return (
+    <>
+      <Header />
+      <Shortcuts />
+      <div className="pb-24 md:pb-0">{children}</div>
+      <TabBar />
+    </>
+  );
+}
+
+function Logo({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 26 26" fill="none" aria-hidden>
+      <path
+        d="M5 4h9a3 3 0 0 1 3 3v15l-6-3-6 3V4Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M17 7h4v15l-4-2"
+        stroke="currentColor"
+        strokeOpacity="0.45"
+        strokeWidth="2.2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function LanguageSelect({ className }: { className?: string }) {
+  const { language, setLanguage, t } = useI18n();
+  return (
+    <select
+      aria-label={t('settings.language')}
+      value={language}
+      onChange={(e) => setLanguage(e.target.value as UiLanguage)}
+      className={cx('h-9 rounded-full border-0 bg-white/[0.08] px-3 text-sm text-fg', className)}
+    >
+      {UI_LANGUAGES.map((l) => (
+        <option key={l.id} value={l.id}>
+          {l.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function Login({ onDone }: { onDone: () => Promise<void> }) {
+  const { t } = useI18n();
+  const [token, setToken] = useState('');
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState(false);
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await send('/api/auth', 'POST', { token: token.trim() });
+      await onDone();
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4">
+      <div
+        aria-hidden
+        className="absolute -top-40 -left-40 size-[620px] rounded-full bg-[#7aa2ff] opacity-[0.08] blur-[120px]"
+      />
+      <div className="absolute top-4 right-4">
+        <LanguageSelect />
+      </div>
+      <form onSubmit={submit} className="relative flex w-full max-w-md flex-col gap-6">
+        <div className="flex items-center gap-3">
+          <Logo size={34} />
+          <span className="font-display text-[44px] font-extrabold tracking-[-0.04em]">
+            KaviSeerr
+          </span>
+        </div>
+        <p className="text-soft font-serif text-[24px] leading-snug italic">{t('login.tagline')}</p>
+        <label className="text-muted flex flex-col gap-2 text-sm">
+          {t('login.token')}
+          <input
+            type="password"
+            autoComplete="current-password"
+            required
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            className={cx(field, 'h-12 text-base')}
+          />
+        </label>
+        {error !== null && (
+          <p role="alert" className="text-bad text-sm">
+            {errorText(t, error)}
+          </p>
+        )}
+        <button type="submit" disabled={busy || !token.trim()} className={primaryButton}>
+          {busy ? t('login.signingIn') : t('login.signIn')}
+        </button>
+        <div className="text-muted flex flex-col gap-2 text-[13px] leading-relaxed">
+          <span>{t('login.hint')}</span>
+          <code className="bg-raised text-mid rounded-lg px-3 py-2 font-mono text-xs break-all">
+            docker compose exec kaviseerr cat /data/access.token
+          </code>
+        </div>
+      </form>
+    </main>
+  );
+}
+
+const NAV = [
+  { href: '/', key: 'nav.home' },
+  { href: '/catalog', key: 'nav.catalog' },
+  { href: '/library', key: 'nav.library' },
+  { href: '/updates', key: 'nav.updates' },
+];
+
+function useActivity() {
+  const batches = useApi<DownloadBatch[]>('/api/downloads/batches', { refreshInterval: 5000 });
+  const extensions = useApi<Extension[]>('/api/extensions', { refreshInterval: 30 * 60_000 });
+  return {
+    active: (batches.data ?? []).filter((b) => b.state !== 'completed' && b.state !== 'error')
+      .length,
+    failed: (batches.data ?? []).filter((b) => b.state === 'error').length,
+    updates: (extensions.data ?? []).filter((e) => e.isInstalled && e.hasUpdate).length,
+  };
+}
+
+function isActive(pathname: string, href: string) {
+  return href === '/' ? pathname === '/' : pathname.startsWith(href);
+}
+
+function Header() {
+  const { t } = useI18n();
+  const pathname = usePathname();
+  const activity = useActivity();
+  const [solid, setSolid] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setSolid(window.scrollY > 24);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  return (
+    <header
+      className={cx(
+        // Content aligns with the 1440px page column on wide screens; no hard edge under the bar.
+        'fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-6 px-4 transition-[background-color,backdrop-filter] duration-300 md:h-20 md:gap-11 md:px-[max(4rem,calc((100vw-1440px)/2+4rem))]',
+        solid ? 'bg-bg/85 backdrop-blur-xl' : 'bg-gradient-to-b from-black/45 to-transparent',
+      )}
+    >
+      <Link href="/" className="flex items-center gap-2.5 text-white">
+        <Logo />
+        <span className="font-display text-[19px] font-extrabold tracking-[-0.03em] md:text-[21px]">
+          KaviSeerr
+        </span>
+      </Link>
+      <nav aria-label={t('nav.label')} className="hidden gap-7 text-[15px] md:flex">
+        {NAV.map((n) => (
+          <Link
+            key={n.href}
+            href={n.href}
+            aria-current={isActive(pathname, n.href) ? 'page' : undefined}
+            className={
+              isActive(pathname, n.href) ? 'font-semibold text-white' : 'text-mid hover:text-white'
+            }
+          >
+            {t(n.key)}
+          </Link>
+        ))}
+      </nav>
+      <div className="ml-auto flex items-center gap-1">
+        <QuickSearch variant="inline" />
+        <button
+          type="button"
+          aria-label={t('nav.search')}
+          onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
+          className="relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08] lg:hidden"
+        >
+          <SearchIcon size={20} />
+        </button>
+        <IconLink
+          href="/downloads"
+          label={
+            activity.active
+              ? t('nav.downloadsActive', { count: activity.active })
+              : t('nav.downloads')
+          }
+          className="hidden md:flex"
+        >
+          <DownloadIcon />
+          {activity.active > 0 && (
+            <span className="bg-fg text-bg absolute top-1.5 right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold">
+              {activity.active}
+            </span>
+          )}
+        </IconLink>
+        <IconLink
+          href="/sources"
+          label={
+            activity.updates
+              ? t('nav.sourcesUpdates', { count: activity.updates })
+              : t('nav.sources')
+          }
+          className="hidden md:flex"
+        >
+          <PuzzleIcon />
+          {activity.updates > 0 && (
+            <span className="bg-warn absolute top-2.5 right-2.5 size-2 rounded-full" />
+          )}
+        </IconLink>
+        <IconLink href="/settings" label={t('nav.settings')}>
+          <SlidersIcon />
+        </IconLink>
+      </div>
+    </header>
+  );
+}
+
+function IconLink({
+  href,
+  label,
+  children,
+  className,
+}: {
+  href: string;
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-label={label}
+      title={label}
+      className={cx(
+        'relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08]',
+        className,
+      )}
+    >
+      {children}
+    </Link>
+  );
+}
+
+const TABS = [
+  { href: '/', key: 'nav.home', icon: 'M3 11 12 4l9 7v9h-6v-6H9v6H3v-9Z' },
+  {
+    href: '/catalog',
+    key: 'nav.catalog',
+    icon: 'M4 4h4v16H4zM10 4h4v16h-4zM16.5 5l3.8 1-3.9 14.5-3.8-1L16.5 5Z',
+  },
+  { href: '/search', key: 'nav.search', icon: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm9 16-3.5-3.5' },
+  {
+    href: '/library',
+    key: 'nav.libraryShort',
+    icon: 'M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2Zm4-12h6',
+  },
+  { href: '/downloads', key: 'nav.activity', icon: 'M12 4v11m-5-5 5 5 5-5M5 20h14' },
+];
+
+function TabBar() {
+  const { t } = useI18n();
+  const pathname = usePathname();
+  const activity = useActivity();
+  const badge = activity.active + activity.failed;
+  return (
+    <nav
+      aria-label={t('nav.label')}
+      className="border-line fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-[#100f0e]/92 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),12px)] backdrop-blur-xl md:hidden"
+    >
+      {TABS.map((tab) => {
+        const active =
+          tab.href === '/downloads'
+            ? /^\/(downloads|updates|sources)/.test(pathname)
+            : isActive(pathname, tab.href);
+        if (tab.href === '/search')
+          return (
+            <button
+              key={tab.href}
+              type="button"
+              onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
+              className="relative flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] text-[#8c867e]"
+            >
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d={tab.icon} />
+              </svg>
+              {t(tab.key)}
+            </button>
+          );
+        return (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            aria-current={active ? 'page' : undefined}
+            className={cx(
+              'relative flex min-h-11 flex-col items-center justify-center gap-1 text-[11px]',
+              active ? 'font-semibold text-white' : 'text-[#8c867e]',
+            )}
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d={tab.icon} />
+            </svg>
+            {t(tab.key)}
+            {tab.href === '/downloads' && badge > 0 && (
+              <span className="bg-fg text-bg absolute top-0 left-1/2 ml-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold">
+                {badge}
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+function Shortcuts() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        window.dispatchEvent(new Event(OPEN_SEARCH_EVENT));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  return <QuickSearch variant="overlay" />;
+}
+
+export function SearchIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+export function DownloadIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden
+    >
+      <path d="M12 4v11" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 20h14" />
+    </svg>
+  );
+}
+function PuzzleIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M9 4h4v3a2 2 0 1 0 4 0V4h3v6h-3a2 2 0 1 0 0 4h3v6h-6v-3a2 2 0 1 0-4 0v3H4v-6h3a2 2 0 1 0 0-4H4V4h5Z" />
+    </svg>
+  );
+}
+function SlidersIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden
+    >
+      <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+      <circle cx="16" cy="7" r="2" />
+      <circle cx="10" cy="17" r="2" />
+    </svg>
+  );
+}
+
+/** Content wrapper for pages without a hero: clears the fixed header. */
+export function Page({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <main
+      className={cx(
+        'mx-auto flex w-full max-w-[1440px] flex-col gap-6 px-4 pt-20 md:gap-7 md:px-16 md:pt-32',
+        className,
+      )}
+    >
+      {children}
+    </main>
+  );
+}

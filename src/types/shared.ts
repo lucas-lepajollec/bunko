@@ -1,0 +1,381 @@
+/** Browser-safe API contract. No database/server imports in this file. */
+export type MediaType = 'MANGA' | 'NOVEL' | 'ANIME';
+export type Provider = 'anilist' | 'mangadex' | 'mangaupdates' | 'local';
+/** Reading format derived from provider format and country of origin. */
+export type MediaFormat = 'MANGA' | 'MANHWA' | 'MANHUA' | 'ONE_SHOT' | 'LIGHT_NOVEL' | 'WEB_NOVEL';
+export interface SourceMatch {
+  sourceId: string;
+  sourceName: string;
+  suwayomiMangaId: number;
+  mangaUrl: string;
+  thumbnailUrl: string | null;
+  lang: string;
+}
+export interface UnifiedMedia {
+  id: string;
+  type: MediaType;
+  title: string;
+  altTitles: string[];
+  anilistId: number | null;
+  mangadexId: string | null;
+  mangaUpdatesId: string | null;
+  coverUrl: string | null;
+  bannerUrl: string | null;
+  synopsis: string | null;
+  genres: string[];
+  authors: string[];
+  score: number | null;
+  status: string | null;
+  chapters: number | null;
+  episodes: number | null;
+  webUrl: string | null;
+  providers: Provider[];
+  sources: SourceMatch[];
+  trackedId: number | null;
+  kavitaSeriesId: number | null;
+  format: MediaFormat | null;
+  /** ISO country of origin (JP, KR, CN, TW...). */
+  origin: string | null;
+  year: number | null;
+  volumes: number | null;
+  /** Dominant cover colour supplied by AniList, used as a per-title accent. */
+  color: string | null;
+  popularity: number | null;
+  /** Publication start as a partial ISO date: "YYYY", "YYYY-MM" or "YYYY-MM-DD". */
+  startDate: string | null;
+}
+export interface RelatedMedia {
+  relation: string;
+  media: UnifiedMedia;
+}
+export interface MediaDetail extends UnifiedMedia {
+  tags: string[];
+  relations: RelatedMedia[];
+  recommendations: UnifiedMedia[];
+}
+export type DiscoverKind = 'all' | 'manga' | 'manhwa' | 'manhua' | 'novel';
+/** "new" = most recent publication start first, never future or undated titles. */
+export type DiscoverSort = 'trending' | 'popular' | 'score' | 'new';
+/** Quarter-based seasons, AniList convention: WINTER Jan–Mar, SPRING Apr–Jun, SUMMER Jul–Sep, FALL Oct–Dec. */
+export type Season = 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL';
+export interface DiscoverQuery {
+  kind?: DiscoverKind;
+  sort?: DiscoverSort;
+  genre?: string;
+  status?: 'RELEASING' | 'FINISHED';
+  /** Restrict to titles whose publication started in this season (requires `year`). */
+  season?: Season;
+  /** Restrict to titles whose publication started in this year (alone or with `season`). */
+  year?: number;
+  page?: number;
+  perPage?: number;
+}
+export interface DiscoverPage {
+  items: UnifiedMedia[];
+  page: number;
+  hasNextPage: boolean;
+}
+/** A title found on a Suwayomi source, scored against the requested media (0..1). */
+export interface SourceCandidate extends SourceMatch {
+  title: string;
+  score: number;
+}
+export type MatchEventMap = {
+  sources: { sources: Source[] };
+  match: { source: Source; candidates: SourceCandidate[]; durationMs: number };
+  source_error: { source: Source; code: string };
+  done: { completed: number };
+  error: ApiError['error'];
+};
+export interface ProviderOutcome {
+  provider: Provider;
+  status: 'ok' | 'error';
+  durationMs: number;
+}
+export interface SearchResponse {
+  results: UnifiedMedia[];
+  providers: ProviderOutcome[];
+  durationMs: number;
+}
+export interface Source {
+  id: string;
+  name: string;
+  lang: string;
+}
+export interface SourceResult {
+  source: Source;
+  results: SourceMatch[];
+  titles: string[];
+  hasNextPage: boolean;
+  durationMs: number;
+}
+export interface Extension {
+  id: string;
+  name: string;
+  lang: string;
+  versionName: string;
+  isInstalled: boolean;
+  hasUpdate: boolean;
+  iconUrl: string;
+}
+export type ExtensionAction =
+  | { action: 'refresh' }
+  | { action: 'update_all' }
+  | { action: 'install' | 'update' | 'uninstall'; id: string };
+export interface ChapterVariant {
+  id: number;
+  mangaId: number;
+  sourceId: string;
+  sourceName: string;
+  name: string;
+  number: number | null;
+  scanlator: string | null;
+  isDownloaded: boolean;
+}
+export interface MergedChapter {
+  key: string;
+  number: number | null;
+  variants: ChapterVariant[];
+}
+export interface ChaptersResponse {
+  chapters: MergedChapter[];
+  errors: { mangaId: number; code: string }[];
+}
+export interface ChapterSelection {
+  suwayomiMangaId: number;
+  sourceId: string;
+  sourceName: string;
+}
+export interface DownloadItem {
+  state: string;
+  progress: number;
+  tries: number;
+  position: number;
+  chapter: { id: number; name: string; chapterNumber: number };
+  manga: { id: number; title: string };
+}
+export interface DownloadStatus {
+  state: string;
+  queue: DownloadItem[];
+}
+export interface EnqueueRequest {
+  chapterIds: number[];
+  media: UnifiedMedia;
+}
+export interface DownloadBatch {
+  id: string;
+  media: UnifiedMedia;
+  chapterIds: number[];
+  importedIds: number[];
+  state: 'enqueuing' | 'downloading' | 'importing' | 'scanning' | 'completed' | 'error';
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface DownloadsSnapshot {
+  status: DownloadStatus;
+  batches: DownloadBatch[];
+}
+export interface Release {
+  provider: 'sonarr' | 'prowlarr';
+  guid: string;
+  indexerId: number;
+  title: string;
+  indexer: string;
+  sizeBytes: number;
+  sizeGb: number;
+  seeders: number | null;
+  languages: string[];
+  resolution: string | null;
+  codec: string | null;
+  protocol: string;
+  rejected: boolean;
+  rejections: string[];
+  publishDate: string | null;
+}
+export interface ReleaseQuery {
+  query?: string;
+  seriesId?: number;
+  seasonNumber?: number;
+  episodeNumber?: number;
+  provider?: 'sonarr' | 'prowlarr';
+}
+export interface GrabReleaseRequest {
+  provider: 'sonarr' | 'prowlarr';
+  guid: string;
+  indexerId: number;
+}
+export interface Settings {
+  suwayomiUrl: string;
+  suwayomiUsername: string;
+  suwayomiPassword: string;
+  kavitaUrl: string;
+  kavitaApiKey: string;
+  kavitaAuthMode: 'api-key' | 'jwt';
+  sonarrUrl: string;
+  sonarrApiKey: string;
+  prowlarrUrl: string;
+  prowlarrApiKey: string;
+  kavitaLibraryPath: string;
+  favoriteSourceIds: string[];
+  extensionRepos: string[];
+  /** Worker update-check interval in minutes (5–1440), default 15. */
+  updateIntervalMinutes: number;
+}
+export type SecretSetting = 'suwayomiPassword' | 'kavitaApiKey' | 'sonarrApiKey' | 'prowlarrApiKey';
+export type PublicSettings = Omit<Settings, SecretSetting> & {
+  secretsConfigured: Record<SecretSetting, boolean>;
+};
+export type SettingsPatch = Partial<Settings>;
+export interface TrackedMedia {
+  id: number;
+  anilistId: number | null;
+  mangadexId: string | null;
+  title: string;
+  type: MediaType;
+  coverUrl: string | null;
+  kavitaSeriesId: number | null;
+  autoDownload: boolean;
+  createdAt: string;
+  media: UnifiedMedia;
+  /** Ordered by priority: index 0 is preferred for downloads. */
+  sources: ChapterSelection[];
+  status: ReadingStatus;
+  progress: LibraryProgress;
+  /** Chapters detected on sources and not yet in the library. */
+  newChapters: number;
+  lastReadAt: string | null;
+}
+/** User reading state. "Caught up" is derived (READING and nothing unread), never stored. */
+export type ReadingStatus = 'PLANNING' | 'READING' | 'PAUSED' | 'COMPLETED' | 'DROPPED';
+export interface LibraryProgress {
+  /** Highest chapter number read, from Kavita reading progress when available. */
+  read: number | null;
+  /** Chapters present in the library (imported CBZ). */
+  owned: number;
+  /** Highest chapter number known on metadata or sources. */
+  released: number | null;
+  /** Owned chapters above `read`. */
+  unread: number;
+  /** Where `read` comes from. */
+  readSource: 'kavita' | 'none';
+}
+export interface TrackPatch {
+  id: number;
+  status?: ReadingStatus;
+  autoDownload?: boolean;
+  kavitaSeriesId?: number | null;
+  sources?: ChapterSelection[];
+}
+export interface TrackRequest {
+  media: UnifiedMedia;
+  status?: ReadingStatus;
+  autoDownload?: boolean;
+  kavitaSeriesId?: number | null;
+  sources?: ChapterSelection[];
+}
+export interface ApiError {
+  error: { code: string; message: string };
+}
+export type SearchEventMap = {
+  sources: { sources: Source[] };
+  source_result: SourceResult;
+  source_error: { source: Source; code: string };
+  done: { completed: number };
+  error: ApiError['error'];
+};
+export type DownloadEventMap = { snapshot: DownloadsSnapshot; error: ApiError['error'] };
+export type ServiceState = 'ok' | 'error' | 'unconfigured';
+export interface ServicesStatus {
+  suwayomi: { state: ServiceState; version: string | null };
+  kavita: { state: ServiceState };
+}
+
+/* ---- Sources, browsing and updates (contract for /api/sources/*, /api/updates, /api/downloads/control) ---- */
+export interface SourceHealth {
+  state: 'ok' | 'slow' | 'error' | 'unknown';
+  latencyMs: number | null;
+  /** Safe error code only (e.g. UPSTREAM_TIMEOUT, CLOUDFLARE). */
+  error: string | null;
+  checkedAt: string | null;
+}
+export interface SourceInfo extends Source {
+  iconUrl: string | null;
+  /** Included in global live search. */
+  enabled: boolean;
+  /** Position in the global search order (0 first), null when disabled. */
+  priority: number | null;
+  health: SourceHealth;
+  /** Package of the extension providing the source, when known. */
+  extensionId: string | null;
+}
+export interface SourcePreferences {
+  /** Ordered list of source ids searched globally; empty means every installed source of the user's languages. */
+  enabledSourceIds: string[];
+  /** Source languages to consider (ISO codes, e.g. ["fr"]). */
+  languages: string[];
+}
+/** Mirrors Suwayomi source filters, flattened for rendering. `position` is the index in the source filter list. */
+export type SourceFilter =
+  | { kind: 'header' | 'separator'; position: number; name: string }
+  | { kind: 'select'; position: number; name: string; values: string[]; default: number }
+  | { kind: 'text'; position: number; name: string; default: string }
+  | { kind: 'checkbox'; position: number; name: string; default: boolean }
+  | { kind: 'tristate'; position: number; name: string; default: 'IGNORE' | 'INCLUDE' | 'EXCLUDE' }
+  | {
+      kind: 'sort';
+      position: number;
+      name: string;
+      values: string[];
+      default: { index: number; ascending: boolean } | null;
+    }
+  | { kind: 'group'; position: number; name: string; filters: SourceFilter[] };
+/** Mirrors Suwayomi FilterChangeInput. */
+export interface FilterChange {
+  position: number;
+  selectState?: number;
+  textState?: string;
+  checkBoxState?: boolean;
+  triState?: 'IGNORE' | 'INCLUDE' | 'EXCLUDE';
+  sortState?: { index: number; ascending: boolean };
+  groupChange?: FilterChange;
+}
+export interface BrowseRequest {
+  mode: 'POPULAR' | 'LATEST' | 'SEARCH';
+  query?: string;
+  page: number;
+  filters?: FilterChange[];
+}
+export interface BrowseItem extends SourceMatch {
+  title: string;
+  /** Linked to a tracked library entry. */
+  trackedId: number | null;
+}
+export interface BrowsePage {
+  source: SourceInfo;
+  items: BrowseItem[];
+  page: number;
+  hasNextPage: boolean;
+}
+export type UpdateState = 'pending' | 'queued' | 'downloading' | 'downloaded' | 'error';
+export interface UpdateEntry {
+  id: number;
+  trackedId: number;
+  title: string;
+  coverUrl: string | null;
+  color: string | null;
+  /** Sorted chapter numbers detected together. */
+  chapters: number[];
+  sourceName: string;
+  detectedAt: string;
+  state: UpdateState;
+}
+export interface UpdatesFeed {
+  entries: UpdateEntry[];
+  lastCheckAt: string | null;
+  nextCheckAt: string | null;
+  checking: boolean;
+  autoCount: number;
+  trackedCount: number;
+}
+export type DownloadControl = { action: 'pause' | 'resume' | 'clear' };
