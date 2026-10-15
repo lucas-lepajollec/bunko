@@ -1,78 +1,180 @@
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
+  <img src="docs/assets/logo-light.svg" width="72" height="72" alt="KaviSeerr">
+</picture>
+
 # KaviSeerr
 
-A self-hosted manga, manhwa, light-novel and anime hub connecting Suwayomi, Kavita, Sonarr and Prowlarr. The multilingual interface (English, French, Spanish, German, Italian) covers discovery, catalog filters, two-level search (catalogs plus live per-source results), Mihon-style source browsing with extension filters, title sheets with automatic source matching and a chapter table, a library with reading statuses and read/owned/released progress, new-chapter feed, downloads, extension management and settings. Desktop and mobile layouts are both supported.
+**Find a manga, webtoon or light novel, pick its chapters, read them in Kavita.**
 
-## Run with Docker
+A self-hosted reading hub that sits on top of the Suwayomi and Kavita you already run.
 
-Requirements: Docker Engine and Docker Compose v2, about 2 GB available RAM for the complete stack, outbound HTTPS for metadata and installed extensions.
+[![CI](https://github.com/lucas-lepajollec/kaviseer/actions/workflows/ci.yml/badge.svg)](https://github.com/lucas-lepajollec/kaviseer/actions/workflows/ci.yml)
+[![Docker image](https://github.com/lucas-lepajollec/kaviseer/actions/workflows/docker.yml/badge.svg)](https://github.com/lucas-lepajollec/kaviseer/pkgs/container/kaviseer)
+[![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey.svg)](LICENSE)
 
-```sh
-docker compose up -d --build --wait
-curl --fail http://localhost:2512/api/health
+[Quick start](#quick-start) · [Configuration](#configuration-and-persistence) · [Security](#security-privacy-and-limitations) · [Contributing](CONTRIBUTING.md)
+
+</div>
+
+## Overview
+
+[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server) runs Mihon/Tachiyomi-compatible extensions and downloads chapters. [Kavita](https://www.kavitareader.com/) is a great reader. Between the two, finding a title, checking which source has it and getting clean files into your library is still tedious. KaviSeerr is that missing layer:
+
+| | What it does |
+| --- | --- |
+| **Catalog first** | Instant search and browsing over AniList, MangaDex and MangaUpdates — covers, synopses, seasons and release dates, not raw source listings. |
+| **Sources second** | Each title is matched automatically to your installed extensions, ranked by title similarity. A live search across every extension finds what no catalog lists. |
+| **One click to Kavita** | Pick missing chapters, a range or a specific version per chapter. They arrive as CBZ files with embedded `ComicInfo.xml`, and Kavita rescans the series. |
+| **Follow, don't babysit** | Reading statuses, read / owned / released progress (from Kavita), automatic fetching of new chapters and a daily release feed. |
+
+KaviSeerr does not host, provide or recommend any content source, and ships with no extension repository.
+
+## Product preview
+
+The interface pairs full-bleed artwork and bold titles with a bookshop structure: numbered shelves, a table of contents for chapters, and a quiet neutral chrome tinted by each title's colour. It works on desktop and mobile, in English, French, Spanish, German and Italian. Screenshots will be added with the first tagged release.
+
+## Highlights
+
+- **Home** — this season's new series, titles to pick up again, the weekly top 10, the latest releases (newest first) and one shelf per format.
+- **Catalog** — manga, manhwa & webtoons, manhua and novels; filter by genre, status, season and year; sort by trend, popularity, score or release date.
+- **Search** — results in a dropdown as you type, from any page; then the full catalog results or a live search inside your extensions, source by source.
+- **Title sheet** — automatic source matching with priorities, merged chapter table (missing, unread, ranges, per-chapter version), bulk download, reading status, automatic fetching.
+- **Library, new chapters, downloads** — shelves by reading status, a feed of detected chapters, and a visible pipeline: download → import → Kavita scan → ready, with retry.
+- **Sources** — extension updates, health and latency per source, which sources join global search and in which order, repositories.
+
+Light-novel downloads (EPUB into Kavita) are a planned module; novels can already be discovered and tracked.
+
+## Quick start
+
+You need a running **Suwayomi** server (v2.x) and, to read and track progress, a **Kavita** server. KaviSeerr runs as a single container next to them.
+
+**1. Create `docker-compose.yml`**
+
+```yaml
+services:
+  kaviseerr:
+    image: ghcr.io/lucas-lepajollec/kaviseer:latest
+    container_name: kaviseerr
+    restart: unless-stopped
+    ports:
+      - "2512:2512"
+    environment:
+      # Your existing Suwayomi, as reachable FROM this container (not "localhost").
+      SUWAYOMI_URL: http://192.168.1.10:4567
+    volumes:
+      - kaviseerr-data:/data                         # database, access token, settings key
+      - /srv/media/manga/kaviseerr:/library          # imported chapters — also mounted in Kavita
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+volumes:
+  kaviseerr-data:
 ```
 
-The application listens on **2512:2512**. Open the interface at `http://localhost:2512`. Browser login works on `localhost` and IP addresses; cross-site requests are rejected. Suwayomi and FlareSolverr are internal services, with no published host ports. This new local project has no published application image: Compose deliberately builds the source. The pinned upstream images are Suwayomi `v2.4.2366` and FlareSolverr `v3.5.2`.
+The repository's [`docker-compose.yml`](docker-compose.yml) is the same file driven by a [`.env`](.env.example), if you prefer variables.
 
-An access token is generated once in the persistent `app-data` volume. To view it **locally**, run:
+**2. Prepare the library folder and start**
 
 ```sh
+sudo mkdir -p /srv/media/manga/kaviseerr && sudo chown 1000:1000 /srv/media/manga/kaviseerr
+docker compose up -d
 docker compose exec kaviseerr cat /data/access.token
 ```
 
-Do not paste that token into chats, screenshots or repository files. API clients use `Authorization: Bearer <token>`. Browser clients sign in with `POST /api/auth` and receive an HttpOnly session cookie; this also authenticates native `EventSource` streams. See [the API contract](docs/api.md).
+**3. Sign in and connect your services**
 
-## Connect your services
+Open `http://<your-host>:2512`, paste the access token, then go to **Settings → Connections**:
 
-Sign in, open **Paramètres** and enter service base URLs and keys, or use `PATCH /api/settings`. All sensitive values are encrypted at rest. Settings reads return only secret-presence flags; omitted secret fields stay unchanged, an explicit empty string clears them.
+| Setting | Example | Notes |
+| --- | --- | --- |
+| Suwayomi address | `http://192.168.1.10:4567` | Pre-filled from `SUWAYOMI_URL`. Add a username and password if your Suwayomi uses basic authentication. |
+| Kavita address | `http://192.168.1.10:5000` | Reachable from the KaviSeerr container. |
+| Kavita API key | from Kavita → *User settings* | Needs permission to scan libraries. |
+| Library folder as seen by Kavita | `/manga/kaviseerr` | The path **inside Kavita** of the folder mounted at `/library` above. |
 
-- Suwayomi defaults to `http://suwayomi:4567` in Compose, headless, CBZ enabled. Set `extensionRepos` to repositories you trust; none is bundled. Refresh with `POST /api/extensions/action`, then install selected packages. `GET /api/sources` lists installed French sources; `favoriteSourceIds` limits live searches to your selection. `POST /api/catalog/sync` indexes popular pages on demand; deep searches also index their actual results. This is a progressively populated cache, not a promise of exhaustive source catalogs.
-- Kavita, Sonarr and Prowlarr are existing external services. Use addresses reachable **from the application container**, not the host's `localhost`. When these services run in Docker, join the same external Docker network via an override and use their service names.
-- Give Kavita the application's **library volume** as a library root, for example mount the Compose-created volume `<compose-project>_library` at `/library` in Kavita. It must be readable by Kavita's UID (application-created files use UID 1000). Set `kavitaLibraryPath` to that path **inside Kavita**. Add the root to a Kavita manga library before importing. Kavita requires a valid key with scan permissions. `kavitaAuthMode: "api-key"` uses `x-api-key`; older installations can select `"jwt"` for the Plugin/authenticate flow.
-- Sonarr interactive search requires its existing numeric `seriesId`. Prowlarr text search uses `query`. The returned provider travels with the release selection so the grab goes back to the right service.
+In Kavita, mount the same host folder (for example `/srv/media/manga/kaviseerr:/manga/kaviseerr`) and add it to a **manga** library.
 
-The worker imports only chapters confirmed downloaded by Suwayomi, embeds `ComicInfo.xml` in each CBZ, writes a series metadata file and allowed-provider HD cover, then requests Kavita's folder scan. Failed batches remain visible and retryable. The worker keeps running when browsers disconnect. Automatic chapter checks run every 15 minutes for tracked manga/novels with explicit source selections.
+Your Suwayomi extensions appear under **Sources** right away. Choose which ones join global search, then open a title and pick chapters.
 
-## Development and verification
+> **Good to know.** KaviSeerr turns on *Save as CBZ* in your Suwayomi settings, because Kavita reads CBZ best. Chapters are copied over HTTP into the library folder; Suwayomi and KaviSeerr do not need to share a volume.
 
-Node.js 22.x:
+<details>
+<summary><b>Starting from scratch?</b> Run KaviSeerr with its own Suwayomi and FlareSolverr</summary>
+
+[`docker-compose.full.yml`](docker-compose.full.yml) adds a headless Suwayomi engine and FlareSolverr on an internal network (no extra published ports):
+
+```sh
+docker compose -f docker-compose.full.yml up -d
+```
+
+Then add an extension repository you trust under **Sources → Repositories** and install extensions. KaviSeerr ships with none.
+
+</details>
+
+<details>
+<summary><b>Troubleshooting</b></summary>
+
+- **Suwayomi shows "unreachable".** Inside a container, `localhost` is the container itself. Use the host's LAN address, a shared Docker network and the Suwayomi service name, or `host.docker.internal` with `extra_hosts: ["host.docker.internal:host-gateway"]`.
+- **Imports fail with a permission error.** The container runs as UID 1000: the library folder must be writable by that user.
+- **Kavita does not show new chapters.** Check that the "library folder as seen by Kavita" matches Kavita's own mount path, and that this folder belongs to a Kavita library.
+- **A source fails or is slow.** Update its extension under **Sources**; Cloudflare-protected sites may need FlareSolverr configured in Suwayomi.
+
+</details>
+
+## Configuration and persistence
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SUWAYOMI_URL` | `http://suwayomi:4567` | Initial Suwayomi address (editable in Settings). |
+| `KAVISEERR_DATA_DIR` | `/data` in the image | Database, `access.token`, `settings.key`. |
+| `KAVISEERR_LIBRARY_DIR` | `/library` in the image | Folder receiving imported CBZ files. |
+
+Everything else lives in **Settings**: connections, new-chapter check interval (5 minutes to 24 hours), interface language. Source order, languages and repositories live in **Sources**.
+
+- **Back up the `/data` volume as a whole** while the container is stopped: the database, the access token and the encryption key belong together.
+- **To rotate the access token**, stop the container, delete `access.token` from the data volume and start again; existing sessions are signed out.
+- **To update**, `docker compose pull && docker compose up -d`. Images are published for `amd64` and `arm64`; pin a version tag (`ghcr.io/lucas-lepajollec/kaviseer:x.y.z`) once releases are tagged.
+
+## Security, privacy, and limitations
+
+- Every request needs the access token or the HttpOnly session obtained with it; state-changing requests from other origins are rejected. Behind a reverse proxy, keep the original `Host` header, disable buffering for server-sent events and use TLS outside your LAN.
+- Service credentials are encrypted at rest and never returned by the API. The container runs read-only, as a non-root user, without capabilities.
+- Catalog metadata comes from the public AniList, MangaDex and MangaUpdates APIs; titles and synopses stay in their source language.
+- Sources depend on third-party extensions and websites. Matching is title-based and labels doubtful candidates instead of guessing.
+- Novel downloads and the video module (Sonarr/Prowlarr) are not in the interface yet.
+
+Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
+
+## Architecture
+
+Next.js 16 (App Router) on Node 22, in one container. The API talks to Suwayomi over GraphQL, to Kavita over REST and to the metadata providers; SQLite (WAL, full-text search) stores the library, settings, source health and the release feed. A durable worker runs imports, Kavita scans, progress refresh and scheduled checks, and resumes after restarts. The interface is built on the shared contract in [`src/types/shared.ts`](src/types/shared.ts).
+
+[API reference](docs/api.md) · [Architecture notes](docs/architecture.md) · [Verification record](docs/verification.md)
+
+## Development and quality
 
 ```sh
 npm ci
-npm run dev
-npm run check
+SUWAYOMI_URL=http://192.168.1.10:4567 npm run dev   # http://127.0.0.1:2498, token in data/access.token
+npm run check                                       # lint, strict TypeScript, tests, production build
+scripts/container-smoke.sh "$(docker build -q .)"   # container health and authentication checks
 ```
 
-Open **http://localhost:2498** after `npm run dev`. Read your generated local `data/access.token` to sign in; the token is never stored in browser storage. Development binds to `127.0.0.1:2498`; `npm run dev:lan` binds all host interfaces. In local Node development set `SUWAYOMI_URL` to an accessible Suwayomi base URL. Other settings remain in SQLite. Optional environment configuration: `KAVISEERR_DATA_DIR` (default `./data`), `KAVISEERR_LIBRARY_DIR` (default `./media`), `KAVISEERR_WORKER=false` (tests only). `npm start` binds production to localhost:2512; the Docker standalone server binds all container interfaces.
+Tests use temporary storage and local protocol fixtures — never real credentials or media. CI runs the same checks on every push and pull request, and multi-architecture images are published from `main`.
 
-Tests use isolated storage, generated test secrets, local HTTP protocol fixtures and synthetic archive bytes. They never use personal accounts or real media. [Architecture and verification limits](docs/architecture.md).
+## Public demo
 
-## Operations
+There is no public demo: KaviSeerr is only useful with your own Suwayomi and Kavita.
 
-```sh
-docker compose ps
-docker compose logs --tail 100 kaviseerr
-docker compose stop
-# Back up all three named volumes while stopped.
-docker compose start
-```
+## Documentation and community
 
-`app-data` contains SQLite, WAL, `settings.key` and `access.token`: keep the whole volume together, encrypted in your backup system. `suwayomi-data` contains extension state and original downloads. `library` contains the imported CBZ library and metadata. Database files and secrets are private to UID 1000. Volumes are initialized by their images; bind-mount replacements must be writable by the image user. Do not omit the key files during restore.
+[Contributing](CONTRIBUTING.md) · [Support](SUPPORT.md) · [Security](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md) · [Changelog](CHANGELOG.md)
 
-To restore, stop the stack, restore **all three** volumes to the matching versions with UID ownership intact, then start and check health. Schema version 1 creates tables idempotently. No destructive migrations are performed. Keep a stopped-volume snapshot before changing application/schema versions.
-
-Update deliberately from reviewed source, preserve the old local image with `docker image tag kaviseerr:local kaviseerr:previous`, then rebuild and recreate. On failure restore the matching volume snapshot and run the old image through a Compose override. Do not downgrade a database after a future migration without its matching backup.
-
-`docker compose down` removes containers and network while retaining volumes. **`down -v` deletes all application and media data.** To rotate the application access token, stop KaviSeerr, remove only `access.token` through your local volume administration tool, then start it; existing browser sessions become invalid.
-
-For localhost-only access change the port mapping to `127.0.0.1:2512:2512`. For access through a reverse proxy, keep the original Host header and disable buffering/timeouts for SSE. Use TLS for access outside your trusted LAN. No Docker socket or host privilege is needed.
-
-## Interface and contracts
-
-The catalogue queries public metadata on demand. **Deep Search FR** in a media sheet lists actual installed-source matches; select sources, load chapters, choose variants or a numeric range, then enqueue the selection. **Activer le suivi auto** enables automatic downloads for those explicit sources. Following a title alone leaves automatic downloads off. Anime sheets offer Sonarr/Prowlarr interactive search, language/codec/resolution filters and provider-correct grabs. Light novels use installed Suwayomi sources; EPUB scraping/conversion is not implemented.
-
-Downloads display live queue state separately from persisted import batches. Unavailable services appear as errors. Settings remain editable while Suwayomi is unreachable, and clearing a saved secret requires its explicit checkbox. `Ctrl/Cmd+K` opens quick search; Escape closes dialogs. The layout adapts to mobile/tablet and respects reduced motion. No demo catalogue is inserted.
-
-- [Shared TypeScript contract](src/types/shared.ts)
-- [Exact endpoints and events](docs/api.md)
-
-Project created locally; no remote, image publication or public release has been configured. The open-source goal is recorded, but a license still needs the owner's choice before publication.
+Released under the [MIT License](LICENSE).

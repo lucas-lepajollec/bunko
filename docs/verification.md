@@ -24,10 +24,10 @@ The final rebuilt-image smoke passed again with 53 results (observed provider du
 To reproduce after creating an isolated stack:
 
 ```sh
-docker compose -p kaviseerr-smoke up -d --build
-docker compose -p kaviseerr-smoke exec -T kaviseerr node --input-type=module < scripts/docker-smoke.mjs
+docker compose -f docker-compose.full.yml -p kaviseerr-smoke up -d --build
+docker compose -f docker-compose.full.yml -p kaviseerr-smoke exec -T kaviseerr node --input-type=module < scripts/docker-smoke.mjs
 # Remove only this disposable project's containers, network and generated test data:
-docker compose -p kaviseerr-smoke down -v
+docker compose -f docker-compose.full.yml -p kaviseerr-smoke down -v
 ```
 
 Real private Kavita scans and Sonarr/Prowlarr grabs, source-dependent downloads and Cloudflare behavior remain unverified until the operator connects those services and chooses extensions. The API reports missing configuration; the tests do not pretend those services exist. The frontend handoff documents these limits.

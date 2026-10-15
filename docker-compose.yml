@@ -1,53 +1,33 @@
-# KaviSeerr with an internal Suwayomi engine and FlareSolverr. Only the app port is published.
+# KaviSeerr alone, connected to the Suwayomi and Kavita you already run.
+# 1. Copy .env.example to .env and adjust it (or edit the values below).
+# 2. docker compose up -d
+# 3. docker compose exec kaviseerr cat /data/access.token   -> sign in at http://<host>:2512
 services:
   kaviseerr:
-    # Published by .github/workflows/docker.yml; `docker compose up --build` builds from source instead.
     image: ghcr.io/lucas-lepajollec/kaviseer:latest
-    build: .
-    ports:
-      - "2512:2512"
-    environment:
-      SUWAYOMI_URL: http://suwayomi:4567
-    volumes:
-      - app-data:/data
-      - library:/library
-    depends_on:
-      suwayomi:
-        condition: service_started
+    container_name: kaviseerr
     restart: unless-stopped
+    ports:
+      - "${KAVISEERR_PORT:-2512}:2512"
+    environment:
+      # Your existing Suwayomi, as reachable FROM this container (not "localhost").
+      # It can also be changed later in Settings -> Connections.
+      SUWAYOMI_URL: ${SUWAYOMI_URL:-http://192.168.1.10:4567}
+    volumes:
+      # Database, access token and settings key. Back it up.
+      - kaviseerr-data:/data
+      # Where imported chapters (CBZ) are written. Mount the same folder in Kavita
+      # and add it to a manga library. Must be writable by UID 1000.
+      - ${KAVISEERR_LIBRARY:-./library}:/library
     read_only: true
     tmpfs:
       - /tmp
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
-  suwayomi:
-    image: ghcr.io/suwayomi/suwayomi-server:v2.4.2366
-    environment:
-      BIND_IP: 0.0.0.0
-      BIND_PORT: "4567"
-      WEB_UI_ENABLED: "false"
-      AUTO_DOWNLOAD_CHAPTERS: "false"
-      DOWNLOAD_AS_CBZ: "true"
-      FLARESOLVERR_ENABLED: "true"
-      FLARESOLVERR_URL: http://flaresolverr:8191
-    volumes:
-      - suwayomi-data:/home/suwayomi/.local/share/Tachidesk
-    depends_on:
-      flaresolverr:
-        condition: service_started
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-  flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:v3.5.2
-    environment:
-      LOG_LEVEL: warn
-      TZ: Europe/Paris
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
+    # Uncomment to reach services published on this Docker host as "host.docker.internal".
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+
 volumes:
-  app-data:
-  suwayomi-data:
-  library:
+  kaviseerr-data:
