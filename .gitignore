@@ -2,9 +2,10 @@ node_modules/
 .next/
 .env*
 !.env.example
-data/
-media/
-coverage/
+# Runtime folders at the repository root only (src/app/api/media is source code).
+/data/
+/media/
+/coverage/
 *.tsbuildinfo
 AGENTS.override.md
 .project-local/
