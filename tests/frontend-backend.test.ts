@@ -539,11 +539,12 @@ describe('v2 protocol fixtures', () => {
     const batch = listBatches()[0];
     await processBatch(batch);
     // Pages import directly even while Suwayomi isDownloaded is false; Kavita is unconfigured.
-    expect(updatesFeed().entries[0].state).toBe('error');
+    expect(updatesFeed().entries[0].state).toBe('downloaded');
+    expect(batch.scan).toMatchObject({ state: 'failed', error: 'KAVITA_SCAN_ERROR' });
     expect(listTracked()[0].progress.owned).toBe(1);
     updateSettings({ kavitaUrl: base, kavitaApiKey: 'synthetic-api-key' });
     const retried = retryBatch(batch.id);
-    expect(updatesFeed().entries[0].state).toBe('queued');
+    expect(updatesFeed().entries[0].state).toBe('downloaded');
     await processBatch(retried);
     expect(updatesFeed().entries[0].state).toBe('downloaded');
     expect(listTracked()[0].progress.owned).toBe(1);

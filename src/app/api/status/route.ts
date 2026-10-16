@@ -4,13 +4,14 @@ import type { ServicesStatus } from '@/types/shared';
 import { json, route } from '@/lib/api';
 import { graphql } from '@/lib/suwayomi';
 import { getSettings } from '@/lib/settings';
+import { kavitaAdmin } from '@/lib/kavita-client';
 import { endpoint } from '@/lib/http';
 /** Reachability of the services the interface depends on; never returns upstream details. */
 export const GET = route(async (r) => {
   const settings = getSettings();
   const status: ServicesStatus = {
     suwayomi: { state: 'unconfigured', version: null },
-    kavita: { state: 'unconfigured' },
+    kavita: { state: 'unconfigured', admin: null },
   };
   await Promise.all([
     (async () => {
@@ -35,9 +36,9 @@ export const GET = route(async (r) => {
           redirect: 'error',
         });
         await response.body?.cancel();
-        status.kavita = { state: response.ok ? 'ok' : 'error' };
+        status.kavita = { state: response.ok ? 'ok' : 'error', admin: await kavitaAdmin(r.signal) };
       } catch {
-        status.kavita = { state: 'error' };
+        status.kavita = { state: 'error', admin: null };
       }
     })(),
   ]);

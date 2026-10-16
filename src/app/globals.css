@@ -67,6 +67,53 @@ body {
   }
 }
 
+/*
+ * Native selects: dark popups everywhere (Brave/Chromium otherwise paint options white over a
+ * transparent select), our own chevron kept off the edge, and a rounded focus ring instead of a
+ * rectangle. A pill wrapper (label > select) carries the ring itself.
+ */
+@layer base {
+  select {
+    appearance: none;
+    color-scheme: dark;
+    padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a8a29a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.9rem center;
+    background-size: 12px;
+  }
+  select option,
+  select optgroup {
+    background-color: #1a1816;
+    color: #f2eee8;
+  }
+  select:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgb(242 238 232 / 0.7);
+  }
+  label:has(> select) select:focus-visible {
+    box-shadow: none;
+  }
+  label:has(> select:focus-visible) {
+    box-shadow: 0 0 0 2px rgb(242 238 232 / 0.7);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.animate-toast {
+  animation: toast-in 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-toast {
+    animation: none;
+  }
+}
+
 /* Book-on-a-shelf shadow: a thin spine plus a soft drop. */
 .book {
   border-radius: 4px;

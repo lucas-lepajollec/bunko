@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Kavita scans work (the scan API needs the key in its body, from an admin account); Settings warn when the key is not an admin key, and title sheets say whether the cover reached Kavita.
+- Downloads page lists every chapter with its own state, progress and error; one failing chapter no longer fails the series, failed chapters can be retried alone, and finished batches can be removed.
+- Title sheets: cover and details on the left with the Matches button at the bottom, title and chapters on the right; the latest 15 chapters with "See more" and an inner scroll; "Select all" covers every chapter of the filter; 3-line synopsis.
+- Feedback is calmer: temporary toasts at the bottom, ⓘ bubbles for minor caveats, clear notices above the chapters for real problems.
+- Matches: Catalog, Sources and Kavita as three rows with a state each; automatic sources prefer the most relevant then the most complete (up to three); source search lists working sources first.
+- Dark native dropdowns (Brave), chevrons off the edge, rounded focus rings; wider layout on large screens.
 - Downloads no longer fail with "invalid values" when a title uses a cover served by Bunko; downloads and tracking take artwork from the server's own record.
 - Much lower CPU: library reads aggregate in SQL and are memoized, SQLite runs in WAL mode, the worker wakes on events instead of every 1.5 s, and the update cycle no longer recomputes the whole library per title.
 - Covers of followed titles are downloaded once and served by Bunko with long-lived caching, so they no longer reload or depend on sources being up.

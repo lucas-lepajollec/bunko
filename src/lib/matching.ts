@@ -1,6 +1,6 @@
 import type { MediaDetail, Source, SourceCandidate } from '@/types/shared';
 import { normalizeTitle } from './media';
-import { searchSource } from './suwayomi';
+import { searchSource, sourceChapterCount } from './suwayomi';
 function tokens(value: string) {
   return new Set(
     value
@@ -71,5 +71,18 @@ export async function matchOnSource(
     });
     if ([...found.values()].some((c) => c.score >= 0.9)) break;
   }
-  return [...found.values()].sort((a, b) => b.score - a.score).slice(0, 4);
+  const candidates = [...found.values()];
+  await Promise.all(
+    candidates
+      .filter((c) => c.score >= 0.9)
+      .map(async (c) => {
+        c.chapterCount = await sourceChapterCount(c.sourceId, c.suwayomiMangaId, signal);
+      }),
+  );
+  return candidates.sort(rankCandidates).slice(0, 3);
+}
+
+/** Stable sort preserves source preference only after relevance and completeness tie. */
+export function rankCandidates(a: SourceCandidate, b: SourceCandidate) {
+  return b.score - a.score || (b.chapterCount ?? -1) - (a.chapterCount ?? -1);
 }

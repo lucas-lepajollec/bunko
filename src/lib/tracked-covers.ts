@@ -3,7 +3,7 @@ import type { CoverOption, TrackedMedia, UnifiedMedia } from '@/types/shared';
 import { statement, getTracked, listTracked } from './db';
 import { matchKavita } from './kavita-index';
 import { requestJson } from './http';
-import { AppError } from './errors';
+import { AppError, errorCode } from './errors';
 import { selectedCover, syncSeriesCover } from './kavita-cover';
 import { coverContext } from './cover-state';
 import { sharedConcurrencyGate } from './concurrency';
@@ -120,6 +120,19 @@ export async function syncTrackedCover(id: number, signal?: AbortSignal, force =
         ) === context
       );
     };
+    const status = (state: 'pending' | 'synced' | 'failed', error: string | null = null) => {
+      if (!series || !current()) return;
+      const saved = storedCover(id);
+      statement(`INSERT OR REPLACE INTO kavita_cover_status
+        (tracked_id,context,hash,series_id,state,error) VALUES(?,?,?,?,?,?)`).run(
+        id,
+        context,
+        saved?.context === context ? saved.hash : '',
+        series.seriesId,
+        state,
+        error,
+      );
+    };
     const saved = storedCover(id);
     let url = saved?.context === context ? saved.origin_url : (t.coverUrl ?? '');
     let cover = !force && saved?.context === context ? readStoredCover(saved) : null;
@@ -166,7 +179,21 @@ export async function syncTrackedCover(id: number, signal?: AbortSignal, force =
       if (!persisted) return;
     }
     if (!cover || !series || !current()) return;
-    await syncSeriesCover(series, url, () => Boolean(current()), signal, cover);
+    if (
+      !force &&
+      t.kavitaCover.state === 'synced' &&
+      saved?.context === context &&
+      storedCover(id)?.hash === saved.hash
+    )
+      return;
+    status('pending');
+    try {
+      await syncSeriesCover(series, url, () => Boolean(current()), signal, cover);
+      status('synced');
+    } catch (error) {
+      status('failed', errorCode(error));
+      throw error;
+    }
   }, signal);
 }
 export async function syncTrackedCovers(parentSignal?: AbortSignal, backfillOnly = false) {
@@ -193,7 +220,9 @@ export async function syncTrackedCovers(parentSignal?: AbortSignal, backfillOnly
     .filter(
       (t) =>
         !backfillOnly ||
-        (!t.coverUrl?.startsWith('/api/covers/') &&
+        ((t.kavitaCover.state === 'pending' ||
+          t.kavitaCover.state === 'failed' ||
+          !t.coverUrl?.startsWith('/api/covers/')) &&
           (checked.get(t.id)?.context !== context(t) ||
             Date.now() - (checked.get(t.id)?.at ?? 0) >= 300_000)),
     )

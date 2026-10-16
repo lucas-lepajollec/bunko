@@ -28,7 +28,7 @@ type Save = { state: 'saving' } | { state: 'saved' } | { state: 'error'; text: s
 const searching = (e: TrackedMedia | undefined) =>
   e?.sourceMatch === 'queued' || e?.sourceMatch === 'searching';
 
-/** "What is this title linked to", one row per link; each row opens the manager on its tab. */
+/** Three independent links (catalog, sources, Kavita), each with its state; rows open the manager. */
 export function MatchesSummary({
   entry,
   media,
@@ -44,16 +44,18 @@ export function MatchesSummary({
   const latest = Math.max(0, ...(entry?.sourceStatus ?? []).map((s) => s.latestChapter ?? 0));
   const offCatalog =
     entry?.identity === 'off-catalog' || media.providers.every((p) => p === 'kavita');
-  const rows: { key: Section; label: string; value: ReactNode; tone?: 'warn' }[] = [
+  type Row = { key: Section; label: string; value: ReactNode; tone: 'ok' | 'warn' | 'idle' };
+  const rows: Row[] = [
     {
       key: 'catalog',
       label: t('match.catalog'),
       value: offCatalog
         ? t('match.offCatalogShort')
         : media.providers
-            .filter((p) => p !== 'local')
+            .filter((p) => p !== 'local' && p !== 'kavita')
             .map((p) => t(`provider.${p}`))
             .join(', ') || '—',
+      tone: offCatalog ? 'idle' : 'ok',
     },
     {
       key: 'sources',
@@ -65,14 +67,14 @@ export function MatchesSummary({
           t('match.sourcesCount', { count: sources.length })
         )
       ) : searching(entry) ? (
-        <span className="flex items-center gap-2">
+        <span className="inline-flex items-center gap-2">
           <Spinner className="size-3" />
           {t('match.searchingBackground')}
         </span>
       ) : (
         t('match.noSource')
       ),
-      tone: sources.length || searching(entry) ? undefined : 'warn',
+      tone: sources.length ? 'ok' : searching(entry) ? 'idle' : 'warn',
     },
     {
       key: 'kavita',
@@ -80,40 +82,25 @@ export function MatchesSummary({
       value: media.kavita
         ? t('match.kavitaShort', { library: media.kavita.libraryName, n: n(media.kavita.chapters) })
         : t('match.kavitaNone'),
-    },
-    {
-      key: 'cover',
-      label: t('match.cover'),
-      value:
-        !entry || entry.coverChoice === 'auto'
-          ? t('match.coverAuto')
-          : t(`match.origin.${entry.coverChoice.origin}`),
+      tone: media.kavita ? (entry?.kavitaCover?.state === 'failed' ? 'warn' : 'ok') : 'idle',
     },
   ];
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-baseline justify-between gap-4">
-        <span className="text-muted text-xs tracking-[0.16em] uppercase">{t('match.title')}</span>
-        <button
-          type="button"
-          onClick={() => onOpen('catalog')}
-          className="text-mid text-sm hover:text-white"
-        >
-          {t('match.edit')}
-        </button>
-      </div>
+      <span className="text-muted text-xs tracking-[0.16em] uppercase">{t('match.title')}</span>
       <div className="flex flex-col text-sm">
         {rows.map((r) => (
           <button
             key={r.key}
             type="button"
             onClick={() => onOpen(r.key)}
-            className="border-line group flex items-center justify-between gap-4 border-b py-2.5 text-left"
+            className="border-line group flex items-center gap-3 border-b py-2.5 text-left"
           >
+            <Dot tone={r.tone} />
             <span className="text-muted shrink-0">{r.label}</span>
             <span
               className={cx(
-                'flex min-w-0 items-center gap-2 text-right',
+                'ml-auto flex min-w-0 items-center gap-2 text-right',
                 r.tone === 'warn' && 'text-warn',
               )}
             >
@@ -142,8 +129,11 @@ export function MatchesDrawer({
   scanStarted,
   onScan,
   onSources,
+  onTrack,
 }: {
   open: boolean;
+  /** Adds the title to the library, which makes catalog/Kavita/cover settings available. */
+  onTrack?: () => Promise<void>;
   /** A scan already ran or is running for this title (the drawer then never starts another). */
   scanStarted: boolean;
   section: Section;
@@ -219,7 +209,7 @@ export function MatchesDrawer({
               onChange={onSection}
               label={t('match.title')}
               items={[
-                { id: 'catalog', label: t('match.tab.catalog') },
+                { id: 'catalog', label: t('match.catalog') },
                 { id: 'sources', label: t('match.sources') },
                 { id: 'kavita', label: 'Kavita' },
                 { id: 'cover', label: t('match.tab.images') },
@@ -228,7 +218,14 @@ export function MatchesDrawer({
           </div>
           <div className="flex-1 overflow-y-auto px-5 pb-8 md:px-8">
             {!entry && section !== 'sources' ? (
-              <p className="text-mid">{t('match.trackFirst')}</p>
+              <div className="flex flex-col items-start gap-3">
+                <p className="text-mid">{t('match.trackFirst')}</p>
+                {onTrack && (
+                  <button type="button" onClick={() => run(onTrack)} className={smallButton}>
+                    {t('match.addToLibrary')}
+                  </button>
+                )}
+              </div>
             ) : section === 'catalog' ? (
               <CatalogTab
                 entry={entry!}
@@ -472,7 +469,7 @@ function SourcesTab({
         .filter((c) => !linked.has(`${c.sourceId}:${c.suwayomiMangaId}`))
         .map((c) => ({ ...c, sourceName: l.source.name })),
     )
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => b.score - a.score || (b.chapterCount ?? 0) - (a.chapterCount ?? 0));
   const move = (i: number, d: -1 | 1) => {
     const next = [...sources];
     [next[i], next[i + d]] = [next[i + d], next[i]];
@@ -683,6 +680,7 @@ function CoverTab({
       {!scanning && options.data && all.length === 0 && (
         <p className="text-muted text-sm">{t('match.noCover')}</p>
       )}
+      <KavitaCoverState entry={entry} />
       <BackdropSection entry={entry} media={media} onChange={onBackdrop} />
     </div>
   );
@@ -796,5 +794,33 @@ function BackdropSection({
         <p className="text-muted text-sm">{t('match.backdropNone')}</p>
       )}
     </div>
+  );
+}
+
+function KavitaCoverState({ entry }: { entry: TrackedMedia }) {
+  const { t } = useI18n();
+  const state = entry.kavitaCover?.state ?? 'none';
+  if (state === 'none') return null;
+  return (
+    <p
+      className={cx(
+        'flex items-center gap-2 text-sm',
+        state === 'failed' ? 'text-warn' : 'text-mid',
+      )}
+    >
+      {state === 'pending' ? (
+        <Spinner className="size-3" />
+      ) : (
+        <Dot tone={state === 'synced' ? 'ok' : 'warn'} />
+      )}
+      {state === 'failed'
+        ? t('match.kavitaCoverFailed', {
+            reason:
+              t(`error.${entry.kavitaCover.error}`) === `error.${entry.kavitaCover.error}`
+                ? t('error.KAVITA_SCAN_ERROR')
+                : t(`error.${entry.kavitaCover.error}`),
+          })
+        : t(`match.kavitaCover.${state}`)}
+    </p>
   );
 }

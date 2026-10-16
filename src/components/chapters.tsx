@@ -4,9 +4,10 @@ import type { ChapterVariant, MergedChapter } from '@/types/shared';
 import { useI18n } from '@/i18n/I18nProvider';
 import { cx } from './ui';
 
-export type ChapterFilter = 'missing' | 'unread' | 'all' | `range:${number}`;
-const PAGE = 100;
-const BUCKET = 50;
+export type ChapterFilter = 'missing' | 'unread' | 'all';
+/** Latest chapters first; older ones load on demand. Selection always covers the whole filter. */
+const FIRST = 15;
+const MORE = 50;
 
 export function preferredVariant(chapter: MergedChapter, priority: string[], choice?: number) {
   return (
@@ -47,7 +48,7 @@ export function ChapterTable({
 }) {
   const { t, n } = useI18n();
   const [filter, setFilter] = useState<ChapterFilter>('missing');
-  const [limit, setLimit] = useState(PAGE);
+  const [limit, setLimit] = useState(FIRST);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const ordered = useMemo(
@@ -56,18 +57,9 @@ export function ChapterTable({
   );
   const missing = ordered.filter((c) => isMissing(c, owned));
   const unread = ordered.filter((c) => read === null || (c.number ?? 0) > read);
-  const max = Math.max(0, ...ordered.map((c) => c.number ?? 0));
-  const buckets = Array.from(
-    { length: Math.ceil(max / BUCKET) },
-    (_, i) => Math.ceil(max / BUCKET) - 1 - i,
-  );
   const visible = ordered.filter((c) => {
     if (filter === 'missing') return isMissing(c, owned);
     if (filter === 'unread') return read === null || (c.number ?? 0) > read;
-    if (filter.startsWith('range:')) {
-      const b = Number(filter.slice(6));
-      return (c.number ?? 0) > b * BUCKET && (c.number ?? 0) <= (b + 1) * BUCKET;
-    }
     return true;
   });
   const toggle = (key: string) => {
@@ -84,7 +76,7 @@ export function ChapterTable({
       aria-pressed={filter === id}
       onClick={() => {
         setFilter(id);
-        setLimit(PAGE);
+        setLimit(FIRST);
       }}
       className={cx(
         'h-9 shrink-0 rounded-full px-4 text-sm',
@@ -101,9 +93,6 @@ export function ChapterTable({
           {pill('missing', t('chapters.missing', { count: missing.length }))}
           {pill('unread', t('chapters.unread', { count: unread.length }))}
           {pill('all', t('chapters.all', { count: ordered.length }))}
-          {buckets.map((b) =>
-            pill(`range:${b}`, `${n(b * BUCKET + 1)} – ${n(Math.min((b + 1) * BUCKET, max))}`),
-          )}
         </div>
         <div className="text-mid flex flex-wrap items-center gap-2 text-sm">
           <label className="flex items-center gap-2">
@@ -120,7 +109,7 @@ export function ChapterTable({
               }}
               className="size-4 accent-[var(--accent)]"
             />
-            {t('chapters.selectShown')}
+            {t('chapters.selectAll', { count: n(visible.length) })}
           </label>
           <form
             className="ml-auto flex items-center gap-2"
@@ -163,7 +152,8 @@ export function ChapterTable({
           {filter === 'missing' ? t('chapters.noneMissing') : t('chapters.none')}
         </p>
       )}
-      <ul>
+      {/* Desktop: the list scrolls inside the column so details stay in view. */}
+      <ul className="md:max-h-[68vh] md:overflow-y-auto md:pr-2">
         {visible.slice(0, limit).map((c) => {
           const variant = preferredVariant(c, priority, choice[c.key]);
           return (
@@ -180,16 +170,18 @@ export function ChapterTable({
             />
           );
         })}
+        {visible.length > limit && (
+          <li className="flex justify-center py-4">
+            <button
+              type="button"
+              onClick={() => setLimit((l) => l + MORE)}
+              className="text-mid rounded-full bg-white/[0.06] px-5 py-2 text-sm hover:text-white"
+            >
+              {t('chapters.seeMore', { count: n(visible.length - limit) })}
+            </button>
+          </li>
+        )}
       </ul>
-      {visible.length > limit && (
-        <button
-          type="button"
-          onClick={() => setLimit((l) => l + PAGE)}
-          className="text-mid self-start py-4 text-sm hover:text-white"
-        >
-          {t('chapters.showMore', { count: visible.length - limit })}
-        </button>
-      )}
     </div>
   );
 }
@@ -255,7 +247,7 @@ function ChapterRow({
             aria-label={t('chapters.version', { label })}
             value={variant.id}
             onChange={(e) => onChoose(Number(e.target.value))}
-            className="text-muted max-w-[260px] truncate bg-transparent text-xs md:text-right md:text-[13px]"
+            className="text-muted max-w-[260px] truncate rounded-full bg-transparent bg-[position:right_0.25rem_center] pr-6 text-xs md:text-right md:text-[13px]"
           >
             {chapter.variants.map((v) => (
               <option key={v.id} value={v.id}>

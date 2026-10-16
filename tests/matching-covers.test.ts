@@ -37,6 +37,8 @@ let searchHits: Record<string, { id: number; title: string }[]>;
 let sourceChapters: Record<number, number[]>;
 let failManga: number | null;
 let uploaded: Record<string, unknown>[];
+let adminRole = true;
+let scans: Record<string, unknown>[];
 let imageBytes: string;
 let kavitaImage: string;
 let requireImageKey: boolean;
@@ -185,6 +187,10 @@ beforeAll(async () => {
         },
       });
     }
+    if (url.pathname === '/api/Plugin/authenticate')
+      return json({
+        token: `header.${Buffer.from(JSON.stringify({ role: adminRole ? 'Admin' : 'Pleb' })).toString('base64url')}.signature`,
+      });
     if (url.pathname === '/api/Upload/series') {
       uploaded.push(body);
       return json({});
@@ -199,7 +205,10 @@ beforeAll(async () => {
       return json({ summary: 'Owned summary', genres: [{ title: 'Fantasy' }] });
     if (url.pathname === '/api/Series/volumes')
       return json([{ chapters: [{ number: '12', pages: 10, pagesRead: 0 }] }]);
-    if (url.pathname === '/api/Library/scan-folder') return json({});
+    if (url.pathname === '/api/Library/scan-folder') {
+      scans.push(body);
+      return json({});
+    }
     if (
       url.pathname.includes('/thumbnail') ||
       url.pathname.includes('series-cover') ||
@@ -234,6 +243,8 @@ beforeEach(() => {
   sourceChapters = { 10: [1, 19], 20: [1, 3] };
   failManga = null;
   uploaded = [];
+  adminRole = true;
+  scans = [];
   requests = [];
   imageBytes = 'fixture-cover';
   kavitaImage = 'kavita-cover';
@@ -1132,4 +1143,131 @@ it('backfills covers while a source match remains blocked', async () => {
     release();
     await work;
   }
+});
+
+it('persists pending, denied, synced and replacement cover states independently per entry', async () => {
+  indexSeries();
+  updateSettings({ kavitaApiKey: 'synthetic-admin-check' });
+  const t = track({ media: catalog(), kavitaSeriesId: 77 });
+  const other = track({ media: catalog(2, 'Unlinked') });
+  expect(listTracked().find((v) => v.id === t.id)?.kavitaCover).toEqual({
+    state: 'pending',
+    error: null,
+  });
+  expect(listTracked().find((v) => v.id === other.id)?.kavitaCover.state).toBe('none');
+  adminRole = false;
+  await expect(syncTrackedCover(t.id)).rejects.toMatchObject({ code: 'KAVITA_NOT_ADMIN' });
+  expect(listTracked().find((v) => v.id === t.id)?.kavitaCover).toEqual({
+    state: 'failed',
+    error: 'KAVITA_NOT_ADMIN',
+  });
+  expect(uploaded).toHaveLength(0);
+  adminRole = true;
+  updateSettings({ kavitaApiKey: 'replacement-synthetic-admin-check' });
+  // A retained local cover must still be retried by the worker's backfill pass.
+  await syncTrackedCovers(undefined, true);
+  expect(listTracked().find((v) => v.id === t.id)?.kavitaCover).toEqual({
+    state: 'synced',
+    error: null,
+  });
+  expect(uploaded).toHaveLength(1);
+  expect(scans.at(-1)).toMatchObject({
+    apiKey: 'replacement-synthetic-admin-check',
+    folderPath: '/medias/Mangas/Owned Work',
+  });
+  imageBytes = 'replacement-image';
+  const response = await patch({ id: t.id, cover: { origin: 'source', id: '1:10' } });
+  expect(response.status).toBe(200);
+  expect(listTracked().find((v) => v.id === t.id)?.kavitaCover.state).toBe('synced');
+  expect(uploaded).toHaveLength(2);
+  expect(JSON.stringify(await response.json())).not.toContain('synthetic-admin-check');
+  await patch({ id: t.id, kavitaSeriesId: null });
+  expect(listTracked().find((v) => v.id === t.id)?.kavitaCover.state).toBe('none');
+});
+it('ranks confident candidates by count after relevance, caches counts and caps candidates at three', async () => {
+  sources = sources.slice(0, 1);
+  searchHits = {
+    '1': [
+      { id: 10, title: 'Owned Work' },
+      { id: 20, title: 'Owned Work' },
+      { id: 30, title: 'Owned Work extra' },
+      { id: 40, title: 'Owned Work' },
+    ],
+  };
+  sourceChapters = {
+    10: [1],
+    20: [1, 2, 3],
+    30: Array.from({ length: 50 }, (_, i) => i),
+    40: [1, 2],
+  };
+  const { matchOnSource } = await import('@/lib/matching');
+  const matches = await matchOnSource(sources[0], catalog());
+  expect(matches.map((c) => [c.suwayomiMangaId, c.chapterCount])).toEqual([
+    [20, 3],
+    [40, 2],
+    [10, 1],
+  ]);
+  const probes = requests.filter((r) => r.query.includes('fetchChapters'));
+  expect(probes).toHaveLength(3);
+  expect(probes.every((r) => r.query.includes('chapters { id }'))).toBe(true);
+  expect(probes.some((r) => (r.variables.input as { mangaId: number }).mangaId === 30)).toBe(false);
+  await matchOnSource(sources[0], catalog());
+  expect(requests.filter((r) => r.query.includes('fetchChapters'))).toHaveLength(3);
+  const route = await import('@/app/api/media/sources/route');
+  const response = await route.GET(
+    request('GET', undefined, `/api/media/sources?id=anilist:${9000 + generation}`),
+  );
+  const events = await response.text();
+  const streamedMatches = events
+    .split('\n\n')
+    .filter((e) => e.startsWith('event: match'))
+    .map((e) => JSON.parse(e.split('data: ')[1]));
+  expect(
+    streamedMatches[0].candidates.map((c: { suwayomiMangaId: number }) => c.suwayomiMangaId),
+  ).toEqual([20, 40, 10]);
+});
+it('uses completeness to break relevance ties across automatically selected sources', async () => {
+  sourceChapters = { 10: [1], 20: [1, 2, 3], 30: [1, 2], 40: [1, 2, 3, 4] };
+  const t = track({ media: catalog() });
+  await matchTrackedSources();
+  expect(
+    listTracked()
+      .find((v) => v.id === t.id)
+      ?.sources.map((s) => s.sourceId),
+  ).toEqual(['4', '2', '3']);
+  expect(peak).toBeLessThanOrEqual(6);
+});
+
+it('reports a replacement cover as pending during the upload and synced only after its scan', async () => {
+  indexSeries();
+  updateSettings({ kavitaApiKey: 'synthetic' });
+  const t = track({ media: catalog(), kavitaSeriesId: 77 });
+  await syncTrackedCover(t.id);
+  imageBytes = 'new-pending-cover';
+  let release!: () => void;
+  let arrived!: () => void;
+  const blocked = new Promise<void>((r) => {
+    release = r;
+  });
+  const started = new Promise<void>((r) => {
+    arrived = r;
+  });
+  const fetcher = globalThis.fetch;
+  vi.stubGlobal('fetch', async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).endsWith('/api/Upload/series')) {
+      arrived();
+      await blocked;
+    }
+    return fetcher(url, init);
+  });
+  const changing = patch({ id: t.id, cover: { origin: 'source', id: '1:10' } });
+  try {
+    await started;
+    expect(listTracked()[0].kavitaCover).toEqual({ state: 'pending', error: null });
+  } finally {
+    release();
+  }
+  expect((await changing).status).toBe(200);
+  expect(listTracked()[0].kavitaCover).toEqual({ state: 'synced', error: null });
+  expect(scans).toHaveLength(2);
 });

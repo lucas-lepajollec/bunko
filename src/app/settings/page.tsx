@@ -1,6 +1,7 @@
 'use client';
 import { clearPersistentCache } from '@/lib/client/cache';
 import Link from 'next/link';
+import { Notice } from '@/components/notify';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useSWRConfig } from 'swr';
 import type {
@@ -83,6 +84,7 @@ export default function SettingsPage() {
             </Section>
             <Section id="kavita" index={2}>
               <KavitaTargets
+                admin={status.data?.kavita.admin ?? null}
                 settings={settings.data}
                 onSaved={(s) => settings.mutate(s, { revalidate: false })}
               />
@@ -539,9 +541,11 @@ function Access() {
 const KINDS: LibraryKind[] = ['MANGA', 'MANHWA', 'MANHUA', 'NOVEL'];
 
 function KavitaTargets({
+  admin,
   settings,
   onSaved,
 }: {
+  admin: boolean | null;
   settings: Settings;
   onSaved: (s: Settings) => void;
 }) {
@@ -621,6 +625,11 @@ function KavitaTargets({
           className="accent-fg size-[18px]"
         />
       </Row>
+      {admin === false && (
+        <Notice tone="bad" title={t('kavita.notAdmin')}>
+          {t('kavita.notAdminBody')}
+        </Notice>
+      )}
       <p className="text-mid leading-relaxed">{t('kavita.targetsHint2')}</p>
       {libraries.error && <ErrorNote error={libraries.error} />}
       {libraries.data && !usable && (

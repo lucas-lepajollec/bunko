@@ -10,7 +10,7 @@ import { db, listTracked, getTracked } from './db';
 import { coverContext } from './cover-state';
 import { endpoint } from './http';
 import { getSettings } from './settings';
-import { kavitaHeaders, kavitaCoverEndpoint } from './kavita-client';
+import { kavitaHeaders, kavitaCoverEndpoint, kavitaAdmin, scanKavitaFolder } from './kavita-client';
 import { storedCover, readStoredCover, storeCover } from './stored-covers';
 import { imagePath, localImageUrl } from './images';
 import { suwayomiHeaders } from './suwayomi';
@@ -52,6 +52,8 @@ export async function downloadCover(url: string, parentSignal?: AbortSignal) {
   return { bytes: await boundedBuffer(response, limit), mime };
 }
 async function post(suffix: string, payload: unknown, parentSignal?: AbortSignal) {
+  if ((await kavitaAdmin(parentSignal)) === false)
+    throw new AppError('KAVITA_NOT_ADMIN', 'Kavita requires an administrator key', 502);
   const response = await fetch(endpoint(getSettings().kavitaUrl, suffix), {
     method: 'POST',
     headers: await kavitaHeaders(parentSignal),
@@ -61,7 +63,11 @@ async function post(suffix: string, payload: unknown, parentSignal?: AbortSignal
   });
   await response.body?.cancel();
   if (!response.ok)
-    throw new AppError('KAVITA_SCAN_ERROR', 'Kavita cover/scan request failed', 502);
+    throw new AppError(
+      response.status === 403 ? 'KAVITA_NOT_ADMIN' : 'KAVITA_COVER_ERROR',
+      'Kavita cover request failed',
+      502,
+    );
 }
 export async function hasCoverImage(folder: string) {
   return (await readdir(folder)).some((n) =>
@@ -198,7 +204,7 @@ async function bootstrapKavitaCover(series: IndexedSeries, media: UnifiedMedia) 
   db()
     .prepare('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)')
     .run(`kavita_cover_hash:${series.seriesId}`, digest(cover.bytes));
-  await post('/api/Library/scan-folder', { folderPath: series.folder });
+  await scanKavitaFolder(series.folder);
   clearPending();
 }
 
@@ -291,7 +297,11 @@ export async function syncSeriesCover(
     const key = `kavita_cover_hash:${series.seriesId}`;
     const previous = db().prepare('SELECT value FROM worker_state WHERE key=?').get(key) as
       { value: string } | undefined;
-    if (previous?.value === hash || (current && !current())) return;
+    if (current && !current()) return;
+    if (previous?.value === hash) {
+      if (series.folder) await scanKavitaFolder(series.folder, signal);
+      return;
+    }
     // Never upload the reader's own cover back to itself.
     if (new URL(url, 'http://bunko.invalid').pathname !== '/api/kavita/image') {
       await post(
@@ -306,5 +316,6 @@ export async function syncSeriesCover(
       invalidateKavitaImage(series.seriesId);
     }
     db().prepare('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)').run(key, hash);
+    if (series.folder) await scanKavitaFolder(series.folder, signal);
   }, signal);
 }

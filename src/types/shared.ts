@@ -91,6 +91,8 @@ export interface DiscoverPage {
 export interface SourceCandidate extends SourceMatch {
   title: string;
   score: number;
+  /** Chapters available on that source, when known (used to prefer the most complete source). */
+  chapterCount?: number | null;
 }
 export type MatchEventMap = {
   sources: { sources: Source[] };
@@ -185,6 +187,23 @@ export interface DownloadBatch {
   error: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Every chapter of the batch, in queue order, with its own state. */
+  chapters: DownloadChapter[];
+  /** Kavita rescan after import: `null` until attempted. */
+  scan: { state: 'done' | 'failed'; error: string | null; at: string } | null;
+}
+export interface DownloadChapter {
+  /** Suwayomi chapter id (same as in `chapterIds`). */
+  id: number;
+  number: number | null;
+  /** Display name from the source, e.g. "Chapter 96" or "Vol. 3 Ch. 12". */
+  name: string;
+  sourceName: string;
+  state: 'queued' | 'downloading' | 'importing' | 'done' | 'error';
+  /** 0–1 while pages download, otherwise null. */
+  progress: number | null;
+  /** Safe error code (translated by the UI) when `state` is `error`. */
+  error: string | null;
 }
 export interface DownloadsSnapshot {
   status: DownloadStatus;
@@ -272,6 +291,8 @@ export interface TrackedMedia {
   identity: 'catalog' | 'off-catalog';
   /** Other covers to try, in automatic order, when `coverUrl` fails to load (empty for a manual choice). */
   coverFallbacks: string[];
+  /** Whether the displayed cover reached Kavita (upload needs an admin API key). */
+  kavitaCover: { state: 'synced' | 'pending' | 'failed' | 'none'; error: string | null };
   /** Hero background: the catalog work's banner (`auto`) or none (`hidden`, chosen by the user). */
   backdrop: 'auto' | 'hidden';
   /** Background source matching for this entry (comics only; `linked` once it has sources). */
@@ -369,7 +390,11 @@ export type DownloadEventMap = { snapshot: DownloadsSnapshot; error: ApiError['e
 export type ServiceState = 'ok' | 'error' | 'unconfigured';
 export interface ServicesStatus {
   suwayomi: { state: ServiceState; version: string | null };
-  kavita: { state: ServiceState };
+  kavita: {
+    state: ServiceState;
+    /** The API key belongs to a Kavita admin (needed for scans and cover uploads); null if unknown. */
+    admin: boolean | null;
+  };
 }
 
 /* ---- Sources, browsing and updates (contract for /api/sources/*, /api/updates, /api/downloads/control) ---- */
@@ -461,7 +486,12 @@ export interface UpdatesFeed {
   autoCount: number;
   trackedCount: number;
 }
-export type DownloadControl = { action: 'pause' | 'resume' | 'clear' };
+export type DownloadControl =
+  | { action: 'pause' | 'resume' | 'clear' }
+  /** Re-queue only the failed chapters of one batch (or of every batch when omitted). */
+  | { action: 'retry_failed'; batchId?: string }
+  /** Drop one batch from the list (finished ones) or cancel its remaining chapters. */
+  | { action: 'remove'; batchId: string };
 
 /* ---- Kavita libraries, targets and existing content ---- */
 /** Formats routed to a Kavita library. ONE_SHOT follows MANGA; both novel formats follow NOVEL. */

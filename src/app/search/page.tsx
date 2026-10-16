@@ -146,12 +146,21 @@ function Search() {
         <Skeleton className="h-24 rounded-2xl" />
       )}
       <section className="flex flex-col">
-        {lanes?.map((lane) => (
-          <SourceLane key={lane.source.id} lane={lane} known={known} />
-        ))}
+        {[...(lanes ?? [])]
+          // Sources with results first, then still searching, then empty, then failed.
+          .sort((a, b) => laneRank(a) - laneRank(b))
+          .map((lane) => (
+            <SourceLane key={lane.source.id} lane={lane} known={known} />
+          ))}
       </section>
     </Page>
   );
+}
+
+function laneRank(lane: Lane) {
+  if (lane.state === 'error') return 3;
+  if (lane.state === 'loading') return 1;
+  return lane.result?.results.length ? 0 : 2;
 }
 
 function SourceLane({ lane, known }: { lane: Lane; known: Set<string> }) {

@@ -13,6 +13,7 @@ vi.mock('@/lib/kavita', () => ({
   refreshLibraryProgress: async () => {},
 }));
 vi.mock('@/lib/suwayomi', () => ({
+  chapterNumber: () => 1,
   chapterState: async (id: number) => ({ id, name: 'Chapter', chapterNumber: 1 }),
 }));
 vi.mock('@/lib/library-paths', async (original) => ({

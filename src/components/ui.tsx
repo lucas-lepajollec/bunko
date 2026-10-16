@@ -99,7 +99,7 @@ export function SectionHeading({
 }: {
   num?: number;
   title: string;
-  aside?: string;
+  aside?: ReactNode;
   href?: string;
   linkLabel?: string;
   id?: string;
@@ -400,7 +400,7 @@ export const ghostButton =
 export const smallButton =
   'inline-flex h-9 items-center justify-center gap-2 rounded-full bg-white/[0.1] px-4 text-[13px] text-fg transition-colors hover:bg-white/[0.16] disabled:opacity-50';
 export const field =
-  'h-11 w-full rounded-xl border border-line bg-raised px-3.5 text-sm text-fg outline-none placeholder:text-faint focus:border-line-strong';
+  'h-11 w-full rounded-xl border border-line bg-raised px-3.5 text-sm text-fg outline-none placeholder:text-faint focus:border-line-strong [&:is(select)]:pr-9';
 
 /** The opening sentence of a synopsis, used as an editorial quote. */
 export function firstSentence(text: string | null) {

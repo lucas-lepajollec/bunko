@@ -13,6 +13,9 @@ import type {
   BrowsePage,
   DownloadControl,
 } from '@/types/shared';
+import { saveChapterLabels } from './chapter-labels';
+import { createHash } from 'node:crypto';
+import { cached } from './metadata-cache';
 import { getSettings } from './settings';
 import { endpoint, requestJson } from './http';
 import { AppError, errorCode, errorDetail, sourceFailure } from './errors';
@@ -282,6 +285,7 @@ export async function chaptersFor(
     ),
   );
   const chapters = mergeChapters(settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])));
+  if (!signal?.aborted && canWrite()) saveChapterLabels(chapters.flatMap((c) => c.variants));
   const numbers = chapters.flatMap((c) => (c.number === null ? [] : [c.number]));
   if (numbers.length && !signal?.aborted && canWrite())
     for (const tracked of listTracked().filter((t) =>
@@ -429,4 +433,30 @@ export async function downloadStatus(signal?: AbortSignal): Promise<DownloadStat
 export async function controlDownloader(control: DownloadControl): Promise<DownloadStatus> {
   const engine = await import('./downloads');
   return engine.controlEngine(control);
+}
+
+/** Fetch only IDs for confident matches; count probes share the global source budget. */
+export async function sourceChapterCount(sourceId: string, mangaId: number, signal?: AbortSignal) {
+  const settings = getSettings();
+  const server = createHash('sha256')
+    .update(
+      JSON.stringify([settings.suwayomiUrl, settings.suwayomiUsername, settings.suwayomiPassword]),
+    )
+    .digest('hex');
+  return cached<number | null>(`source_count:${server}:${sourceId}:${mangaId}`, 600_000, () =>
+    sourceCall(async () => {
+      try {
+        const result = await graphql<{ fetchChapters: { chapters: { id: number }[] } }>(
+          'mutation($input: FetchChaptersInput!) { fetchChapters(input: $input) { chapters { id } } }',
+          { input: { mangaId } },
+          20_000,
+          signal,
+        );
+        return result.fetchChapters.chapters.length;
+      } catch {
+        signal?.throwIfAborted();
+        return null;
+      }
+    }, signal),
+  );
 }

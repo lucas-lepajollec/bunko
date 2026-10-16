@@ -11,6 +11,7 @@ import { UNAUTHORIZED_EVENT, send, useApi, batchesInterval } from '@/lib/client/
 import { cx, errorText, field, primaryButton } from './ui';
 import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
 import { ActivityPill } from './activity';
+import { Toaster } from './notify';
 import { persistentCache } from '@/lib/client/cache';
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -47,6 +48,7 @@ function AuthGate({ children }: { children: ReactNode }) {
       <Shortcuts />
       <div className="pb-24 md:pb-0">{children}</div>
       <TabBar />
+      <Toaster />
     </>
   );
 }
@@ -69,7 +71,10 @@ export function LanguageSelect({ className }: { className?: string }) {
       aria-label={t('settings.language')}
       value={language}
       onChange={(e) => setLanguage(e.target.value as UiLanguage)}
-      className={cx('h-9 rounded-full border-0 bg-white/[0.08] px-3 text-sm text-fg', className)}
+      className={cx(
+        'h-9 rounded-full border-0 bg-white/[0.08] pr-9 pl-3.5 text-sm text-fg',
+        className,
+      )}
     >
       {UI_LANGUAGES.map((l) => (
         <option key={l.id} value={l.id}>
@@ -222,8 +227,8 @@ function Header() {
   return (
     <header
       className={cx(
-        // Content aligns with the 1440px page column on wide screens; no hard edge under the bar.
-        'fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-6 px-4 transition-[background-color,backdrop-filter] duration-300 md:h-20 md:gap-11 md:px-[max(4rem,calc((100vw-1440px)/2+4rem))]',
+        // Content aligns with the 1760px page column on wide screens; no hard edge under the bar.
+        'fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-6 px-4 transition-[background-color,backdrop-filter] duration-300 md:h-20 md:gap-11 md:px-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))]',
         solid ? 'bg-bg/90 backdrop-blur-md' : 'bg-gradient-to-b from-black/45 to-transparent',
       )}
     >
@@ -499,7 +504,7 @@ export function Page({ children, className }: { children: ReactNode; className?:
   return (
     <main
       className={cx(
-        'mx-auto flex w-full max-w-[1440px] flex-col gap-6 px-4 pt-20 md:gap-7 md:px-16 md:pt-32',
+        'mx-auto flex w-full max-w-[1760px] flex-col gap-6 px-4 pt-20 md:gap-7 md:px-10 md:pt-32',
         className,
       )}
     >

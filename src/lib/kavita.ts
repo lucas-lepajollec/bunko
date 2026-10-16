@@ -9,7 +9,7 @@ import { getSettings } from './settings';
 import { endpoint, requestJson } from './http';
 import { chapterNumber } from './suwayomi';
 import { AppError } from './errors';
-import { kavitaHeaders } from './kavita-client';
+import { kavitaHeaders, scanKavitaFolder } from './kavita-client';
 import { selectedCover, hasCoverImage, writeCoverFile } from './kavita-cover';
 import { matchKavita } from './kavita-index';
 import {
@@ -176,19 +176,10 @@ export async function importChapter(
   }
   await discardChapterCache(chapter.id);
 }
-export async function scanLibrary(media: UnifiedMedia) {
+export async function scanLibrary(media: UnifiedMedia, signal?: AbortSignal) {
   const folder = await seriesDirectory(media);
   const kavitaFolder = kavitaPathForLocal(folder, targetFor(media));
-  const response = await fetch(endpoint(getSettings().kavitaUrl, '/api/Library/scan-folder'), {
-    method: 'POST',
-    headers: await kavitaHeaders(),
-    body: JSON.stringify({ folderPath: kavitaFolder }),
-    signal: AbortSignal.timeout(30_000),
-    redirect: 'error',
-  });
-  await response.body?.cancel();
-  if (!response.ok)
-    throw new AppError('KAVITA_SCAN_ERROR', `Kavita scan returned HTTP ${response.status}`, 502);
+  await scanKavitaFolder(kavitaFolder, signal);
 }
 const seriesSchema = z.object({
   id: z.number().int().positive(),

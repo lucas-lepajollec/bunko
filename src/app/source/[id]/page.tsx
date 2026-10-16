@@ -254,7 +254,7 @@ function FilterList({
                 <select
                   value={(values[k] as number | undefined) ?? f.default}
                   onChange={(e) => setValue(k, Number(e.target.value))}
-                  className="text-fg h-9 rounded-full bg-white/[0.08] px-3 text-sm"
+                  className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5 text-sm"
                 >
                   {f.values.map((v, i) => (
                     <option key={i} value={i}>
@@ -326,7 +326,7 @@ function FilterList({
                     aria-label={f.name}
                     value={s.index}
                     onChange={(e) => setValue(k, { ...s, index: Number(e.target.value) })}
-                    className="text-fg h-9 flex-1 rounded-full bg-white/[0.08] px-3 text-sm"
+                    className="text-fg h-9 flex-1 rounded-full bg-white/[0.08] pr-9 pl-3.5 text-sm"
                   >
                     {f.values.map((v, i) => (
                       <option key={i} value={i}>

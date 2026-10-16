@@ -188,7 +188,7 @@ function Catalog() {
                     e.target.value && !year ? { year: String(thisYear) } : undefined,
                   )
                 }
-                className="text-fg h-9 rounded-full bg-white/[0.08] px-3"
+                className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
               >
                 <option value="">{t('catalog.anySeason')}</option>
                 {SEASONS.map((x) => (
@@ -205,7 +205,7 @@ function Catalog() {
                 onChange={(e) =>
                   set('year', e.target.value, e.target.value ? undefined : { season: '' })
                 }
-                className="text-fg h-9 rounded-full bg-white/[0.08] px-3"
+                className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
               >
                 <option value="">{t('catalog.anyYear')}</option>
                 {Array.from({ length: thisYear - 1979 }, (_, i) => thisYear - i).map((y) => (
@@ -220,7 +220,7 @@ function Catalog() {
               <select
                 value={status}
                 onChange={(e) => set('status', e.target.value)}
-                className="text-fg h-9 rounded-full bg-white/[0.08] px-3"
+                className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
               >
                 <option value="">{t('catalog.statusAll')}</option>
                 <option value="RELEASING">{t('status.releasing')}</option>
@@ -232,7 +232,7 @@ function Catalog() {
               <select
                 value={sort}
                 onChange={(e) => set('sort', e.target.value)}
-                className="text-fg h-9 rounded-full bg-white/[0.08] px-3"
+                className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
               >
                 {SORTS.map((s) => (
                   <option key={s} value={s}>

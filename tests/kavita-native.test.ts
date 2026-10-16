@@ -37,6 +37,8 @@ let server: Server;
 let base: string;
 let graphError = '';
 let failedPage = -1;
+let failedChapterId = -1;
+let scanNonAdmin = false;
 let htmlPage = -1;
 let largePage = false;
 let slowPage = false;
@@ -173,7 +175,7 @@ beforeAll(async () => {
       maxPages = Math.max(maxPages, activePages);
       await new Promise((r) => setTimeout(r, slowPage && number > 0 ? 120 : 5));
       activePages--;
-      if (number === failedPage) {
+      if (number === failedPage || Number(url.pathname.split('/')[6]) === failedChapterId) {
         res.statusCode = 503;
         return res.end('{}');
       }
@@ -242,6 +244,10 @@ beforeAll(async () => {
         },
       ]);
     if (url.pathname === '/api/Library/scan-folder') {
+      if (scanNonAdmin) {
+        res.statusCode = 400;
+        return res.end('API key must belong to an admin');
+      }
       res.statusCode = failScan ? 503 : 200;
       return res.end();
     }
@@ -288,6 +294,8 @@ beforeEach(async () => {
   });
   graphError = '';
   failedPage = -1;
+  failedChapterId = -1;
+  scanNonAdmin = false;
   htmlPage = -1;
   largePage = false;
   slowPage = false;
@@ -707,12 +715,14 @@ describe('native page-to-CBZ engine', () => {
     expect(pageHits.get(3)).toBe(3);
     expect(pageHits.get(0)).toBe(1);
     failedPage = -1;
+    failedChapterId = -1;
+    scanNonAdmin = false;
     failScan = true;
     const retried = engine.retryBatch(batch.id);
     await engine.processBatch(retried);
     expect(retried).toMatchObject({
-      state: 'error',
-      error: 'KAVITA_SCAN_ERROR',
+      state: 'completed',
+      scan: { state: 'failed', error: 'KAVITA_SCAN_ERROR' },
       importedIds: [31],
     });
     expect(pageHits.get(0)).toBe(1);
@@ -828,9 +838,178 @@ describe('native page-to-CBZ engine', () => {
     expect(engine.engineStatus().state).toBe('STOPPED');
     expect(engine.engineStatus().queue[0].chapter.id).toBe(61);
     failedPage = -1;
+    failedChapterId = -1;
+    scanNonAdmin = false;
     await engine.controlEngine({ action: 'resume' });
     await engine.processBatch(listBatches()[0]);
     expect(listBatches()[0].state).toBe('completed');
     expect(pageHits.get(0)).toBe(before);
   });
+});
+
+it('continues after a failed chapter, exposes source metadata and retries only failures through control', async () => {
+  failedChapterId = 102;
+  const batch = engine.createBatch({ media, chapterIds: [101, 102, 103] });
+  await engine.processBatch(batch);
+  expect(batch).toMatchObject({
+    state: 'completed',
+    error: null,
+    importedIds: [101, 103],
+    scan: { state: 'done', error: null },
+  });
+  expect(batch.chapters).toEqual([
+    {
+      id: 101,
+      number: 101,
+      name: 'Chapter 101',
+      sourceName: 'Fixture',
+      state: 'done',
+      progress: null,
+      error: null,
+    },
+    {
+      id: 102,
+      number: 102,
+      name: 'Chapter 102',
+      sourceName: 'Fixture',
+      state: 'error',
+      progress: null,
+      error: 'IMPORT_HTTP_ERROR',
+    },
+    {
+      id: 103,
+      number: 103,
+      name: 'Chapter 103',
+      sourceName: 'Fixture',
+      state: 'done',
+      progress: null,
+      error: null,
+    },
+  ]);
+  const before = calls.length;
+  failedChapterId = -1;
+  const control = await import('@/app/api/downloads/control/route');
+  expect(
+    (
+      await control.POST(
+        request('/api/downloads/control', 'POST', { action: 'retry_failed', batchId: batch.id }),
+      )
+    ).status,
+  ).toBe(200);
+  expect(listBatches()[0].chapters.map((c) => c.state)).toEqual(['done', 'queued', 'done']);
+  await engine.processBatch(listBatches()[0]);
+  expect(listBatches()[0].chapters.every((c) => c.state === 'done')).toBe(true);
+  expect(
+    calls
+      .slice(before)
+      .filter((c) => c.path.includes('/page/'))
+      .every((c) => c.path.includes('/chapter/102/')),
+  ).toBe(true);
+  const batchesRoute = await import('@/app/api/downloads/batches/route');
+  const snapshot = await engine.snapshot();
+  expect(await (await batchesRoute.GET(request('/api/downloads/batches'))).json()).toEqual(
+    snapshot.batches,
+  );
+  const stream = await import('@/app/api/downloads/stream/route');
+  const abort = new AbortController();
+  const response = await stream.GET(
+    new Request(request('/api/downloads/stream'), { signal: abort.signal }),
+  );
+  const reader = response.body!.getReader();
+  const event = new TextDecoder().decode((await reader.read()).value);
+  expect(JSON.parse(event.split('data: ')[1].trim()).batches).toEqual(snapshot.batches);
+  abort.abort();
+  await reader.cancel();
+  await engine.controlEngine({ action: 'remove', batchId: batch.id });
+  expect(listBatches()).toEqual([]);
+  expect(db().prepare('SELECT count(*) AS n FROM imported_chapters').get()).toEqual({ n: 3 });
+});
+it('requeues failed chapters from all finished batches without replaying successes', async () => {
+  failedChapterId = 111;
+  await engine.processBatch(engine.createBatch({ media, chapterIds: [111] }));
+  failedChapterId = 112;
+  await engine.processBatch(engine.createBatch({ media, chapterIds: [112, 113] }));
+  await engine.controlEngine({ action: 'retry_failed' });
+  expect(listBatches().every((b) => b.state === 'enqueuing')).toBe(true);
+  expect(
+    listBatches()
+      .flatMap((b) => b.chapters)
+      .filter((c) => c.state === 'queued')
+      .map((c) => c.id)
+      .sort(),
+  ).toEqual([111, 112]);
+});
+it('cancels only the remaining chapters on remove and retains completed imports', async () => {
+  const batch = engine.createBatch({ media, chapterIds: [121, 122, 123] });
+  slowPage = true;
+  const processing = engine.processBatch(batch);
+  await waitUntil(() => listBatches()[0].chapters[1].state === 'downloading');
+  expect(listBatches()[0].chapters[0].state).toBe('done');
+  expect(listBatches()[0].chapters[1].progress).toBeGreaterThanOrEqual(0);
+  expect(listBatches()[0].chapters[1].progress).toBeLessThanOrEqual(1);
+  await engine.controlEngine({ action: 'remove', batchId: batch.id });
+  await processing;
+  expect(listBatches()[0]).toMatchObject({ state: 'completed', importedIds: [121] });
+  expect(listBatches()[0].chapters.map((c) => [c.state, c.error])).toEqual([
+    ['done', null],
+    ['error', 'CANCELLED'],
+    ['error', 'CANCELLED'],
+  ]);
+  expect(engine.engineStatus().queue).toEqual([]);
+});
+it('records non-admin scan denial without losing imports or leaking the key', async () => {
+  scanNonAdmin = true;
+  const batch = engine.createBatch({ media, chapterIds: [131] });
+  await engine.processBatch(batch);
+  expect(batch).toMatchObject({
+    state: 'completed',
+    scan: { state: 'failed', error: 'KAVITA_NOT_ADMIN' },
+  });
+  expect(batch.scan?.at).toMatch(/^20/);
+  expect(calls.findLast((c) => c.path === '/api/Library/scan-folder')?.body).toMatchObject({
+    apiKey: 'fixture-key',
+    folderPath: expect.any(String),
+  });
+  expect(JSON.stringify(batch)).not.toContain('fixture-key');
+});
+
+it('keeps source labels on newly queued chapters after chapter selection', async () => {
+  await chaptersFor([selection]);
+  const batch = engine.createBatch({ media, chapterIds: [12] });
+  expect(batch.chapters).toMatchObject([
+    {
+      id: 12,
+      name: 'Chapter 12',
+      number: 12,
+      sourceName: 'Fixture',
+      state: 'queued',
+      progress: null,
+    },
+  ]);
+});
+
+it('durably defers retries requested during a transfer to only the already failed chapters', async () => {
+  failedChapterId = 141;
+  slowPage = true;
+  const batch = engine.createBatch({ media, chapterIds: [141, 142] });
+  const processing = engine.processBatch(batch);
+  await waitUntil(
+    () =>
+      listBatches()[0].chapters[0].state === 'error' &&
+      listBatches()[0].chapters[1].state === 'downloading',
+  );
+  await engine.controlEngine({ action: 'retry_failed', batchId: batch.id });
+  failedChapterId = -1;
+  await processing;
+  expect(listBatches()[0].chapters.map((c) => c.state)).toEqual(['queued', 'done']);
+  const before = calls.length;
+  slowPage = false;
+  await engine.processBatch(listBatches()[0]);
+  expect(listBatches()[0].chapters.every((c) => c.state === 'done')).toBe(true);
+  expect(
+    calls
+      .slice(before)
+      .filter((c) => c.path.includes('/page/'))
+      .every((c) => c.path.includes('/chapter/141/')),
+  ).toBe(true);
 });

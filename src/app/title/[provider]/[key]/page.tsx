@@ -18,6 +18,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { Backdrop } from '@/components/backdrop';
 import { ChapterTable, isMissing, preferredVariant } from '@/components/chapters';
 import { PosterCard } from '@/components/media';
+import { InfoBubble, Notice, toast } from '@/components/notify';
 import { MatchesDrawer, MatchesSummary, type Lane, type Section } from '@/components/matches';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import {
@@ -29,9 +30,9 @@ import {
   SectionHeading,
   Segmented,
   Skeleton,
+  Spinner,
   cx,
   errorText,
-  firstSentence,
   ghostButton,
   primaryButton,
   smallButton,
@@ -47,7 +48,7 @@ export default function TitlePage() {
   const detail = useApi<MediaDetail>(`/api/media?id=${encodeURIComponent(id)}`);
   if (detail.error)
     return (
-      <main className="mx-auto max-w-[1440px] px-4 pt-24 md:px-16 md:pt-32">
+      <main className="mx-auto max-w-[1760px] px-4 pt-24 md:px-10 md:pt-32">
         <Empty title={t('title.unavailable')}>
           <ErrorNote error={detail.error} />
         </Empty>
@@ -55,7 +56,7 @@ export default function TitlePage() {
     );
   if (!detail.data)
     return (
-      <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-4 pt-[300px] md:flex-row md:items-end md:gap-12 md:px-16 md:pt-[220px]">
+      <main className="mx-auto flex max-w-[1760px] flex-col gap-4 px-4 pt-[300px] md:flex-row md:items-end md:gap-12 md:px-10 md:pt-[220px]">
         <Skeleton className="aspect-[2/3] w-28 md:w-[250px]" />
         <div className="flex flex-1 flex-col gap-4">
           <Skeleton className="h-3 w-56" />
@@ -79,7 +80,7 @@ function Title({ media }: { media: MediaDetail }) {
       (media.anilistId !== null && e.anilistId === media.anilistId) ||
       (media.mangadexId !== null && e.mangadexId === media.mangadexId),
   );
-  const [tab, setTab] = useState<'chapters' | 'sources' | 'info'>('chapters');
+  const [tab, setTab] = useState<'chapters' | 'info'>('chapters');
   const [drawer, setDrawer] = useState<Section | null>(null);
   const [override, setOverride] = useState<ChapterSelection[] | null>(null);
   const [lanes, setLanes] = useState<Lane[] | null>(null);
@@ -87,7 +88,6 @@ function Title({ media }: { media: MediaDetail }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [choice, setChoice] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
   const isComic = media.type === 'MANGA';
   const fromDetail: ChapterSelection[] = media.sources.map((s) => ({
     suwayomiMangaId: s.suwayomiMangaId,
@@ -141,9 +141,15 @@ function Title({ media }: { media: MediaDetail }) {
 
   const autoPicked = useMemo(
     () =>
+      // Up to three confident sources: most relevant first, then the most complete.
       (lanes ?? [])
         .filter((l) => l.candidates[0]?.score >= 0.9)
-        .slice(0, 2)
+        .sort(
+          (a, b) =>
+            b.candidates[0].score - a.candidates[0].score ||
+            (b.candidates[0].chapterCount ?? 0) - (a.candidates[0].chapterCount ?? 0),
+        )
+        .slice(0, 3)
         .map((l) => ({
           suwayomiMangaId: l.candidates[0].suwayomiMangaId,
           sourceId: l.source.id,
@@ -199,7 +205,6 @@ function Title({ media }: { media: MediaDetail }) {
     }
   }
   async function setStatus(value: ReadingStatus | 'NONE') {
-    setMessage(null);
     try {
       if (value === 'NONE') {
         if (entry) await send('/api/tracked', 'DELETE', { id: entry.id });
@@ -207,18 +212,17 @@ function Title({ media }: { media: MediaDetail }) {
       else await send('/api/tracked', 'POST', { media, status: value, sources });
       await library.mutate();
     } catch (e) {
-      setMessage({ tone: 'bad', text: errorText(t, e) });
+      toast({ tone: 'bad', text: errorText(t, e) });
     }
   }
   async function setAuto(on: boolean) {
-    setMessage(null);
     try {
       if (entry) await send('/api/tracked', 'PATCH', { id: entry.id, autoDownload: on, sources });
       else
         await send('/api/tracked', 'POST', { media, status: 'READING', autoDownload: on, sources });
       await library.mutate();
     } catch (e) {
-      setMessage({ tone: 'bad', text: errorText(t, e) });
+      toast({ tone: 'bad', text: errorText(t, e) });
     }
   }
   async function download(keys: string[]) {
@@ -229,16 +233,19 @@ function Title({ media }: { media: MediaDetail }) {
       .filter((v): v is number => typeof v === 'number' && !queued.has(v));
     if (!ids.length) return;
     setBusy(true);
-    setMessage(null);
     try {
       if (!entry) await send('/api/tracked', 'POST', { media, status: 'READING', sources });
       for (let i = 0; i < ids.length; i += 500)
         await send('/api/downloads/enqueue', 'POST', { chapterIds: ids.slice(i, i + 500), media });
       setSelected(new Set());
-      setMessage({ tone: 'ok', text: t('title.queued', { count: ids.length }) });
+      toast({
+        tone: 'ok',
+        text: t('title.queued', { count: ids.length }),
+        link: { href: '/downloads', label: t('title.seeDownloads') },
+      });
       await Promise.all([batches.mutate(), library.mutate()]);
     } catch (e) {
-      setMessage({ tone: 'bad', text: errorText(t, e) });
+      toast({ tone: 'bad', text: errorText(t, e) });
     } finally {
       setBusy(false);
     }
@@ -284,6 +291,43 @@ function Title({ media }: { media: MediaDetail }) {
     ],
   ].filter(([, v]) => v);
 
+  const matchesButton = isComic && (
+    <button
+      type="button"
+      onClick={() => setDrawer('catalog')}
+      className={cx(ghostButton, 'w-full gap-2.5 bg-transparent ring-1 ring-white/25')}
+    >
+      <LinkIcon />
+      {t('match.manage')}
+      {attention && <Dot tone="warn" />}
+    </button>
+  );
+  const details = (
+    <>
+      <dl className="flex flex-col text-sm">
+        {facts.map(([k, v]) => (
+          <div key={k} className="border-line flex justify-between gap-4 border-b py-2.5">
+            <dt className="text-muted shrink-0">{k}</dt>
+            <dd className="min-w-0 text-right [overflow-wrap:anywhere]">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      {media.synopsis && <Synopsis text={media.synopsis} />}
+      {isComic && (
+        <div className="flex flex-col gap-4">
+          <MatchesSummary
+            entry={entry}
+            media={media}
+            sources={sources}
+            onOpen={(section) => setDrawer(section)}
+          />
+          {matchesButton}
+          <Automation entry={entry} disabled={!sources.length} onAuto={setAuto} />
+        </div>
+      )}
+    </>
+  );
+
   return (
     <main className="relative" style={{ ['--accent' as string]: media.color ?? '#9fb6ff' }}>
       <Backdrop
@@ -292,36 +336,37 @@ function Title({ media }: { media: MediaDetail }) {
           entry?.identity === 'off-catalog' || entry?.backdrop === 'hidden' ? null : media.bannerUrl
         }
         color={media.color ?? '#7aa2ff'}
-        className="h-[440px] md:h-[780px]"
+        className="h-[440px] md:h-[720px]"
       />
-      <section className="relative mx-auto flex max-w-[1440px] flex-col gap-4 px-4 pt-[150px] md:flex-row md:items-end md:gap-12 md:px-16 md:pt-[150px]">
-        <div className="flex items-end gap-4 md:contents">
+      <div className="relative mx-auto grid max-w-[1760px] gap-6 px-4 pt-[110px] pb-16 md:grid-cols-[280px_minmax(0,1fr)] md:gap-12 md:px-10 md:pt-[150px] lg:grid-cols-[300px_minmax(0,1fr)] xl:gap-16">
+        {/* Left: cover, then everything about the work. */}
+        <aside className="hidden flex-col gap-7 self-start md:flex">
           <Cover
             src={entry?.coverUrl ?? media.coverUrl}
             fallbacks={entry?.coverFallbacks}
             alt={media.title}
-            className="w-28 shrink-0 md:w-[250px]"
+            className="mx-auto w-full max-w-[300px]"
           />
-          <div className="flex flex-col gap-2 md:hidden">
-            <Kicker media={media} />
-            <h1 className="font-display text-[40px] leading-[0.9] font-extrabold tracking-[-0.05em]">
-              {media.title}
-            </h1>
+          {details}
+        </aside>
+
+        {/* Right: title, actions, chapters. */}
+        <div className="flex min-w-0 flex-col gap-5">
+          <div className="flex items-end gap-4 md:block">
+            <Cover
+              src={entry?.coverUrl ?? media.coverUrl}
+              fallbacks={entry?.coverFallbacks}
+              alt=""
+              className="w-24 shrink-0 md:hidden"
+            />
+            <div className="flex min-w-0 flex-col gap-2 md:gap-4">
+              <Kicker media={media} />
+              <h1 className="font-display text-[34px] leading-[0.92] font-extrabold tracking-[-0.05em] [overflow-wrap:anywhere] md:text-[56px] xl:text-[80px]">
+                {media.title}
+              </h1>
+            </div>
           </div>
-        </div>
-        <div className="flex max-w-[800px] flex-1 flex-col gap-4">
-          <div className="hidden md:block">
-            <Kicker media={media} />
-          </div>
-          <h1 className="font-display hidden text-[60px] leading-[0.9] font-extrabold tracking-[-0.05em] [overflow-wrap:anywhere] md:block lg:text-[92px]">
-            {media.title}
-          </h1>
-          {media.synopsis && (
-            <p className="text-soft font-serif text-[19px] leading-snug italic md:text-[25px]">
-              {t('common.quote', { text: firstSentence(media.synopsis) })}
-            </p>
-          )}
-          <div className="flex flex-col gap-3 md:mt-1.5 md:flex-row md:flex-wrap md:items-center">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             {isComic && (
               <button
                 type="button"
@@ -338,13 +383,13 @@ function Title({ media }: { media: MediaDetail }) {
                       : t('title.noSource')}
               </button>
             )}
-            <label className={cx(ghostButton, 'pr-2 pl-5')}>
+            <label className={cx(ghostButton, 'pr-1 pl-5')}>
               <Dot tone={entry ? 'accent' : 'idle'} />
               <select
                 aria-label={t('title.readingStatus')}
                 value={entry?.status ?? 'NONE'}
                 onChange={(e) => setStatus(e.target.value as ReadingStatus | 'NONE')}
-                className="h-10 flex-1 bg-transparent pr-2 text-[15px] text-white"
+                className="h-10 flex-1 rounded-full bg-transparent pr-9 text-[15px] text-white"
               >
                 <option value="NONE">{t('title.notInLibrary')}</option>
                 {STATUSES.map((s) => (
@@ -364,22 +409,11 @@ function Title({ media }: { media: MediaDetail }) {
                 {t('kavita.read', { n: media.kavita.chapters })} ↗
               </a>
             )}
-            {isComic && (
-              <button
-                type="button"
-                onClick={() => setDrawer('catalog')}
-                className={cx(ghostButton, 'gap-2.5 bg-transparent ring-1 ring-white/25')}
-              >
-                <LinkIcon />
-                {t('match.title')}
-                {attention && <Dot tone="warn" />}
-              </button>
-            )}
           </div>
           {entry && (
-            <div className="flex max-w-[520px] flex-col gap-2">
+            <div className="flex max-w-[560px] flex-col gap-2">
               <ProgressBar progress={progress} className="h-1.5" />
-              <span className="text-mid flex flex-wrap gap-x-5 gap-y-1 text-[13px]">
+              <span className="text-mid flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]">
                 <span>
                   {t('title.read', { n: progress.read !== null ? n(progress.read) : '—' })}
                 </span>
@@ -389,104 +423,87 @@ function Title({ media }: { media: MediaDetail }) {
                     n: progress.released !== null ? n(progress.released) : '—',
                   })}
                 </span>
-                <span className="text-muted">
+                <InfoBubble label={t('title.progressInfo')}>
                   {progress.readSource === 'kavita'
                     ? t('title.readFromKavita')
                     : t('title.readUnknown')}
-                </span>
+                </InfoBubble>
               </span>
             </div>
           )}
-          {message && (
-            <p
-              role="status"
-              className={cx('text-sm', message.tone === 'bad' ? 'text-bad' : 'text-ok')}
-            >
-              {message.text}{' '}
-              {message.tone === 'ok' && (
-                <Link href="/downloads" className="text-mid underline">
-                  {t('title.seeDownloads')}
-                </Link>
-              )}
-            </p>
-          )}
-        </div>
-      </section>
 
-      <div className="relative mx-auto mt-8 max-w-[1440px] px-4 md:hidden">
-        <Segmented
-          value={tab}
-          onChange={setTab}
-          label={t('title.sections')}
-          items={[
-            { id: 'chapters', label: isComic ? t('title.tab.chapters') : t('title.tab.reading') },
-            { id: 'sources', label: t('title.tab.sources', { count: sources.length }) },
-            { id: 'info', label: t('title.tab.info') },
-          ]}
-        />
-      </div>
-
-      <div className="relative mx-auto grid max-w-[1440px] gap-10 px-4 pt-5 pb-16 md:grid-cols-[320px_minmax(0,1fr)] md:gap-16 md:px-16 md:pt-14">
-        <aside className="flex flex-col gap-8">
-          <div className={cx('flex-col gap-8', tab === 'info' ? 'flex' : 'hidden md:flex')}>
-            <dl className="flex flex-col text-sm">
-              {facts.map(([k, v]) => (
-                <div key={k} className="border-line flex justify-between gap-4 border-b py-2.5">
-                  <dt className="text-muted shrink-0">{k}</dt>
-                  <dd className="text-right">{v}</dd>
-                </div>
-              ))}
-            </dl>
-            {media.synopsis && <Synopsis text={media.synopsis} />}
+          <div className="mt-2 md:hidden">
+            <Segmented
+              value={tab}
+              onChange={setTab}
+              label={t('title.sections')}
+              items={[
+                {
+                  id: 'chapters',
+                  label: isComic ? t('title.tab.chapters') : t('title.tab.reading'),
+                },
+                { id: 'info', label: t('title.tab.info') },
+              ]}
+            />
           </div>
-          {isComic && (
-            <div className={cx('flex-col gap-8', tab === 'sources' ? 'flex' : 'hidden md:flex')}>
-              <MatchesSummary
-                entry={entry}
-                media={media}
-                sources={sources}
-                onOpen={(section) => setDrawer(section)}
-              />
-              <Automation entry={entry} disabled={!sources.length} onAuto={setAuto} />
-            </div>
-          )}
-        </aside>
-        <section
-          aria-labelledby="toc"
-          className={cx('min-w-0 flex-col gap-4', tab === 'chapters' ? 'flex' : 'hidden md:flex')}
-        >
-          {isComic ? (
-            <>
-              <SectionHeading
-                id="toc"
-                num={1}
-                title={t('chapters.title')}
-                aside={
-                  chapters.data
-                    ? t('chapters.aside', {
-                        count: n(chapters.data.chapters.length),
-                        sources: sources.length,
-                      })
-                    : undefined
-                }
-              />
-              {!sources.length ? (
-                <NoSource lanes={lanes} onSearch={() => setTab('sources')} title={media.title} />
-              ) : chapters.error ? (
-                <ErrorNote error={chapters.error} />
-              ) : !chapters.data ? (
-                <div className="flex flex-col gap-2">
-                  {Array.from({ length: 8 }, (_, i) => (
-                    <Skeleton key={i} className="h-11" />
-                  ))}
-                </div>
-              ) : (
-                <>
-                  {chapters.data.errors.length > 0 && (
-                    <p className="text-warn text-sm">
-                      {t('chapters.partial', { count: chapters.data.errors.length })}
-                    </p>
-                  )}
+          <div className={cx('flex-col gap-7 md:hidden', tab === 'info' ? 'flex' : 'hidden')}>
+            {details}
+          </div>
+
+          <section
+            aria-labelledby="toc"
+            className={cx(
+              'min-w-0 flex-col gap-4 md:mt-6',
+              tab === 'chapters' ? 'flex' : 'hidden md:flex',
+            )}
+          >
+            {isComic ? (
+              <>
+                <SectionHeading
+                  id="toc"
+                  num={1}
+                  title={t('chapters.title')}
+                  aside={
+                    chapters.data ? (
+                      <span className="inline-flex items-center gap-2">
+                        {t('chapters.aside', {
+                          count: n(chapters.data.chapters.length),
+                          sources: sources.length,
+                        })}
+                        {chapters.data.errors.length > 0 && (
+                          <InfoBubble tone="warn" label={t('chapters.partialLabel')}>
+                            {t('chapters.partial', { count: chapters.data.errors.length })}
+                          </InfoBubble>
+                        )}
+                      </span>
+                    ) : undefined
+                  }
+                />
+                {!sources.length ? (
+                  <NoSource lanes={lanes} onSearch={() => setDrawer('sources')} />
+                ) : chapters.error ? (
+                  <Notice
+                    tone="bad"
+                    title={t('chapters.loadFailed')}
+                    action={
+                      <button
+                        type="button"
+                        onClick={() => chapters.mutate()}
+                        className={smallButton}
+                      >
+                        {t('common.retry')}
+                      </button>
+                    }
+                  >
+                    {errorText(t, chapters.error)}
+                  </Notice>
+                ) : !chapters.data ? (
+                  <div className="flex flex-col gap-2">
+                    {Array.from({ length: 8 }, (_, i) => (
+                      <Skeleton key={i} className="h-11" />
+                    ))}
+                  </div>
+                ) : (
                   <ChapterTable
                     chapters={chapters.data.chapters}
                     priority={priority}
@@ -498,17 +515,17 @@ function Title({ media }: { media: MediaDetail }) {
                     queued={queued}
                     owned={owned}
                   />
-                </>
-              )}
-            </>
-          ) : (
-            <Empty title={t('novel.title')}>{t('novel.body')}</Empty>
-          )}
-        </section>
+                )}
+              </>
+            ) : (
+              <Empty title={t('novel.title')}>{t('novel.body')}</Empty>
+            )}
+          </section>
+        </div>
       </div>
 
       {media.relations.length > 0 && (
-        <section className="relative mx-auto flex max-w-[1440px] flex-col gap-5 px-4 pb-12 md:px-16">
+        <section className="relative mx-auto flex max-w-[1760px] flex-col gap-5 px-4 pb-12 md:px-10">
           <SectionHeading num={2} title={t('title.universe')} />
           <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 md:mx-0 md:px-0">
             {media.relations.map((r) => (
@@ -533,7 +550,7 @@ function Title({ media }: { media: MediaDetail }) {
         </section>
       )}
       {media.recommendations.length > 0 && (
-        <section className="relative mx-auto flex max-w-[1440px] flex-col gap-5 px-4 pb-20 md:px-16">
+        <section className="relative mx-auto flex max-w-[1760px] flex-col gap-5 px-4 pb-20 md:px-10">
           <SectionHeading
             num={media.relations.length ? 3 : 2}
             title={t('title.recommendations')}
@@ -559,6 +576,7 @@ function Title({ media }: { media: MediaDetail }) {
         scanStarted={needsMatch || matchRun > 0}
         onScan={rescan}
         onSources={updateSources}
+        onTrack={() => setStatus('PLANNING')}
       />
       {selected.size > 0 && (
         <div className="bg-fg text-bg fixed inset-x-3 bottom-24 z-30 mx-auto flex max-w-[760px] items-center gap-3 rounded-full py-2 pr-2 pl-5 shadow-[0_20px_40px_rgba(0,0,0,0.5)] md:bottom-6">
@@ -614,12 +632,12 @@ function Synopsis({ text }: { text: string }) {
       <p
         className={cx(
           'text-mid text-sm leading-relaxed whitespace-pre-line',
-          !open && 'line-clamp-6',
+          !open && 'line-clamp-3',
         )}
       >
         {text}
       </p>
-      {text.length > 360 && (
+      {text.length > 160 && (
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -664,45 +682,35 @@ function Automation({
   );
 }
 
-function NoSource({
-  lanes,
-  onSearch,
-  title,
-}: {
-  lanes: Lane[] | null;
-  onSearch: () => void;
-  title: string;
-}) {
+function NoSource({ lanes, onSearch }: { lanes: Lane[] | null; onSearch: () => void }) {
   const { t } = useI18n();
   const engine = useSuwayomi();
   const pending = (lanes ?? []).filter((l) => l.state === 'loading').length;
   if (engine.state && engine.state !== 'ok') return <SuwayomiNotice />;
   if (lanes === null || pending > 0)
-    return <p className="text-muted font-serif text-xl italic">{t('sources.matchingLong')}</p>;
+    return (
+      <p className="text-mid flex items-center gap-2 text-sm">
+        <Spinner />
+        {t('sources.matchingLong')}
+      </p>
+    );
   return (
-    <Empty
+    <Notice
       title={lanes.length === 0 ? t('sources.noSourcesInstalled') : t('sources.notFound')}
       action={
-        <div className="flex flex-wrap gap-2">
-          {lanes.length === 0 ? (
-            <Link href="/sources" className={smallButton}>
-              {t('sources.manage')}
-            </Link>
-          ) : (
-            <>
-              <button type="button" onClick={onSearch} className={cx(smallButton, 'md:hidden')}>
-                {t('sources.seeCandidates')}
-              </button>
-              <Link href={`/search?q=${encodeURIComponent(title)}`} className={smallButton}>
-                {t('sources.searchManually')}
-              </Link>
-            </>
-          )}
-        </div>
+        lanes.length === 0 ? (
+          <Link href="/sources" className={smallButton}>
+            {t('sources.manage')}
+          </Link>
+        ) : (
+          <button type="button" onClick={onSearch} className={smallButton}>
+            {t('sources.seeCandidates')}
+          </button>
+        )
       }
     >
       {lanes.length === 0 ? t('sources.noSourcesBody') : t('sources.notFoundBody')}
-    </Empty>
+    </Notice>
   );
 }
 

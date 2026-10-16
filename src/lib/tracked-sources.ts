@@ -1,7 +1,7 @@
 import type { ChapterSelection, SourceCandidate, TrackedMedia } from '@/types/shared';
 import { statement, db, getTracked, saveSourceStatus } from './db';
 import { sourceInfos, chaptersFor } from './suwayomi';
-import { matchOnSource } from './matching';
+import { matchOnSource, rankCandidates } from './matching';
 import { suwayomiDetail } from './catalog';
 import { errorCode } from './errors';
 import { sourceHealth } from './source-preferences';
@@ -97,6 +97,7 @@ export async function matchTrackedSources(
                 'SELECT 1 FROM source_dismissals WHERE tracked_id=? AND source_id=? AND manga_id=?',
               ).get(t.id, c.sourceId, c.suwayomiMangaId),
           )
+          .sort(rankCandidates)
           .slice(0, 3);
         statement('UPDATE tracked_media SET sources_json=?,source_match_at=? WHERE id=?').run(
           JSON.stringify(
@@ -116,7 +117,7 @@ export async function matchTrackedSources(
             title: c.title,
             thumbnailUrl: c.thumbnailUrl,
             latestChapter: null,
-            chapterCount: null,
+            chapterCount: c.chapterCount ?? null,
             checkedAt: null,
             auto: true,
             error: null,

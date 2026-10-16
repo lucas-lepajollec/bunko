@@ -80,7 +80,7 @@ export default function HomePage() {
         loading={seasonal.isLoading || lastSeason.isLoading}
         error={seasonal.error}
       />
-      <div className="relative mx-auto flex max-w-[1440px] flex-col gap-10 px-4 pb-16 md:gap-14 md:px-16">
+      <div className="relative mx-auto flex max-w-[1760px] flex-col gap-10 px-4 pb-16 md:gap-14 md:px-10">
         {resume.length > 0 && (
           <section className="flex flex-col gap-4 md:gap-5">
             <SectionHeading
@@ -199,7 +199,7 @@ function Hero({
         color={m.color}
         className="h-[calc(100%+140px)] md:h-[calc(100%+220px)]"
       />
-      <div className="absolute inset-x-4 bottom-8 flex flex-col gap-3 md:inset-x-auto md:bottom-auto md:left-[max(4rem,calc((100vw-1440px)/2+4rem))] md:top-[190px] md:w-[680px] md:gap-[18px]">
+      <div className="absolute inset-x-4 bottom-8 flex flex-col gap-3 md:inset-x-auto md:bottom-auto md:left-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))] md:top-[190px] md:w-[680px] md:gap-[18px]">
         <div className="text-soft flex items-center gap-3 text-[11px] tracking-[0.16em] uppercase md:text-xs">
           <span className="h-[3px] w-6 rounded-full" style={{ background: 'var(--accent)' }} />
           {t('home.seasonKicker', {
@@ -234,7 +234,7 @@ function Hero({
         </div>
       </div>
       {items.length > 1 && (
-        <div className="absolute right-[max(4rem,calc((100vw-1440px)/2+4rem))] bottom-[150px] hidden gap-3 md:flex">
+        <div className="absolute right-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))] bottom-[150px] hidden gap-3 md:flex">
           {items.map((item, i) => (
             <button
               key={item.id}

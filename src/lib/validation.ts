@@ -297,4 +297,8 @@ export const browseBody = z
     filters: z.array(filterChangeSchema(8)).max(100).optional(),
   })
   .strict();
-export const downloadControl = z.object({ action: z.enum(['pause', 'resume', 'clear']) }).strict();
+export const downloadControl = z.discriminatedUnion('action', [
+  z.object({ action: z.enum(['pause', 'resume', 'clear']) }).strict(),
+  z.object({ action: z.literal('retry_failed'), batchId: z.uuid().optional() }).strict(),
+  z.object({ action: z.literal('remove'), batchId: z.uuid() }).strict(),
+]);

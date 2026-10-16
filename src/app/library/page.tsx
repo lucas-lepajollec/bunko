@@ -160,7 +160,7 @@ export default function LibraryPage() {
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as Sort)}
-                className="text-fg h-[34px] rounded-full bg-white/[0.08] px-3"
+                className="text-fg h-[34px] rounded-full bg-white/[0.08] pr-9 pl-3.5"
               >
                 {(['news', 'recent', 'title', 'added'] as Sort[]).map((s) => (
                   <option key={s} value={s}>

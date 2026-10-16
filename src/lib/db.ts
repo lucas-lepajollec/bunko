@@ -67,11 +67,19 @@ export function db(): Database.Database {
     CREATE TABLE IF NOT EXISTS image_cache (
       key TEXT PRIMARY KEY, bytes INTEGER NOT NULL, accessed_at INTEGER NOT NULL,
       attempted_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS chapter_labels (
+      namespace TEXT NOT NULL, chapter_id INTEGER NOT NULL, payload TEXT NOT NULL, at INTEGER NOT NULL,
+      PRIMARY KEY(namespace,chapter_id));
+    CREATE INDEX IF NOT EXISTS chapter_labels_age ON chapter_labels(at);
     CREATE TABLE IF NOT EXISTS resolved_covers (
       tracked_id INTEGER PRIMARY KEY REFERENCES tracked_media(id) ON DELETE CASCADE,
       context TEXT NOT NULL, url TEXT NOT NULL, failures INTEGER NOT NULL DEFAULT 0);
   `);
-  connection.exec(`CREATE TABLE IF NOT EXISTS stored_covers (
+  connection.exec(`CREATE TABLE IF NOT EXISTS kavita_cover_status (
+    tracked_id INTEGER PRIMARY KEY REFERENCES tracked_media(id) ON DELETE CASCADE,
+    context TEXT NOT NULL, hash TEXT NOT NULL, series_id INTEGER NOT NULL,
+    state TEXT NOT NULL, error TEXT);
+    CREATE TABLE IF NOT EXISTS stored_covers (
     tracked_id INTEGER PRIMARY KEY REFERENCES tracked_media(id) ON DELETE CASCADE,
     context TEXT NOT NULL, hash TEXT NOT NULL, mime TEXT NOT NULL, filename TEXT NOT NULL,
     origin_url TEXT NOT NULL);
@@ -85,6 +93,7 @@ export function db(): Database.Database {
     'observed_chapters',
     'resolved_covers',
     'stored_covers',
+    'kavita_cover_status',
     'kavita_series',
     'settings',
     'download_batches',
@@ -485,6 +494,18 @@ function snapshotTracked(id?: number) {
         }[]
       ).map((r) => [r.tracked_id, r]),
     );
+    const coverStatuses = new Map(
+      (
+        select('SELECT * FROM kavita_cover_status', 'tracked_id') as {
+          tracked_id: number;
+          context: string;
+          hash: string;
+          series_id: number;
+          state: 'pending' | 'synced' | 'failed';
+          error: string | null;
+        }[]
+      ).map((r) => [r.tracked_id, r]),
+    );
     const resolved = new Map(
       (
         select('SELECT * FROM resolved_covers', 'tracked_id') as {
@@ -573,6 +594,17 @@ function snapshotTracked(id?: number) {
         type: r.type as TrackedMedia['type'],
         coverUrl,
         coverChoice,
+        kavitaCover:
+          !kavita || !coverUrl
+            ? { state: 'none', error: null }
+            : (() => {
+                const status = coverStatuses.get(id);
+                return status?.context === context &&
+                  status.series_id === kavita.seriesId &&
+                  status.hash === (stable ? stored.hash : '')
+                  ? { state: status.state, error: status.error }
+                  : { state: 'pending', error: null };
+              })(),
         backdrop: r.backdrop as TrackedMedia['backdrop'],
         coverFallbacks:
           !stable && coverChoice === 'auto' ? automaticCovers.filter((v) => v !== coverUrl) : [],
@@ -690,10 +722,11 @@ function insertTracked(input: TrackRequest): TrackedMedia {
   wakeWorker();
   return getTracked(id)!;
 }
-export function saveBatch(batch: DownloadBatch) {
+export function saveBatch(batch: DownloadBatch, linkUpdates = true) {
   statement(
     'INSERT INTO download_batches(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',
   ).run(batch.id, JSON.stringify(batch));
+  if (!linkUpdates) return;
   for (const t of listTracked().filter((t) => sameMedia(t.media, batch.media))) {
     const link = statement(`UPDATE update_chapters SET batch_id=? WHERE chapter_id=? AND entry_id IN
       (SELECT id FROM update_entries WHERE tracked_id=?)`);
@@ -714,7 +747,28 @@ export function listBatches(): DownloadBatch[] {
     statement('SELECT payload FROM download_batches ORDER BY rowid DESC').all() as {
       payload: string;
     }[]
-  ).map((r) => JSON.parse(r.payload) as DownloadBatch);
+  ).map((r) => {
+    const batch = JSON.parse(r.payload) as DownloadBatch;
+    batch.chapterIds = batch.chapterIds.slice(0, 500);
+    batch.chapters = batch.chapterIds.map(
+      (id) =>
+        batch.chapters?.find((c) => c.id === id) ?? {
+          id,
+          name: '',
+          number: null,
+          sourceName: '',
+          state: batch.importedIds.includes(id)
+            ? 'done'
+            : batch.state === 'error'
+              ? 'error'
+              : 'queued',
+          progress: null,
+          error: batch.state === 'error' && !batch.importedIds.includes(id) ? batch.error : null,
+        },
+    );
+    batch.scan ??= null;
+    return batch;
+  });
   if (!db().inTransaction) batchSnapshot = { version, entries };
   return structuredClone(entries);
 }

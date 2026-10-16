@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import type {
   DownloadBatch,
-  DownloadItem,
   DownloadStatus,
   DownloadsSnapshot,
   PublicSettings,
@@ -12,12 +11,14 @@ import { ApiFailure, mediaHref, openStream, send, useApi } from '@/lib/client/ap
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
+import { InfoBubble, toast } from '@/components/notify';
 import {
   Cover,
   Dot,
   Empty,
   ErrorNote,
   PageTitle,
+  Spinner,
   Tabs,
   cx,
   errorText,
@@ -25,16 +26,12 @@ import {
 } from '@/components/ui';
 
 type View = 'active' | 'failed' | 'history';
-const STEPS = ['download', 'import', 'scan', 'ready'] as const;
-const stepIndex = (b: DownloadBatch) =>
-  ({ enqueuing: 0, downloading: 0, importing: 1, scanning: 2, completed: 3, error: -1 })[b.state];
 
 export default function DownloadsPage() {
   const { t } = useI18n();
   const [snapshot, setSnapshot] = useState<DownloadsSnapshot | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [view, setView] = useState<View>('active');
-  const [notice, setNotice] = useState<string | null>(null);
   const settings = useApi<PublicSettings>('/api/settings');
   const engine = useSuwayomi();
   useEffect(
@@ -54,18 +51,17 @@ export default function DownloadsPage() {
   );
   const batches = snapshot?.batches ?? [];
   const active = batches.filter((b) => b.state !== 'completed' && b.state !== 'error');
-  const failed = batches.filter((b) => b.state === 'error');
-  const history = batches.filter((b) => b.state === 'completed');
+  const failed = batches.filter(hasFailures);
+  const history = batches.filter((b) => b.state === 'completed' && !hasFailures(b));
   const shown = view === 'active' ? active : view === 'failed' ? failed : history;
   const status = snapshot?.status;
   const running = status?.state === 'STARTED';
   async function control(action: 'pause' | 'resume' | 'clear') {
-    setNotice(null);
     try {
       const next = await send<DownloadStatus>('/api/downloads/control', 'POST', { action });
       setSnapshot((s) => (s ? { ...s, status: next } : s));
     } catch (e) {
-      setNotice(errorText(t, e));
+      toast({ tone: 'bad', text: errorText(t, e) });
     }
   }
   return (
@@ -108,7 +104,7 @@ export default function DownloadsPage() {
           </Empty>
         )}
         {shown.map((b) => (
-          <BatchCard key={b.id} batch={b} queue={status?.queue ?? []} />
+          <BatchCard key={b.id} batch={b} />
         ))}
       </div>
       <aside className="mt-10 flex flex-col gap-5 md:mt-[30px]">
@@ -138,7 +134,6 @@ export default function DownloadsPage() {
               {t('downloads.clear')}
             </button>
           </div>
-          {notice && <p className="text-bad text-sm">{notice}</p>}
         </div>
         <div className="flex flex-col gap-1 rounded-[18px] bg-white/[0.05] p-5 text-sm md:p-[22px]">
           <span className="text-muted mb-2.5 text-xs tracking-[0.16em] uppercase">
@@ -177,111 +172,159 @@ export default function DownloadsPage() {
   );
 }
 
-function BatchCard({ batch, queue }: { batch: DownloadBatch; queue: DownloadItem[] }) {
+const hasFailures = (b: DownloadBatch) =>
+  b.state === 'error' || b.chapters.some((c) => c.state === 'error');
+const PREVIEW = 8;
+
+function BatchCard({ batch }: { batch: DownloadBatch }) {
   const { t, n } = useI18n();
-  const [retrying, setRetrying] = useState(false);
-  const step = stepIndex(batch);
-  const items = queue.filter((q) => batch.chapterIds.includes(q.chapter.id)).slice(0, 6);
-  const done = batch.importedIds.length;
+  const [expanded, setExpanded] = useState(false);
+  const [working, setWorking] = useState(false);
+  const total = batch.chapters.length || batch.chapterIds.length;
+  const done = batch.chapters.filter((c) => c.state === 'done').length;
+  const failed = batch.chapters.filter((c) => c.state === 'error');
+  const finished = batch.state === 'completed' || batch.state === 'error';
+  // Most useful first: running, then failed, then waiting, then done.
+  const order = { downloading: 0, importing: 0, error: 1, queued: 2, done: 3 } as const;
+  const rows = [...batch.chapters].sort((a, b) => order[a.state] - order[b.state]);
+  const shown = expanded ? rows : rows.slice(0, PREVIEW);
+  async function act(body: object, ok: string) {
+    setWorking(true);
+    try {
+      await send('/api/downloads/control', 'POST', body);
+      toast({ tone: 'ok', text: ok });
+    } catch (e) {
+      toast({ tone: 'bad', text: errorText(t, e) });
+    } finally {
+      setWorking(false);
+    }
+  }
+  const stepLabel =
+    batch.state === 'error'
+      ? errorLabel(t, batch.error, 'downloads.failedGeneric')
+      : t(`downloads.state.${batch.state}`);
   return (
-    <section className="flex flex-col gap-3.5 rounded-[18px] bg-white/[0.04] p-4 md:p-[22px]">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-[18px]">
-        <div className="flex min-w-0 items-center gap-3.5">
-          <Cover src={batch.media.coverUrl} className="w-10 shrink-0 md:w-[52px]" />
-          <span className="flex min-w-0 flex-col gap-0.5">
-            <Link
-              href={mediaHref(batch.media.id)}
-              className="truncate text-base font-semibold hover:underline md:text-lg"
+    <section className="flex flex-col gap-4 rounded-[18px] bg-white/[0.04] p-4 md:p-[22px]">
+      <div className="flex items-center gap-3.5">
+        <Cover src={batch.media.coverUrl} className="w-11 shrink-0 md:w-[52px]" />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <Link
+            href={mediaHref(batch.media.id)}
+            className="truncate text-base font-semibold hover:underline md:text-lg"
+          >
+            {batch.media.title}
+          </Link>
+          <span className="text-muted flex flex-wrap items-center gap-x-2 text-xs md:text-[13px]">
+            <span>{t('downloads.doneOf', { done: n(done), total: n(total) })}</span>
+            {failed.length > 0 && (
+              <span className="text-bad">
+                · {t('downloads.failedCount', { count: failed.length })}
+              </span>
+            )}
+            <span
+              className={cx('flex items-center gap-1.5', batch.state === 'error' && 'text-bad')}
             >
-              {batch.media.title}
-            </Link>
-            <span className="text-muted text-xs md:text-[13px]">
-              {t('downloads.batchLine', { count: n(batch.chapterIds.length), done: n(done) })}
+              · {!finished && <Spinner className="size-3" />}
+              {stepLabel}
             </span>
+            {batch.scan?.state === 'failed' && (
+              <InfoBubble tone="warn" label={t('downloads.scanFailedLabel')}>
+                {t('downloads.scanFailed', {
+                  reason: errorLabel(t, batch.scan.error, 'error.KAVITA_SCAN_ERROR'),
+                })}
+              </InfoBubble>
+            )}
           </span>
-        </div>
-        {batch.state === 'error' ? (
-          <div className="flex items-center gap-3 md:ml-auto">
-            <span className="text-bad font-serif text-[17px] italic">
-              {t(`error.${batch.error}`) === `error.${batch.error}`
-                ? t('downloads.failedGeneric')
-                : t(`error.${batch.error}`)}
-            </span>
+        </span>
+        <div className="flex shrink-0 gap-2">
+          {failed.length > 0 && (
             <button
               type="button"
-              disabled={retrying}
-              onClick={async () => {
-                setRetrying(true);
-                await send('/api/downloads/batches', 'POST', {
-                  id: batch.id,
-                  action: 'retry',
-                }).catch(() => undefined);
-                setRetrying(false);
-              }}
-              className="bg-fg text-bg h-9 rounded-full px-4 text-[13px] font-semibold"
+              disabled={working}
+              onClick={() =>
+                act(
+                  { action: 'retry_failed', batchId: batch.id },
+                  t('downloads.retrying', { count: failed.length }),
+                )
+              }
+              className="bg-fg text-bg h-9 rounded-full px-4 text-[13px] font-semibold disabled:opacity-50"
             >
-              {t('downloads.retry')}
+              {t('downloads.retryFailed')}
             </button>
-          </div>
-        ) : (
-          <ol
-            className="flex flex-wrap items-center gap-x-1.5 gap-y-1 md:ml-auto"
-            aria-label={t('downloads.steps')}
+          )}
+          <button
+            type="button"
+            disabled={working}
+            aria-label={finished ? t('downloads.remove') : t('downloads.cancel')}
+            title={finished ? t('downloads.remove') : t('downloads.cancel')}
+            onClick={() =>
+              (finished || window.confirm(t('downloads.cancelConfirm'))) &&
+              act({ action: 'remove', batchId: batch.id }, t('downloads.removed'))
+            }
+            className="text-mid flex size-9 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
           >
-            {STEPS.map((s, i) => (
-              <li
-                key={s}
-                aria-current={i === step ? 'step' : undefined}
+            ✕
+          </button>
+        </div>
+      </div>
+      <span className="h-1 overflow-hidden rounded-full bg-white/10">
+        <span
+          className="bg-ok block h-full rounded-full transition-[width] duration-500"
+          style={{ width: `${total ? (done / total) * 100 : 0}%` }}
+        />
+      </span>
+      {rows.length > 0 && (
+        <ul className="flex flex-col">
+          {shown.map((c) => (
+            <li
+              key={c.id}
+              className="border-line relative flex min-h-[44px] items-center gap-3 overflow-hidden border-b px-1 text-sm last:border-b-0"
+            >
+              {c.state === 'downloading' && c.progress !== null && (
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 bg-[#7aa2ff]/[0.14]"
+                  style={{ width: `${Math.round(c.progress * 100)}%` }}
+                />
+              )}
+              <span className="relative min-w-0 flex-1 truncate">
+                <span className="font-serif text-[18px]">
+                  {c.number !== null ? t('chapters.number', { n: n(c.number) }) : c.name}
+                </span>
+                <span className="text-muted ml-2 text-xs">{c.sourceName}</span>
+              </span>
+              <span
                 className={cx(
-                  'flex items-center gap-1.5 font-serif text-[15px] italic md:text-[17px]',
-                  i <= step ? 'text-fg' : 'text-faint',
+                  'relative flex shrink-0 items-center gap-1.5 text-right text-[13px]',
+                  c.state === 'error' ? 'text-bad' : c.state === 'done' ? 'text-ok' : 'text-mid',
                 )}
               >
-                <span
-                  className="size-2 rounded-full"
-                  style={{
-                    background:
-                      i < step || step === 3
-                        ? 'var(--color-ok)'
-                        : i === step
-                          ? '#7aa2ff'
-                          : '#3a3632',
-                  }}
-                />
-                {t(`downloads.step.${s}`)}
-                {i < STEPS.length - 1 && (
-                  <span aria-hidden className="bg-line-strong ml-1 h-px w-4" />
+                {(c.state === 'downloading' || c.state === 'importing') && (
+                  <Spinner className="size-3" />
                 )}
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
-      {items.length > 0 && (
-        <ul className="border-line flex flex-col border-t">
-          {items.map((q) => (
-            <li
-              key={q.chapter.id}
-              className="border-line relative flex h-[42px] items-center gap-3.5 border-b px-3 text-sm"
-            >
-              <span
-                className="absolute inset-y-0 left-0 bg-[#7aa2ff]/[0.16]"
-                style={{ width: `${Math.round(q.progress * 100)}%` }}
-              />
-              <span className="relative w-[130px] truncate font-serif text-[19px]">
-                {q.chapter.name}
-              </span>
-              <span className="relative ml-auto text-[13px]">
-                {q.state === 'DOWNLOADING'
-                  ? t('downloads.percent', { n: Math.round(q.progress * 100) })
-                  : q.state === 'ERROR'
-                    ? t('downloads.itemError')
-                    : t('downloads.waiting')}
+                {c.state === 'error'
+                  ? errorLabel(t, c.error, 'downloads.itemError')
+                  : c.state === 'downloading' && c.progress !== null
+                    ? t('downloads.percent', { n: Math.round(c.progress * 100) })
+                    : t(`downloads.chapter.${c.state}`)}
               </span>
             </li>
           ))}
         </ul>
       )}
+      {rows.length > PREVIEW && (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="text-mid self-start text-sm hover:text-white"
+        >
+          {expanded ? t('common.less') : t('downloads.showAll', { count: n(rows.length) })}
+        </button>
+      )}
     </section>
   );
+}
+
+function errorLabel(t: (k: string) => string, code: string | null, fallback: string) {
+  return code && t(`error.${code}`) !== `error.${code}` ? t(`error.${code}`) : t(fallback);
 }

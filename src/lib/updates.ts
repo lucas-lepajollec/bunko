@@ -43,9 +43,17 @@ export function updatesFeed(): UpdatesFeed {
     const t = tracked.find((t) => t.id === row.tracked_id);
     if (!t) return [];
     const chapters = statement(
-      'SELECT number,batch_id FROM update_chapters WHERE entry_id=? ORDER BY number',
-    ).all(row.id) as { number: number | null; batch_id: string | null }[];
-    const states = chapters.map((c) => (c.batch_id ? batches.get(c.batch_id)?.state : undefined));
+      'SELECT chapter_id,number,batch_id FROM update_chapters WHERE entry_id=? ORDER BY number',
+    ).all(row.id) as { chapter_id: number; number: number | null; batch_id: string | null }[];
+    const states = chapters.map((c) => {
+      const batch = c.batch_id ? batches.get(c.batch_id) : undefined;
+      const chapter = batch?.chapters.find(
+        (v) => v.id === c.chapter_id || (c.number !== null && v.number === c.number),
+      );
+      if (chapter?.state === 'done') return 'completed';
+      if (chapter?.state === 'error') return 'error';
+      return batch?.state;
+    });
     let state: UpdateState = 'pending';
     if (states.length && states.every((s) => s === 'completed')) state = 'downloaded';
     else if (states.some((s) => s === 'error')) state = 'error';

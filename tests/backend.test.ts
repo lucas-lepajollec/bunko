@@ -402,8 +402,8 @@ describe('durable download pipeline', () => {
     scanFails = true;
     const batch = await createBatch({ chapterIds: [10], media });
     await processBatch(batch);
-    expect(batch.state).toBe('error');
-    expect(batch.error).toBe('KAVITA_SCAN_ERROR');
+    expect(batch.state).toBe('completed');
+    expect(batch.scan).toMatchObject({ state: 'failed', error: 'KAVITA_SCAN_ERROR' });
     expect(batch.importedIds).toEqual([10]);
     expect(scans).toBe(1);
     expect(
@@ -415,7 +415,7 @@ describe('durable download pipeline', () => {
     scanFails = true;
     const batch = listBatches()[0];
     await processBatch(batch);
-    expect(batch.state).toBe('error');
+    expect(batch.state).toBe('completed');
     expect(batch.importedIds).toEqual([10]);
     const folder = path.join(directory, 'library', 'Manga', seriesName(media));
     const archive = readdirSync(folder).find((n) => n.endsWith('.cbz'))!;
@@ -436,7 +436,7 @@ describe('durable download pipeline', () => {
       calls.filter((c) => String(c.body.query).includes('enqueueChapterDownloads(')),
     ).toHaveLength(enqueuesBefore);
     const scan = calls.findLast((c) => c.path === '/api/Library/scan-folder');
-    expect(scan?.headers.authorization).toBe('Bearer fixture-jwt');
+    expect(scan?.body.apiKey).toBe(getSettings().kavitaApiKey);
     expect(scan?.body.folderPath).toContain('/library/');
   });
   it('records explicit chapter download failures', async () => {
