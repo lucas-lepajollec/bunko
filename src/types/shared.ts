@@ -43,6 +43,17 @@ export interface UnifiedMedia {
   popularity: number | null;
   /** Publication start as a partial ISO date: "YYYY", "YYYY-MM" or "YYYY-MM-DD". */
   startDate: string | null;
+  /** The matching series already present in Kavita, if any. */
+  kavita: KavitaPresence | null;
+}
+export interface KavitaPresence {
+  seriesId: number;
+  libraryId: number;
+  libraryName: string;
+  /** Distinct chapter numbers Kavita holds for the series. */
+  chapters: number;
+  /** Deep link into the Kavita web reader, when the Kavita address is known. */
+  url: string | null;
 }
 export interface RelatedMedia {
   relation: string;
@@ -83,7 +94,7 @@ export interface SourceCandidate extends SourceMatch {
 export type MatchEventMap = {
   sources: { sources: Source[] };
   match: { source: Source; candidates: SourceCandidate[]; durationMs: number };
-  source_error: { source: Source; code: string };
+  source_error: { source: Source; code: string; detail?: string | null };
   done: { completed: number };
   error: ApiError['error'];
 };
@@ -140,6 +151,8 @@ export interface MergedChapter {
 export interface ChaptersResponse {
   chapters: MergedChapter[];
   errors: { mangaId: number; code: string }[];
+  /** Chapter numbers already in the matching Kavita series (empty when none is known). */
+  inKavita: number[];
 }
 export interface ChapterSelection {
   suwayomiMangaId: number;
@@ -216,7 +229,10 @@ export interface Settings {
   sonarrApiKey: string;
   prowlarrUrl: string;
   prowlarrApiKey: string;
+  /** Kavita-side path of the folder mounted at /library in this container. */
   kavitaLibraryPath: string;
+  /** Kavita library and folder receiving each format; unset kinds go to the mounted library root. */
+  libraryTargets: LibraryTargets;
   favoriteSourceIds: string[];
   extensionRepos: string[];
   /** Worker update-check interval in minutes (5–1440), default 15. */
@@ -280,7 +296,7 @@ export interface ApiError {
 export type SearchEventMap = {
   sources: { sources: Source[] };
   source_result: SourceResult;
-  source_error: { source: Source; code: string };
+  source_error: { source: Source; code: string; detail?: string | null };
   done: { completed: number };
   error: ApiError['error'];
 };
@@ -295,8 +311,10 @@ export interface ServicesStatus {
 export interface SourceHealth {
   state: 'ok' | 'slow' | 'error' | 'unknown';
   latencyMs: number | null;
-  /** Safe error code only (e.g. UPSTREAM_TIMEOUT, CLOUDFLARE). */
+  /** Safe error code only (e.g. UPSTREAM_TIMEOUT, CLOUDFLARE, SOURCE_HTTP_ERROR, SOURCE_LOGIN_REQUIRED). */
   error: string | null;
+  /** Short, sanitized reason reported by the extension (no URLs, no credentials), for display. */
+  detail?: string | null;
   checkedAt: string | null;
 }
 export interface SourceInfo extends Source {
@@ -379,3 +397,44 @@ export interface UpdatesFeed {
   trackedCount: number;
 }
 export type DownloadControl = { action: 'pause' | 'resume' | 'clear' };
+
+/* ---- Kavita libraries, targets and existing content ---- */
+/** Formats routed to a Kavita library. ONE_SHOT follows MANGA; both novel formats follow NOVEL. */
+export type LibraryKind = 'MANGA' | 'MANHWA' | 'MANHUA' | 'NOVEL';
+export interface KavitaFolder {
+  /** Folder path as Kavita sees it. */
+  path: string;
+  /** Same folder inside this container when it is under the mounted library, else null. */
+  localPath: string | null;
+  writable: boolean;
+}
+export interface KavitaLibrary {
+  id: number;
+  name: string;
+  /** Kavita library type name (Manga, Comic, Book, LightNovel, …). */
+  type: string;
+  folders: KavitaFolder[];
+}
+export interface LibraryTarget {
+  libraryId: number;
+  /** Kavita-side folder path chosen inside that library. */
+  folder: string;
+}
+export type LibraryTargets = Partial<Record<LibraryKind, LibraryTarget>>;
+export interface KavitaSeriesSummary {
+  seriesId: number;
+  libraryId: number;
+  libraryName: string;
+  name: string;
+  chapters: number;
+  /** Proxied cover (`/api/kavita/image?seriesId=`), never a URL carrying the API key. */
+  coverUrl: string | null;
+  url: string | null;
+  /** Tracked KaviSeerr entry linked to this series, if any. */
+  trackedId: number | null;
+}
+export interface KavitaIndexStatus {
+  state: 'ok' | 'error' | 'unconfigured';
+  series: number;
+  syncedAt: string | null;
+}

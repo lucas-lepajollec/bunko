@@ -2,10 +2,20 @@
 import Link from 'next/link';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useSWRConfig } from 'swr';
-import type { PublicSettings, SecretSetting, ServicesStatus, SettingsPatch } from '@/types/shared';
+import type {
+  KavitaIndexStatus,
+  KavitaLibrary,
+  LibraryKind,
+  LibraryTargets,
+  PublicSettings,
+  SecretSetting,
+  ServicesStatus,
+  SettingsPatch,
+} from '@/types/shared';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LanguageSelect, Page } from '@/components/shell';
+import { useRelativeTime } from '@/components/time';
 import {
   Dot,
   ErrorNote,
@@ -17,7 +27,15 @@ import {
   smallButton,
 } from '@/components/ui';
 
-const SECTIONS = ['connections', 'downloads', 'display', 'sources', 'modules', 'access'] as const;
+const SECTIONS = [
+  'connections',
+  'kavita',
+  'downloads',
+  'display',
+  'sources',
+  'modules',
+  'access',
+] as const;
 type Settings = PublicSettings & { updateIntervalMinutes?: number };
 
 export default function SettingsPage() {
@@ -61,27 +79,33 @@ export default function SettingsPage() {
                 onSaved={() => Promise.all([settings.mutate(), status.mutate()])}
               />
             </Section>
-            <Section id="downloads" index={2}>
+            <Section id="kavita" index={2}>
+              <KavitaTargets
+                settings={settings.data}
+                onSaved={(s) => settings.mutate(s, { revalidate: false })}
+              />
+            </Section>
+            <Section id="downloads" index={3}>
               <Downloads
                 settings={settings.data}
                 onSaved={(s) => settings.mutate(s, { revalidate: false })}
               />
             </Section>
-            <Section id="display" index={3}>
+            <Section id="display" index={4}>
               <Row label={t('settings.language')} tip={t('settings.languageTip')}>
                 <LanguageSelect className="h-11 px-4" />
               </Row>
             </Section>
-            <Section id="sources" index={4}>
+            <Section id="sources" index={5}>
               <p className="text-mid text-sm leading-relaxed">{t('settings.sourcesBody')}</p>
               <Link href="/sources" className={cx(smallButton, 'self-start')}>
                 {t('settings.manageSources')} →
               </Link>
             </Section>
-            <Section id="modules" index={5}>
+            <Section id="modules" index={6}>
               <Modules />
             </Section>
-            <Section id="access" index={6}>
+            <Section id="access" index={7}>
               <Access />
             </Section>
           </>
@@ -438,6 +462,121 @@ function Access() {
       >
         {t('settings.signOut')}
       </button>
+    </div>
+  );
+}
+
+const KINDS: LibraryKind[] = ['MANGA', 'MANHWA', 'MANHUA', 'NOVEL'];
+
+function KavitaTargets({
+  settings,
+  onSaved,
+}: {
+  settings: Settings;
+  onSaved: (s: Settings) => void;
+}) {
+  const { t, n } = useI18n();
+  const libraries = useApi<KavitaLibrary[]>(settings.kavitaUrl ? '/api/kavita/libraries' : null);
+  const index = useApi<KavitaIndexStatus>(settings.kavitaUrl ? '/api/kavita/status' : null, {
+    refreshInterval: 10_000,
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const targets: LibraryTargets = settings.libraryTargets ?? {};
+  const relative = useRelativeTime();
+  if (!settings.kavitaUrl) return <p className="text-mid text-sm">{t('kavita.needsConnection')}</p>;
+  async function save(kind: LibraryKind, value: string) {
+    setError(null);
+    const next: LibraryTargets = { ...targets };
+    if (!value) delete next[kind];
+    else {
+      const [libraryId, ...rest] = value.split('|');
+      next[kind] = { libraryId: Number(libraryId), folder: rest.join('|') };
+    }
+    try {
+      onSaved(await send<Settings>('/api/settings', 'PATCH', { libraryTargets: next }));
+    } catch (e) {
+      setError(errorText(t, e));
+    }
+  }
+  const usable = (libraries.data ?? []).some((l) =>
+    l.folders.some((f) => f.localPath && f.writable),
+  );
+  return (
+    <div className="flex flex-col gap-5 text-sm">
+      <div className="flex flex-wrap items-center gap-3 rounded-[18px] bg-white/[0.045] p-4 md:px-[22px]">
+        <Dot
+          tone={index.data?.state === 'ok' ? 'ok' : index.data?.state === 'error' ? 'bad' : 'idle'}
+        />
+        <span>
+          {index.data?.state === 'ok'
+            ? t('kavita.indexed', {
+                count: n(index.data.series),
+                when: relative(index.data.syncedAt),
+              })
+            : index.data?.state === 'error'
+              ? t('kavita.indexError')
+              : t('kavita.indexPending')}
+        </span>
+        <button
+          type="button"
+          disabled={syncing}
+          onClick={async () => {
+            setSyncing(true);
+            await send('/api/kavita/sync', 'POST').catch(() => undefined);
+            setSyncing(false);
+            void index.mutate();
+          }}
+          className={cx(smallButton, 'md:ml-auto')}
+        >
+          {syncing ? t('common.working') : t('kavita.sync')}
+        </button>
+      </div>
+      <p className="text-mid leading-relaxed">
+        {t('kavita.targetsHint', { path: settings.kavitaLibraryPath })}
+      </p>
+      {libraries.error && <ErrorNote error={libraries.error} />}
+      {libraries.data && !usable && (
+        <p className="text-warn leading-relaxed">
+          {t('kavita.noUsableFolder', { path: settings.kavitaLibraryPath })}
+        </p>
+      )}
+      {KINDS.map((kind) => {
+        const current = targets[kind];
+        return (
+          <Row key={kind} label={t(`kavita.kind.${kind}`)}>
+            <select
+              aria-label={t(`kavita.kind.${kind}`)}
+              value={current ? `${current.libraryId}|${current.folder}` : ''}
+              onChange={(e) => save(kind, e.target.value)}
+              className={cx(field, 'md:w-[420px]')}
+            >
+              <option value="">
+                {t('kavita.defaultTarget', { path: settings.kavitaLibraryPath })}
+              </option>
+              {(libraries.data ?? []).map((lib) => (
+                <optgroup key={lib.id} label={`${lib.name} · ${lib.type}`}>
+                  {lib.folders.map((f) => (
+                    <option
+                      key={f.path}
+                      value={`${lib.id}|${f.path}`}
+                      disabled={!f.localPath || !f.writable}
+                    >
+                      {f.path}
+                      {!f.localPath
+                        ? ` — ${t('kavita.notMounted')}`
+                        : !f.writable
+                          ? ` — ${t('kavita.readOnly')}`
+                          : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </Row>
+        );
+      })}
+      {error && <p className="text-bad">{error}</p>}
     </div>
   );
 }

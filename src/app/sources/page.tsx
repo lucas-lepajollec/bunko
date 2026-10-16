@@ -247,7 +247,7 @@ function MySources({
                     {ext?.hasUpdate ? ` · ${t('sources.updateAvailable')}` : ''}
                   </span>
                 </span>
-                <span className="text-mid col-start-2 row-start-2 flex items-center gap-2 text-xs md:col-start-auto md:row-start-auto md:text-sm">
+                <span className="text-mid col-start-2 row-start-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs md:col-start-auto md:row-start-auto md:text-sm">
                   <Dot tone={tone} />
                   {s.health.state === 'unknown'
                     ? t('sources.health.unknown')
@@ -258,6 +258,14 @@ function MySources({
                       : t('sources.health.latency', {
                           s: n((s.health.latencyMs ?? 0) / 1000, { maximumFractionDigits: 1 }),
                         })}
+                  {s.health.detail && (
+                    <span
+                      className="text-faint block w-full truncate text-[11px]"
+                      title={s.health.detail}
+                    >
+                      {s.health.detail}
+                    </span>
+                  )}
                 </span>
                 <label className="text-mid col-start-2 row-start-3 flex items-center gap-2.5 text-xs md:col-start-auto md:row-start-auto md:text-sm">
                   <input

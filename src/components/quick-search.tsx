@@ -142,7 +142,11 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
                 <span className="truncate text-sm font-medium">{m.title}</span>
                 <span className="text-muted truncate text-xs">
                   {meta(m, true)}
-                  {m.trackedId !== null ? ` · ${t('common.inLibrary')}` : ''}
+                  {m.kavita
+                    ? ` · ${t('common.inKavita')}`
+                    : m.trackedId !== null
+                      ? ` · ${t('common.inLibrary')}`
+                      : ''}
                 </span>
               </span>
             </button>

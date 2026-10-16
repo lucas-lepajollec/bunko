@@ -148,7 +148,7 @@ function Title({ media }: { media: MediaDetail }) {
   const chaptersKey = isComic && sources.length ? ['chapters', JSON.stringify(sources)] : null;
   const chapters = useSWR<ChaptersResponse>(
     chaptersKey,
-    () => send<ChaptersResponse>('/api/manga/chapters', 'POST', { sources }),
+    () => send<ChaptersResponse>('/api/manga/chapters', 'POST', { sources, mediaId: media.id }),
     {
       revalidateOnFocus: false,
     },
@@ -160,7 +160,8 @@ function Title({ media }: { media: MediaDetail }) {
   const queued = new Set(
     active.flatMap((b) => b.chapterIds.filter((cid) => !b.importedIds.includes(cid))),
   );
-  const missing = (chapters.data?.chapters ?? []).filter(isMissing);
+  const owned = new Set(chapters.data?.inKavita ?? []);
+  const missing = (chapters.data?.chapters ?? []).filter((c) => isMissing(c, owned));
   const progress = entry?.progress ?? {
     read: null,
     owned: 0,
@@ -201,7 +202,7 @@ function Title({ media }: { media: MediaDetail }) {
   async function download(keys: string[]) {
     const list = chapters.data?.chapters ?? [];
     const ids = list
-      .filter((c) => keys.includes(c.key) && isMissing(c))
+      .filter((c) => keys.includes(c.key) && isMissing(c, owned))
       .map((c) => preferredVariant(c, priority, choice[c.key])?.id)
       .filter((v): v is number => typeof v === 'number' && !queued.has(v));
     if (!ids.length) return;
@@ -324,6 +325,16 @@ function Title({ media }: { media: MediaDetail }) {
                 ))}
               </select>
             </label>
+            {media.kavita?.url && (
+              <a
+                href={media.kavita.url}
+                target="_blank"
+                rel="noreferrer"
+                className={cx(ghostButton, 'bg-transparent ring-1 ring-white/25')}
+              >
+                {t('kavita.read', { n: media.kavita.chapters })} ↗
+              </a>
+            )}
           </div>
           {entry && (
             <div className="flex max-w-[520px] flex-col gap-2">
@@ -449,6 +460,7 @@ function Title({ media }: { media: MediaDetail }) {
                     choice={choice}
                     setChoice={(k, v) => setChoice((c) => ({ ...c, [k]: v }))}
                     queued={queued}
+                    owned={owned}
                   />
                 </>
               )}

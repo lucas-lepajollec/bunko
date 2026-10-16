@@ -103,7 +103,9 @@ In Kavita, mount the same host folder (for example `/srv/media/manga/kaviseerr:/
 
 Your Suwayomi extensions appear under **Sources** right away. Choose which ones join global search, then open a title and pick chapters.
 
-> **Good to know.** KaviSeerr turns on *Save as CBZ* in your Suwayomi settings, because Kavita reads CBZ best. Chapters are copied over HTTP into the library folder; Suwayomi and KaviSeerr do not need to share a volume.
+To store each format in its own Kavita library (for example manga and webtoons separately), mount the **parent** folder of your Kavita libraries at `/library`, set its Kavita path in Connections, then pick a library folder per format in **Settings → Kavita libraries**. KaviSeerr also indexes what Kavita already holds: titles you own show an *In Kavita* badge, owned chapters are not downloaded again, and existing series can be followed from **Library → In Kavita**.
+
+> **Good to know.** KaviSeerr asks Suwayomi only for the chapter pages, then builds each CBZ itself, named the way Kavita expects (`Series/Series Ch. 0012.cbz`) with embedded metadata. Suwayomi's own download folder and settings are left untouched, and the two containers do not need to share a volume.
 
 <details>
 <summary><b>Starting from scratch?</b> Run KaviSeerr with its own Suwayomi and FlareSolverr</summary>
@@ -124,7 +126,7 @@ Then add an extension repository you trust under **Sources → Repositories** an
 - **Suwayomi shows "unreachable".** Inside a container, `localhost` is the container itself. Use the host's LAN address, a shared Docker network and the Suwayomi service name, or `host.docker.internal` with `extra_hosts: ["host.docker.internal:host-gateway"]`.
 - **Imports fail with a permission error.** The container runs as UID 1000: the library folder must be writable by that user.
 - **Kavita does not show new chapters.** Check that the "library folder as seen by Kavita" matches Kavita's own mount path, and that this folder belongs to a Kavita library.
-- **A source fails or is slow.** Update its extension under **Sources**; Cloudflare-protected sites may need FlareSolverr configured in Suwayomi.
+- **A source fails or is slow.** The source list shows the reason reported by the extension (Cloudflare, HTTP error, login required). Update the extension under **Sources**; Cloudflare-protected sites may need FlareSolverr configured in Suwayomi.
 
 </details>
 

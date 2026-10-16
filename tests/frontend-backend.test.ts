@@ -4,7 +4,6 @@ import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, type Server } from 'node:http';
-import AdmZip from 'adm-zip';
 const directory = mkdtempSync(path.join(tmpdir(), 'kaviseerr-v2-'));
 process.env.KAVISEERR_DATA_DIR = path.join(directory, 'data');
 process.env.KAVISEERR_LIBRARY_DIR = path.join(directory, 'library');
@@ -174,7 +173,9 @@ beforeAll(async () => {
                 : [chapter(21, 1), chapter(23, 3)],
           },
         };
-      } else if (query.includes('chapter(id:'))
+      } else if (query.includes('fetchChapterPages'))
+        data = { fetchChapterPages: { pages: ['/api/v1/manga/101/chapter/0/page/0'] } };
+      else if (query.includes('chapter(id:'))
         data = {
           chapter: {
             ...chapter(body.variables.id, body.variables.id === 15 ? 5 : 4),
@@ -200,10 +201,9 @@ beforeAll(async () => {
       res.end(JSON.stringify({ data }));
       return;
     }
-    if (req.url?.startsWith('/api/v1/chapter/')) {
-      const zip = new AdmZip();
-      zip.addFile('1.jpg', Buffer.from('synthetic page'));
-      res.end(zip.toBuffer());
+    if (req.url?.startsWith('/api/v1/manga/101/chapter/0/page/')) {
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.end(Buffer.from('synthetic page'));
       return;
     }
     if (req.url?.startsWith('/api/Search/search?')) {
@@ -281,7 +281,7 @@ afterAll(async () => {
 });
 // First assertion deliberately runs before destructive fixture resets, on an actual v1 database.
 it('migrates an existing v1 database transactionally and idempotently without losing tracked data', () => {
-  expect(db().pragma('user_version', { simple: true })).toBe(2);
+  expect(db().pragma('user_version', { simple: true })).toBe(3);
   expect(listTracked()[0]).toMatchObject({
     id: 1,
     title: 'Legacy',
@@ -296,7 +296,7 @@ it('migrates an existing v1 database transactionally and idempotently without lo
 describe('v2 protocol fixtures', () => {
   beforeEach(() => {
     db().exec(
-      'DELETE FROM tracked_media; DELETE FROM imported_chapters; DELETE FROM download_batches; DELETE FROM worker_state; DELETE FROM worker_lock; DELETE FROM source_health;',
+      'DELETE FROM tracked_media; DELETE FROM imported_chapters; DELETE FROM download_batches; DELETE FROM worker_state; DELETE FROM worker_lock; DELETE FROM source_health; DELETE FROM download_jobs; DELETE FROM kavita_series;',
     );
     db().prepare("DELETE FROM settings WHERE key='sourcePreferences'").run();
     updateSettings({
@@ -534,9 +534,7 @@ describe('v2 protocol fixtures', () => {
     expect(updatesFeed().entries[0]).toMatchObject({ chapters: [5], state: 'queued' });
     const batch = listBatches()[0];
     await processBatch(batch);
-    expect(updatesFeed().entries[0].state).toBe('downloading');
-    downloaded = true;
-    await processBatch(batch); // Import succeeds; Kavita remains unconfigured.
+    // Pages import directly even while Suwayomi isDownloaded is false; Kavita is unconfigured.
     expect(updatesFeed().entries[0].state).toBe('error');
     expect(listTracked()[0].progress.owned).toBe(1);
     updateSettings({ kavitaUrl: base, kavitaApiKey: 'synthetic-api-key' });
@@ -611,16 +609,14 @@ describe('v2 protocol fixtures', () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
     expect(updatesFeed().entries).toHaveLength(1);
   });
-  it('maps pause, resume and clear to the exact downloader mutations and returns status', async () => {
-    for (const [action, name] of [
-      ['pause', 'stopDownloader'],
-      ['resume', 'startDownloader'],
-      ['clear', 'clearDownloader'],
-    ] as const) {
+  it('controls the local downloader without Suwayomi mutations', async () => {
+    const before = calls.length;
+    for (const action of ['pause', 'resume', 'clear'] as const) {
       const result = await controlDownloader({ action });
+      expect(result.state).toBe(action === 'pause' ? 'STOPPED' : 'STARTED');
       expect(result.queue).toEqual([]);
-      expect(String(calls.at(-1)?.body.query)).toContain(`${name}(input: {})`);
     }
+    expect(calls.length).toBe(before);
     const { POST } = await import('@/app/api/downloads/control/route');
     expect(
       (await POST(request('/api/downloads/control', 'POST', { action: 'delete' }))).status,

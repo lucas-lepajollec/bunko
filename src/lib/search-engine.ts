@@ -1,5 +1,6 @@
 import type { MediaType, Provider, SearchResponse, UnifiedMedia } from '@/types/shared';
 import { listTracked, searchCatalog } from './db';
+import { withKavita } from './kavita-index';
 import { requestJson } from './http';
 import {
   aniFields,
@@ -131,6 +132,22 @@ async function mangaupdates(
     .filter((m) => type !== 'MANGA' || !/novel/i.test(m.type ?? ''))
     .map(fromMangaUpdates);
 }
+function enrichSearch(items: UnifiedMedia[]): UnifiedMedia[] {
+  const tracked = listTracked();
+  return items.map((m) => {
+    const t = tracked.find(
+      (t) =>
+        t.type === m.type &&
+        ((m.anilistId !== null && t.anilistId === m.anilistId) ||
+          (m.mangadexId !== null && t.mangadexId === m.mangadexId) ||
+          t.media.id === m.id),
+    );
+    return withKavita(
+      { ...m, trackedId: t?.id ?? null, kavitaSeriesId: t?.kavitaSeriesId ?? null },
+      t?.kavitaSeriesId,
+    );
+  });
+}
 const cache = new Map<string, { at: number; value: SearchResponse }>();
 export async function search(
   query: string,
@@ -140,7 +157,8 @@ export async function search(
   const start = Date.now();
   const key = `${type}:${query.toLowerCase()}`;
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < 30_000) return structuredClone(hit.value);
+  if (hit && Date.now() - hit.at < 30_000)
+    return { ...structuredClone(hit.value), results: enrichSearch(hit.value.results) };
   const jobs: { provider: Provider; run: () => Promise<UnifiedMedia[]> }[] = [
     { provider: 'anilist', run: () => anilist(query, type, signal) },
   ];
@@ -169,18 +187,9 @@ export async function search(
       }
     }),
   );
-  const tracked = listTracked();
-  const results = deduplicate(settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])))
-    .map((m) => {
-      const t = tracked.find(
-        (t) =>
-          t.type === m.type &&
-          ((m.anilistId !== null && t.anilistId === m.anilistId) ||
-            (m.mangadexId !== null && t.mangadexId === m.mangadexId) ||
-            t.media.id === m.id),
-      );
-      return { ...m, trackedId: t?.id ?? null, kavitaSeriesId: t?.kavitaSeriesId ?? null };
-    })
+  const results = enrichSearch(
+    deduplicate(settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))),
+  )
     .map((m) => ({ m, rank: relevance(m, query) }))
     .sort((a, b) => b.rank - a.rank)
     .map(({ m }) => m);

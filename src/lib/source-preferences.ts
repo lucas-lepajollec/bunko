@@ -26,13 +26,19 @@ export function sourceHealth(id: string): SourceHealth {
     { payload: string } | undefined;
   return row
     ? JSON.parse(row.payload)
-    : { state: 'unknown', latencyMs: null, error: null, checkedAt: null };
+    : { state: 'unknown', latencyMs: null, error: null, detail: null, checkedAt: null };
 }
-export function recordSourceHealth(id: string, latencyMs: number, error: string | null = null) {
+export function recordSourceHealth(
+  id: string,
+  latencyMs: number,
+  error: string | null = null,
+  detail: string | null = null,
+) {
   const health: SourceHealth = {
     state: error ? 'error' : latencyMs > 4000 ? 'slow' : 'ok',
     latencyMs,
     error,
+    detail,
     checkedAt: new Date().toISOString(),
   };
   db()

@@ -62,7 +62,7 @@ export async function matchOnSource(
   const titles = [media.title, ...media.altTitles];
   const found = new Map<number, SourceCandidate>();
   for (const query of searchQueries(media)) {
-    const result = await searchSource(source, query, signal, 1, 'SEARCH', 8000);
+    const result = await searchSource(source, query, signal, 1, 'SEARCH', 20_000);
     result.results.forEach((hit, i) => {
       const score = titleScore(result.titles[i], titles);
       const previous = found.get(hit.suwayomiMangaId);

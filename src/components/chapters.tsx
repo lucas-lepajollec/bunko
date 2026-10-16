@@ -19,7 +19,9 @@ const rank = (priority: string[], id: string) => {
   const i = priority.indexOf(id);
   return i < 0 ? priority.length : i;
 };
-export const isMissing = (c: MergedChapter) => !c.variants.some((v) => v.isDownloaded);
+/** Missing = not in Kavita (by chapter number) and not already downloaded through Suwayomi. */
+export const isMissing = (c: MergedChapter, owned?: Set<number>) =>
+  !(c.number !== null && owned?.has(c.number)) && !c.variants.some((v) => v.isDownloaded);
 
 export function ChapterTable({
   chapters,
@@ -30,6 +32,7 @@ export function ChapterTable({
   choice,
   setChoice,
   queued,
+  owned,
 }: {
   chapters: MergedChapter[];
   priority: string[];
@@ -39,6 +42,8 @@ export function ChapterTable({
   choice: Record<string, number>;
   setChoice: (key: string, variantId: number) => void;
   queued: Set<number>;
+  /** Chapter numbers already in Kavita. */
+  owned: Set<number>;
 }) {
   const { t, n } = useI18n();
   const [filter, setFilter] = useState<ChapterFilter>('missing');
@@ -49,7 +54,7 @@ export function ChapterTable({
     () => [...chapters].sort((a, b) => (b.number ?? -1) - (a.number ?? -1)),
     [chapters],
   );
-  const missing = ordered.filter(isMissing);
+  const missing = ordered.filter((c) => isMissing(c, owned));
   const unread = ordered.filter((c) => read === null || (c.number ?? 0) > read);
   const max = Math.max(0, ...ordered.map((c) => c.number ?? 0));
   const buckets = Array.from(
@@ -57,7 +62,7 @@ export function ChapterTable({
     (_, i) => Math.ceil(max / BUCKET) - 1 - i,
   );
   const visible = ordered.filter((c) => {
-    if (filter === 'missing') return isMissing(c);
+    if (filter === 'missing') return isMissing(c, owned);
     if (filter === 'unread') return read === null || (c.number ?? 0) > read;
     if (filter.startsWith('range:')) {
       const b = Number(filter.slice(6));
@@ -164,6 +169,7 @@ export function ChapterTable({
           return (
             <ChapterRow
               key={c.key}
+              owned={owned}
               chapter={c}
               variant={variant}
               read={read}
@@ -196,6 +202,7 @@ function ChapterRow({
   onToggle,
   onChoose,
   queued,
+  owned,
 }: {
   chapter: MergedChapter;
   variant: ChapterVariant | undefined;
@@ -204,17 +211,21 @@ function ChapterRow({
   onToggle: () => void;
   onChoose: (variantId: number) => void;
   queued: boolean;
+  owned: Set<number>;
 }) {
   const { t, n } = useI18n();
-  const downloaded = !isMissing(chapter);
+  const downloaded = !isMissing(chapter, owned);
+  const inKavita = chapter.number !== null && owned.has(chapter.number);
   const isRead = read !== null && chapter.number !== null && chapter.number <= read;
   const state = queued
     ? t('chapters.queued')
-    : downloaded
-      ? t('chapters.downloaded')
-      : isRead
-        ? t('chapters.read')
-        : t('chapters.toDownload');
+    : inKavita
+      ? t('chapters.inKavita')
+      : downloaded
+        ? t('chapters.downloaded')
+        : isRead
+          ? t('chapters.read')
+          : t('chapters.toDownload');
   const label =
     chapter.number !== null
       ? t('chapters.number', { n: n(chapter.number) })

@@ -3,7 +3,10 @@ export const dynamic = 'force-dynamic';
 import { z } from 'zod';
 import { body, json, route } from '@/lib/api';
 import { chaptersFor, graphql, resolveManga } from '@/lib/suwayomi';
-import { selection, sourceId } from '@/lib/validation';
+import { mediaDetail } from '@/lib/catalog';
+import { listTracked } from '@/lib/db';
+import type { UnifiedMedia } from '@/types/shared';
+import { selection, sourceId, mediaId } from '@/lib/validation';
 export const GET = route(async (r) => {
   const p = z
     .object({
@@ -29,6 +32,24 @@ export const GET = route(async (r) => {
   );
 });
 export const POST = route(async (r) => {
-  const { sources } = await body(r, z.object({ sources: z.array(selection).min(1).max(20) }));
-  return json(await chaptersFor(sources, r.signal));
+  const { sources, mediaId: id } = await body(
+    r,
+    z.object({ sources: z.array(selection).min(1).max(20), mediaId: mediaId.optional() }),
+  );
+  let media: UnifiedMedia | undefined;
+  if (id) {
+    media = listTracked().find(
+      (t) =>
+        t.media.id === id ||
+        (t.anilistId !== null && id === `anilist:${t.anilistId}`) ||
+        (t.mangadexId !== null && id === `mangadex:${t.mangadexId}`),
+    )?.media;
+    if (!media)
+      try {
+        media = await mediaDetail(id, r.signal);
+      } catch {
+        r.signal.throwIfAborted();
+      }
+  }
+  return json(await chaptersFor(sources, r.signal, media));
 });

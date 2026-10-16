@@ -32,21 +32,27 @@ export function PosterCard({
           className="transition-transform duration-300 group-hover:-translate-y-1"
         />
         {badge ??
-          (media.trackedId !== null && (
+          (media.kavita ? (
             <span className="bg-bg/85 absolute top-2 right-2 flex h-6 items-center gap-1 rounded-full px-2 text-[11px] font-semibold">
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="3"
-                aria-hidden
-              >
-                <path d="m5 12 5 5 9-10" />
-              </svg>
-              {t('common.inLibrary')}
+              {t('kavita.badge', { n: media.kavita.chapters })}
             </span>
+          ) : (
+            media.trackedId !== null && (
+              <span className="bg-bg/85 absolute top-2 right-2 flex h-6 items-center gap-1 rounded-full px-2 text-[11px] font-semibold">
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  aria-hidden
+                >
+                  <path d="m5 12 5 5 9-10" />
+                </svg>
+                {t('common.inLibrary')}
+              </span>
+            )
           ))}
       </span>
       <span className="line-clamp-2 text-[13px] leading-snug font-medium">{media.title}</span>

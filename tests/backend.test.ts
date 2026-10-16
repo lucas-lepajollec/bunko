@@ -81,7 +81,9 @@ beforeAll(async () => {
             hasNextPage: false,
           },
         };
-      } else if (query.includes('fetchChapters'))
+      } else if (query.includes('fetchChapterPages'))
+        data = { fetchChapterPages: { pages: ['/api/v1/manga/1/chapter/0/page/0'] } };
+      else if (query.includes('fetchChapters'))
         data = {
           fetchChapters: {
             chapters: [
@@ -116,7 +118,12 @@ beforeAll(async () => {
       else if (query.includes('mangas(')) data = { mangas: { nodes: [{ id: 1 }] } };
       else if (query.includes('chapter(id:'))
         data = {
-          chapter: { id: 10, name: 'Chapter 112', chapterNumber: 112, isDownloaded: downloaded },
+          chapter: {
+            id: body.variables.id,
+            name: 'Chapter 112',
+            chapterNumber: 112,
+            isDownloaded: downloaded,
+          },
         };
       else if (query.includes('downloadStatus'))
         data = {
@@ -128,11 +135,15 @@ beforeAll(async () => {
       res.end(JSON.stringify({ data }));
       return;
     }
-    if (req.url === '/api/v1/chapter/10/download') {
+    if (req.url === '/api/v1/manga/1/chapter/0/page/0') {
+      if (queueError) {
+        res.statusCode = 503;
+        res.end('{}');
+        return;
+      }
+      res.setHeader('Content-Type', 'image/jpeg');
       imports++;
-      const zip = new AdmZip();
-      zip.addFile('001.jpg', Buffer.from('test-only-page-bytes'));
-      res.end(zip.toBuffer());
+      res.end(Buffer.from('test-only-page-bytes'));
       return;
     }
     if (req.url?.startsWith('/api/Library/scan-folder')) {
@@ -384,16 +395,20 @@ describe('chapters, metadata and releases', () => {
   });
 });
 describe('durable download pipeline', () => {
-  it('does not treat an empty queue as a completed batch', async () => {
+  it('uses page transfer and the import ledger when Suwayomi reports no download', async () => {
     downloaded = false;
+    scanFails = true;
     const batch = await createBatch({ chapterIds: [10], media });
     await processBatch(batch);
-    expect(batch.state).toBe('downloading');
-    expect(batch.importedIds).toEqual([]);
-    expect(scans).toBe(0);
-    expect((await createBatch({ chapterIds: [10], media })).id).toBe(batch.id);
+    expect(batch.state).toBe('error');
+    expect(batch.error).toBe('KAVITA_SCAN_ERROR');
+    expect(batch.importedIds).toEqual([10]);
+    expect(scans).toBe(1);
+    expect(
+      calls.some((c) => /enqueueChapterDownloads|downloadAsCbz/.test(String(c.body.query))),
+    ).toBe(false);
   });
-  it('imports confirmed downloads, retains progress on scan failure and retries without reimport', async () => {
+  it('retains CBZ import progress on scan failure and retries without reimport', async () => {
     downloaded = true;
     scanFails = true;
     const batch = listBatches()[0];
@@ -430,10 +445,11 @@ describe('durable download pipeline', () => {
       id: 'test-error-batch',
       state: 'downloading' as const,
       importedIds: [],
+      chapterIds: [11],
     };
     saveBatch(batch);
     await processBatch(batch);
-    expect(batch.error).toBe('DOWNLOAD_FAILED');
+    expect(batch.error).toBe('IMPORT_HTTP_ERROR');
   });
 });
 describe('upstream boundaries', () => {

@@ -22,6 +22,7 @@ export function emptyMedia(id: string, title: string, type: MediaType): UnifiedM
     sources: [],
     trackedId: null,
     kavitaSeriesId: null,
+    kavita: null,
     format: null,
     origin: null,
     year: null,

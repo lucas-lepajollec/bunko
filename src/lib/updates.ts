@@ -3,6 +3,7 @@ import { db, listBatches, listTracked, observeChapters, sameMedia } from './db';
 import { chaptersFor } from './suwayomi';
 import { getSettings } from './settings';
 import { refreshLibraryProgress } from './kavita';
+import { syncKavitaIndex, matchKavita } from './kavita-index';
 export function workerValue(key: string): string | null {
   return (
     (
@@ -85,6 +86,7 @@ export async function runUpdateCheck(create: (input: EnqueueRequest) => Download
   setWorkerValue('check_requested', '1'); // Remains set after a crash, so a new lease retries the check.
   setWorkerValue('last_check_at', new Date().toISOString());
   try {
+    await syncKavitaIndex();
     const signal = AbortSignal.timeout(120_000);
     const queue = listTracked().filter((t) => t.type === 'MANGA' && t.sources.length);
     await Promise.allSettled(
@@ -104,7 +106,9 @@ export async function runUpdateCheck(create: (input: EnqueueRequest) => Download
                 .filter((b) => sameMedia(b.media, t.media))
                 .flatMap((b) => b.chapterIds),
             );
+            const kavitaNumbers = matchKavita(t.media, t.kavitaSeriesId)?.numbers ?? [];
             const fresh = result.chapters
+              .filter((c) => c.number === null || !kavitaNumbers.includes(c.number))
               .filter(
                 (c) =>
                   !seen.some((s) =>

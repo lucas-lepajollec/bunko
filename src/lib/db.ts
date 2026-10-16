@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { matchKavita, withKavita } from './kavita-index';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type {
@@ -39,6 +40,7 @@ export function db(): Database.Database {
 
   `);
   migrateV2(connection);
+  migrateV3(connection);
   return connection;
 }
 /** Transactional, repeatable migration; never resets a newer schema version. */
@@ -79,6 +81,15 @@ export function migrateV2(database: Database.Database) {
         PRIMARY KEY(entry_id, chapter_id));
       PRAGMA user_version = 2;
     `);
+  })();
+}
+/** Add local engine and Kavita index storage without touching existing imports/files. */
+export function migrateV3(database: Database.Database) {
+  database.transaction(() => {
+    if (Number(database.pragma('user_version', { simple: true })) >= 3) return;
+    database.exec(`CREATE TABLE IF NOT EXISTS kavita_series (series_id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS download_jobs (chapter_id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
+      PRAGMA user_version = 3;`);
   })();
 }
 export function sameMedia(a: UnifiedMedia, b: UnifiedMedia) {
@@ -186,12 +197,19 @@ export function listTracked(): TrackedMedia[] {
   return (
     db().prepare('SELECT * FROM tracked_media ORDER BY id DESC').all() as Record<string, unknown>[]
   ).map((r) => {
-    const media = JSON.parse(String(r.media_json)) as UnifiedMedia;
+    const rawMedia = JSON.parse(String(r.media_json)) as UnifiedMedia;
+    const media = withKavita(rawMedia, r.kavita_series_id as number | null);
     const imported = db()
       .prepare(
         'SELECT DISTINCT number FROM imported_chapters WHERE tracked_id=? AND number IS NOT NULL',
       )
       .all(r.id as number) as { number: number }[];
+    const ownedNumbers = [
+      ...new Set([
+        ...imported.map((c) => c.number),
+        ...(matchKavita(rawMedia, r.kavita_series_id as number | null)?.numbers ?? []),
+      ]),
+    ];
     const newChapters = db()
       .prepare(
         `SELECT COUNT(*) AS count FROM (
@@ -199,11 +217,9 @@ export function listTracked(): TrackedMedia[] {
       EXCEPT SELECT number FROM imported_chapters WHERE tracked_id=? AND number IS NOT NULL)`,
       )
       .get(r.id as number, r.id as number) as { count: number };
-    const known = [
-      media.chapters,
-      r.released as number | null,
-      ...imported.map((c) => c.number),
-    ].filter((n): n is number => n !== null);
+    const known = [media.chapters, r.released as number | null, ...ownedNumbers].filter(
+      (n): n is number => n !== null,
+    );
     const read = r.last_read as number | null;
     return {
       id: Number(r.id),
@@ -221,12 +237,24 @@ export function listTracked(): TrackedMedia[] {
       lastReadAt: r.last_read_at as string | null,
       progress: {
         read,
-        owned: imported.length,
+        owned: ownedNumbers.length,
         released: known.length ? Math.max(...known) : null,
-        unread: imported.filter((c) => read === null || c.number > read).length,
+        unread: ownedNumbers.filter((n) => read === null || n > read).length,
         readSource: r.progress_checked ? ('kavita' as const) : ('none' as const),
       },
-      newChapters: newChapters.count,
+      newChapters: Math.max(
+        0,
+        newChapters.count -
+          (
+            db()
+              .prepare(
+                'SELECT DISTINCT number FROM observed_chapters WHERE tracked_id=? AND number IS NOT NULL',
+              )
+              .all(r.id as number) as { number: number }[]
+          ).filter(
+            (c) => !imported.some((i) => i.number === c.number) && ownedNumbers.includes(c.number),
+          ).length,
+      ),
     };
   });
 }

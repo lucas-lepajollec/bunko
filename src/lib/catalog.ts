@@ -2,6 +2,7 @@ import type { DiscoverPage, DiscoverQuery, MediaDetail, UnifiedMedia } from '@/t
 import { requestJson } from './http';
 import { AppError } from './errors';
 import { listTracked } from './db';
+import { withKavita } from './kavita-index';
 import { graphql } from './suwayomi';
 import { proxyImage } from './images';
 import {
@@ -49,7 +50,10 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
         (m.anilistId !== null && t.anilistId === m.anilistId) ||
         (m.mangadexId !== null && t.mangadexId === m.mangadexId),
     );
-    return { ...m, trackedId: t?.id ?? null, kavitaSeriesId: t?.kavitaSeriesId ?? null };
+    return withKavita(
+      { ...m, trackedId: t?.id ?? null, kavitaSeriesId: t?.kavitaSeriesId ?? null },
+      t?.kavitaSeriesId,
+    );
   });
 }
 const sorts = {
@@ -235,6 +239,7 @@ export async function mediaDetail(id: string, signal?: AbortSignal): Promise<Med
     ...detail,
     trackedId: tracked.trackedId,
     kavitaSeriesId: tracked.kavitaSeriesId,
+    kavita: tracked.kavita,
     relations: detail.relations.map((r) => ({ ...r, media: withTracking([r.media])[0] })),
     recommendations: withTracking(detail.recommendations),
   };

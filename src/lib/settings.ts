@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { db, dataDir } from './db';
+import { validateLibraryTargets } from './library-paths';
 import type { PublicSettings, SecretSetting, Settings, SettingsPatch } from '@/types/shared';
 export const secretKeys: SecretSetting[] = [
   'suwayomiPassword',
@@ -56,6 +57,7 @@ export function getSettings(): Settings {
     prowlarrUrl: '',
     prowlarrApiKey: '',
     kavitaLibraryPath: '/library',
+    libraryTargets: {},
     favoriteSourceIds: [],
     extensionRepos: [],
     updateIntervalMinutes: 15,
@@ -88,6 +90,11 @@ export function publicSettings(): PublicSettings {
   };
 }
 export function updateSettings(patch: SettingsPatch) {
+  const current = getSettings();
+  validateLibraryTargets(
+    patch.libraryTargets ?? current.libraryTargets,
+    patch.kavitaLibraryPath ?? current.kavitaLibraryPath,
+  );
   const insert = db().prepare(
     'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
   );

@@ -1,18 +1,30 @@
-import { mkdir, open, realpath, rename, unlink, writeFile } from 'node:fs/promises';
+import { open, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import AdmZip from 'adm-zip';
 import { z } from 'zod';
 import { db, listTracked, recordImport } from './db';
 import type { TrackedMedia, UnifiedMedia } from '@/types/shared';
 import { getSettings } from './settings';
 import { endpoint, requestJson } from './http';
-import { chapterNumber, suwayomiHeaders } from './suwayomi';
+import { chapterNumber } from './suwayomi';
 import { AppError } from './errors';
-export const libraryRoot = path.resolve(
-  /* turbopackIgnore: true */ process.env.KAVISEERR_LIBRARY_DIR ?? './media',
-);
-const MAX_ARCHIVE_BYTES = 256 * 1024 * 1024;
+import { kavitaHeaders } from './kavita-client';
+import { matchKavita } from './kavita-index';
+import {
+  libraryRoot,
+  inside,
+  mapKavitaPath,
+  safeLibraryDirectory,
+  targetFor,
+} from './library-paths';
+import {
+  boundedBuffer,
+  chapterPages,
+  discardChapterCache,
+  MAX_CHAPTER_BYTES,
+} from './chapter-pages';
+export { libraryRoot } from './library-paths';
 export function xmlEscape(value: string) {
   return value
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
@@ -25,7 +37,7 @@ export function xmlEscape(value: string) {
 export function comicInfo(media: UnifiedMedia, number: number | null, title: string) {
   const fields: Record<string, string> = {
     Series: media.title,
-    ...(number !== null ? { Number: String(number) } : {}),
+    ...(number !== null ? { Number: String(number) } : { Format: 'Special' }),
     Title: title,
     Summary: (media.synopsis ?? '').replace(/<[^>]+>/g, ''),
     Writer: media.authors.join(', '),
@@ -40,82 +52,91 @@ export function comicInfo(media: UnifiedMedia, number: number | null, title: str
     .map(([k, v]) => `  <${k}>${xmlEscape(v)}</${k}>`)
     .join('\n')}\n</ComicInfo>\n`;
 }
+export function safeName(value: string, max = 120) {
+  const sanitized = value
+    .normalize('NFKC')
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+    .replace(/^\.+|[. ]+$/g, '')
+    .trim();
+  let result = '';
+  for (const character of sanitized) {
+    if (Buffer.byteLength(result + character, 'utf8') > max) break;
+    result += character;
+  }
+  return result.replace(/[. ]+$/g, '') || 'series';
+}
 export function seriesName(media: UnifiedMedia) {
-  return `${
-    media.title
-      .normalize('NFKC')
-      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
-      .replace(/^\.+|\.+$/g, '')
-      .trim()
-      .slice(0, 120) || 'series'
-  }-${createHash('sha256').update(media.id).digest('hex').slice(0, 10)}`;
+  return safeName(media.title);
 }
 export async function seriesDirectory(media: UnifiedMedia) {
-  await mkdir(libraryRoot, { recursive: true });
-  const root = await realpath(/* turbopackIgnore: true */ libraryRoot);
-  const folder = path.join(root, seriesName(media));
-  await mkdir(folder, { recursive: true });
-  const actual = await realpath(folder);
-  if (path.dirname(actual) !== root)
-    throw new AppError('UNSAFE_PATH', 'Series folder escapes library', 400);
-  return actual;
+  const target = targetFor(media);
+  const existing = matchKavita(media);
+  const local = existing?.folder ? mapKavitaPath(existing.folder) : null;
+  const reuse =
+    local &&
+    inside(target.local, local) &&
+    local !== target.local &&
+    (target.libraryId === null || target.libraryId === existing?.libraryId);
+  return safeLibraryDirectory(
+    reuse ? local : path.join(/* turbopackIgnore: true */ target.local, seriesName(media)),
+    true,
+  );
 }
-async function boundedBuffer(response: Response, limit: number): Promise<Buffer> {
-  if (!response.ok || !response.body) {
-    await response.body?.cancel();
-    throw new AppError('IMPORT_HTTP_ERROR', 'Media transfer failed', 502);
-  }
-  if (Number(response.headers.get('content-length')) > limit) {
-    await response.body.cancel();
-    throw new AppError('IMPORT_TOO_LARGE', 'Media exceeds import size limit', 502);
-  }
-  const reader = response.body.getReader();
-  const buffers: Buffer[] = [];
-  let length = 0;
+function padded(value: number, digits: number) {
+  const [whole, decimal] = String(value).split('.');
+  return whole.padStart(digits, '0') + (decimal ? `.${decimal}` : '');
+}
+export function chapterFilename(
+  media: UnifiedMedia,
+  chapter: { name: string; chapterNumber: number; volume?: number | null },
+) {
+  const title = seriesName(media);
+  const number = chapterNumber(chapter.name, chapter.chapterNumber);
+  if (number === null) return `${title} SP - ${safeName(chapter.name, 80)}.cbz`;
+  const namedVolume = chapter.name.match(/(?:vol(?:ume)?\.?|tome)\s*(\d+(?:\.\d+)?)/i);
+  const volume = chapter.volume ?? (namedVolume ? Number(namedVolume[1]) : null);
+  return `${title}${volume !== null && volume >= 0 ? ` Vol. ${padded(volume, 2)}` : ''} Ch. ${padded(number, 4)}.cbz`;
+}
+async function atomicWrite(folder: string, name: string, contents: string | Buffer) {
+  const tmp = path.join(folder, `.${randomUUID()}.partial`);
   try {
-    for (;;) {
-      const part = await reader.read();
-      if (part.done) break;
-      length += part.value.byteLength;
-      if (length > limit)
-        throw new AppError('IMPORT_TOO_LARGE', 'Media exceeds import size limit', 502);
-      buffers.push(Buffer.from(part.value));
-    }
+    await writeFile(tmp, contents, { flag: 'wx', mode: 0o600 });
+    await rename(tmp, path.join(folder, name));
   } finally {
-    await reader.cancel();
+    await unlink(tmp).catch((e) => {
+      if (e.code !== 'ENOENT') throw e;
+    });
   }
-  return Buffer.concat(buffers);
 }
 export async function writeMetadata(media: UnifiedMedia) {
   const folder = await seriesDirectory(media);
-  await writeFile(path.join(folder, 'ComicInfo.xml'), comicInfo(media, null, media.title), {
-    mode: 0o600,
-  });
-  if (media.coverUrl) {
-    // Only fetch covers from the metadata providers, never a client-supplied arbitrary URL.
-    const url = new URL(media.coverUrl);
-    if (
-      url.protocol !== 'https:' ||
-      ![
-        's4.anilist.co',
-        's3.anilist.co',
-        'uploads.mangadex.org',
-        'cdn.mangaupdates.com',
-        'www.mangaupdates.com',
-      ].includes(url.hostname)
-    )
-      return;
-    const image = await boundedBuffer(
-      await fetch(url, { signal: AbortSignal.timeout(15_000), redirect: 'error' }),
-      15 * 1024 * 1024,
-    );
-    await writeFile(path.join(folder, 'cover.jpg'), image, { mode: 0o600 });
+  await atomicWrite(folder, 'ComicInfo.xml', comicInfo(media, null, media.title));
+  if (!media.coverUrl) return;
+  const url = new URL(media.coverUrl);
+  if (
+    url.protocol !== 'https:' ||
+    ![
+      's4.anilist.co',
+      's3.anilist.co',
+      'uploads.mangadex.org',
+      'cdn.mangaupdates.com',
+      'www.mangaupdates.com',
+    ].includes(url.hostname)
+  )
+    return;
+  const response = await fetch(url, { signal: AbortSignal.timeout(15_000), redirect: 'error' });
+  if (
+    !/^image\/(?:jpeg|png|webp|gif|avif)(?:;|$)/i.test(response.headers.get('content-type') ?? '')
+  ) {
+    await response.body?.cancel();
+    return;
   }
+  await atomicWrite(folder, 'cover.jpg', await boundedBuffer(response, 15 * 1024 * 1024));
 }
 export function addComicInfo(archive: Buffer, xml: string): Buffer {
   const zip = new AdmZip(archive);
   const entries = zip.getEntries();
-  if (entries.reduce((sum, e) => sum + e.header.size, 0) > MAX_ARCHIVE_BYTES * 2)
+  if (entries.reduce((sum, e) => sum + e.header.size, 0) > MAX_CHAPTER_BYTES * 2)
     throw new AppError('UNSAFE_ARCHIVE', 'Archive expands beyond the limit', 502);
   if (!entries.some((e) => /\.(?:jpe?g|png|webp|gif|avif)$/i.test(e.entryName)))
     throw new AppError('INVALID_ARCHIVE', 'Archive contains no chapter pages', 502);
@@ -128,44 +149,66 @@ export async function importChapter(
     id: number;
     chapterNumber: number;
     name: string;
+    volume?: number | null;
     manga?: { id: number; source?: { id: string; name: string } };
   },
+  signal?: AbortSignal,
+  progress?: (done: number, total: number, tries: number) => void,
+  importing?: () => void,
 ) {
   const folder = await seriesDirectory(media);
+  const pages = await chapterPages(chapter.id, signal, progress);
+  signal?.throwIfAborted();
+  importing?.();
   const number = chapterNumber(chapter.name, chapter.chapterNumber);
-  const target = path.join(folder, `Ch-${number ?? 'special'}-${chapter.id}.cbz`);
-  const tmp = `${target}.partial`;
-  const response = await fetch(
-    endpoint(getSettings().suwayomiUrl, `/api/v1/chapter/${chapter.id}/download`),
-    { headers: suwayomiHeaders(), signal: AbortSignal.timeout(120_000), redirect: 'error' },
+  const zip = new AdmZip();
+  for (let index = 0; index < pages.length; index++)
+    zip.addFile(
+      `${String(index + 1).padStart(4, '0')}.${pages[index].extension}`,
+      pages[index].bytes,
+    );
+  let xml = comicInfo(media, number, chapter.name);
+  const volume =
+    chapter.volume ?? Number(chapter.name.match(/(?:vol(?:ume)?\.?|tome)\s*(\d+)/i)?.[1] ?? NaN);
+  if (Number.isFinite(volume))
+    xml = xml.replace('</ComicInfo>', `  <Volume>${volume}</Volume>\n</ComicInfo>`);
+  zip.addFile('ComicInfo.xml', Buffer.from(xml));
+  // Recheck the directory immediately before writing, including cached/existing folders.
+  await safeLibraryDirectory(
+    path.join(libraryRoot, path.relative(await realpath(libraryRoot), folder)),
   );
-  const archive = addComicInfo(
-    await boundedBuffer(response, MAX_ARCHIVE_BYTES),
-    comicInfo(media, number, chapter.name),
-  );
+  const target = path.join(folder, chapterFilename(media, chapter));
+  const tmp = `${target}.${randomUUID()}.partial`;
   try {
-    const handle = await open(tmp, 'w', 0o600);
+    const handle = await open(tmp, 'wx', 0o600);
     try {
-      await handle.writeFile(archive);
+      await handle.writeFile(zip.toBuffer());
       await handle.sync();
     } finally {
       await handle.close();
     }
+    signal?.throwIfAborted();
     await rename(tmp, target);
+    recordImport(media, { ...chapter, chapterNumber: number ?? -1 });
   } finally {
     await unlink(tmp).catch((e) => {
       if (e.code !== 'ENOENT') throw e;
     });
   }
-  recordImport(media, { ...chapter, chapterNumber: number ?? -1 });
+  await discardChapterCache(chapter.id);
 }
 export async function scanLibrary(media: UnifiedMedia) {
-  const s = getSettings();
-  const headers = await kavitaHeaders();
-  const response = await fetch(endpoint(s.kavitaUrl, '/api/Library/scan-folder'), {
+  const folder = await seriesDirectory(media);
+  const fs = await import('node:fs/promises');
+  const root = await fs.realpath(libraryRoot);
+  const kavitaFolder = path.posix.join(
+    getSettings().kavitaLibraryPath,
+    ...path.relative(root, folder).split(path.sep),
+  );
+  const response = await fetch(endpoint(getSettings().kavitaUrl, '/api/Library/scan-folder'), {
     method: 'POST',
-    headers,
-    body: JSON.stringify({ folderPath: path.posix.join(s.kavitaLibraryPath, seriesName(media)) }),
+    headers: await kavitaHeaders(),
+    body: JSON.stringify({ folderPath: kavitaFolder }),
     signal: AbortSignal.timeout(30_000),
     redirect: 'error',
   });
@@ -173,23 +216,6 @@ export async function scanLibrary(media: UnifiedMedia) {
   if (!response.ok)
     throw new AppError('KAVITA_SCAN_ERROR', `Kavita scan returned HTTP ${response.status}`, 502);
 }
-
-async function kavitaHeaders(signal?: AbortSignal): Promise<Record<string, string>> {
-  const s = getSettings();
-  if (!s.kavitaUrl || !s.kavitaApiKey)
-    throw new AppError('SERVICE_NOT_CONFIGURED', 'Kavita is not configured', 409);
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (s.kavitaAuthMode === 'jwt') {
-    const authUrl = new URL(endpoint(s.kavitaUrl, '/api/Plugin/authenticate'));
-    authUrl.searchParams.set('apiKey', s.kavitaApiKey);
-    authUrl.searchParams.set('pluginName', 'KaviSeerr');
-    const auth = await requestJson<{ token: string }>(authUrl, { method: 'POST', signal });
-    if (!auth.token) throw new AppError('KAVITA_AUTH_ERROR', 'Kavita authentication failed', 502);
-    headers.Authorization = `Bearer ${auth.token}`;
-  } else headers['x-api-key'] = s.kavitaApiKey;
-  return headers;
-}
-
 const seriesSchema = z.object({
   id: z.number().int().positive(),
   name: z.string().nullable().optional(),
@@ -242,7 +268,7 @@ export async function refreshTrackedProgress(tracked: TrackedMedia, signal?: Abo
   const headers = await kavitaHeaders(bounded);
   const get = <T>(suffix: string) =>
     requestJson<T>(endpoint(s.kavitaUrl, suffix), { headers, signal: bounded }, 4000);
-  let id = tracked.kavitaSeriesId;
+  let id = tracked.kavitaSeriesId ?? matchKavita(tracked.media)?.seriesId ?? null;
   if (id === null) {
     const candidates = new Map<number, z.infer<typeof seriesSchema>>();
     for (const query of [seriesName(tracked.media), tracked.title]) {

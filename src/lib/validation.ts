@@ -78,6 +78,16 @@ export const media = z.object({
       }),
     )
     .max(100),
+  kavita: z
+    .object({
+      seriesId: id,
+      libraryId: id,
+      libraryName: z.string().max(500),
+      chapters: z.number().int().nonnegative(),
+      url: nullableUrl,
+    })
+    .nullable()
+    .default(null),
   trackedId: id.nullable(),
   kavitaSeriesId: id.nullable(),
   format: z
@@ -139,9 +149,41 @@ export const settingsPatch = z
       .min(1)
       .max(2048)
       .refine(
-        (v) => v.startsWith('/') && !v.split('/').includes('..'),
+        (v) =>
+          v.startsWith('/') &&
+          !v.includes('\\') &&
+          !v.includes('\0') &&
+          !v.split('/').includes('..'),
         'Use an absolute Kavita container path',
       )
+      .optional(),
+    libraryTargets: z
+      .object(
+        Object.fromEntries(
+          ['MANGA', 'MANHWA', 'MANHUA', 'NOVEL'].map((kind) => [
+            kind,
+            z
+              .object({
+                libraryId: id,
+                folder: z
+                  .string()
+                  .min(1)
+                  .max(2048)
+                  .refine(
+                    (v) =>
+                      v.startsWith('/') &&
+                      !v.includes('\\') &&
+                      !v.includes('\0') &&
+                      !v.split('/').includes('..'),
+                    'Use an absolute Kavita folder',
+                  ),
+              })
+              .strict()
+              .optional(),
+          ]),
+        ),
+      )
+      .strict()
       .optional(),
     favoriteSourceIds: z.array(sourceId).max(100).optional(),
     extensionRepos: z.array(httpUrl).max(20).optional(),

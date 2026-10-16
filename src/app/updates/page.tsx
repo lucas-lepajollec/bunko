@@ -11,6 +11,7 @@ import type {
 import { mediaHref, send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
+import { useRelativeTime } from '@/components/time';
 import { isMissing, preferredVariant } from '@/components/chapters';
 import {
   Cover,
@@ -23,19 +24,6 @@ import {
   smallButton,
 } from '@/components/ui';
 
-export function useRelativeTime() {
-  const { locale } = useI18n();
-  return (iso: string | null) => {
-    if (!iso) return '—';
-    const diff = (new Date(iso).getTime() - Date.now()) / 1000;
-    const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
-    const abs = Math.abs(diff);
-    if (abs < 60) return rtf.format(Math.round(diff), 'second');
-    if (abs < 3600) return rtf.format(Math.round(diff / 60), 'minute');
-    if (abs < 86400) return rtf.format(Math.round(diff / 3600), 'hour');
-    return rtf.format(Math.round(diff / 86400), 'day');
-  };
-}
 
 function dayGroup(iso: string) {
   const d = new Date(iso);
@@ -169,12 +157,14 @@ function UpdateRow({
     setBusy(true);
     setError(null);
     try {
-      const { chapters } = await send<ChaptersResponse>('/api/manga/chapters', 'POST', {
+      const { chapters, inKavita } = await send<ChaptersResponse>('/api/manga/chapters', 'POST', {
         sources: tracked.sources,
+        mediaId: tracked.media.id,
       });
+      const owned = new Set(inKavita ?? []);
       const wanted = new Set(entry.chapters);
       const ids = chapters
-        .filter((c) => c.number !== null && wanted.has(c.number) && isMissing(c))
+        .filter((c) => c.number !== null && wanted.has(c.number) && isMissing(c, owned))
         .map(
           (c) =>
             preferredVariant(

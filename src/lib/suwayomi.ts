@@ -15,10 +15,13 @@ import type {
 } from '@/types/shared';
 import { getSettings } from './settings';
 import { endpoint, requestJson } from './http';
-import { AppError, errorCode } from './errors';
+import { AppError, errorCode, errorDetail, sourceFailure } from './errors';
 import { db, indexCatalog, listTracked } from './db';
 import { getSourcePreferences, recordSourceHealth, sourceHealth } from './source-preferences';
 import { proxyImage } from './images';
+import { sharedConcurrencyGate } from './concurrency';
+import { matchKavita } from './kavita-index';
+const sourceCall = sharedConcurrencyGate('sources', 6);
 export function suwayomiHeaders(): Record<string, string> {
   const s = getSettings();
   return s.suwayomiUsername
@@ -43,15 +46,26 @@ export async function graphql<T>(
     },
     timeoutMs,
   );
-  if (
-    response.errors?.some((e) =>
-      /cloudflare|cf-chl|challenge-platform/i.test(
-        String((e as { message?: unknown })?.message ?? ''),
-      ),
-    )
-  )
-    throw new AppError('CLOUDFLARE', 'Source requires an unsupported challenge', 502);
-  if (response.errors?.length || !response.data)
+  if (response.errors?.length) {
+    const messages = response.errors
+      .map((e) => String((e as { message?: unknown })?.message ?? ''))
+      .filter(Boolean);
+    const settings = getSettings();
+    const failures = messages.map((message) =>
+      sourceFailure(message, [
+        settings.suwayomiUsername,
+        settings.suwayomiPassword,
+        settings.kavitaApiKey,
+      ]),
+    );
+    throw (
+      failures.find((e) => e.code === 'CLOUDFLARE') ??
+      failures.find((e) => e.code !== 'SUWAYOMI_GRAPHQL_ERROR') ??
+      failures[0] ??
+      sourceFailure('Suwayomi rejected the operation')
+    );
+  }
+  if (!response.data)
     throw new AppError('SUWAYOMI_GRAPHQL_ERROR', 'Suwayomi rejected the operation', 502);
   return response.data;
 }
@@ -102,32 +116,36 @@ export async function searchSource(
   signal?: AbortSignal,
   page = 1,
   type: 'SEARCH' | 'POPULAR' | 'LATEST' = 'SEARCH',
-  timeoutMs = 4000,
+  timeoutMs = 20_000,
   filters?: BrowseRequest['filters'],
 ): Promise<SourceResult> {
   const start = Date.now();
   try {
-    const r = await graphql<{
-      fetchSourceManga: {
-        mangas: { id: number; title: string; url: string; thumbnailUrl: string | null }[];
-        hasNextPage: boolean;
-      };
-    }>(
-      `
-        mutation ($input: FetchSourceMangaInput!) {
-          fetchSourceManga(input: $input) {
-            mangas {
-              id
-              title
-              url
-              thumbnailUrl
+    const r = await sourceCall(
+      () =>
+        graphql<{
+          fetchSourceManga: {
+            mangas: { id: number; title: string; url: string; thumbnailUrl: string | null }[];
+            hasNextPage: boolean;
+          };
+        }>(
+          `
+            mutation ($input: FetchSourceMangaInput!) {
+              fetchSourceManga(input: $input) {
+                mangas {
+                  id
+                  title
+                  url
+                  thumbnailUrl
+                }
+                hasNextPage
+              }
             }
-            hasNextPage
-          }
-        }
-      `,
-      { input: { source: source.id, type, query, page, ...(filters ? { filters } : {}) } },
-      timeoutMs,
+          `,
+          { input: { source: source.id, type, query, page, ...(filters ? { filters } : {}) } },
+          timeoutMs,
+          signal,
+        ),
       signal,
     );
     const rows = r.fetchSourceManga.mangas.map((m) => ({
@@ -156,7 +174,7 @@ export async function searchSource(
       durationMs: Date.now() - start,
     };
   } catch (e) {
-    recordSourceHealth(source.id, Date.now() - start, errorCode(e));
+    recordSourceHealth(source.id, Date.now() - start, errorCode(e), errorDetail(e));
     throw e;
   }
 }
@@ -189,11 +207,6 @@ export async function extensionAction(action: ExtensionAction) {
     'mutation($input: UpdateExtensionInput!) { updateExtension(input: $input) { clientMutationId } }',
     { input: { id: action.id, patch } },
     120_000,
-  );
-}
-export async function configureDownloads() {
-  await graphql(
-    'mutation { setSettings(input: { settings: { downloadAsCbz: true } }) { clientMutationId } }',
   );
 }
 export async function configureRepos(repos: string[]) {
@@ -233,6 +246,7 @@ export function mergeChapters(chapters: ChapterVariant[]): MergedChapter[] {
 export async function chaptersFor(
   selections: ChapterSelection[],
   signal?: AbortSignal,
+  media?: import('@/types/shared').UnifiedMedia,
 ): Promise<ChaptersResponse> {
   const settled = await Promise.allSettled(
     selections.map(async (s) => {
@@ -289,6 +303,34 @@ export async function chaptersFor(
     }
   return {
     chapters,
+    inKavita: (() => {
+      if (media) return matchKavita(media)?.numbers ?? [];
+      const tracked = listTracked().filter((t) =>
+        [...t.sources, ...(t.media.sources ?? [])].some((s) =>
+          selections.some(
+            (v) => v.sourceId === s.sourceId && v.suwayomiMangaId === s.suwayomiMangaId,
+          ),
+        ),
+      );
+      const matches = tracked.flatMap((t) => {
+        const match = matchKavita(t.media, t.kavitaSeriesId);
+        return match ? [match] : [];
+      });
+      if (!matches.length)
+        for (const selection of selections) {
+          const row = db()
+            .prepare(
+              'SELECT title FROM catalog_fts WHERE source_id=? AND source_manga_id=? LIMIT 1',
+            )
+            .get(selection.sourceId, String(selection.suwayomiMangaId)) as
+            { title: string } | undefined;
+          if (row) {
+            const match = matchKavita({ title: row.title, altTitles: [], kavitaSeriesId: null });
+            if (match) matches.push(match);
+          }
+        }
+      return new Set(matches.map((s) => s.seriesId)).size === 1 ? matches[0].numbers : [];
+    })(),
     errors: settled.flatMap((r, i) =>
       r.status === 'rejected'
         ? [{ mangaId: selections[i].suwayomiMangaId, code: errorCode(r.reason) }]
@@ -296,25 +338,30 @@ export async function chaptersFor(
     ),
   };
 }
-export async function enqueue(ids: number[]) {
-  await graphql(
-    'mutation($input: EnqueueChapterDownloadsInput!) { enqueueChapterDownloads(input: $input) { clientMutationId } }',
-    { input: { ids } },
-    40_000,
+/** Page URLs are Suwayomi proxy paths, not extension-origin URLs. v2.4.2366. */
+export async function fetchChapterPages(
+  chapterId: number,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const result = await graphql<{ fetchChapterPages: { pages: string[] } }>(
+    'mutation($input: FetchChapterPagesInput!) { fetchChapterPages(input: $input) { pages } }',
+    { input: { chapterId } },
+    20_000,
+    signal,
   );
-}
-export async function downloadStatus(signal?: AbortSignal): Promise<DownloadStatus> {
-  return (
-    await graphql<{ downloadStatus: DownloadStatus }>(
-      'query { downloadStatus { state queue { state progress tries position chapter { id name chapterNumber } manga { id title } } } }',
-      {},
-      10_000,
-      signal,
+  const pages = result.fetchChapterPages.pages;
+  if (
+    !pages?.length ||
+    pages.length > 2000 ||
+    pages.some(
+      (p) => typeof p !== 'string' || !/^\/api\/v1\/manga\/\d+\/chapter\/\d+\/page\/\d+$/.test(p),
     )
-  ).downloadStatus;
+  )
+    throw new AppError('INVALID_PAGES', 'Invalid chapter page list', 502);
+  return pages;
 }
-export async function chapterState(id: number) {
-  return (
+export async function chapterState(id: number, signal?: AbortSignal) {
+  const chapter = (
     await graphql<{
       chapter: {
         id: number;
@@ -326,8 +373,13 @@ export async function chapterState(id: number) {
     }>(
       'query($id: Int!) { chapter(id: $id) { id name chapterNumber isDownloaded manga { id source { id name } } } }',
       { id },
+      20_000,
+      signal,
     )
   ).chapter;
+  if (chapter?.id !== id)
+    throw new AppError('INVALID_CHAPTER', 'Suwayomi returned an invalid chapter', 502);
+  return chapter;
 }
 
 export async function browseSource(
@@ -342,7 +394,7 @@ export async function browseSource(
     signal,
     input.page,
     input.mode,
-    30_000,
+    20_000,
     input.filters,
   );
   const tracked = listTracked();
@@ -365,14 +417,13 @@ export async function browseSource(
     })),
   };
 }
+// Compatibility exports; the local engine owns these operations.
+export async function downloadStatus(signal?: AbortSignal): Promise<DownloadStatus> {
+  signal?.throwIfAborted();
+  const engine = await import('./downloads');
+  return engine.engineStatus();
+}
 export async function controlDownloader(control: DownloadControl): Promise<DownloadStatus> {
-  const mutation = { pause: 'stopDownloader', resume: 'startDownloader', clear: 'clearDownloader' }[
-    control.action
-  ];
-  const result = await graphql<Record<string, { downloadStatus: DownloadStatus }>>(
-    `mutation { ${mutation}(input: {}) { downloadStatus { state queue { state progress tries position chapter { id name chapterNumber } manga { id title } } } } }`,
-    {},
-    35_000,
-  );
-  return result[mutation].downloadStatus;
+  const engine = await import('./downloads');
+  return engine.controlEngine(control);
 }

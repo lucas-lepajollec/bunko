@@ -14,6 +14,7 @@ interface Lane {
   state: 'loading' | 'done' | 'error';
   result?: SourceResult;
   code?: string;
+  detail?: string | null;
 }
 
 export default function SearchPage() {
@@ -70,10 +71,12 @@ function Search() {
           );
         },
         source_error: (d) => {
-          const e = d as { source: Source; code: string };
+          const e = d as { source: Source; code: string; detail?: string | null };
           setLanes((ls) =>
             (ls ?? []).map((l) =>
-              l.source.id === e.source.id ? { ...l, state: 'error', code: e.code } : l,
+              l.source.id === e.source.id
+                ? { ...l, state: 'error', code: e.code, detail: e.detail }
+                : l,
             ),
           );
         },
@@ -173,6 +176,11 @@ function SourceLane({ lane, known }: { lane: Lane; known: Set<string> }) {
                   seconds: n((lane.result?.durationMs ?? 0) / 1000, { maximumFractionDigits: 1 }),
                 })}
         </span>
+        {lane.state === 'error' && lane.detail && (
+          <span className="text-faint line-clamp-2 text-[11px] leading-snug" title={lane.detail}>
+            {lane.detail}
+          </span>
+        )}
         <Link
           href={`/source/${lane.source.id}`}
           className="text-mid ml-auto text-[13px] hover:text-white md:mt-1 md:ml-0"
