@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import type { DownloadBatch, EnqueueRequest, UpdateState, UpdatesFeed } from '@/types/shared';
-import { db, listBatches, listTracked, observeChapters, sameMedia } from './db';
+import { statement, db, listBatches, listTracked, observeChapters, sameMedia } from './db';
 import { chaptersFor } from './suwayomi';
 import { getSettings } from './settings';
 import { refreshLibraryProgress } from './kavita';
@@ -9,20 +10,18 @@ import { syncTrackedCovers } from './tracked-covers';
 export function workerValue(key: string): string | null {
   return (
     (
-      db().prepare('SELECT value FROM worker_state WHERE key=?').get(key) as
+      statement('SELECT value FROM worker_state WHERE key=?').get(key) as
         { value: string } | undefined
     )?.value ?? null
   );
 }
 export function setWorkerValue(key: string, value: string) {
-  db()
-    .prepare(
-      'INSERT INTO worker_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
-    )
-    .run(key, value);
+  statement(
+    'INSERT INTO worker_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+  ).run(key, value);
 }
 export function refreshRunning() {
-  const lease = db().prepare('SELECT owner,expires_at FROM worker_lock WHERE id=1').get() as
+  const lease = statement('SELECT owner,expires_at FROM worker_lock WHERE id=1').get() as
     { owner: string; expires_at: number } | undefined;
   return (
     workerValue('checking') === '1' &&
@@ -34,7 +33,7 @@ export function updatesFeed(): UpdatesFeed {
   const tracked = listTracked();
   const batches = new Map(listBatches().map((b) => [b.id, b]));
   const entries = (
-    db().prepare('SELECT * FROM update_entries ORDER BY id DESC LIMIT 200').all() as {
+    statement('SELECT * FROM update_entries ORDER BY id DESC LIMIT 200').all() as {
       id: number;
       tracked_id: number;
       source_name: string;
@@ -43,9 +42,9 @@ export function updatesFeed(): UpdatesFeed {
   ).flatMap((row) => {
     const t = tracked.find((t) => t.id === row.tracked_id);
     if (!t) return [];
-    const chapters = db()
-      .prepare('SELECT number,batch_id FROM update_chapters WHERE entry_id=? ORDER BY number')
-      .all(row.id) as { number: number | null; batch_id: string | null }[];
+    const chapters = statement(
+      'SELECT number,batch_id FROM update_chapters WHERE entry_id=? ORDER BY number',
+    ).all(row.id) as { number: number | null; batch_id: string | null }[];
     const states = chapters.map((c) => (c.batch_id ? batches.get(c.batch_id)?.state : undefined));
     let state: UpdateState = 'pending';
     if (states.length && states.every((s) => s === 'completed')) state = 'downloaded';
@@ -85,7 +84,7 @@ export function updatesFeed(): UpdatesFeed {
 export function updateCheckDue() {
   const last = workerValue('last_check_at');
   return (
-    workerValue('check_requested') === '1' ||
+    Boolean(workerValue('check_requested') && workerValue('check_requested') !== '0') ||
     !last ||
     Date.now() - Date.parse(last) >= getSettings().updateIntervalMinutes * 60_000
   );
@@ -96,11 +95,13 @@ export async function runUpdateCheck(
   ownsLease: () => boolean = () => true,
 ) {
   if (parentSignal?.aborted || !ownsLease()) return;
-  const lease = db().prepare('SELECT owner FROM worker_lock WHERE id=1').get() as
+  const lease = statement('SELECT owner FROM worker_lock WHERE id=1').get() as
     { owner: string } | undefined;
   setWorkerValue('refresh_owner', lease?.owner ?? '');
   setWorkerValue('checking', '1');
-  setWorkerValue('check_requested', '1'); // Remains set after a crash, so a new lease retries the check.
+  const requested = workerValue('check_requested');
+  const request = requested && requested !== '0' ? requested : randomUUID();
+  setWorkerValue('check_requested', request); // A concurrent request gets a new generation.
   setWorkerValue('last_check_at', new Date().toISOString());
   setWorkerValue('refresh_done', '0');
   setWorkerValue('refresh_total', '0');
@@ -128,12 +129,12 @@ export async function runUpdateCheck(
             if (signal.aborted || !ownsLease()) return;
             await refreshSourceStatuses(t, result, signal, ownsLease);
             if (signal.aborted || !ownsLease()) return;
-            const seen = db()
-              .prepare('SELECT chapter_id,number FROM observed_chapters WHERE tracked_id=?')
-              .all(t.id) as { chapter_id: number; number: number | null }[];
-            const imported = db()
-              .prepare('SELECT chapter_id,number FROM imported_chapters WHERE tracked_id=?')
-              .all(t.id) as { chapter_id: number; number: number | null }[];
+            const seen = statement(
+              'SELECT chapter_id,number FROM observed_chapters WHERE tracked_id=?',
+            ).all(t.id) as { chapter_id: number; number: number | null }[];
+            const imported = statement(
+              'SELECT chapter_id,number FROM imported_chapters WHERE tracked_id=?',
+            ).all(t.id) as { chapter_id: number; number: number | null }[];
             const known = new Set(
               listBatches()
                 .filter((b) => sameMedia(b.media, t.media))
@@ -172,19 +173,15 @@ export async function runUpdateCheck(
                 const selected = fresh.filter((c) => c.sourceId === source.sourceId);
                 if (!selected.length) continue;
                 const id = Number(
-                  db()
-                    .prepare(
-                      'INSERT INTO update_entries(tracked_id,source_id,source_name,detected_at) VALUES(?,?,?,?)',
-                    )
-                    .run(t.id, source.sourceId, source.sourceName, new Date().toISOString())
+                  statement(
+                    'INSERT INTO update_entries(tracked_id,source_id,source_name,detected_at) VALUES(?,?,?,?)',
+                  ).run(t.id, source.sourceId, source.sourceName, new Date().toISOString())
                     .lastInsertRowid,
                 );
                 for (const c of selected)
-                  db()
-                    .prepare(
-                      'INSERT INTO update_chapters(entry_id,chapter_id,number) VALUES(?,?,?)',
-                    )
-                    .run(id, c.id, c.number);
+                  statement(
+                    'INSERT INTO update_chapters(entry_id,chapter_id,number) VALUES(?,?,?)',
+                  ).run(id, c.id, c.number);
                 if (t.autoDownload)
                   for (let offset = 0; offset < selected.length; offset += 500)
                     create({
@@ -205,7 +202,10 @@ export async function runUpdateCheck(
     if (signal.aborted || !ownsLease()) return;
     await refreshLibraryProgress(signal);
     await syncTrackedCovers(signal);
-    if (ownsLease()) setWorkerValue('check_requested', signal.aborted ? '1' : '0');
+    if (ownsLease() && !signal.aborted)
+      statement("UPDATE worker_state SET value='0' WHERE key='check_requested' AND value=?").run(
+        request,
+      );
   } finally {
     if (ownsLease()) setWorkerValue('checking', '0');
   }

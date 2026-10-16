@@ -1,8 +1,17 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+import { wakeWorker } from '@/lib/worker-events';
 import { z } from 'zod';
 import { body, json, route } from '@/lib/api';
-import { db, listTracked, track, untrack, sameMedia } from '@/lib/db';
+import {
+  db,
+  getTracked,
+  listTracked,
+  track,
+  untrack,
+  sameMedia,
+  authoritativeMedia,
+} from '@/lib/db';
 import { trackBody, trackPatch } from '@/lib/validation';
 import { refreshProgressOnDemand } from '@/lib/progress-refresh';
 import { indexedSeriesById } from '@/lib/kavita-index';
@@ -21,15 +30,15 @@ export const GET = route(async (r) => {
 export const POST = route(async (r) => json(track(await body(r, trackBody)), 201));
 export const PATCH = route(async (r) => {
   const input = await body(r, trackPatch);
-  const current = listTracked().find((t) => t.id === input.id);
+  let current = getTracked(input.id);
   if (!current) throw new AppError('NOT_FOUND', 'Tracked media not found', 404);
   if (input.kavitaSeriesId != null && !indexedSeriesById(input.kavitaSeriesId))
     throw new AppError('NOT_FOUND', 'Kavita series is not indexed', 404);
-  const auto = input.autoDownload ?? current.autoDownload;
-  const sources = input.sources ?? current.sources;
+  let auto = input.autoDownload ?? current.autoDownload;
+  let sources = input.sources ?? current.sources;
   if (auto && (!sources.length || (input.media ?? current.media).type === 'ANIME'))
     throw new AppError('VALIDATION_ERROR', 'Automatic downloads require manga/novel sources');
-  let media = input.media ?? storedMedia(current.id);
+  let media = input.media ? authoritativeMedia(input.media) : storedMedia(current.id);
   if (input.offCatalog) {
     const seriesId =
       input.kavitaSeriesId === undefined ? current.kavitaSeriesId : input.kavitaSeriesId;
@@ -41,6 +50,10 @@ export const PATCH = route(async (r) => {
         'A Kavita series or source is required to detach the catalog',
         409,
       );
+  }
+  if (input.media && sameMedia(input.media, current.media)) {
+    const saved = storedMedia(current.id);
+    media = { ...media, coverUrl: saved.coverUrl, bannerUrl: saved.bannerUrl };
   }
   let chosenUrl = input.media || input.offCatalog ? media.coverUrl : current.coverUrl;
   if (input.cover && input.cover !== 'auto') {
@@ -67,11 +80,24 @@ export const PATCH = route(async (r) => {
       chosenUrl = selected.url;
     }
   }
-  const conflict = listTracked().some((t) => t.id !== current.id && sameMedia(t.media, media));
+  const conflict = listTracked().some((t) => t.id !== input.id && sameMedia(t.media, media));
   if (conflict)
     throw new AppError('ALREADY_TRACKED', 'This catalog identity is already tracked', 409);
+  const originalIdentity = current.media.id;
+  const requestedCover = chosenUrl;
   try {
     db().transaction(() => {
+      const latest = getTracked(input.id);
+      if (!latest || latest.media.id !== originalIdentity)
+        throw new AppError('CONCURRENT_EDIT', 'Tracked identity changed; retry the edit', 409);
+      current = latest;
+      auto = input.autoDownload ?? current.autoDownload;
+      sources = input.sources ?? current.sources;
+      if (auto && (!sources.length || media.type === 'ANIME'))
+        throw new AppError('VALIDATION_ERROR', 'Automatic downloads require manga/novel sources');
+      if (!input.media && !input.offCatalog) media = storedMedia(current.id);
+      chosenUrl =
+        input.cover || input.media || input.offCatalog ? requestedCover : current.coverUrl;
       if (input.sources) replaceSources(current, input.sources);
       if (
         input.media ||
@@ -123,10 +149,11 @@ export const PATCH = route(async (r) => {
       throw new AppError('ALREADY_TRACKED', 'This catalog identity is already tracked', 409);
     throw error;
   }
-  await syncTrackedCover(input.id).catch(() => {
+  wakeWorker();
+  await syncTrackedCover(input.id, undefined, Boolean(input.cover)).catch(() => {
     /* Retry chosen cover on the next update cycle. */
   });
-  return json(listTracked().find((t) => t.id === input.id));
+  return json(getTracked(input.id));
 });
 export const DELETE = route(async (r) => {
   const { id } = await body(r, z.object({ id: z.number().int().positive() }));

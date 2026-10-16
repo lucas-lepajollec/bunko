@@ -1,7 +1,7 @@
 import { indexedSeries, indexedSeriesById, matchKavita, type IndexedSeries } from './kavita-index';
 import { search, deduplicate } from './search-engine';
 import { titleScore } from './matching';
-import { track, db, listTracked, manualKavitaLink, sameMedia } from './db';
+import { track, db, getTracked, listTracked, manualKavitaLink, sameMedia } from './db';
 import { AppError } from './errors';
 import { emptyMedia } from './media';
 import type { UnifiedMedia } from '@/types/shared';
@@ -54,7 +54,7 @@ export async function trackKavitaSeries(seriesId: number, signal?: AbortSignal, 
       db()
         .prepare('UPDATE tracked_media SET kavita_series_id=? WHERE id=? AND kavita_manual=0')
         .run(seriesId, linked.id);
-      return listTracked().find((t) => t.id === linked.id)!;
+      return getTracked(linked.id)!;
     }
     return linked;
   }
@@ -97,7 +97,7 @@ export async function trackKavitaSeries(seriesId: number, signal?: AbortSignal, 
       .prepare('UPDATE tracked_media SET kavita_series_id=? WHERE id=? AND kavita_manual=0')
       .run(seriesId, tracked.id);
     if (!automatic) db().prepare('DELETE FROM kavita_dismissals WHERE series_id=?').run(seriesId);
-    return listTracked().find((t) => t.id === tracked.id)!;
+    return getTracked(tracked.id)!;
   })();
 }
 export async function autoImportKavita() {

@@ -1,5 +1,5 @@
 import type { ChapterSelection, SourceCandidate, TrackedMedia } from '@/types/shared';
-import { db, listTracked, saveSourceStatus } from './db';
+import { statement, db, getTracked, saveSourceStatus } from './db';
 import { sourceInfos, chaptersFor } from './suwayomi';
 import { matchOnSource } from './matching';
 import { suwayomiDetail } from './catalog';
@@ -19,9 +19,11 @@ export function sameSource(
 export function replaceSources(t: TrackedMedia, sources: ChapterSelection[]) {
   for (const old of t.sources)
     if (!sources.some((s) => sameSource(s, old)))
-      db()
-        .prepare('INSERT OR IGNORE INTO source_dismissals VALUES(?,?,?)')
-        .run(t.id, old.sourceId, old.suwayomiMangaId);
+      statement('INSERT OR IGNORE INTO source_dismissals VALUES(?,?,?)').run(
+        t.id,
+        old.sourceId,
+        old.suwayomiMangaId,
+      );
   for (const source of sources) {
     const status = t.sourceStatus.find((s) => sameSource(s, source));
     saveSourceStatus(t.id, {
@@ -51,7 +53,7 @@ export async function matchTrackedSources(
     if (!ownsLease()) return false;
     const next = sourceMatchQueue()[0];
     if (!next) return false;
-    const t = listTracked().find((v) => v.id === next.id);
+    const t = getTracked(next.id);
     if (!t || t.sources.length) return false;
     const available = (await sourceInfos(signal))
       .filter((s) => s.enabled)
@@ -64,21 +66,19 @@ export async function matchTrackedSources(
         );
       });
     if (!available.length || signal?.aborted || !ownsLease()) return false;
-    const lease = db().prepare('SELECT owner FROM worker_lock WHERE id=1').get() as
+    const lease = statement('SELECT owner FROM worker_lock WHERE id=1').get() as
       { owner: string } | undefined;
     const state = JSON.stringify({ id: t.id, title: t.title, owner: lease?.owner ?? null });
-    db().prepare("INSERT OR REPLACE INTO worker_state VALUES('source_matching',?)").run(state);
+    statement("INSERT OR REPLACE INTO worker_state VALUES('source_matching',?)").run(state);
     try {
       const results = await Promise.allSettled(
         available.map(async (source) => {
           return (await matchOnSource(source, t.media, signal)).find(
             (c) =>
               c.score >= 0.9 &&
-              !db()
-                .prepare(
-                  'SELECT 1 FROM source_dismissals WHERE tracked_id=? AND source_id=? AND manga_id=?',
-                )
-                .get(t.id, c.sourceId, c.suwayomiMangaId),
+              !statement(
+                'SELECT 1 FROM source_dismissals WHERE tracked_id=? AND source_id=? AND manga_id=?',
+              ).get(t.id, c.sourceId, c.suwayomiMangaId),
           );
         }),
       );
@@ -88,31 +88,27 @@ export async function matchTrackedSources(
       );
       let linked = false;
       db().transaction(() => {
-        const current = listTracked().find((v) => v.id === t.id);
+        const current = getTracked(t.id);
         if (!current || current.sources.length || identity(current) !== identity(t)) return;
         const selected: SourceCandidate[] = candidates
           .filter(
             (c) =>
-              !db()
-                .prepare(
-                  'SELECT 1 FROM source_dismissals WHERE tracked_id=? AND source_id=? AND manga_id=?',
-                )
-                .get(t.id, c.sourceId, c.suwayomiMangaId),
+              !statement(
+                'SELECT 1 FROM source_dismissals WHERE tracked_id=? AND source_id=? AND manga_id=?',
+              ).get(t.id, c.sourceId, c.suwayomiMangaId),
           )
           .slice(0, 3);
-        db()
-          .prepare('UPDATE tracked_media SET sources_json=?,source_match_at=? WHERE id=?')
-          .run(
-            JSON.stringify(
-              selected.map((c) => ({
-                sourceId: c.sourceId,
-                sourceName: c.sourceName,
-                suwayomiMangaId: c.suwayomiMangaId,
-              })),
-            ),
-            new Date().toISOString(),
-            t.id,
-          );
+        statement('UPDATE tracked_media SET sources_json=?,source_match_at=? WHERE id=?').run(
+          JSON.stringify(
+            selected.map((c) => ({
+              sourceId: c.sourceId,
+              sourceName: c.sourceName,
+              suwayomiMangaId: c.suwayomiMangaId,
+            })),
+          ),
+          new Date().toISOString(),
+          t.id,
+        );
         for (const c of selected)
           saveSourceStatus(t.id, {
             sourceId: c.sourceId,
@@ -128,14 +124,14 @@ export async function matchTrackedSources(
         linked = selected.length > 0;
       })();
       if (linked && !signal?.aborted && ownsLease()) {
-        const current = listTracked().find((v) => v.id === t.id)!;
+        const current = getTracked(t.id)!;
         const result = await chaptersFor(current.sources, signal, undefined, ownsLease);
         if (!signal?.aborted && ownsLease())
           await refreshSourceStatuses(current, result, signal, ownsLease);
       }
       return true;
     } finally {
-      db().prepare("DELETE FROM worker_state WHERE key='source_matching' AND value=?").run(state);
+      statement("DELETE FROM worker_state WHERE key='source_matching' AND value=?").run(state);
     }
   }, signal);
 }
@@ -175,7 +171,7 @@ export async function refreshSourceStatuses(
         error ??= errorCode(e);
       }
       // Re-read after HTTP: preserve a concurrent manual edit and never resurrect a removed link.
-      const current = listTracked().find((v) => v.id === t.id);
+      const current = getTracked(t.id);
       const retained = current?.sourceStatus.find((v) => sameSource(v, previous));
       if (retained && !signal?.aborted && ownsLease())
         saveSourceStatus(t.id, { ...status, auto: retained.auto, error });

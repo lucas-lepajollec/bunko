@@ -13,7 +13,7 @@ import type {
   SourceCandidate,
   TrackedMedia,
 } from '@/types/shared';
-import { mediaHref, openStream, send, useApi } from '@/lib/client/api';
+import { batchesInterval, mediaHref, openStream, send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Backdrop } from '@/components/backdrop';
 import { ChapterTable, isMissing, preferredVariant } from '@/components/chapters';
@@ -70,7 +70,9 @@ export default function TitlePage() {
 function Title({ media }: { media: MediaDetail }) {
   const { t, n } = useI18n();
   const library = useApi<TrackedMedia[]>('/api/tracked');
-  const batches = useApi<DownloadBatch[]>('/api/downloads/batches', { refreshInterval: 4000 });
+  const batches = useApi<DownloadBatch[]>('/api/downloads/batches', {
+    refreshInterval: batchesInterval,
+  });
   const entry = (library.data ?? []).find(
     (e) =>
       e.media.id === media.id ||

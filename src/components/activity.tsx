@@ -18,7 +18,7 @@ const busy = (a: LibraryActivity | undefined) =>
 export function useLibraryActivity({ sync = false }: { sync?: boolean } = {}) {
   const { mutate } = useSWRConfig();
   const activity = useApi<LibraryActivity>('/api/library/activity', {
-    refreshInterval: (a) => (busy(a) ? 4000 : 60_000),
+    refreshInterval: (a) => (busy(a) ? 8000 : 60_000),
   });
   const wasBusy = useRef(false);
   const lastSync = useRef(0);

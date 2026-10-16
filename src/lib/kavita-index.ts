@@ -1,5 +1,6 @@
+import { wakeWorker } from './worker-events';
 import { z } from 'zod';
-import { db } from './db';
+import { db, statement, writeVersion } from './db';
 import { getSettings } from './settings';
 import { normalizeTitle } from './media';
 import { kavitaJson } from './kavita-client';
@@ -37,65 +38,127 @@ export interface IndexedSeries {
   kind?: import('@/types/shared').LibraryKind;
   completed?: boolean;
 }
+let seriesSnapshot:
+  | {
+      version: number;
+      entries: IndexedSeries[];
+      ids: Map<number, IndexedSeries>;
+      names: Map<string, IndexedSeries[]>;
+    }
+  | undefined;
+function seriesIndex() {
+  const version = writeVersion('series');
+  if (seriesSnapshot?.version === version) return seriesSnapshot;
+  const entries = (
+    statement('SELECT payload FROM kavita_series ORDER BY series_id').all() as { payload: string }[]
+  ).map((r) => JSON.parse(r.payload) as IndexedSeries);
+  const names = new Map<string, IndexedSeries[]>();
+  for (const s of entries)
+    for (const name of new Set(s.names.map(normalizeTitle))) {
+      const hits = names.get(name) ?? [];
+      hits.push(s);
+      names.set(name, hits);
+    }
+  const snapshot = { version, entries, ids: new Map(entries.map((s) => [s.seriesId, s])), names };
+  if (!db().inTransaction) seriesSnapshot = snapshot;
+  return snapshot;
+}
 export function indexedSeries(): IndexedSeries[] {
-  return (
-    db().prepare('SELECT payload FROM kavita_series ORDER BY series_id').all() as {
-      payload: string;
-    }[]
-  ).map((r) => JSON.parse(r.payload));
+  return seriesIndex().entries;
 }
 export function indexedSeriesById(id: number): IndexedSeries | null {
-  const row = db().prepare('SELECT payload FROM kavita_series WHERE series_id=?').get(id) as
-    { payload: string } | undefined;
-  return row ? JSON.parse(row.payload) : null;
+  return seriesIndex().ids.get(id) ?? null;
 }
 type MatchMedia = Pick<UnifiedMedia, 'title' | 'altTitles' | 'kavitaSeriesId'> &
   Partial<Pick<UnifiedMedia, 'id' | 'anilistId' | 'mangadexId' | 'type'>>;
-export function matchKavita(media: MatchMedia, linkedId?: number | null): IndexedSeries | null {
-  if (media.id) {
-    const row = db()
-      .prepare(
-        `SELECT kavita_series_id,kavita_manual FROM tracked_media WHERE media_json ->> '$.id'=?
-      OR (anilist_id IS NOT NULL AND anilist_id=?) OR (mangadex_id IS NOT NULL AND mangadex_id=?) LIMIT 1`,
-      )
-      .get(media.id, media.anilistId ?? null, media.mangadexId ?? null) as
-      { kavita_series_id: number | null; kavita_manual: number } | undefined;
-    if (row?.kavita_manual)
-      return row.kavita_series_id === null ? null : indexedSeriesById(row.kavita_series_id);
-    if (linkedId === undefined) linkedId = row?.kavita_series_id;
+let linkage:
+  | {
+      version: number;
+      ids: Map<string, Link>;
+      anilist: Map<number, Link>;
+      mangadex: Map<string, Link>;
+    }
+  | undefined;
+type Link = { kavita_series_id: number | null; kavita_manual: number };
+/** Capture an indexed resolver once per catalog/library operation. */
+export function kavitaMatcher() {
+  const version = writeVersion('linkage');
+  let links = linkage;
+  if (links?.version !== version) {
+    const ids = new Map<string, Link>();
+    const anilist = new Map<number, Link>();
+    const mangadex = new Map<string, Link>();
+    const rows = statement(
+      "SELECT media_json ->> '$.id' AS identity,anilist_id,mangadex_id,kavita_series_id,kavita_manual FROM tracked_media",
+    ).all() as (Link & {
+      identity: string;
+      anilist_id: number | null;
+      mangadex_id: string | null;
+    })[];
+    for (const r of rows) {
+      ids.set(r.identity, r);
+      if (r.anilist_id !== null) anilist.set(r.anilist_id, r);
+      if (r.mangadex_id !== null) mangadex.set(r.mangadex_id, r);
+    }
+    links = { version, ids, anilist, mangadex };
+    if (!db().inTransaction) linkage = links;
   }
-  // Derived response fields never override a persisted/manual tracked linkage.
-  if (linkedId != null) return indexedSeriesById(linkedId);
-  if (media.type === 'ANIME') return null;
-  const names = new Set(
-    [media.title, ...(media.altTitles ?? [])]
-      .filter((n): n is string => typeof n === 'string')
-      .map(normalizeTitle)
-      .filter(Boolean),
-  );
-  const hits = indexedSeries().filter((s) => s.names.some((n) => names.has(normalizeTitle(n))));
-  return hits.length === 1 ? hits[0] : null;
+  const index = seriesIndex();
+  return (media: MatchMedia, linkedId?: number | null): IndexedSeries | null => {
+    const row = media.id
+      ? (links.ids.get(media.id) ??
+        links.anilist.get(media.anilistId ?? -1) ??
+        links.mangadex.get(media.mangadexId ?? ''))
+      : undefined;
+    if (row?.kavita_manual)
+      return row.kavita_series_id === null ? null : (index.ids.get(row.kavita_series_id) ?? null);
+    if (linkedId === undefined) linkedId = row?.kavita_series_id;
+    if (linkedId != null) return index.ids.get(linkedId) ?? null;
+    if (media.type === 'ANIME') return null;
+    const hits = new Set(
+      [media.title, ...(media.altTitles ?? [])]
+        .filter((n): n is string => typeof n === 'string')
+        .flatMap((n) => index.names.get(normalizeTitle(n)) ?? []),
+    );
+    return hits.size === 1 ? [...hits][0] : null;
+  };
+}
+export function matchKavita(media: MatchMedia, linkedId?: number | null): IndexedSeries | null {
+  return kavitaMatcher()(media, linkedId);
 }
 export function seriesUrl(series: Pick<IndexedSeries, 'libraryId' | 'seriesId'>) {
   const url = getSettings().kavitaUrl.replace(/\/+$/, '');
   return url ? `${url}/library/${series.libraryId}/series/${series.seriesId}` : null;
 }
-export function kavitaPresence(series: IndexedSeries | null): KavitaPresence | null {
+export function kavitaPresence(
+  series: IndexedSeries | null,
+  baseUrl?: string,
+): KavitaPresence | null {
   return series
     ? {
         seriesId: series.seriesId,
         libraryId: series.libraryId,
         libraryName: series.libraryName,
         chapters: series.numbers.length,
-        url: seriesUrl(series),
+        url:
+          baseUrl === undefined
+            ? seriesUrl(series)
+            : baseUrl
+              ? `${baseUrl}/library/${series.libraryId}/series/${series.seriesId}`
+              : null,
       }
     : null;
 }
-export function withKavita<T extends UnifiedMedia>(media: T, linkedId?: number | null): T {
-  const match = matchKavita(media, linkedId);
+export function withKavita<T extends UnifiedMedia>(
+  media: T,
+  linkedId?: number | null,
+  resolve = matchKavita,
+  baseUrl?: string,
+): T {
+  const match = resolve(media, linkedId);
   return {
     ...media,
-    kavita: kavitaPresence(match),
+    kavita: kavitaPresence(match, baseUrl),
     kavitaSeriesId: match?.seriesId ?? linkedId ?? null,
   };
 }
@@ -248,6 +311,7 @@ export function kavitaIndexStatus(): KavitaIndexStatus {
 export function requestKavitaSync() {
   stateSet('kavita_sync_requested', '1');
   stateSet('kavita_retry_at', '0');
+  wakeWorker();
 }
 export function kavitaSyncRequested() {
   return (

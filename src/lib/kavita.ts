@@ -10,7 +10,7 @@ import { endpoint, requestJson } from './http';
 import { chapterNumber } from './suwayomi';
 import { AppError } from './errors';
 import { kavitaHeaders } from './kavita-client';
-import { downloadCover, hasCoverImage, writeCoverFile } from './kavita-cover';
+import { selectedCover, hasCoverImage, writeCoverFile } from './kavita-cover';
 import { matchKavita } from './kavita-index';
 import {
   libraryRoot,
@@ -109,7 +109,7 @@ export async function writeMetadata(media: UnifiedMedia) {
   const folder = await seriesDirectory(media);
   await atomicWrite(folder, 'ComicInfo.xml', comicInfo(media, null, media.title));
   if (!media.coverUrl || (await hasCoverImage(folder))) return;
-  const cover = await downloadCover(media.coverUrl);
+  const cover = await selectedCover(media.coverUrl);
   if (cover) await writeCoverFile(folder, cover.bytes);
 }
 export function addComicInfo(archive: Buffer, xml: string): Buffer {

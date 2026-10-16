@@ -113,7 +113,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
       className={cx(
         'flex flex-col overflow-hidden',
         variant === 'inline'
-          ? 'border-line absolute top-[50px] right-0 w-[440px] rounded-2xl border bg-[#141210]/97 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl'
+          ? 'border-line absolute top-[50px] right-0 w-[440px] rounded-2xl border bg-[#141210] shadow-[0_24px_60px_rgba(0,0,0,0.55)]'
           : 'mt-3',
       )}
     >
@@ -238,7 +238,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
       role="dialog"
       aria-modal="true"
       aria-label={t('nav.search')}
-      className="bg-bg/97 fixed inset-0 z-50 flex flex-col px-4 pt-4 backdrop-blur-xl lg:hidden"
+      className="bg-bg fixed inset-0 z-50 flex flex-col px-4 pt-4 lg:hidden"
     >
       <div className="flex items-center gap-2">
         <div className="flex-1">{field}</div>

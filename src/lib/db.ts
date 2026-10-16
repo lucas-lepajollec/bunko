@@ -1,9 +1,12 @@
+import { storedCover, deleteStoredCoverFile } from './stored-covers';
+import { wakeWorker } from './worker-events';
 import Database from 'better-sqlite3';
 import { coverContext } from './cover-state';
 import { activeSourceMatch, SOURCE_MATCH_RETRY_MS } from './source-match-state';
-import { matchKavita, withKavita } from './kavita-index';
+import { matchKavita, kavitaPresence, kavitaMatcher } from './kavita-index';
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { getSettings } from './settings';
 import { env } from '@/lib/env';
 import type {
   DownloadBatch,
@@ -28,6 +31,9 @@ export function db(): Database.Database {
       : path.join(/* turbopackIgnore: true */ dataDir, 'bunko.db'),
   );
   connection.pragma('journal_mode = WAL');
+  connection.pragma('synchronous = NORMAL');
+  connection.pragma('cache_size = -16384');
+  connection.pragma('temp_store = MEMORY');
   connection.pragma('foreign_keys = ON');
   connection.pragma('busy_timeout = 5000');
   connection.exec(`
@@ -65,8 +71,61 @@ export function db(): Database.Database {
       tracked_id INTEGER PRIMARY KEY REFERENCES tracked_media(id) ON DELETE CASCADE,
       context TEXT NOT NULL, url TEXT NOT NULL, failures INTEGER NOT NULL DEFAULT 0);
   `);
+  connection.exec(`CREATE TABLE IF NOT EXISTS stored_covers (
+    tracked_id INTEGER PRIMARY KEY REFERENCES tracked_media(id) ON DELETE CASCADE,
+    context TEXT NOT NULL, hash TEXT NOT NULL, mime TEXT NOT NULL, filename TEXT NOT NULL,
+    origin_url TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS write_versions (domain TEXT PRIMARY KEY, version INTEGER NOT NULL);
+    INSERT OR IGNORE INTO write_versions VALUES('library',0),('series',0),('settings',0),('linkage',0),('batches',0);`);
+  // Database triggers cover every writer, including other Next bundles/connections and rollbacks.
+  for (const table of [
+    'tracked_media',
+    'source_links',
+    'imported_chapters',
+    'observed_chapters',
+    'resolved_covers',
+    'stored_covers',
+    'kavita_series',
+    'settings',
+    'download_batches',
+  ]) {
+    for (const operation of ['INSERT', 'UPDATE', 'DELETE']) {
+      const domain =
+        table === 'download_batches'
+          ? 'batches'
+          : table === 'kavita_series'
+            ? 'series'
+            : table === 'settings'
+              ? 'settings'
+              : table === 'tracked_media'
+                ? 'linkage'
+                : null;
+      connection.exec(`CREATE TRIGGER IF NOT EXISTS version_${table}_${operation}
+        AFTER ${operation} ON ${table} BEGIN
+        ${table === 'download_batches' ? '' : "UPDATE write_versions SET version=version+1 WHERE domain='library';"}
+        ${domain ? `UPDATE write_versions SET version=version+1 WHERE domain='${domain}' ${table === 'tracked_media' && operation === 'UPDATE' ? "AND (OLD.anilist_id IS NOT NEW.anilist_id OR OLD.mangadex_id IS NOT NEW.mangadex_id OR OLD.kavita_series_id IS NOT NEW.kavita_series_id OR OLD.kavita_manual IS NOT NEW.kavita_manual OR json_extract(OLD.media_json,'$.id') IS NOT json_extract(NEW.media_json,'$.id'))" : ''};` : ''}
+        END;`);
+    }
+  }
   resetAccountAtStartup(connection);
   return connection;
+}
+const statements = new Map<string, Database.Statement>();
+/** Reuse SQL bytecode in hot paths. Statements belong to this module's lazy connection. */
+export function statement(sql: string): Database.Statement {
+  let prepared = statements.get(sql);
+  if (!prepared) {
+    prepared = db().prepare(sql);
+    statements.set(sql, prepared);
+  }
+  return prepared;
+}
+export function writeVersion(domain = 'library'): number {
+  return (
+    statement('SELECT version FROM write_versions WHERE domain=?').get(domain) as {
+      version: number;
+    }
+  ).version;
 }
 /** Transactional, repeatable migration; never resets a newer schema version. */
 export function migrateV2(database: Database.Database) {
@@ -168,11 +227,14 @@ export function sourceStatuses(
   id: number,
   selections: TrackedMedia['sources'],
   media: UnifiedMedia,
+  loaded?: SourceLinkStatus[],
 ): SourceLinkStatus[] {
-  const rows = db().prepare('SELECT payload FROM source_links WHERE tracked_id=?').all(id) as {
-    payload: string;
-  }[];
-  const statuses = rows.map((r) => JSON.parse(r.payload) as SourceLinkStatus);
+  const rows = loaded
+    ? []
+    : (statement('SELECT payload FROM source_links WHERE tracked_id=?').all(id) as {
+        payload: string;
+      }[]);
+  const statuses = loaded ?? rows.map((r) => JSON.parse(r.payload) as SourceLinkStatus);
   return selections.map(
     (s) =>
       statuses.find(
@@ -195,24 +257,23 @@ export function sourceStatuses(
   );
 }
 export function saveSourceStatus(id: number, status: SourceLinkStatus) {
-  db()
-    .prepare(
-      `INSERT INTO source_links(tracked_id,source_id,manga_id,payload) VALUES(?,?,?,?)
+  statement(
+    `INSERT INTO source_links(tracked_id,source_id,manga_id,payload) VALUES(?,?,?,?)
     ON CONFLICT(tracked_id,source_id,manga_id) DO UPDATE SET payload=excluded.payload`,
-    )
-    .run(id, status.sourceId, status.suwayomiMangaId, JSON.stringify(status));
+  ).run(id, status.sourceId, status.suwayomiMangaId, JSON.stringify(status));
 }
 export function manualKavitaLink(id: number) {
   return Boolean(
     (
-      db().prepare('SELECT kavita_manual FROM tracked_media WHERE id=?').get(id) as
+      statement('SELECT kavita_manual FROM tracked_media WHERE id=?').get(id) as
         { kavita_manual: number } | undefined
     )?.kavita_manual,
   );
 }
 export function untrack(id: number) {
+  const cover = storedCover(id);
   db().transaction(() => {
-    const tracked = listTracked().find((t) => t.id === id);
+    const tracked = getTracked(id);
     const series = tracked
       ? (matchKavita(tracked.media, tracked.kavitaSeriesId) ??
         matchKavita({
@@ -226,9 +287,10 @@ export function untrack(id: number) {
       series?.seriesId ??
       (tracked?.media.id.startsWith('kavita:') ? Number(tracked.media.id.slice(7)) : null);
     if (seriesId)
-      db().prepare('INSERT OR IGNORE INTO kavita_dismissals(series_id) VALUES(?)').run(seriesId);
-    db().prepare('DELETE FROM tracked_media WHERE id=?').run(id);
+      statement('INSERT OR IGNORE INTO kavita_dismissals(series_id) VALUES(?)').run(seriesId);
+    statement('DELETE FROM tracked_media WHERE id=?').run(id);
   })();
+  if (cover) deleteStoredCoverFile(cover);
 }
 // Next can load db.ts in multiple route bundles; reset only once per server process/volume.
 const runtime = globalThis as typeof globalThis & { __bunkoAccountReset?: Set<string> };
@@ -251,20 +313,45 @@ export function sameMedia(a: UnifiedMedia, b: UnifiedMedia) {
   );
 }
 /** Exact catalog identities win; a unique linked source/series is also authoritative. */
+const trackingLookups = new WeakMap<
+  TrackedMedia[],
+  (media: UnifiedMedia) => TrackedMedia | undefined
+>();
 export function trackedForMedia(media: UnifiedMedia, entries: TrackedMedia[]) {
-  const exact = entries.find((t) => sameMedia(t.media, media));
-  if (exact) return exact;
-  const linked = entries.filter(
-    (t) =>
-      t.type === media.type &&
-      ((media.id.startsWith('kavita:') && t.kavitaSeriesId === Number(media.id.slice(7))) ||
-        media.sources.some((m) =>
-          t.sources.some(
-            (s) => s.sourceId === m.sourceId && s.suwayomiMangaId === m.suwayomiMangaId,
-          ),
-        )),
-  );
-  return linked.length === 1 ? linked[0] : undefined;
+  let lookup = trackingLookups.get(entries);
+  if (!lookup) {
+    const exact = new Map<string, TrackedMedia>();
+    const sources = new Map<string, TrackedMedia[]>();
+    const series = new Map<string, TrackedMedia[]>();
+    const add = (map: Map<string, TrackedMedia[]>, key: string, t: TrackedMedia) => {
+      const list = map.get(key) ?? [];
+      list.push(t);
+      map.set(key, list);
+    };
+    for (const t of entries) {
+      exact.set(`${t.type}:id:${t.media.id}`, t);
+      if (t.anilistId !== null) exact.set(`${t.type}:anilist:${t.anilistId}`, t);
+      if (t.mangadexId !== null) exact.set(`${t.type}:mangadex:${t.mangadexId}`, t);
+      if (t.kavitaSeriesId !== null) add(series, `${t.type}:${t.kavitaSeriesId}`, t);
+      for (const s of t.sources) add(sources, `${t.type}:${s.sourceId}:${s.suwayomiMangaId}`, t);
+    }
+    lookup = (m) => {
+      const direct =
+        exact.get(`${m.type}:id:${m.id}`) ??
+        exact.get(`${m.type}:anilist:${m.anilistId}`) ??
+        exact.get(`${m.type}:mangadex:${m.mangadexId}`);
+      if (direct) return direct;
+      const hits = new Set([
+        ...(m.id.startsWith('kavita:') ? (series.get(`${m.type}:${m.id.slice(7)}`) ?? []) : []),
+        ...m.sources.flatMap(
+          (s) => sources.get(`${m.type}:${s.sourceId}:${s.suwayomiMangaId}`) ?? [],
+        ),
+      ]);
+      return hits.size === 1 ? [...hits][0] : undefined;
+    };
+    trackingLookups.set(entries, lookup);
+  }
+  return lookup(media);
 }
 export function recordImport(
   media: UnifiedMedia,
@@ -279,33 +366,32 @@ export function recordImport(
   const source =
     chapter.manga?.source ?? tracked?.sources.find((s) => s.suwayomiMangaId === chapter.manga?.id);
   const match = media.sources.find((s) => s.suwayomiMangaId === chapter.manga?.id);
-  db()
-    .prepare(
-      `INSERT INTO imported_chapters(chapter_id, tracked_id, media_json, number, source_id, source_name, imported_at)
+  statement(
+    `INSERT INTO imported_chapters(chapter_id, tracked_id, media_json, number, source_id, source_name, imported_at)
     VALUES(?,?,?,?,?,?,?) ON CONFLICT(chapter_id) DO UPDATE SET tracked_id=excluded.tracked_id,
     number=excluded.number,source_id=excluded.source_id,source_name=excluded.source_name`,
-    )
-    .run(
-      chapter.id,
-      tracked?.id ?? null,
-      JSON.stringify(media),
-      chapter.chapterNumber >= 0 ? chapter.chapterNumber : null,
-      source && 'id' in source ? source.id : (source?.sourceId ?? match?.sourceId ?? null),
-      source && 'name' in source ? source.name : (source?.sourceName ?? match?.sourceName ?? null),
-      new Date().toISOString(),
-    );
+  ).run(
+    chapter.id,
+    tracked?.id ?? null,
+    JSON.stringify(media),
+    chapter.chapterNumber >= 0 ? chapter.chapterNumber : null,
+    source && 'id' in source ? source.id : (source?.sourceId ?? match?.sourceId ?? null),
+    source && 'name' in source ? source.name : (source?.sourceName ?? match?.sourceName ?? null),
+    new Date().toISOString(),
+  );
 }
 export function observeChapters(trackedId: number, chapters: ChapterVariant[]) {
-  const insert = db()
-    .prepare(`INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name)
+  const insert =
+    statement(`INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name)
     VALUES(?,?,?,?,?) ON CONFLICT(tracked_id,chapter_id) DO UPDATE SET number=excluded.number`);
   db().transaction(() => {
     for (const c of chapters) insert.run(trackedId, c.id, c.number, c.sourceId, c.sourceName);
     const numbers = chapters.flatMap((c) => (c.number === null ? [] : [c.number]));
     if (numbers.length)
-      db()
-        .prepare('UPDATE tracked_media SET released=MAX(COALESCE(released,0),?) WHERE id=?')
-        .run(Math.max(...numbers), trackedId);
+      statement('UPDATE tracked_media SET released=MAX(COALESCE(released,0),?) WHERE id=?').run(
+        Math.max(...numbers),
+        trackedId,
+      );
   })();
 }
 export function indexCatalog(rows: (SourceMatch & { title: string; altTitles?: string[] })[]) {
@@ -346,9 +432,9 @@ export function searchCatalog(query: string): (SourceMatch & { title: string })[
     ?.slice(0, 16);
   if (!tokens?.length) return [];
   const match = tokens.map((t) => `"${t}"*`).join(' AND ');
-  const rows = db()
-    .prepare('SELECT * FROM catalog_fts WHERE catalog_fts MATCH ? ORDER BY rank LIMIT 100')
-    .all(match) as Record<string, string>[];
+  const rows = statement(
+    'SELECT * FROM catalog_fts WHERE catalog_fts MATCH ? ORDER BY rank LIMIT 100',
+  ).all(match) as Record<string, string>[];
   return rows.map((r) => ({
     title: r.title,
     sourceId: r.source_id,
@@ -359,128 +445,209 @@ export function searchCatalog(query: string): (SourceMatch & { title: string })[
     mangaUrl: r.manga_url,
   }));
 }
-export function listTracked(): TrackedMedia[] {
-  const matching = activeSourceMatch();
-  return (
-    db().prepare('SELECT * FROM tracked_media ORDER BY id DESC').all() as Record<string, unknown>[]
-  ).map((r) => {
-    const rawMedia = JSON.parse(String(r.media_json)) as UnifiedMedia;
-    const sources = JSON.parse(String(r.sources_json)) as TrackedMedia['sources'];
-    const sourceStatus = sourceStatuses(Number(r.id), sources, rawMedia);
-    const coverChoice = JSON.parse(String(r.cover_choice_json)) as CoverChoice;
-    const kavita = matchKavita(rawMedia, r.kavita_series_id as number | null);
-    const identity =
-      r.off_catalog || /^(kavita|suwayomi|local):/.test(rawMedia.id)
-        ? ('off-catalog' as const)
-        : ('catalog' as const);
-    const automaticCovers = [
-      ...new Set(
-        [
-          identity === 'catalog' ? rawMedia.coverUrl : null,
-          ...sourceStatus.map((s) => s.thumbnailUrl),
-          kavita ? `/api/kavita/image?seriesId=${kavita.seriesId}` : rawMedia.coverUrl,
-        ].filter((url): url is string => Boolean(url)),
-      ),
-    ];
-    const resolved = db()
-      .prepare('SELECT context,url FROM resolved_covers WHERE tracked_id=?')
-      .get(Number(r.id)) as { context: string; url: string } | undefined;
-    const context = coverContext(
-      rawMedia.id,
-      identity,
-      coverChoice,
-      sources,
-      kavita?.seriesId ?? null,
+let trackedSnapshot:
+  | {
+      version: number;
+      entries: TrackedMedia[];
+      byId: Map<number, TrackedMedia>;
+      retry: Map<number, number>;
+    }
+  | undefined;
+function snapshotTracked(id?: number) {
+  const version = writeVersion();
+  if (trackedSnapshot?.version === version) return trackedSnapshot;
+  const outerTransaction = db().inTransaction;
+  // A read transaction gives one consistent snapshot when another process commits concurrently.
+  const result = db().transaction(() => {
+    const select = (sql: string, column: string, suffix = '') =>
+      statement(sql + (id === undefined ? '' : ` WHERE ${column}=?`) + suffix).all(
+        ...(id === undefined ? [] : [id]),
+      );
+    const rows = select('SELECT * FROM tracked_media', 'id', ' ORDER BY id DESC') as Record<
+      string,
+      unknown
+    >[];
+    const links = new Map<number, SourceLinkStatus[]>();
+    for (const r of select('SELECT tracked_id,payload FROM source_links', 'tracked_id') as {
+      tracked_id: number;
+      payload: string;
+    }[]) {
+      const values = links.get(r.tracked_id) ?? [];
+      values.push(JSON.parse(r.payload));
+      links.set(r.tracked_id, values);
+    }
+    const covers = new Map(
+      (
+        select('SELECT * FROM stored_covers', 'tracked_id') as {
+          tracked_id: number;
+          context: string;
+          hash: string;
+        }[]
+      ).map((r) => [r.tracked_id, r]),
     );
-    const coverUrl =
-      coverChoice === 'auto'
-        ? resolved?.context === context
-          ? resolved.url
-          : (automaticCovers[0] ?? null)
-        : (r.cover_url as string | null);
-    const media = { ...withKavita(rawMedia, r.kavita_series_id as number | null), coverUrl };
-    const imported = db()
-      .prepare(
-        'SELECT DISTINCT number FROM imported_chapters WHERE tracked_id=? AND number IS NOT NULL',
-      )
-      .all(r.id as number) as { number: number }[];
-    const ownedNumbers = [
-      ...new Set([
-        ...imported.map((c) => c.number),
-        ...(matchKavita(rawMedia, r.kavita_series_id as number | null)?.numbers ?? []),
-      ]),
-    ];
-    const newChapters = db()
-      .prepare(
-        `SELECT COUNT(*) AS count FROM (
-      SELECT DISTINCT number FROM observed_chapters WHERE tracked_id=? AND number IS NOT NULL
-      EXCEPT SELECT number FROM imported_chapters WHERE tracked_id=? AND number IS NOT NULL)`,
-      )
-      .get(r.id as number, r.id as number) as { count: number };
-    const observed = db()
-      .prepare('SELECT MAX(number) AS highest FROM observed_chapters WHERE tracked_id=?')
-      .get(r.id as number) as { highest: number | null };
-    const known = [
-      media.chapters,
-      r.released as number | null,
-      observed.highest,
-      ...sourceStatus.map((s) => s.latestChapter),
-      ...ownedNumbers,
-    ].filter((n): n is number => n !== null);
-    const read = r.last_read as number | null;
-    return {
-      id: Number(r.id),
-      anilistId: r.anilist_id as number | null,
-      mangadexId: r.mangadex_id as string | null,
-      title: String(r.title),
-      type: r.type as TrackedMedia['type'],
-      coverUrl,
-      coverChoice,
-      backdrop: r.backdrop as TrackedMedia['backdrop'],
-      coverFallbacks:
-        coverChoice === 'auto' ? automaticCovers.filter((url) => url !== coverUrl) : [],
-      sourceMatch: sources.length
-        ? 'linked'
-        : matching?.id === Number(r.id)
-          ? 'searching'
-          : !r.source_match_at ||
-              Date.parse(String(r.source_match_at)) <= Date.now() - SOURCE_MATCH_RETRY_MS
-            ? 'queued'
-            : 'not-found',
-      sourceStatus,
-      identity,
-      kavitaSeriesId: r.kavita_series_id as number | null,
-      autoDownload: Boolean(r.auto_download),
-      createdAt: String(r.created_at),
-      media,
-      sources,
-      status: r.status as TrackedMedia['status'],
-      lastReadAt: r.last_read_at as string | null,
-      progress: {
-        read,
-        owned: ownedNumbers.length,
-        released: known.length ? Math.max(...known) : null,
-        unread: ownedNumbers.filter((n) => read === null || n > read).length,
-        readSource: r.progress_checked ? ('kavita' as const) : ('none' as const),
-      },
-      newChapters: Math.max(
-        0,
-        newChapters.count -
-          (
-            db()
-              .prepare(
-                'SELECT DISTINCT number FROM observed_chapters WHERE tracked_id=? AND number IS NOT NULL',
-              )
-              .all(r.id as number) as { number: number }[]
-          ).filter(
-            (c) => !imported.some((i) => i.number === c.number) && ownedNumbers.includes(c.number),
-          ).length,
-      ),
-    };
-  });
+    const resolved = new Map(
+      (
+        select('SELECT * FROM resolved_covers', 'tracked_id') as {
+          tracked_id: number;
+          context: string;
+          url: string;
+        }[]
+      ).map((r) => [r.tracked_id, r]),
+    );
+    // SQLite groups distinct ownership/observations once for the entire library.
+    const numbers = (table: string) =>
+      new Map(
+        (
+          statement(
+            `SELECT tracked_id,json_group_array(DISTINCT number) AS numbers FROM ${table} WHERE number IS NOT NULL ${id === undefined ? '' : 'AND tracked_id=?'} GROUP BY tracked_id`,
+          ).all(...(id === undefined ? [] : [id])) as { tracked_id: number; numbers: string }[]
+        ).map((r) => [r.tracked_id, JSON.parse(r.numbers) as number[]]),
+      );
+    const imported = numbers('imported_chapters');
+    const observed = numbers('observed_chapters');
+    const retry = new Map<number, number>();
+    const match = kavitaMatcher();
+    const kavitaUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
+    const entries = rows.map((r): TrackedMedia => {
+      const id = Number(r.id);
+      const rawMedia = JSON.parse(String(r.media_json)) as UnifiedMedia;
+      const sources = JSON.parse(String(r.sources_json)) as TrackedMedia['sources'];
+      const sourceStatus = sourceStatuses(id, sources, rawMedia, links.get(id) ?? []);
+      const coverChoice = JSON.parse(String(r.cover_choice_json)) as CoverChoice;
+      const kavita = match(rawMedia, r.kavita_series_id as number | null);
+      const identity =
+        r.off_catalog || /^(kavita|suwayomi|local):/.test(rawMedia.id) ? 'off-catalog' : 'catalog';
+      const automaticCovers = [
+        ...new Set(
+          [
+            identity === 'catalog' ? rawMedia.coverUrl : null,
+            ...sourceStatus.map((s) => s.thumbnailUrl),
+            kavita ? `/api/kavita/image?seriesId=${kavita.seriesId}` : rawMedia.coverUrl,
+          ].filter((v): v is string => Boolean(v)),
+        ),
+      ];
+      const context = coverContext(
+        rawMedia.id,
+        identity,
+        coverChoice,
+        sources,
+        kavita?.seriesId ?? null,
+      );
+      const stored = covers.get(id);
+      const saved = resolved.get(id);
+      const stable = stored?.context === context;
+      const coverUrl = stable
+        ? `/api/covers/${id}?v=${stored.hash}`
+        : coverChoice === 'auto'
+          ? saved?.context === context
+            ? saved.url || null
+            : (automaticCovers[0] ?? null)
+          : saved?.context === context && !saved.url
+            ? null
+            : (r.cover_url as string | null);
+      const media = {
+        ...rawMedia,
+        kavita: kavitaPresence(kavita, kavitaUrl),
+        kavitaSeriesId: kavita?.seriesId ?? (r.kavita_series_id as number | null),
+        coverUrl,
+      };
+      const owned = new Set([...(imported.get(id) ?? []), ...(kavita?.numbers ?? [])]);
+      const seen = observed.get(id) ?? [];
+      const known = [
+        media.chapters,
+        r.released as number | null,
+        ...seen,
+        ...owned,
+        ...sourceStatus.map((s) => s.latestChapter),
+      ].filter((n): n is number => n !== null);
+      const read = r.last_read as number | null;
+      retry.set(
+        id,
+        r.source_match_at ? Date.parse(String(r.source_match_at)) + SOURCE_MATCH_RETRY_MS : 0,
+      );
+      return {
+        id,
+        anilistId: r.anilist_id as number | null,
+        mangadexId: r.mangadex_id as string | null,
+        title: String(r.title),
+        type: r.type as TrackedMedia['type'],
+        coverUrl,
+        coverChoice,
+        backdrop: r.backdrop as TrackedMedia['backdrop'],
+        coverFallbacks:
+          !stable && coverChoice === 'auto' ? automaticCovers.filter((v) => v !== coverUrl) : [],
+        sourceMatch: sources.length ? 'linked' : 'queued',
+        sourceStatus,
+        identity,
+        kavitaSeriesId: r.kavita_series_id as number | null,
+        autoDownload: Boolean(r.auto_download),
+        createdAt: String(r.created_at),
+        media,
+        sources,
+        status: r.status as TrackedMedia['status'],
+        lastReadAt: r.last_read_at as string | null,
+        progress: {
+          read,
+          owned: owned.size,
+          released: known.length ? Math.max(...known) : null,
+          unread: [...owned].filter((n) => read === null || n > read).length,
+          readSource: r.progress_checked ? 'kavita' : 'none',
+        },
+        newChapters: seen.filter((n) => !owned.has(n)).length,
+      };
+    });
+    const snapshot = { version, entries, byId: new Map(entries.map((t) => [t.id, t])), retry };
+    if (id === undefined && !outerTransaction) trackedSnapshot = snapshot;
+    return snapshot;
+  })();
+  // Prime committed index/settings caches after our read transaction. Never publish a
+  // cache assembled inside a caller's write transaction (its version may roll back).
+  if (!outerTransaction) {
+    kavitaMatcher();
+    getSettings();
+  }
+  return result;
+}
+function matchingState(
+  t: TrackedMedia,
+  matching: ReturnType<typeof activeSourceMatch>,
+  retry: Map<number, number>,
+): TrackedMedia {
+  return {
+    ...t,
+    sourceMatch: t.sources.length
+      ? 'linked'
+      : matching?.id === t.id
+        ? 'searching'
+        : (retry.get(t.id) ?? 0) <= Date.now()
+          ? 'queued'
+          : 'not-found',
+  };
+}
+export function listTracked(): TrackedMedia[] {
+  const snapshot = snapshotTracked();
+  const matching = activeSourceMatch();
+  return snapshot.entries.map((t) => matchingState(t, matching, snapshot.retry));
+}
+export function getTracked(id: number): TrackedMedia | undefined {
+  const snapshot = snapshotTracked(id);
+  const t = snapshot.byId.get(id);
+  return t ? matchingState(t, activeSourceMatch(), snapshot.retry) : undefined;
+}
+/** Client artwork cannot replace the authoritative artwork of an already followed work. */
+export function authoritativeMedia(media: UnifiedMedia): UnifiedMedia {
+  const tracked = trackedForMedia(media, listTracked());
+  return tracked
+    ? { ...media, coverUrl: tracked.media.coverUrl, bannerUrl: tracked.media.bannerUrl }
+    : media;
 }
 
 export function track(input: TrackRequest): TrackedMedia {
+  return db()
+    .transaction(() => insertTracked(input))
+    .immediate();
+}
+function insertTracked(input: TrackRequest): TrackedMedia {
   const existing = listTracked().find(
     (t) =>
       (input.media.anilistId !== null && t.anilistId === input.media.anilistId) ||
@@ -490,50 +657,47 @@ export function track(input: TrackRequest): TrackedMedia {
   if (existing) return existing;
   const m = input.media;
   const id = Number(
-    db()
-      .prepare(
-        'INSERT INTO tracked_media(anilist_id,mangadex_id,title,type,cover_url,kavita_series_id,auto_download,created_at,media_json,sources_json,status) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-      )
-      .run(
-        m.anilistId,
-        m.mangadexId,
-        m.title,
-        m.type,
-        m.coverUrl,
-        input.kavitaSeriesId ?? null,
-        Number(input.autoDownload ?? false),
-        new Date().toISOString(),
-        JSON.stringify(m),
-        JSON.stringify(input.sources ?? []),
-        input.status ?? 'READING',
-      ).lastInsertRowid,
+    statement(
+      'INSERT INTO tracked_media(anilist_id,mangadex_id,title,type,cover_url,kavita_series_id,auto_download,created_at,media_json,sources_json,status) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+    ).run(
+      m.anilistId,
+      m.mangadexId,
+      m.title,
+      m.type,
+      m.coverUrl,
+      input.kavitaSeriesId ?? null,
+      Number(input.autoDownload ?? false),
+      new Date().toISOString(),
+      JSON.stringify(m),
+      JSON.stringify(input.sources ?? []),
+      input.status ?? 'READING',
+    ).lastInsertRowid,
   );
   if (input.kavitaSeriesId !== undefined)
-    db().prepare('UPDATE tracked_media SET kavita_manual=1 WHERE id=?').run(id);
+    statement('UPDATE tracked_media SET kavita_manual=1 WHERE id=?').run(id);
   // Imports can precede tracking; link their durable identity when the series is added.
-  const unlinked = db()
-    .prepare('SELECT chapter_id,media_json FROM imported_chapters WHERE tracked_id IS NULL')
-    .all() as { chapter_id: number; media_json: string }[];
+  const unlinked = statement(
+    'SELECT chapter_id,media_json FROM imported_chapters WHERE tracked_id IS NULL',
+  ).all() as { chapter_id: number; media_json: string }[];
   for (const row of unlinked)
     if (sameMedia(JSON.parse(row.media_json), m))
-      db()
-        .prepare('UPDATE imported_chapters SET tracked_id=? WHERE chapter_id=?')
-        .run(id, row.chapter_id);
-  const created = listTracked().find((t) => t.id === id)!;
+      statement('UPDATE imported_chapters SET tracked_id=? WHERE chapter_id=?').run(
+        id,
+        row.chapter_id,
+      );
+  const created = getTracked(id)!;
   for (const status of created.sourceStatus) saveSourceStatus(id, status);
-  return created;
+  wakeWorker();
+  return getTracked(id)!;
 }
 export function saveBatch(batch: DownloadBatch) {
-  db()
-    .prepare(
-      'INSERT INTO download_batches(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',
-    )
-    .run(batch.id, JSON.stringify(batch));
+  statement(
+    'INSERT INTO download_batches(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',
+  ).run(batch.id, JSON.stringify(batch));
   for (const t of listTracked().filter((t) => sameMedia(t.media, batch.media))) {
-    const link = db()
-      .prepare(`UPDATE update_chapters SET batch_id=? WHERE chapter_id=? AND entry_id IN
+    const link = statement(`UPDATE update_chapters SET batch_id=? WHERE chapter_id=? AND entry_id IN
       (SELECT id FROM update_entries WHERE tracked_id=?)`);
-    const alternate = db().prepare(`UPDATE update_chapters SET batch_id=? WHERE number=(
+    const alternate = statement(`UPDATE update_chapters SET batch_id=? WHERE number=(
       SELECT number FROM observed_chapters WHERE tracked_id=? AND chapter_id=?) AND entry_id IN
       (SELECT id FROM update_entries WHERE tracked_id=?)`);
     for (const id of batch.chapterIds) {
@@ -542,20 +706,23 @@ export function saveBatch(batch: DownloadBatch) {
     }
   }
 }
+let batchSnapshot: { version: number; entries: DownloadBatch[] } | undefined;
 export function listBatches(): DownloadBatch[] {
-  return (
-    db().prepare('SELECT payload FROM download_batches ORDER BY rowid DESC').all() as {
+  const version = writeVersion('batches');
+  if (batchSnapshot?.version === version) return structuredClone(batchSnapshot.entries);
+  const entries = (
+    statement('SELECT payload FROM download_batches ORDER BY rowid DESC').all() as {
       payload: string;
     }[]
-  ).map((r) => JSON.parse(r.payload));
+  ).map((r) => JSON.parse(r.payload) as DownloadBatch);
+  if (!db().inTransaction) batchSnapshot = { version, entries };
+  return structuredClone(entries);
 }
 export function acquireWorker(owner: string): boolean {
   const now = Date.now();
   return (
-    db()
-      .prepare(
-        'INSERT INTO worker_lock(id,owner,expires_at) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET owner=excluded.owner,expires_at=excluded.expires_at WHERE worker_lock.expires_at < ? OR worker_lock.owner = ?',
-      )
-      .run(owner, now + 300_000, now, owner).changes === 1
+    statement(
+      'INSERT INTO worker_lock(id,owner,expires_at) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET owner=excluded.owner,expires_at=excluded.expires_at WHERE worker_lock.expires_at < ? OR worker_lock.owner = ?',
+    ).run(owner, now + 90_000, now, owner).changes === 1
   );
 }

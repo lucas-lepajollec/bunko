@@ -59,8 +59,10 @@ export function Backdrop({
         <div className="absolute inset-0 hidden bg-[linear-gradient(90deg,#0b0a09_0%,rgba(11,10,9,0.75)_34%,rgba(11,10,9,0)_70%)] md:block" />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(11,10,9,0.55)_0%,rgba(11,10,9,0)_22%,rgba(11,10,9,0)_45%,rgba(11,10,9,0.6)_75%)]" />
         <div
-          className="absolute bottom-[8%] left-[-220px] h-[600px] w-[900px] rounded-full opacity-[0.13] blur-[120px]"
-          style={{ background: color ?? 'transparent' }}
+          className="absolute bottom-[8%] left-[-220px] h-[600px] w-[900px] opacity-[0.13]"
+          style={{
+            background: color ? `radial-gradient(closest-side, ${color}, transparent)` : undefined,
+          }}
         />
       </div>
     </div>

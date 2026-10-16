@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { db, dataDir } from './db';
+import { statement, writeVersion, db, dataDir } from './db';
 import { validateLibraryTargets } from './library-paths';
 import type { PublicSettings, SecretSetting, Settings, SettingsPatch } from '@/types/shared';
 export const secretKeys: SecretSetting[] = [
@@ -44,7 +44,10 @@ function decrypt(value: string) {
     'utf8',
   );
 }
+let settingsSnapshot: { version: number; value: Settings } | undefined;
 export function getSettings(): Settings {
+  const version = writeVersion('settings');
+  if (settingsSnapshot?.version === version) return settingsSnapshot.value;
   const result: Settings = {
     suwayomiUrl: process.env.SUWAYOMI_URL ?? 'http://suwayomi:4567',
     suwayomiUsername: '',
@@ -63,7 +66,7 @@ export function getSettings(): Settings {
     extensionRepos: [],
     updateIntervalMinutes: 15,
   };
-  for (const row of db().prepare('SELECT key,value FROM settings').all() as {
+  for (const row of statement('SELECT key,value FROM settings').all() as {
     key: keyof Settings;
     value: string;
   }[]) {
@@ -75,6 +78,7 @@ export function getSettings(): Settings {
     });
   }
   result.updateIntervalMinutes = Math.max(5, Math.min(1440, result.updateIntervalMinutes));
+  if (!db().inTransaction) settingsSnapshot = { version, value: result };
   return result;
 }
 export function publicSettings(): PublicSettings {
@@ -97,7 +101,7 @@ export function updateSettings(patch: SettingsPatch) {
       patch.libraryTargets ?? current.libraryTargets,
       patch.kavitaLibraryPath ?? current.kavitaLibraryPath,
     );
-  const insert = db().prepare(
+  const insert = statement(
     'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
   );
   db().transaction(() => {

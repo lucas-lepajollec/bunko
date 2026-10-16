@@ -6,7 +6,7 @@ import { AppError } from './errors';
 import { db, listTracked, trackedForMedia } from './db';
 import { cached, storedMetadata, saveMetadata } from './metadata-cache';
 import { kavitaMedia } from './kavita-track';
-import { withKavita } from './kavita-index';
+import { withKavita, kavitaMatcher } from './kavita-index';
 import { graphql } from './suwayomi';
 import { proxyImage } from './images';
 import { sharedConcurrencyGate } from './concurrency';
@@ -40,6 +40,8 @@ async function anilist<T>(query: string, variables: Record<string, unknown>, sig
 }
 export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
   const tracked = listTracked();
+  const resolve = kavitaMatcher();
+  const baseUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
   return items.map((m) => {
     const t = trackedForMedia(m, tracked);
     return withKavita(
@@ -50,6 +52,8 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
         kavitaSeriesId: t?.kavitaSeriesId ?? null,
       },
       t?.kavitaSeriesId,
+      resolve,
+      baseUrl,
     );
   });
 }
@@ -239,13 +243,14 @@ async function loadDetail(id: string, signal?: AbortSignal): Promise<MediaDetail
 }
 function enrichDetail(detail: MediaDetail): MediaDetail {
   const [tracked] = withTracking([detail]);
+  const relations = withTracking(detail.relations.map((r) => r.media));
   return {
     ...detail,
     coverUrl: tracked.coverUrl,
     trackedId: tracked.trackedId,
     kavitaSeriesId: tracked.kavitaSeriesId,
     kavita: tracked.kavita,
-    relations: detail.relations.map((r) => ({ ...r, media: withTracking([r.media])[0] })),
+    relations: detail.relations.map((r, i) => ({ ...r, media: relations[i] })),
     recommendations: withTracking(detail.recommendations),
   };
 }

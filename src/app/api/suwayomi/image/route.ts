@@ -3,12 +3,12 @@ import { imagePath } from '@/lib/images';
 import { getSettings } from '@/lib/settings';
 import { suwayomiHeaders } from '@/lib/suwayomi';
 import { endpoint } from '@/lib/http';
-import { cachedImage, fetchImage, imageResponse, suwayomiImageKey } from '@/lib/image-cache';
+import { cachedImageResponse, fetchImage, suwayomiImageKey } from '@/lib/image-cache';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const GET = route(async (r) => {
   const relative = imagePath(new URL(r.url).searchParams.get('path') ?? '');
-  const image = await cachedImage(suwayomiImageKey(relative), () =>
+  return cachedImageResponse(r, suwayomiImageKey(relative), () =>
     fetchImage(
       endpoint(getSettings().suwayomiUrl, relative),
       suwayomiHeaders(),
@@ -16,5 +16,4 @@ export const GET = route(async (r) => {
       true,
     ),
   );
-  return imageResponse(r, image);
 });

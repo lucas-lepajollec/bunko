@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Downloads no longer fail with "invalid values" when a title uses a cover served by Bunko; downloads and tracking take artwork from the server's own record.
+- Much lower CPU: library reads aggregate in SQL and are memoized, SQLite runs in WAL mode, the worker wakes on events instead of every 1.5 s, and the update cycle no longer recomputes the whole library per title.
+- Covers of followed titles are downloaded once and served by Bunko with long-lived caching, so they no longer reload or depend on sources being up.
+- Lighter UI: download polling slows down when idle and large blur effects were replaced by gradients.
 - Loaded data stays loaded: images from Kavita and sources are cached on disk, catalog metadata persists across restarts, the automatic cover is fixed once it works (and pushed to Kavita), and the browser keeps the last library and sheets between visits. Background activity no longer refetches whole pages.
 - Title backgrounds show only the catalog work's own banner: none when there is no banner or the title is off-catalog, and they can be hidden per title (Matches → Images).
 - A visible "Matches" button on every title; layouts checked from 360 px to desktop.

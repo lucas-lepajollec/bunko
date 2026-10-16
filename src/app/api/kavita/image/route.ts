@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { z } from 'zod';
 import { route } from '@/lib/api';
 import { kavitaHeaders, kavitaCoverEndpoint } from '@/lib/kavita-client';
-import { cachedImage, fetchImage, imageResponse, kavitaImageKey } from '@/lib/image-cache';
+import { cachedImageResponse, fetchImage, kavitaImageKey } from '@/lib/image-cache';
 export const GET = route(async (r) => {
   const id = z.coerce
     .number()
@@ -11,7 +11,7 @@ export const GET = route(async (r) => {
     .positive()
     .max(2147483647)
     .parse(new URL(r.url).searchParams.get('seriesId'));
-  const image = await cachedImage(kavitaImageKey(id), async () => {
+  return cachedImageResponse(r, kavitaImageKey(id), async () => {
     const signal = AbortSignal.timeout(15_000);
     return fetchImage(
       kavitaCoverEndpoint(id),
@@ -21,5 +21,4 @@ export const GET = route(async (r) => {
       signal,
     );
   });
-  return imageResponse(r, image);
 });

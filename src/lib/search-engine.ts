@@ -1,6 +1,7 @@
+import { getSettings } from './settings';
 import type { MediaType, Provider, SearchResponse, UnifiedMedia } from '@/types/shared';
 import { trackedForMedia, listTracked, searchCatalog } from './db';
-import { withKavita } from './kavita-index';
+import { withKavita, kavitaMatcher } from './kavita-index';
 import { requestJson } from './http';
 import {
   aniFields,
@@ -135,6 +136,8 @@ async function mangaupdates(
 }
 function enrichSearch(items: UnifiedMedia[]): UnifiedMedia[] {
   const tracked = listTracked();
+  const resolve = kavitaMatcher();
+  const baseUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
   return items.map((m) => {
     const t = trackedForMedia(m, tracked);
     return withKavita(
@@ -145,6 +148,8 @@ function enrichSearch(items: UnifiedMedia[]): UnifiedMedia[] {
         kavitaSeriesId: t?.kavitaSeriesId ?? null,
       },
       t?.kavitaSeriesId,
+      resolve,
+      baseUrl,
     );
   });
 }

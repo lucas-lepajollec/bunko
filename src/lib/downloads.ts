@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { setTimeout as pause } from 'node:timers/promises';
+import { onWorkerWake, wakeWorker, waitForWorker, workerIdleMs } from './worker-events';
+import { syncTrackedCovers } from './tracked-covers';
 import type {
   DownloadBatch,
   EnqueueRequest,
@@ -7,7 +8,16 @@ import type {
   DownloadItem,
   DownloadControl,
 } from '@/types/shared';
-import { acquireWorker, db, listBatches, saveBatch, sameMedia } from './db';
+import {
+  statement,
+  acquireWorker,
+  db,
+  dataDir,
+  listBatches,
+  saveBatch,
+  sameMedia,
+  authoritativeMedia,
+} from './db';
 import { chapterState } from './suwayomi';
 import { importChapter, scanLibrary, writeMetadata } from './kavita';
 import { AppError, errorCode } from './errors';
@@ -17,7 +27,7 @@ import {
   setWorkerValue,
   workerValue,
   updateCheckDue,
-  updatesFeed,
+  refreshRunning,
 } from './updates';
 import { sharedConcurrencyGate } from './concurrency';
 import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
@@ -35,6 +45,7 @@ function update(batch: DownloadBatch, patch: Partial<DownloadBatch>) {
   saveBatch(batch);
 }
 export function createBatch(input: EnqueueRequest): DownloadBatch {
+  input = { ...input, media: authoritativeMedia(input.media) };
   if (input.media.type === 'ANIME')
     throw new AppError('VALIDATION_ERROR', 'Use Arr releases for anime downloads');
   targetFor(input.media);
@@ -68,6 +79,7 @@ export function createBatch(input: EnqueueRequest): DownloadBatch {
         chapter: { id, name: '', chapterNumber: 0 },
         manga: { id: input.media.sources[0]?.suwayomiMangaId ?? 0, title: input.media.title },
       });
+  wakeWorker();
   // The durable worker owns enqueue and import, so request/browser cancellation cannot lose the batch.
   return batch;
 }
@@ -94,22 +106,21 @@ export function retryBatch(id: string) {
             },
       );
     }
+  wakeWorker();
   return batch;
 }
 function imported(id: number) {
-  return !!db().prepare('SELECT 1 FROM imported_chapters WHERE chapter_id=?').get(id);
+  return !!statement('SELECT 1 FROM imported_chapters WHERE chapter_id=?').get(id);
 }
 function jobs(): DownloadItem[] {
   return (
-    db().prepare('SELECT payload FROM download_jobs ORDER BY rowid').all() as { payload: string }[]
+    statement('SELECT payload FROM download_jobs ORDER BY rowid').all() as { payload: string }[]
   ).map((r) => JSON.parse(r.payload));
 }
 function saveJob(id: number, job: DownloadItem) {
-  db()
-    .prepare(
-      'INSERT INTO download_jobs(chapter_id,payload) VALUES(?,?) ON CONFLICT(chapter_id) DO UPDATE SET payload=excluded.payload',
-    )
-    .run(id, JSON.stringify(job));
+  statement(
+    'INSERT INTO download_jobs(chapter_id,payload) VALUES(?,?) ON CONFLICT(chapter_id) DO UPDATE SET payload=excluded.payload',
+  ).run(id, JSON.stringify(job));
 }
 export function engineStatus(): DownloadStatus {
   return {
@@ -141,9 +152,10 @@ export async function controlEngine(control: DownloadControl): Promise<DownloadS
         b.chapterIds.some((id) => !imported(id)),
     ))
       update(batch, { state: 'error', error: 'CANCELLED' });
-    db().prepare('DELETE FROM download_jobs').run();
+    statement('DELETE FROM download_jobs').run();
     // Cached pages remain available to an explicit batch retry; active writers settle safely.
   }
+  wakeWorker();
   return engineStatus();
 }
 export async function processBatch(batch: DownloadBatch) {
@@ -176,7 +188,7 @@ export async function processBatch(batch: DownloadBatch) {
         if (imported(id)) {
           if (!batch.importedIds.includes(id))
             update(batch, { importedIds: [...batch.importedIds, id] });
-          db().prepare('DELETE FROM download_jobs WHERE chapter_id=?').run(id);
+          statement('DELETE FROM download_jobs WHERE chapter_id=?').run(id);
           continue;
         }
         await chapterGate(async () => {
@@ -217,7 +229,7 @@ export async function processBatch(batch: DownloadBatch) {
               saveJob(id, { ...job, state: 'QUEUED' });
             throw e;
           }
-          db().prepare('DELETE FROM download_jobs WHERE chapter_id=?').run(id);
+          statement('DELETE FROM download_jobs WHERE chapter_id=?').run(id);
         }, signal);
         checkControl();
         signal.throwIfAborted();
@@ -257,7 +269,7 @@ export async function workerTick() {
   running = true;
   const controller = new AbortController();
   const ownsLease = () => {
-    const lease = db().prepare('SELECT owner,expires_at FROM worker_lock WHERE id=1').get() as
+    const lease = statement('SELECT owner,expires_at FROM worker_lock WHERE id=1').get() as
       { owner: string; expires_at: number } | undefined;
     const owns = lease?.owner === owner && lease.expires_at > Date.now();
     if (!owns) controller.abort();
@@ -265,15 +277,21 @@ export async function workerTick() {
   };
   const lease = setInterval(() => {
     if (!ownsLease() || !acquireWorker(owner)) controller.abort();
-  }, 1000);
+  }, 10_000);
   lease.unref();
+  // Covers must not wait for a large matching queue or a long chapter transfer to finish.
+  const covers = syncTrackedCovers(controller.signal, true).catch(() => {
+    /* Retry after a later wake. */
+  });
   let matchingRunning = true;
+  const matchingDone = new AbortController();
   const matching = drainSourceMatches(controller.signal, ownsLease)
     .catch(() => {
       /* An aborted/failed lookup remains queued for a subsequent tick. */
     })
     .finally(() => {
       matchingRunning = false;
+      matchingDone.abort();
     });
   try {
     do {
@@ -286,12 +304,18 @@ export async function workerTick() {
       if (ownsLease() && updateCheckDue())
         await runUpdateCheck(createBatch, controller.signal, ownsLease);
       if (matchingRunning && !controller.signal.aborted)
-        await pause(1500, undefined, { signal: controller.signal });
+        await waitForWorker(
+          workerIdleMs(),
+          AbortSignal.any([controller.signal, matchingDone.signal]),
+        );
     } while (matchingRunning && !controller.signal.aborted);
     await matching;
+    await covers;
+    if (ownsLease()) await syncTrackedCovers(controller.signal, true);
   } finally {
     controller.abort();
     await matching;
+    await covers;
     clearInterval(lease);
     running = false;
   }
@@ -304,18 +328,38 @@ export function startWorker() {
     initialized = true;
   }
   if (timer || env('WORKER') === 'false') return;
+  const scope = globalThis as typeof globalThis & { __bunkoWorkers?: Set<string> };
+  const workers = (scope.__bunkoWorkers ??= new Set());
+  if (workers.has(dataDir)) return;
+  workers.add(dataDir);
+  let looping = false;
+  let pending = false;
+  const schedule = (ms: number) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(loop, ms);
+    timer.unref();
+  };
   const loop = async () => {
+    if (env('WORKER') === 'false') {
+      timer = undefined;
+      return;
+    }
+    looping = true;
+    pending = false;
     try {
       await workerTick();
     } catch {
       console.error('Bunko worker cycle failed');
     } finally {
-      timer = setTimeout(loop, 1500);
-      timer.unref();
+      looping = false;
+      schedule(pending ? 0 : workerIdleMs());
     }
   };
-  timer = setTimeout(loop, 1500);
-  timer.unref();
+  onWorkerWake(() => {
+    if (looping) pending = true;
+    else if (env('WORKER') !== 'false') schedule(0);
+  });
+  schedule(0);
 }
 export async function snapshot(signal?: AbortSignal) {
   signal?.throwIfAborted();
@@ -323,9 +367,11 @@ export async function snapshot(signal?: AbortSignal) {
 }
 
 export function requestUpdateCheck() {
-  if (!updatesFeed().checking) setWorkerValue('check_requested', '1');
+  if (!refreshRunning()) setWorkerValue('check_requested', randomUUID());
+  wakeWorker();
   // The persisted request also survives another module/process currently owning the worker lease.
-  void workerTick().catch(() => {
-    /* A future worker tick retries the durable request. */
-  });
+  if (env('WORKER') === 'false')
+    void workerTick().catch(() => {
+      /* A future worker tick retries the durable request. */
+    });
 }

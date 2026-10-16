@@ -3,6 +3,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:f
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import Database from 'better-sqlite3';
 
 const directory = mkdtempSync(path.join(tmpdir(), 'bunko-persistent-cache-'));
 process.env.BUNKO_DATA_DIR = directory;
@@ -384,36 +385,29 @@ it('retains metadata for discovery, genres and each search provider through fres
   expect(calls).toHaveLength(count);
 });
 
-it('keeps the first successful automatic candidate despite higher priority metadata, and re-resolves only after two consecutive failures', async () => {
+it('keeps the first successful automatic cover locally through upstream failures and module reloads', async () => {
   failImages.add(cover);
   const t = track({ media: media(), sources: [source] });
   await syncTrackedCover(t.id);
-  expect(listTracked()[0]).toMatchObject({ coverUrl: thumbnail, coverFallbacks: [cover] });
-  failImages.clear();
+  const url = `/api/covers/${t.id}?v=${createHash('sha256').update(sourceBytes).digest('hex').slice(0, 16)}`;
+  expect(listTracked()[0]).toMatchObject({ coverUrl: url, coverFallbacks: [] });
+  const count = calls.length;
+  failImages.add('*');
   await syncTrackedCover(t.id);
-  expect(listTracked()[0].coverUrl).toBe(thumbnail);
   vi.resetModules();
   const fresh = await import('@/lib/tracked-covers');
   connections.push((await import('@/lib/db')).db());
   await fresh.syncTrackedCover(t.id);
-  expect(listTracked()[0].coverUrl).toBe(thumbnail);
-  failImages.add('http://source.invalid/api/v1/manga/10/thumbnail');
-  await syncTrackedCover(t.id);
-  expect(listTracked()[0].coverUrl).toBe(thumbnail);
-  failImages.clear();
-  await syncTrackedCover(t.id); // A success resets the consecutive-failure counter.
-  failImages.add('http://source.invalid/api/v1/manga/10/thumbnail');
-  await syncTrackedCover(t.id);
-  expect(listTracked()[0].coverUrl).toBe(thumbnail);
-  await syncTrackedCover(t.id);
-  expect(listTracked()[0].coverUrl).toBe(cover);
+  expect(listTracked()[0].coverUrl).toBe(url);
+  expect(calls).toHaveLength(count);
 });
 it('re-resolves automatic covers after link, identity and explicit choice changes and uploads the resolved fallback bytes', async () => {
   db().prepare('INSERT INTO kavita_series VALUES(?,?)').run(77, JSON.stringify(series));
   failImages.add(cover);
   const t = track({ media: media(), sources: [source], kavitaSeriesId: 77 });
   await syncTrackedCover(t.id);
-  expect(listTracked()[0].coverUrl).toBe(thumbnail);
+  const stable = `/api/covers/${t.id}?v=${createHash('sha256').update(sourceBytes).digest('hex').slice(0, 16)}`;
+  expect(listTracked()[0].coverUrl).toBe(stable);
   expect(uploads).toBe(1);
   expect(imageBytes).toBe(sourceBytes);
   failImages.clear();
@@ -429,7 +423,7 @@ it('re-resolves automatic covers after link, identity and explicit choice change
       }),
     );
   expect((await patch({ id: t.id, sources: [] })).status).toBe(200);
-  expect(listTracked()[0].coverUrl).toBe(cover);
+  expect(listTracked()[0].coverUrl).toBe(stable);
   const replaced = {
     ...media(),
     id: 'anilist:124',
@@ -437,11 +431,11 @@ it('re-resolves automatic covers after link, identity and explicit choice change
     coverUrl: 'https://s4.anilist.co/replacement.jpg',
   };
   expect((await patch({ id: t.id, media: replaced })).status).toBe(200);
-  expect(listTracked()[0].coverUrl).toBe(replaced.coverUrl);
+  expect(listTracked()[0].coverUrl).toBe(stable);
   expect((await patch({ id: t.id, cover: { origin: 'kavita', id: '77' } })).status).toBe(200);
-  expect(listTracked()[0].coverUrl).toBe('/api/kavita/image?seriesId=77');
+  expect(listTracked()[0].coverUrl).toBe(stable);
   expect((await patch({ id: t.id, cover: 'auto' })).status).toBe(200);
-  expect(listTracked()[0].coverUrl).toBe(replaced.coverUrl);
+  expect(listTracked()[0].coverUrl).toBe(stable);
   expect(uploads).toBe(1); // All candidates in this fixture have identical bytes.
 });
 it('throttles progress across routes/module loads, coalesces a concurrent run, and starts again after two minutes', async () => {
@@ -493,4 +487,178 @@ it('rejects oversized cold image responses and keeps cache files absent', async 
     imageCache.cachedImage('oversized', () => imageCache.fetchImage(cover, {}, 3)),
   ).rejects.toThrow();
   expect(db().prepare('SELECT * FROM image_cache').all()).toEqual([]);
+});
+
+it.each(['catalog', 'source', 'kavita', 'stored'] as const)(
+  'round-trips actual media/detail/tracked/search/discover responses through all write schemas (%s cover)',
+  async (origin) => {
+    const { enqueueBody, trackBody, trackPatch } = await import('@/lib/validation');
+    const { GET: searchGet } = await import('@/app/api/search/route');
+    const { GET: discoverGet } = await import('@/app/api/discover/route');
+    const input = {
+      ...media(),
+      coverUrl:
+        origin === 'source'
+          ? thumbnail
+          : origin === 'kavita'
+            ? '/api/kavita/image?seriesId=77'
+            : cover,
+    };
+    const t = track({ media: input });
+    metadata.saveMetadata('detail:anilist:123', {
+      ...input,
+      tags: [],
+      relations: [],
+      recommendations: [],
+    });
+    if (origin === 'stored') await syncTrackedCover(t.id);
+    const detail = await (await mediaRoute.GET(request('/api/media?id=anilist:123'))).json();
+    const tracked = await (await trackedRoute.GET(request('/api/tracked'))).json();
+    const results = await (await searchGet(request('/api/search?q=Fixture&type=MANGA'))).json();
+    const discovery = await (await discoverGet(request('/api/discover'))).json();
+    const { withTracking } = await import('@/lib/catalog');
+    const all = [
+      detail,
+      ...tracked.map((t: { media: unknown }) => t.media),
+      ...results.results,
+      ...discovery.items,
+      ...withTracking([input]),
+    ];
+    expect(all.length).toBeGreaterThanOrEqual(5);
+    for (const m of all) {
+      expect(enqueueBody.safeParse({ chapterIds: [1], media: m }).success).toBe(true);
+      expect(trackBody.safeParse({ media: m }).success).toBe(true);
+      expect(trackPatch.safeParse({ id: t.id, media: m }).success).toBe(true);
+      if (m.id === input.id) expect(m.coverUrl).toBe(listTracked()[0].coverUrl);
+    }
+    if (origin === 'source')
+      expect(detail.coverUrl).toBe('/api/suwayomi/image?path=%2Fapi%2Fv1%2Fmanga%2F10%2Fthumbnail');
+  },
+);
+it('strictly rejects foreign, redirect, traversal and unrecognized local artwork paths', async () => {
+  const { media: schema } = await import('@/lib/validation');
+  for (const url of [
+    '//evil.invalid/api/kavita/image?seriesId=1',
+    '/api/kavita/image?seriesId=1&url=https://evil.invalid',
+    '/api/suwayomi/image?path=%2Fapi%2Fgraphql',
+    `${thumbnail}&path=%2Fapi%2Fv1%2Fmanga%2F11%2Fthumbnail`,
+    '/api/suwayomi/image?path=https%3A%2F%2Fevil.invalid%2Fimage',
+    '/api/covers/1?v=abc',
+    '/api/covers/1?v=1234567890abcdef&redirect=https://evil.invalid',
+    '/api/other?url=foo',
+    '/api/../api/kavita/image?seriesId=1',
+    '/api/kavita/image?seriesId=1#fragment',
+  ])
+    expect(schema.safeParse({ ...media(), coverUrl: url }).success, url).toBe(false);
+});
+it('serves stored bytes with immutable headers, ETag/304, authenticated access and version replacement', async () => {
+  const { GET } = await import('@/app/api/covers/[id]/route');
+  const { storedCover } = await import('@/lib/stored-covers');
+  const t = track({ media: media() });
+  expect((await GET(new Request(`http://bunko.invalid/api/covers/${t.id}`))).status).toBe(401);
+  expect((await GET(request(`/api/covers/${t.id}`))).status).toBe(404);
+  await syncTrackedCover(t.id);
+  const firstUrl = listTracked()[0].coverUrl!;
+  const file = storedCover(t.id)!;
+  const response = await GET(request(firstUrl));
+  expect(await response.text()).toBe(sourceBytes);
+  expect(response.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
+  expect(
+    (await GET(request(firstUrl, { 'If-None-Match': response.headers.get('etag')! }))).status,
+  ).toBe(304);
+  failImages.add('*');
+  const count = calls.length;
+  await syncTrackedCover(t.id);
+  expect(await (await GET(request(firstUrl))).text()).toBe(sourceBytes);
+  expect(calls).toHaveLength(count);
+  failImages.clear();
+  sourceBytes = 'replacement-local-bytes';
+  const patch = await trackedRoute.PATCH(
+    new Request('http://bunko.invalid/api/tracked', {
+      method: 'PATCH',
+      headers: {
+        Authorization: request('/').headers.get('Authorization')!,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ id: t.id, cover: { origin: 'catalog', id: media().id } }),
+    }),
+  );
+  expect(patch.status).toBe(200);
+  const second = listTracked()[0].coverUrl!;
+  expect(second).not.toBe(firstUrl);
+  expect(await (await GET(request(second))).text()).toBe(sourceBytes);
+  expect((await GET(request(firstUrl))).status).toBe(404);
+  expect(readdirSync(path.join(directory, 'covers'))).not.toContain(file.filename);
+  expect(
+    readdirSync(path.join(directory, 'covers')).filter((f) => f.startsWith(`${t.id}-`)),
+  ).toHaveLength(1);
+  const { untrack } = await import('@/lib/db');
+  untrack(t.id);
+  expect((await GET(request(second))).status).toBe(404);
+  expect(
+    readdirSync(path.join(directory, 'covers')).filter((f) => f.startsWith(`${t.id}-`)),
+  ).toHaveLength(0);
+});
+it('backfills existing covers serially, stores before Kavita upload and retains null when every candidate fails', async () => {
+  const { syncTrackedCovers } = await import('@/lib/tracked-covers');
+  const a = track({ media: media() });
+  const b = track({ media: { ...media(), id: 'anilist:124', anilistId: 124 } });
+  failImages.add('*');
+  await syncTrackedCovers();
+  expect(listTracked().every((t) => t.coverUrl === null)).toBe(true);
+  failImages.clear();
+  const blocked = deferred();
+  hold = blocked.promise;
+  const beforeCalls = calls.length;
+  const work = syncTrackedCovers();
+  await flush();
+  expect(calls.length - beforeCalls).toBe(1); // One bounded backfill request at a time.
+  blocked.resolve();
+  await work;
+  hold = undefined;
+  expect(listTracked().every((t) => t.coverUrl?.startsWith('/api/covers/'))).toBe(true);
+  expect(
+    listTracked()
+      .map((t) => t.id)
+      .sort(),
+  ).toEqual([a.id, b.id].sort());
+  const count = calls.length;
+  await syncTrackedCovers();
+  expect(calls).toHaveLength(count);
+});
+it('invalidates snapshots across connections and never caches rolled-back library/index/settings state', async () => {
+  const { db, track, listTracked, getTracked, writeVersion } = await import('@/lib/db');
+  const { updateSettings, getSettings } = await import('@/lib/settings');
+  connections.push(db());
+  const { indexedSeriesById } = await import('@/lib/kavita-index');
+  const t = track({ media: media() });
+  listTracked();
+  const other = new Database(path.join(directory, 'bunko.db'));
+  try {
+    other.prepare("UPDATE tracked_media SET status='PAUSED' WHERE id=?").run(t.id);
+    expect(getTracked(t.id)?.status).toBe('PAUSED');
+    const before = writeVersion();
+    expect(() =>
+      db().transaction(() => {
+        db().prepare("UPDATE tracked_media SET title='Rolled back' WHERE id=?").run(t.id);
+        db().prepare('INSERT INTO kavita_series VALUES(?,?)').run(77, JSON.stringify(series));
+        updateSettings({ updateIntervalMinutes: 10 });
+        expect(getSettings().updateIntervalMinutes).toBe(10);
+        expect(listTracked()[0].title).toBe('Rolled back');
+        expect(indexedSeriesById(77)?.name).toBe(series.name);
+        throw new Error('rollback');
+      })(),
+    ).toThrow('rollback');
+    expect(writeVersion()).toBe(before);
+    db().prepare("UPDATE tracked_media SET title='Committed' WHERE id=?").run(t.id);
+    db()
+      .prepare('INSERT INTO kavita_series VALUES(?,?)')
+      .run(77, JSON.stringify({ ...series, name: 'Committed series' }));
+    updateSettings({ updateIntervalMinutes: 30 });
+    expect(getSettings().updateIntervalMinutes).toBe(30);
+    expect(listTracked()[0].title).toBe('Committed');
+    expect(indexedSeriesById(77)?.name).toBe('Committed series');
+  } finally {
+    other.close();
+  }
 });

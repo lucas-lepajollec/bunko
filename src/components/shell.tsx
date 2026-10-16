@@ -7,7 +7,7 @@ import type { AuthState, DownloadBatch, Extension } from '@/types/shared';
 import { PRODUCT_NAME } from '@/lib/client/brand';
 import { I18nProvider, useI18n } from '@/i18n/I18nProvider';
 import { UI_LANGUAGES, type UiLanguage } from '@/i18n/messages';
-import { UNAUTHORIZED_EVENT, send, useApi } from '@/lib/client/api';
+import { UNAUTHORIZED_EVENT, send, useApi, batchesInterval } from '@/lib/client/api';
 import { cx, errorText, field, primaryButton } from './ui';
 import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
 import { ActivityPill } from './activity';
@@ -110,7 +110,8 @@ function AuthScreen({ mode, onDone }: { mode: 'setup' | 'login'; onDone: () => P
     <main className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4">
       <div
         aria-hidden
-        className="absolute -top-40 -left-40 size-[620px] rounded-full bg-[#7aa2ff] opacity-[0.08] blur-[120px]"
+        // A radial gradient looks like a blurred glow without a costly blur filter.
+        className="absolute -top-40 -left-40 size-[620px] bg-[radial-gradient(closest-side,rgba(122,162,255,0.09),transparent)]"
       />
       <div className="absolute top-4 right-4">
         <LanguageSelect />
@@ -191,7 +192,9 @@ const NAV = [
 ];
 
 function useActivity() {
-  const batches = useApi<DownloadBatch[]>('/api/downloads/batches', { refreshInterval: 5000 });
+  const batches = useApi<DownloadBatch[]>('/api/downloads/batches', {
+    refreshInterval: batchesInterval,
+  });
   const extensions = useApi<Extension[]>('/api/extensions', { refreshInterval: 30 * 60_000 });
   return {
     active: (batches.data ?? []).filter((b) => b.state !== 'completed' && b.state !== 'error')
@@ -221,7 +224,7 @@ function Header() {
       className={cx(
         // Content aligns with the 1440px page column on wide screens; no hard edge under the bar.
         'fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-6 px-4 transition-[background-color,backdrop-filter] duration-300 md:h-20 md:gap-11 md:px-[max(4rem,calc((100vw-1440px)/2+4rem))]',
-        solid ? 'bg-bg/85 backdrop-blur-xl' : 'bg-gradient-to-b from-black/45 to-transparent',
+        solid ? 'bg-bg/90 backdrop-blur-md' : 'bg-gradient-to-b from-black/45 to-transparent',
       )}
     >
       <Link href="/" className="flex items-center gap-2.5 text-white">
@@ -343,7 +346,7 @@ function TabBar() {
   return (
     <nav
       aria-label={t('nav.label')}
-      className="border-line fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-[#100f0e]/92 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),12px)] backdrop-blur-xl md:hidden"
+      className="border-line fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-[#100f0e]/95 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),12px)] backdrop-blur-md md:hidden"
     >
       {TABS.map((tab) => {
         const active =

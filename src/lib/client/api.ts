@@ -88,6 +88,10 @@ export function openStream(
   };
 }
 
+/** Download queue polling: quick while something runs, slow when idle (enqueueing revalidates). */
+export const batchesInterval = (batches: { state: string }[] | undefined) =>
+  batches?.some((b) => b.state !== 'completed' && b.state !== 'error') ? 3000 : 30_000;
+
 /** SWR keys showing followed titles; revalidate them all after any change to an entry. */
 export const libraryKeys = (key: unknown) =>
   typeof key === 'string' &&

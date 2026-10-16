@@ -204,7 +204,7 @@ export default function LibraryPage() {
                   {e.type === 'MANGA' && e.sourceMatch !== 'linked' && (
                     <span
                       className={cx(
-                        'absolute inset-x-2 bottom-2 flex items-center gap-1.5 rounded-full bg-black/75 px-2 py-1 text-[11px] backdrop-blur',
+                        'absolute inset-x-2 bottom-2 flex items-center gap-1.5 rounded-full bg-black/80 px-2 py-1 text-[11px]',
                         e.sourceMatch === 'not-found' ? 'text-warn' : 'text-mid',
                       )}
                     >

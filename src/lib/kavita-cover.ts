@@ -6,12 +6,13 @@ import type { UnifiedMedia } from '@/types/shared';
 import type { IndexedSeries } from './kavita-index';
 import { mapKavitaPath, safeLibraryDirectory, writableFolder } from './library-paths';
 import { boundedBuffer } from './chapter-pages';
-import { db, listTracked } from './db';
+import { db, listTracked, getTracked } from './db';
 import { coverContext } from './cover-state';
 import { endpoint } from './http';
 import { getSettings } from './settings';
 import { kavitaHeaders, kavitaCoverEndpoint } from './kavita-client';
-import { imagePath } from './images';
+import { storedCover, readStoredCover, storeCover } from './stored-covers';
+import { imagePath, localImageUrl } from './images';
 import { suwayomiHeaders } from './suwayomi';
 import { sharedConcurrencyGate } from './concurrency';
 import { AppError } from './errors';
@@ -96,7 +97,15 @@ export async function writeCoverFile(folder: string, bytes: Buffer) {
 const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 /** Sidecars are retained for portability; Kavita uses Upload/series, not the sidecar. */
 export async function ensureKavitaCover(series: IndexedSeries, media: UnifiedMedia) {
-  if (!series.folder || !media.coverUrl || !allowedCoverUrl(media.coverUrl)) return;
+  return coverGate(() => bootstrapKavitaCover(series, media));
+}
+async function bootstrapKavitaCover(series: IndexedSeries, media: UnifiedMedia) {
+  if (
+    !series.folder ||
+    !media.coverUrl ||
+    (!allowedCoverUrl(media.coverUrl) && !localImageUrl(media.coverUrl))
+  )
+    return;
   const local = mapKavitaPath(series.folder);
   if (!local || !(await writableFolder(local))) return;
   const folder = await safeLibraryDirectory(local);
@@ -132,7 +141,7 @@ export async function ensureKavitaCover(series: IndexedSeries, media: UnifiedMed
   }
   if (!cover) {
     if (await hasCoverImage(folder)) return;
-    cover = await downloadCover(media.coverUrl);
+    cover = await selectedCover(media.coverUrl);
     if (!cover) return;
     // Persist intent before the filesystem operation, so interruption can retry safely.
     db()
@@ -146,22 +155,35 @@ export async function ensureKavitaCover(series: IndexedSeries, media: UnifiedMed
   const tracked = listTracked().find(
     (t) => t.media.id === media.id && t.coverChoice === 'auto' && t.coverUrl === media.coverUrl,
   );
-  if (tracked)
-    db()
-      .prepare(
-        'INSERT OR REPLACE INTO resolved_covers(tracked_id,context,url,failures) VALUES(?,?,?,0)',
-      )
-      .run(
-        tracked.id,
-        coverContext(
-          tracked.media.id,
-          tracked.identity,
-          tracked.coverChoice,
-          tracked.sources,
-          series.seriesId,
-        ),
-        media.coverUrl,
-      );
+  if (tracked) {
+    const context = coverContext(
+      tracked.media.id,
+      tracked.identity,
+      tracked.coverChoice,
+      tracked.sources,
+      series.seriesId,
+    );
+    const previous = storedCover(tracked.id);
+    const origin = media.coverUrl.startsWith('/api/covers/')
+      ? (previous?.origin_url ?? media.coverUrl)
+      : media.coverUrl;
+    if (
+      !storeCover(tracked.id, context, origin, cover, () => {
+        const current = getTracked(tracked.id);
+        return Boolean(
+          current &&
+          coverContext(
+            current.media.id,
+            current.identity,
+            current.coverChoice,
+            current.sources,
+            series.seriesId,
+          ) === context,
+        );
+      })
+    )
+      return;
+  }
   const uploaded = db()
     .prepare('SELECT value FROM worker_state WHERE key=?')
     .get(`kavita_cover_hash:${series.seriesId}`) as { value: string } | undefined;
@@ -183,8 +205,12 @@ export async function ensureKavitaCover(series: IndexedSeries, media: UnifiedMed
 /** Fetch only our two authenticated proxy shapes or an allowlisted catalog host. */
 export async function selectedCover(url: string, parentSignal?: AbortSignal) {
   if (allowedCoverUrl(url)) return downloadCover(url, parentSignal);
+  if (!localImageUrl(url)) return null;
   const parsed = new URL(url, 'http://bunko.invalid');
-  if (parsed.origin !== 'http://bunko.invalid') return null;
+  if (parsed.pathname.startsWith('/api/covers/')) {
+    const saved = storedCover(Number(parsed.pathname.split('/').at(-1)));
+    return saved && saved.hash === parsed.searchParams.get('v') ? readStoredCover(saved) : null;
+  }
   let upstream: string;
   let headers: Record<string, string>;
   const signal = AbortSignal.any([

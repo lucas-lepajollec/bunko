@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -52,6 +53,8 @@ const source = (id = '1', mangaId = 10): ChapterSelection => ({
   sourceName: `Source ${id}`,
   suwayomiMangaId: mangaId,
 });
+const stableCover = (id = 1, bytes = imageBytes) =>
+  `/api/covers/${id}?v=${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}`;
 const thumbnail = (id = 10) =>
   `/api/suwayomi/image?path=${encodeURIComponent(`/api/v1/manga/${id}/thumbnail`)}`;
 const catalog = (id = 1, title = 'Owned Work'): UnifiedMedia => ({
@@ -294,7 +297,7 @@ it('detaches a wrong catalog match to Kavita metadata and keeps the choice throu
     id: t.id,
     identity: 'off-catalog',
     anilistId: null,
-    coverUrl: '/api/kavita/image?seriesId=77',
+    coverUrl: null,
     media: {
       id: 'kavita:77',
       title: 'Owned Work',
@@ -318,7 +321,7 @@ it('uses the first source identity and metadata when detaching without a Kavita 
     identity: 'off-catalog',
     anilistId: null,
     mangadexId: null,
-    coverUrl: thumbnail(),
+    coverUrl: stableCover(),
     media: {
       id: 'suwayomi:10',
       title: 'Source title 10',
@@ -505,23 +508,23 @@ it('uses catalog then source then Kavita in auto mode and exposes choices everyw
   const response = await patch({ id: t.id, cover: { origin: 'source', id: '1:10' } });
   expect(await response.json()).toMatchObject({
     coverChoice: { origin: 'source', id: '1:10' },
-    coverUrl: thumbnail(),
-    media: { coverUrl: thumbnail() },
+    coverUrl: stableCover(),
+    media: { coverUrl: stableCover() },
   });
-  expect(withTracking([catalog()])[0].coverUrl).toBe(thumbnail());
+  expect(withTracking([catalog()])[0].coverUrl).toBe(stableCover());
   const entry = await mediaDetail('suwayomi:10');
-  expect(entry.coverUrl).toBe(thumbnail());
+  expect(entry.coverUrl).toBe(stableCover());
   await patch({ id: t.id, cover: 'auto' });
-  expect(listTracked()[0].coverUrl).toBe(catalog().coverUrl);
+  expect(listTracked()[0].coverUrl).toBe(stableCover());
   db()
     .prepare(
       "UPDATE tracked_media SET media_json=json_set(media_json,'$.coverUrl',NULL) WHERE id=?",
     )
     .run(t.id);
   // A validated automatic cover survives a metadata thumbnail disappearing.
-  expect(listTracked()[0].coverUrl).toBe(catalog().coverUrl);
+  expect(listTracked()[0].coverUrl).toBe(stableCover());
   await patch({ id: t.id, sources: [] });
-  expect(listTracked()[0].coverUrl).toBe('/api/kavita/image?seriesId=77');
+  expect(listTracked()[0].coverUrl).toBeNull(); // No Kavita key: no successful bytes to store.
   const bad = await patch({ id: t.id, cover: { origin: 'catalog', id: 'wrong' } });
   expect(bad.status).toBe(400);
   expect(await bad.json()).toMatchObject({ error: { code: 'INVALID_COVER' } });
@@ -537,6 +540,7 @@ it('uploads a changed cover once, keeps its sidecar consistent, and skips identi
   await patch({ id: t.id, cover: { origin: 'source', id: '1:10' } });
   expect(uploaded).toHaveLength(1);
   imageBytes = 'changed-cover';
+  await patch({ id: t.id, cover: { origin: 'source', id: '1:10' } });
   await syncTrackedCovers();
   expect(uploaded).toHaveLength(2);
   expect(readFileSync(path.join(root, 'Mangas', 'Owned Work', 'cover.jpg'), 'utf8')).toBe(
@@ -548,7 +552,7 @@ it('uploads a changed cover once, keeps its sidecar consistent, and skips identi
   const freshDb = await import('@/lib/db');
   expect(freshDb.listTracked()[0]).toMatchObject({
     coverChoice: { origin: 'source', id: '1:10' },
-    coverUrl: thumbnail(),
+    coverUrl: stableCover(),
   });
   expect(uploaded).toHaveLength(2);
   await patch({ id: t.id, cover: { origin: 'kavita', id: '77' } });
@@ -567,7 +571,7 @@ it('preserves a selected MangaDex volume after restarting and returns its cover 
   const t = track({ media, kavitaSeriesId: 77 });
   await patch({ id: t.id, cover: { origin: 'catalog', id: 'mangadex:cover-0' } });
   const url = listTracked()[0].coverUrl;
-  expect(url).toContain('volume-0.jpg');
+  expect(url).toBe(stableCover(t.id));
   expect((await mediaDetail(media.id)).coverUrl).toBe(url);
   expect((await mediaDetail('kavita:77')).coverUrl).toBe(url);
   expect(withTracking([media])[0].coverUrl).toBe(url);
@@ -640,7 +644,7 @@ it('migrates source and cover state idempotently without losing preexisting iden
   old.close();
 });
 
-it('pushes automatic source artwork changes during the worker cycle and retries a failed upload', async () => {
+it('stores automatic artwork during the worker cycle and retries a failed explicit replacement upload', async () => {
   indexSeries();
   updateSettings({ kavitaApiKey: 'synthetic' });
   const t = track({
@@ -650,7 +654,7 @@ it('pushes automatic source artwork changes during the worker cycle and retries 
   });
   await runUpdateCheck(vi.fn());
   expect(listTracked()[0].coverChoice).toBe('auto');
-  expect(listTracked()[0].coverUrl).toBe(thumbnail());
+  expect(listTracked()[0].coverUrl).toBe(stableCover());
   expect(uploaded).toHaveLength(1);
   imageBytes = 'updated-automatic-cover';
   const intercepted = globalThis.fetch;
@@ -660,7 +664,8 @@ it('pushes automatic source artwork changes during the worker cycle and retries 
       return new Response('', { status: 503 });
     return intercepted(url, init);
   });
-  await expect(syncTrackedCover(t.id)).rejects.toMatchObject({ code: 'KAVITA_SCAN_ERROR' });
+  await patch({ id: t.id, cover: { origin: 'source', id: '1:10' } }); // Replacement persists even when the upload fails.
+  expect(listTracked()[0].coverUrl).toBe(stableCover());
   expect(uploaded).toHaveLength(1);
   fail = false;
   await syncTrackedCover(t.id);
@@ -687,7 +692,7 @@ it('does not replace an explicit cover while refreshing source metadata', async 
   await runUpdateCheck(vi.fn());
   expect(listTracked()[0]).toMatchObject({
     coverChoice: { origin: 'catalog', id: 'anilist:1' },
-    coverUrl: catalog().coverUrl,
+    coverUrl: stableCover(),
   });
 });
 it('continues with older unchecked covers after a background cover budget is interrupted', async () => {
@@ -767,9 +772,9 @@ it('returns ordered deduplicated automatic fallback covers and none for a manual
     coverFallbacks: [thumbnail(20), '/api/kavita/image?seriesId=77'],
   });
   const response = await patch({ id: t.id, cover: { origin: 'source', id: '2:20' } });
-  expect(await response.json()).toMatchObject({ coverUrl: thumbnail(20), coverFallbacks: [] });
+  expect(await response.json()).toMatchObject({ coverUrl: stableCover(), coverFallbacks: [] });
   await patch({ id: t.id, cover: 'auto' });
-  expect(listTracked()[0].coverFallbacks).toEqual([thumbnail(20), '/api/kavita/image?seriesId=77']);
+  expect(listTracked()[0].coverFallbacks).toEqual([]);
 });
 
 it('accepts an unlinked source cover and rejects unknown manga or the wrong source with NOT_FOUND', async () => {
@@ -779,14 +784,14 @@ it('accepts an unlinked source cover and rejects unknown manga or the wrong sour
   expect(await response.json()).toMatchObject({
     id: t.id,
     sources: [],
-    coverUrl: thumbnail(20),
+    coverUrl: stableCover(),
     coverChoice: { origin: 'source', id: '2:20' },
   });
   for (const id of ['1:20', '1:999']) {
     const failure = await patch({ id: t.id, cover: { origin: 'source', id } });
     expect(failure.status).toBe(404);
     expect(await failure.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
-    expect(listTracked()[0].coverUrl).toBe(thumbnail(20));
+    expect(listTracked()[0].coverUrl).toBe(stableCover());
   }
 });
 
@@ -805,7 +810,7 @@ it('drains the matching queue without an update cycle and immediately refreshes 
   await workerTick();
   expect(listTracked().every((t) => t.sourceMatch === 'linked')).toBe(true);
   expect(listTracked().find((t) => t.id === first.id)).toMatchObject({
-    coverUrl: thumbnail(),
+    coverUrl: stableCover(),
     progress: { released: 19 },
   });
   expect(
@@ -1070,4 +1075,61 @@ it('migrates v6 backdrops with defaults, preserves choices across reopen and nev
   migrateV7(reopened);
   expect(reopened.pragma('user_version', { simple: true })).toBe(8);
   reopened.close();
+});
+
+it('ignores client cover/banner changes for followed enqueue, repeated tracking and same-identity patches', async () => {
+  indexSeries();
+  const trusted = { ...catalog(), bannerUrl: 'https://s4.anilist.co/trusted-banner.jpg' };
+  const t = track({ media: trusted });
+  const poisoned = {
+    ...t.media,
+    coverUrl: thumbnail(999),
+    bannerUrl: 'https://evil.invalid/banner.jpg',
+  };
+  expect(track({ media: poisoned }).media).toMatchObject({
+    coverUrl: trusted.coverUrl,
+    bannerUrl: trusted.bannerUrl,
+  });
+  const batch = createBatch({ media: poisoned, chapterIds: [10001] });
+  expect(batch.media).toMatchObject({ coverUrl: trusted.coverUrl, bannerUrl: trusted.bannerUrl });
+  const response = await patch({ id: t.id, media: poisoned });
+  expect(response.status).toBe(200);
+  const { storedMedia } = await import('@/lib/tracked-covers');
+  expect(storedMedia(t.id)).toMatchObject({
+    coverUrl: trusted.coverUrl,
+    bannerUrl: trusted.bannerUrl,
+  });
+});
+it('rebases a slow cover patch on concurrent status/backdrop edits', async () => {
+  const t = track({ media: catalog() });
+  sourceDelay = 50;
+  const slow = patch({ id: t.id, cover: { origin: 'source', id: '2:20' } });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect((await patch({ id: t.id, status: 'PAUSED', backdrop: 'hidden' })).status).toBe(200);
+  expect((await slow).status).toBe(200);
+  expect(listTracked()[0]).toMatchObject({
+    status: 'PAUSED',
+    backdrop: 'hidden',
+    coverChoice: { origin: 'source', id: '2:20' },
+  });
+});
+
+it('backfills covers while a source match remains blocked', async () => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  blockedSearch = () => pending;
+  const t = track({ media: catalog() });
+  setWorkerValue('last_check_at', new Date().toISOString());
+  const work = workerTick();
+  try {
+    await vi.waitFor(() =>
+      expect(listTracked().find((v) => v.id === t.id)?.coverUrl).toMatch(/^\/api\/covers\//),
+    );
+    expect(listTracked().find((v) => v.id === t.id)?.sourceMatch).toBe('searching');
+  } finally {
+    release();
+    await work;
+  }
 });

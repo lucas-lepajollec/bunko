@@ -1,5 +1,6 @@
+import { storedCover, storeCover, readStoredCover } from './stored-covers';
 import type { CoverOption, TrackedMedia, UnifiedMedia } from '@/types/shared';
-import { db, listTracked } from './db';
+import { statement, getTracked, listTracked } from './db';
 import { matchKavita } from './kavita-index';
 import { requestJson } from './http';
 import { AppError } from './errors';
@@ -9,7 +10,7 @@ import { sharedConcurrencyGate } from './concurrency';
 import { cached, storedMetadata, saveMetadata } from './metadata-cache';
 
 export function storedMedia(id: number): UnifiedMedia {
-  const row = db().prepare('SELECT media_json FROM tracked_media WHERE id=?').get(id) as {
+  const row = statement('SELECT media_json FROM tracked_media WHERE id=?').get(id) as {
     media_json: string;
   };
   return JSON.parse(row.media_json);
@@ -47,7 +48,7 @@ export async function trackedCoverOptions(
   signal?: AbortSignal,
 ): Promise<CoverOption[]> {
   signal?.throwIfAborted();
-  const t = listTracked().find((t) => t.id === id);
+  const t = getTracked(id);
   if (!t) throw new AppError('NOT_FOUND', 'Tracked media not found', 404);
   const options = localCoverOptions(t);
   const media = storedMedia(id);
@@ -56,12 +57,12 @@ export async function trackedCoverOptions(
       const key = `dex_covers:${media.mangadexId}`;
       // Adopt the earlier durable volume cache so upgrades also work offline.
       if (!storedMetadata(key)) {
-        const legacy = db().prepare('SELECT value FROM worker_state WHERE key=?').get(key) as
+        const legacy = statement('SELECT value FROM worker_state WHERE key=?').get(key) as
           { value: string } | undefined;
         if (legacy) {
           const previous = JSON.parse(legacy.value) as { at: number; options: CoverOption[] };
           saveMetadata(key, previous.options, previous.at);
-          if (storedMetadata(key)) db().prepare('DELETE FROM worker_state WHERE key=?').run(key);
+          if (storedMetadata(key)) statement('DELETE FROM worker_state WHERE key=?').run(key);
         }
       }
       const covers = await cached<CoverOption[]>(key, 24 * 3600_000, async () => {
@@ -94,10 +95,10 @@ export async function trackedCoverOptions(
 }
 
 const resolutionGate = sharedConcurrencyGate('cover-resolution', 1);
-export async function syncTrackedCover(id: number, signal?: AbortSignal) {
+export async function syncTrackedCover(id: number, signal?: AbortSignal, force = false) {
   return resolutionGate(async () => {
-    const t = listTracked().find((t) => t.id === id);
-    if (!t?.coverUrl) return;
+    const t = getTracked(id);
+    if (!t) return;
     const series = matchKavita(storedMedia(id), t.kavitaSeriesId);
     const context = coverContext(
       t.media.id,
@@ -107,7 +108,7 @@ export async function syncTrackedCover(id: number, signal?: AbortSignal) {
       series?.seriesId ?? null,
     );
     const current = () => {
-      const entry = listTracked().find((v) => v.id === id);
+      const entry = getTracked(id);
       return (
         entry &&
         coverContext(
@@ -119,59 +120,84 @@ export async function syncTrackedCover(id: number, signal?: AbortSignal) {
         ) === context
       );
     };
-    let url = t.coverUrl;
-    let cover: Awaited<ReturnType<typeof selectedCover>> = null;
-    const fetchCandidate = async (candidate: string) => {
-      try {
-        return await selectedCover(candidate, signal);
-      } catch {
-        signal?.throwIfAborted();
-        return null;
-      }
-    };
-    const resolved = db()
-      .prepare('SELECT context,url,failures FROM resolved_covers WHERE tracked_id=?')
-      .get(id) as { context: string; url: string; failures: number } | undefined;
-    cover = await fetchCandidate(url);
-    if (!current()) return;
-    if (t.coverChoice === 'auto') {
-      if (!cover && resolved?.context === context) {
-        db().prepare('UPDATE resolved_covers SET failures=failures+1 WHERE tracked_id=?').run(id);
-        if (resolved.failures + 1 < 2) return;
-      }
-      if (!cover)
-        for (const candidate of t.coverFallbacks) {
-          cover = await fetchCandidate(candidate);
-          if (!current()) return;
-          if (cover) {
-            url = candidate;
-            break;
-          }
+    const saved = storedCover(id);
+    let url = saved?.context === context ? saved.origin_url : (t.coverUrl ?? '');
+    let cover = !force && saved?.context === context ? readStoredCover(saved) : null;
+    if (!cover) {
+      if (saved?.context === context)
+        statement('DELETE FROM stored_covers WHERE tracked_id=? AND hash=?').run(id, saved.hash);
+      const manual = (
+        statement('SELECT cover_url FROM tracked_media WHERE id=?').get(id) as {
+          cover_url: string | null;
         }
-      if (cover)
-        db()
-          .prepare(
-            `INSERT OR REPLACE INTO resolved_covers(tracked_id,context,url,failures) VALUES(?,?,?,0)`,
-          )
-          .run(id, context, url);
+      ).cover_url;
+      const candidates = [
+        ...new Set(
+          (t.coverChoice === 'auto'
+            ? force
+              ? localCoverOptions(t).map((c) => c.url)
+              : [saved?.context === context ? saved.origin_url : t.coverUrl, ...t.coverFallbacks]
+            : [manual]
+          ).filter((url): url is string => Boolean(url)),
+        ),
+      ];
+      for (const candidate of candidates) {
+        if (candidate.startsWith('/api/covers/')) continue;
+        try {
+          cover = await selectedCover(candidate, signal);
+        } catch {
+          signal?.throwIfAborted();
+          cover = null;
+        }
+        if (!current()) return;
+        if (cover) {
+          url = candidate;
+          break;
+        }
+      }
+      if (!cover || !current()) {
+        if (current())
+          statement(
+            'INSERT OR REPLACE INTO resolved_covers(tracked_id,context,url,failures) VALUES(?,?,?,0)',
+          ).run(id, context, '');
+        return;
+      }
+      const persisted = storeCover(id, context, url, cover, () => Boolean(current()));
+      if (!persisted) return;
     }
     if (!cover || !series || !current()) return;
     await syncSeriesCover(series, url, () => Boolean(current()), signal, cover);
   }, signal);
 }
-export async function syncTrackedCovers(parentSignal?: AbortSignal) {
+export async function syncTrackedCovers(parentSignal?: AbortSignal, backfillOnly = false) {
   const signal = AbortSignal.any([
     ...(parentSignal ? [parentSignal] : []),
     AbortSignal.timeout(60_000),
   ]);
+  const context = (t: TrackedMedia) =>
+    coverContext(t.media.id, t.identity, t.coverChoice, t.sources, t.media.kavitaSeriesId);
   const checked = new Map(
     (
-      db()
-        .prepare("SELECT key,value FROM worker_state WHERE key LIKE 'tracked_cover_checked:%'")
-        .all() as { key: string; value: string }[]
-    ).map((r) => [Number(r.key.slice('tracked_cover_checked:'.length)), Number(r.value)]),
+      statement(
+        "SELECT key,value FROM worker_state WHERE key LIKE 'tracked_cover_checked:%'",
+      ).all() as { key: string; value: string }[]
+    ).map((r) => {
+      const previous = JSON.parse(r.value) as number | { at: number; context: string };
+      return [
+        Number(r.key.slice('tracked_cover_checked:'.length)),
+        typeof previous === 'number' ? { at: previous, context: '' } : previous,
+      ] as const;
+    }),
   );
-  const queue = listTracked().sort((a, b) => (checked.get(a.id) ?? 0) - (checked.get(b.id) ?? 0));
+  const queue = listTracked()
+    .filter(
+      (t) =>
+        !backfillOnly ||
+        (!t.coverUrl?.startsWith('/api/covers/') &&
+          (checked.get(t.id)?.context !== context(t) ||
+            Date.now() - (checked.get(t.id)?.at ?? 0) >= 300_000)),
+    )
+    .sort((a, b) => (checked.get(a.id)?.at ?? 0) - (checked.get(b.id)?.at ?? 0));
   for (const t of queue) {
     if (signal.aborted) return;
     try {
@@ -179,9 +205,10 @@ export async function syncTrackedCovers(parentSignal?: AbortSignal) {
     } catch {
       /* Persisted choices retry next cycle. */
     } finally {
-      db()
-        .prepare('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)')
-        .run(`tracked_cover_checked:${t.id}`, String(Date.now()));
+      statement('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)').run(
+        `tracked_cover_checked:${t.id}`,
+        JSON.stringify({ at: Date.now(), context: context(t) }),
+      );
     }
   }
 }

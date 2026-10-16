@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  createReadStream,
+  readSync,
   existsSync,
   mkdirSync,
   openSync,
@@ -13,7 +15,8 @@ import {
   statSync,
 } from 'node:fs';
 import path from 'node:path';
-import { dataDir, db } from './db';
+import { Readable } from 'node:stream';
+import { statement, dataDir } from './db';
 import { getSettings } from './settings';
 import { boundedBuffer } from './chapter-pages';
 import { AppError } from './errors';
@@ -21,6 +24,7 @@ import { AppError } from './errors';
 export interface CachedImage {
   bytes: Buffer;
   mime: string;
+  etag?: string;
 }
 const DAY = 86_400_000;
 const directory = path.join(/* turbopackIgnore: true */ dataDir, 'cache', 'images');
@@ -39,7 +43,8 @@ export function suwayomiImageKey(relative: string) {
 }
 const filename = (key: string) => path.join(/* turbopackIgnore: true */ directory, key);
 function remove(key: string) {
-  db().prepare('DELETE FROM image_cache WHERE key=?').run(key);
+  diskHeaders.delete(key);
+  statement('DELETE FROM image_cache WHERE key=?').run(key);
   try {
     unlinkSync(filename(key));
   } catch (e) {
@@ -62,7 +67,7 @@ export function invalidateKavitaImage(seriesId: number) {
 /** Includes orphaned files left by a crash between atomic publication and SQLite update. */
 export function pruneImages(maxBytes = 500 * 1024 * 1024) {
   if (!existsSync(directory)) return;
-  const rows = db().prepare('SELECT key,accessed_at FROM image_cache').all() as {
+  const rows = statement('SELECT key,accessed_at FROM image_cache').all() as {
     key: string;
     accessed_at: number;
   }[];
@@ -90,22 +95,24 @@ function read(key: string): (CachedImage & { at: number }) | null {
     const packed = readFileSync(filename(key));
     const newline = packed.indexOf(10);
     if (newline < 0 || newline > 512) throw new Error('Invalid cache header');
-    const meta = JSON.parse(packed.subarray(0, newline).toString()) as { mime: string; at: number };
+    const meta = JSON.parse(packed.subarray(0, newline).toString()) as {
+      mime: string;
+      at: number;
+      etag?: string;
+    };
     if (
       !/^image\/(?:jpeg|png|gif|webp|avif|x-icon|vnd\.microsoft\.icon)$/.test(meta.mime) ||
       !Number.isFinite(meta.at)
     )
       throw new Error('Invalid cache metadata');
-    db()
-      .prepare(
-        `INSERT INTO image_cache(key,bytes,accessed_at,attempted_at) VALUES(?,?,?,?)
+    statement(
+      `INSERT INTO image_cache(key,bytes,accessed_at,attempted_at) VALUES(?,?,?,?)
       ON CONFLICT(key) DO UPDATE SET accessed_at=excluded.accessed_at`,
-      )
-      .run(key, packed.length, Date.now(), meta.at);
-    return { bytes: packed.subarray(newline + 1), mime: meta.mime, at: meta.at };
+    ).run(key, packed.length, Date.now(), meta.at);
+    return { bytes: packed.subarray(newline + 1), mime: meta.mime, at: meta.at, etag: meta.etag };
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') remove(key);
-    else db().prepare('DELETE FROM image_cache WHERE key=?').run(key);
+    else statement('DELETE FROM image_cache WHERE key=?').run(key);
     return null;
   }
 }
@@ -113,7 +120,9 @@ function write(key: string, image: CachedImage) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const temporary = path.join(/* turbopackIgnore: true */ directory, `.${randomUUID()}.partial`);
   const packed = Buffer.concat([
-    Buffer.from(JSON.stringify({ mime: image.mime, at: Date.now() }) + '\n'),
+    Buffer.from(
+      JSON.stringify({ mime: image.mime, at: Date.now(), etag: `"${hash(image.bytes)}"` }) + '\n',
+    ),
     image.bytes,
   ]);
   try {
@@ -125,11 +134,10 @@ function write(key: string, image: CachedImage) {
       closeSync(file);
     }
     renameSync(temporary, filename(key));
-    db()
-      .prepare(
-        'INSERT OR REPLACE INTO image_cache(key,bytes,accessed_at,attempted_at) VALUES(?,?,?,?)',
-      )
-      .run(key, packed.length, Date.now(), Date.now());
+    diskHeaders.delete(key);
+    statement(
+      'INSERT OR REPLACE INTO image_cache(key,bytes,accessed_at,attempted_at) VALUES(?,?,?,?)',
+    ).run(key, packed.length, Date.now(), Date.now());
     pruneImages();
   } finally {
     try {
@@ -168,9 +176,11 @@ export async function cachedImage(
   if (hit) {
     if (
       Date.now() - hit.at >= DAY &&
-      db()
-        .prepare('UPDATE image_cache SET attempted_at=? WHERE key=? AND attempted_at<=?')
-        .run(Date.now(), digest, Date.now() - DAY).changes
+      statement('UPDATE image_cache SET attempted_at=? WHERE key=? AND attempted_at<=?').run(
+        Date.now(),
+        digest,
+        Date.now() - DAY,
+      ).changes
     )
       void refresh().catch(() => {
         /* Keep serving the last complete image, even after upstream failures. */
@@ -202,7 +212,7 @@ export async function fetchImage(
   return { bytes: await boundedBuffer(response, max), mime };
 }
 export function imageResponse(request: Request, image: CachedImage) {
-  const etag = `"${hash(image.bytes)}"`;
+  const etag = image.etag ?? `"${hash(image.bytes)}"`;
   const headers = {
     'Content-Type': image.mime,
     ETag: etag,
@@ -217,4 +227,105 @@ export function imageResponse(request: Request, image: CachedImage) {
     status: matches ? 304 : 200,
     headers,
   });
+}
+
+type DiskHeader = {
+  mime: string;
+  at: number;
+  etag: string;
+  start: number;
+  mtime: number;
+  size: number;
+  touched: number;
+  attempted: number;
+};
+const diskHeaders = new Map<string, DiskHeader>();
+/** Hot proxy hits open a file stream; payload hashing happens only on publication. */
+export async function cachedImageResponse(
+  request: Request,
+  key: string,
+  load: () => Promise<CachedImage>,
+): Promise<Response> {
+  const digest = hash(key);
+  let header = diskHeaders.get(digest);
+  try {
+    const info = statSync(filename(digest));
+    if (!header || header.mtime !== info.mtimeMs || header.size !== info.size) {
+      const fd = openSync(filename(digest), 'r');
+      const prefix = Buffer.alloc(512);
+      let length: number;
+      try {
+        length = readSync(fd, prefix, 0, 512, 0);
+      } finally {
+        closeSync(fd);
+      }
+      const newline = prefix.subarray(0, length).indexOf(10);
+      if (newline < 0) throw new Error('Invalid image header');
+      const meta = JSON.parse(prefix.subarray(0, newline).toString()) as DiskHeader;
+      // Legacy packed files upgrade on their next daily refresh; hash once per process meanwhile.
+      const etag = meta.etag ?? `"${hash(readFileSync(filename(digest)).subarray(newline + 1))}"`;
+      if (
+        !/^image\/(?:jpeg|png|gif|webp|avif|x-icon|vnd\.microsoft\.icon)$/.test(meta.mime) ||
+        !Number.isFinite(meta.at) ||
+        !/^"[a-f0-9]{64}"$/.test(etag)
+      )
+        throw new Error('Invalid image header');
+      const row = statement('SELECT attempted_at FROM image_cache WHERE key=?').get(digest) as
+        { attempted_at: number } | undefined;
+      header = {
+        ...meta,
+        etag,
+        start: newline + 1,
+        mtime: info.mtimeMs,
+        size: info.size,
+        touched: 0,
+        attempted: row?.attempted_at ?? 0,
+      };
+      if (diskHeaders.size >= 1000) diskHeaders.clear();
+      diskHeaders.set(digest, header);
+    }
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') remove(digest);
+    const image = await cachedImage(key, load);
+    return imageResponse(request, image);
+  }
+  if (Date.now() - header.touched >= 60_000) {
+    statement(`INSERT INTO image_cache(key,bytes,accessed_at,attempted_at) VALUES(?,?,?,?)
+      ON CONFLICT(key) DO UPDATE SET accessed_at=excluded.accessed_at`).run(
+      digest,
+      header.size,
+      Date.now(),
+      header.at,
+    );
+    header.touched = Date.now();
+  }
+  if (Date.now() - header.at >= DAY && Date.now() - header.attempted >= DAY) {
+    header.attempted = Date.now();
+    void cachedImage(key, load).catch(() => {
+      /* Retain last complete bytes. */
+    });
+  }
+  const headers = {
+    'Content-Type': header.mime,
+    ETag: header.etag,
+    'Cache-Control': 'private, max-age=86400, stale-while-revalidate=604800',
+    'X-Content-Type-Options': 'nosniff',
+  };
+  const matches = request.headers
+    .get('if-none-match')
+    ?.split(',')
+    .some((tag) => tag.trim() === '*' || tag.trim().replace(/^W\//, '') === header.etag);
+  if (matches) return new Response(null, { status: 304, headers });
+  try {
+    const fd = openSync(filename(digest), 'r');
+    return new Response(
+      Readable.toWeb(
+        createReadStream(filename(digest), { fd, autoClose: true, start: header.start }),
+      ) as ReadableStream<Uint8Array>,
+      { headers },
+    );
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+    return imageResponse(request, await cachedImage(key, load));
+  }
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { localImageUrl } from './images';
 import type { FilterChange } from '@/types/shared';
 const text = z.string().max(20_000);
 const id = z.number().int().positive().max(2_147_483_647);
@@ -39,9 +40,11 @@ const resourceUrl = z
     }
   }, 'Use an HTTP(S) resource URL without embedded credentials');
 const nullableUrl = resourceUrl.nullable();
-const sourceImage = z
-  .union([resourceUrl, z.string().max(2048).startsWith('/api/suwayomi/image?path=')])
-  .nullable();
+const imageUrl = z.union([
+  resourceUrl,
+  z.string().max(2048).refine(localImageUrl, 'Unsupported Bunko image route'),
+]);
+const sourceImage = imageUrl.nullable();
 export const selection = z.object({
   suwayomiMangaId: id,
   sourceId,
@@ -55,10 +58,8 @@ export const media = z.object({
   anilistId: id.nullable(),
   mangadexId: z.uuid().nullable(),
   mangaUpdatesId: z.string().regex(/^\d+$/).max(30).nullable(),
-  coverUrl: z
-    .union([resourceUrl, z.string().regex(/^\/api\/kavita\/image\?seriesId=[1-9]\d*$/)])
-    .nullable(),
-  bannerUrl: nullableUrl,
+  coverUrl: imageUrl.nullable(),
+  bannerUrl: imageUrl.nullable(),
   synopsis: text.nullable(),
   genres: z.array(text).max(100),
   authors: z.array(text).max(100),

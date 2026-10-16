@@ -190,7 +190,7 @@ export function MatchesDrawer({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
         <Dialog.Content className="bg-bg border-line fixed inset-y-0 right-0 z-50 flex w-full max-w-[580px] flex-col border-l outline-none">
           <div className="flex flex-col gap-5 p-5 pb-4 md:p-8 md:pb-5">
             <div className="flex items-start gap-4">
