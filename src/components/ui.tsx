@@ -47,12 +47,13 @@ export function Cover({
         role={alt ? 'img' : undefined}
         aria-label={alt || undefined}
         className={cx(
-          'book bg-hover text-faint flex aspect-[2/3] items-center justify-center p-2 text-center font-serif text-sm italic',
+          'book bg-hover text-faint @container flex aspect-[2/3] items-center justify-center p-2 text-center font-serif text-sm italic',
           className,
         )}
         style={style}
       >
-        {t('common.noCover')}
+        {/* The label only fits medium and large tiles. */}
+        <span className="hidden @[72px]:inline">{t('common.noCover')}</span>
       </span>
     );
   return (

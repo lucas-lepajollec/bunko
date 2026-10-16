@@ -20,7 +20,10 @@ export const GET = route(async (r) => {
     { headers: await kavitaHeaders(signal), signal, redirect: 'error' },
   );
   const type = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? '';
-  if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'].includes(type)) {
+  if (
+    !response.ok ||
+    !['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'].includes(type)
+  ) {
     await response.body?.cancel();
     throw new AppError('INVALID_IMAGE', 'Kavita cover is not an image', 502);
   }

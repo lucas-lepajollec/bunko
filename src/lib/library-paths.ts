@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import type { LibraryKind, UnifiedMedia } from '@/types/shared';
 import { getSettings } from './settings';
 import { AppError } from './errors';
+import { suggestedLibraryKind } from './library-kinds';
 import { env } from '@/lib/env';
 export const libraryRoot = path.resolve(
   /* turbopackIgnore: true */ env('LIBRARY_DIR') ?? '/library',
@@ -37,7 +38,11 @@ function reachable(folder: string) {
 export function storedLibraries(): import('@/types/shared').KavitaLibrary[] {
   const row = db().prepare("SELECT value FROM worker_state WHERE key='kavita_libraries'").get() as
     { value: string } | undefined;
-  return row ? JSON.parse(row.value) : [];
+  const libraries: import('@/types/shared').KavitaLibrary[] = row ? JSON.parse(row.value) : [];
+  return libraries.map((l) => {
+    const kind = suggestedLibraryKind(l.name, l.type);
+    return { ...l, suggestedFor: kind ? [kind] : [] };
+  });
 }
 /** Resolve one library root, using indexed series as evidence rather than a guessed prefix. */
 export function resolveLibraryFolder(
@@ -157,11 +162,14 @@ export function targetFor(media: Pick<UnifiedMedia, 'format' | 'type'>) {
   const kind = libraryKind(media);
   const libraries = storedLibraries();
   const saved = settings.libraryTargets[kind];
-  const candidates = saved
-    ? [saved]
-    : libraries
-        .filter((l) => l.suggestedFor.includes(kind))
-        .flatMap((l) => l.folders.map((f) => ({ libraryId: l.id, folder: f.path })));
+  const candidates =
+    saved === null
+      ? []
+      : saved
+        ? [saved]
+        : libraries
+            .filter((l) => l.suggestedFor.includes(kind))
+            .flatMap((l) => l.folders.map((f) => ({ libraryId: l.id, folder: f.path })));
   const resolved = candidates.flatMap((t) => {
     if (!belongsToLibrary(t)) return [];
     const local = mapKavitaPath(t.folder);

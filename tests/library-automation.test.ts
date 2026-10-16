@@ -217,7 +217,7 @@ describe('automatic mapping and target selection', () => {
     await index.syncKavitaIndex();
     const libs = await index.kavitaLibraries();
     expect(libs[0]).toMatchObject({
-      suggestedFor: ['MANGA', 'MANHUA'],
+      suggestedFor: ['MANGA'],
       folders: [{ localPath: path.join(root, 'Mangas'), writable: true }],
     });
     expect(libs[1].suggestedFor).toEqual(['MANHWA']);
@@ -228,7 +228,7 @@ describe('automatic mapping and target selection', () => {
     await scanLibrary(catalogMedia());
     expect(calls.at(-1)?.body.folderPath).toBe(rows[0].folderPath);
   });
-  it('guesses comic and novel libraries and falls back for missing comic kinds', () => {
+  it('guesses explicit library kinds without cross-kind fallback', () => {
     const libs = index.suggestLibraries(
       ['Manga', 'Webtoon', 'Manhua', 'LN', 'Books', 'Light Novels'].map((name, i) => ({
         id: i + 1,
@@ -248,7 +248,7 @@ describe('automatic mapping and target selection', () => {
     expect(
       index.suggestLibraries([{ id: 1, name: 'Comics', type: 'Comic', folders: [] }])[0]
         .suggestedFor,
-    ).toEqual(['MANGA', 'MANHWA', 'MANHUA']);
+    ).toEqual([]);
   });
   it('refuses enqueue with 409 before persisting jobs when no target or ambiguous targets exist', async () => {
     const { POST } = await import('@/app/api/downloads/enqueue/route');

@@ -249,34 +249,36 @@ export async function chaptersFor(
   media?: import('@/types/shared').UnifiedMedia,
 ): Promise<ChaptersResponse> {
   const settled = await Promise.allSettled(
-    selections.map(async (s) => {
-      const r = await graphql<{
-        fetchChapters: {
-          chapters: {
-            id: number;
-            name: string;
-            chapterNumber: number;
-            scanlator: string | null;
-            isDownloaded: boolean;
-          }[];
-        };
-      }>(
-        'mutation($input: FetchChaptersInput!) { fetchChapters(input: $input) { chapters { id name chapterNumber scanlator isDownloaded } } }',
-        { input: { mangaId: s.suwayomiMangaId } },
-        30_000,
-        signal,
-      );
-      return r.fetchChapters.chapters.map((c) => ({
-        id: c.id,
-        mangaId: s.suwayomiMangaId,
-        sourceId: s.sourceId,
-        sourceName: s.sourceName,
-        name: c.name,
-        number: chapterNumber(c.name, c.chapterNumber),
-        scanlator: c.scanlator,
-        isDownloaded: c.isDownloaded,
-      }));
-    }),
+    selections.map((s) =>
+      sourceCall(async () => {
+        const r = await graphql<{
+          fetchChapters: {
+            chapters: {
+              id: number;
+              name: string;
+              chapterNumber: number;
+              scanlator: string | null;
+              isDownloaded: boolean;
+            }[];
+          };
+        }>(
+          'mutation($input: FetchChaptersInput!) { fetchChapters(input: $input) { chapters { id name chapterNumber scanlator isDownloaded } } }',
+          { input: { mangaId: s.suwayomiMangaId } },
+          30_000,
+          signal,
+        );
+        return r.fetchChapters.chapters.map((c) => ({
+          id: c.id,
+          mangaId: s.suwayomiMangaId,
+          sourceId: s.sourceId,
+          sourceName: s.sourceName,
+          name: c.name,
+          number: chapterNumber(c.name, c.chapterNumber),
+          scanlator: c.scanlator,
+          isDownloaded: c.isDownloaded,
+        }));
+      }, signal),
+    ),
   );
   const chapters = mergeChapters(settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])));
   const numbers = chapters.flatMap((c) => (c.number === null ? [] : [c.number]));

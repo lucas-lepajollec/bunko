@@ -13,6 +13,7 @@ import type {
   UnifiedMedia,
 } from '@/types/shared';
 import { AppError } from './errors';
+import { suggestedLibraryKind } from './library-kinds';
 const seriesSchema = z.object({
   id: z.number().int().positive(),
   libraryId: z.number().int().positive(),
@@ -151,6 +152,7 @@ export async function kavitaLibraries(signal?: AbortSignal): Promise<KavitaLibra
   return Promise.all(
     suggested.map(async (l) => ({
       ...l,
+      suggestedFor: l.suggestedFor.filter((kind) => getSettings().libraryTargets[kind] !== null),
       folders: await Promise.all(
         l.folders.map(async (f) => {
           const localPath = resolveLibraryFolder(
@@ -166,24 +168,15 @@ export async function kavitaLibraries(signal?: AbortSignal): Promise<KavitaLibra
   );
 }
 export function guessLibraryKind(name: string, type: string): import('@/types/shared').LibraryKind {
-  const text = name.toLowerCase();
-  if (/manhwa|manwha|webtoon/.test(text)) return 'MANHWA';
-  if (/manhua/.test(text)) return 'MANHUA';
-  if (/novel|\bln\b|book|roman/.test(text)) return 'NOVEL';
-  if (/manga/.test(text)) return 'MANGA';
-  return /book|novel/i.test(type) ? 'NOVEL' : 'MANGA';
+  return suggestedLibraryKind(name, type) ?? 'MANGA';
 }
 export function suggestLibraries(
   libraries: Omit<KavitaLibrary, 'suggestedFor'>[],
 ): KavitaLibrary[] {
-  const kinds = libraries.map((l) => guessLibraryKind(l.name, l.type));
-  return libraries.map((l, i) => ({
-    ...l,
-    suggestedFor:
-      kinds[i] === 'MANGA'
-        ? ['MANGA', ...(['MANHWA', 'MANHUA'] as const).filter((k) => !kinds.includes(k))]
-        : [kinds[i]],
-  }));
+  return libraries.map((l) => {
+    const kind = suggestedLibraryKind(l.name, l.type);
+    return { ...l, suggestedFor: kind ? [kind] : [] };
+  });
 }
 /** Specials and volume-only (-100000/default chapter) entries are not chapter zero. */
 export function kavitaChapterNumbers(input: unknown): number[] {

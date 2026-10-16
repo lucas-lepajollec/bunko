@@ -185,6 +185,7 @@ export const settingsPatch = z
                   ),
               })
               .strict()
+              .nullable()
               .optional(),
           ]),
         ),
@@ -229,14 +230,28 @@ export const trackBody = z
     (v) => !v.autoDownload || (v.sources?.length && v.media.type !== 'ANIME'),
     'Automatic downloads require manga/novel sources',
   );
-export const trackPatch = z.object({
-  id,
-  media: media.optional(),
-  status: readingStatus.optional(),
-  autoDownload: z.boolean().optional(),
-  kavitaSeriesId: id.nullable().optional(),
-  sources: z.array(selection).max(20).optional(),
-});
+export const trackPatch = z
+  .object({
+    id,
+    media: media.optional(),
+    offCatalog: z.literal(true).optional(),
+    cover: z
+      .union([
+        z.literal('auto'),
+        z
+          .object({
+            origin: z.enum(['catalog', 'source', 'kavita']),
+            id: z.string().min(1).max(300),
+          })
+          .strict(),
+      ])
+      .optional(),
+    status: readingStatus.optional(),
+    autoDownload: z.boolean().optional(),
+    kavitaSeriesId: id.nullable().optional(),
+    sources: z.array(selection).max(20).optional(),
+  })
+  .refine((v) => !(v.media && v.offCatalog), 'Choose a catalog identity or detach it');
 
 export const sourcePreferences = z
   .object({

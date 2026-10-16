@@ -10,6 +10,8 @@ import type {
   TrackRequest,
   UnifiedMedia,
   ChapterVariant,
+  SourceLinkStatus,
+  CoverChoice,
 } from '@/types/shared';
 export const dataDir = path.resolve(/* turbopackIgnore: true */ env('DATA_DIR') ?? './data');
 let connection: Database.Database | undefined;
@@ -48,6 +50,7 @@ export function db(): Database.Database {
   migrateV3(connection);
   migrateV4(connection);
   migrateV5(connection);
+  migrateV6(connection);
   resetAccountAtStartup(connection);
   return connection;
 }
@@ -120,6 +123,62 @@ export function migrateV5(database: Database.Database) {
       PRAGMA user_version = 5;`);
   })();
 }
+/** Source choices, catalog detachments and cover selections survive restarts. */
+export function migrateV6(database: Database.Database) {
+  database.transaction(() => {
+    if (Number(database.pragma('user_version', { simple: true })) >= 6) return;
+    database.exec(`ALTER TABLE tracked_media ADD COLUMN off_catalog INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE tracked_media ADD COLUMN cover_choice_json TEXT NOT NULL DEFAULT '"auto"';
+      ALTER TABLE tracked_media ADD COLUMN source_match_at TEXT;
+      CREATE TABLE source_links (
+        tracked_id INTEGER NOT NULL REFERENCES tracked_media(id) ON DELETE CASCADE,
+        source_id TEXT NOT NULL, manga_id INTEGER NOT NULL, payload TEXT NOT NULL,
+        PRIMARY KEY(tracked_id,source_id,manga_id));
+      CREATE TABLE source_dismissals (
+        tracked_id INTEGER NOT NULL REFERENCES tracked_media(id) ON DELETE CASCADE,
+        source_id TEXT NOT NULL, manga_id INTEGER NOT NULL,
+        PRIMARY KEY(tracked_id,source_id,manga_id));
+      PRAGMA user_version = 6;`);
+  })();
+}
+export function sourceStatuses(
+  id: number,
+  selections: TrackedMedia['sources'],
+  media: UnifiedMedia,
+): SourceLinkStatus[] {
+  const rows = db().prepare('SELECT payload FROM source_links WHERE tracked_id=?').all(id) as {
+    payload: string;
+  }[];
+  const statuses = rows.map((r) => JSON.parse(r.payload) as SourceLinkStatus);
+  return selections.map(
+    (s) =>
+      statuses.find(
+        (v) => v.sourceId === s.sourceId && v.suwayomiMangaId === s.suwayomiMangaId,
+      ) ?? {
+        sourceId: s.sourceId,
+        suwayomiMangaId: s.suwayomiMangaId,
+        title: media.title,
+        thumbnailUrl:
+          media.sources.find(
+            (v) => v.sourceId === s.sourceId && v.suwayomiMangaId === s.suwayomiMangaId,
+          )?.thumbnailUrl ??
+          `/api/suwayomi/image?path=${encodeURIComponent(`/api/v1/manga/${s.suwayomiMangaId}/thumbnail`)}`,
+        latestChapter: null,
+        chapterCount: null,
+        checkedAt: null,
+        auto: false,
+        error: null,
+      },
+  );
+}
+export function saveSourceStatus(id: number, status: SourceLinkStatus) {
+  db()
+    .prepare(
+      `INSERT INTO source_links(tracked_id,source_id,manga_id,payload) VALUES(?,?,?,?)
+    ON CONFLICT(tracked_id,source_id,manga_id) DO UPDATE SET payload=excluded.payload`,
+    )
+    .run(id, status.sourceId, status.suwayomiMangaId, JSON.stringify(status));
+}
 export function manualKavitaLink(id: number) {
   return Boolean(
     (
@@ -167,6 +226,22 @@ export function sameMedia(a: UnifiedMedia, b: UnifiedMedia) {
       (a.anilistId !== null && a.anilistId === b.anilistId) ||
       (a.mangadexId !== null && a.mangadexId === b.mangadexId))
   );
+}
+/** Exact catalog identities win; a unique linked source/series is also authoritative. */
+export function trackedForMedia(media: UnifiedMedia, entries: TrackedMedia[]) {
+  const exact = entries.find((t) => sameMedia(t.media, media));
+  if (exact) return exact;
+  const linked = entries.filter(
+    (t) =>
+      t.type === media.type &&
+      ((media.id.startsWith('kavita:') && t.kavitaSeriesId === Number(media.id.slice(7))) ||
+        media.sources.some((m) =>
+          t.sources.some(
+            (s) => s.sourceId === m.sourceId && s.suwayomiMangaId === m.suwayomiMangaId,
+          ),
+        )),
+  );
+  return linked.length === 1 ? linked[0] : undefined;
 }
 export function recordImport(
   media: UnifiedMedia,
@@ -266,7 +341,21 @@ export function listTracked(): TrackedMedia[] {
     db().prepare('SELECT * FROM tracked_media ORDER BY id DESC').all() as Record<string, unknown>[]
   ).map((r) => {
     const rawMedia = JSON.parse(String(r.media_json)) as UnifiedMedia;
-    const media = withKavita(rawMedia, r.kavita_series_id as number | null);
+    const sources = JSON.parse(String(r.sources_json)) as TrackedMedia['sources'];
+    const sourceStatus = sourceStatuses(Number(r.id), sources, rawMedia);
+    const coverChoice = JSON.parse(String(r.cover_choice_json)) as CoverChoice;
+    const kavita = matchKavita(rawMedia, r.kavita_series_id as number | null);
+    const identity =
+      r.off_catalog || /^(kavita|suwayomi|local):/.test(rawMedia.id)
+        ? ('off-catalog' as const)
+        : ('catalog' as const);
+    const coverUrl =
+      coverChoice === 'auto'
+        ? ((identity === 'catalog' ? rawMedia.coverUrl : null) ??
+          sourceStatus.find((s) => s.thumbnailUrl)?.thumbnailUrl ??
+          (kavita ? `/api/kavita/image?seriesId=${kavita.seriesId}` : rawMedia.coverUrl))
+        : (r.cover_url as string | null);
+    const media = { ...withKavita(rawMedia, r.kavita_series_id as number | null), coverUrl };
     const imported = db()
       .prepare(
         'SELECT DISTINCT number FROM imported_chapters WHERE tracked_id=? AND number IS NOT NULL',
@@ -292,6 +381,7 @@ export function listTracked(): TrackedMedia[] {
       media.chapters,
       r.released as number | null,
       observed.highest,
+      ...sourceStatus.map((s) => s.latestChapter),
       ...ownedNumbers,
     ].filter((n): n is number => n !== null);
     const read = r.last_read as number | null;
@@ -301,12 +391,15 @@ export function listTracked(): TrackedMedia[] {
       mangadexId: r.mangadex_id as string | null,
       title: String(r.title),
       type: r.type as TrackedMedia['type'],
-      coverUrl: r.cover_url as string | null,
+      coverUrl,
+      coverChoice,
+      sourceStatus,
+      identity,
       kavitaSeriesId: r.kavita_series_id as number | null,
       autoDownload: Boolean(r.auto_download),
       createdAt: String(r.created_at),
       media,
-      sources: JSON.parse(String(r.sources_json)),
+      sources,
       status: r.status as TrackedMedia['status'],
       lastReadAt: r.last_read_at as string | null,
       progress: {
@@ -372,7 +465,9 @@ export function track(input: TrackRequest): TrackedMedia {
       db()
         .prepare('UPDATE imported_chapters SET tracked_id=? WHERE chapter_id=?')
         .run(id, row.chapter_id);
-  return listTracked().find((t) => t.id === id)!;
+  const created = listTracked().find((t) => t.id === id)!;
+  for (const status of created.sourceStatus) saveSourceStatus(id, status);
+  return created;
 }
 export function saveBatch(batch: DownloadBatch) {
   db()

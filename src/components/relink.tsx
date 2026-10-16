@@ -1,104 +1,11 @@
 'use client';
 import { useState } from 'react';
-import type {
-  KavitaSeriesSummary,
-  MediaDetail,
-  SearchResponse,
-  TrackedMedia,
-} from '@/types/shared';
-import { mediaHref, send, useApi } from '@/lib/client/api';
+import type { KavitaSeriesSummary, SearchResponse } from '@/types/shared';
+import { useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
-import { Cover, Skeleton, cx, errorText, field, smallButton, useMediaMeta } from './ui';
+import { Cover, Skeleton, cx, field, smallButton, useMediaMeta } from './ui';
 
-/**
- * Fixes wrong automatic matches on a followed title: the catalog work it points to, and the
- * Kavita series it is linked to. Both choices are manual and stick.
- */
-export function MatchPanel({
-  entry,
-  media,
-  onChanged,
-}: {
-  entry: TrackedMedia;
-  media: MediaDetail;
-  onChanged: () => Promise<unknown>;
-}) {
-  const { t, n } = useI18n();
-  const [mode, setMode] = useState<'catalog' | 'kavita' | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  async function patch(body: object, after?: () => void) {
-    setError(null);
-    try {
-      await send('/api/tracked', 'PATCH', { id: entry.id, ...body });
-      await onChanged();
-      setMode(null);
-      after?.();
-    } catch (e) {
-      setError(errorText(t, e));
-    }
-  }
-  return (
-    <div className="flex flex-col gap-3">
-      <span className="text-muted text-xs tracking-[0.16em] uppercase">{t('match.title')}</span>
-      <div className="flex flex-col gap-1 text-sm">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-mid min-w-0 truncate">
-            {media.providers.includes('kavita') && media.providers.length === 1
-              ? t('match.offCatalog')
-              : t('match.catalogWork', {
-                  provider:
-                    media.providers.filter((p) => p !== 'local' && p !== 'kavita').join(', ') ||
-                    '—',
-                })}
-          </span>
-          <button
-            type="button"
-            onClick={() => setMode(mode === 'catalog' ? null : 'catalog')}
-            className="shrink-0 underline hover:text-white"
-          >
-            {t('match.change')}
-          </button>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-mid min-w-0 truncate">
-            {media.kavita
-              ? t('match.kavitaLinked', {
-                  library: media.kavita.libraryName,
-                  n: n(media.kavita.chapters),
-                })
-              : t('match.kavitaNone')}
-          </span>
-          <button
-            type="button"
-            onClick={() => setMode(mode === 'kavita' ? null : 'kavita')}
-            className="shrink-0 underline hover:text-white"
-          >
-            {t('match.change')}
-          </button>
-        </div>
-      </div>
-      {mode === 'catalog' && (
-        <CatalogPicker
-          initial={entry.title}
-          onPick={(m) => patch({ media: m }, () => routerReplace(m.id))}
-        />
-      )}
-      {mode === 'kavita' && (
-        <KavitaPicker
-          initial={entry.title}
-          onPick={(id) => patch({ kavitaSeriesId: id })}
-          onNone={() => patch({ kavitaSeriesId: null })}
-        />
-      )}
-      {error && <p className="text-bad text-xs">{error}</p>}
-    </div>
-  );
-  function routerReplace(id: string) {
-    window.location.assign(mediaHref(id));
-  }
-}
-
-function CatalogPicker({
+export function CatalogPicker({
   initial,
   onPick,
 }: {
@@ -150,7 +57,7 @@ function CatalogPicker({
   );
 }
 
-function KavitaPicker({
+export function KavitaPicker({
   initial,
   onPick,
   onNone,

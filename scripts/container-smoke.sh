@@ -26,7 +26,7 @@ check 401 "API requires authentication" "$base/api/settings"
 # Every API route must be present in the image (an ignored folder once dropped one silently).
 check 200 "public auth state" "$base/api/auth"
 check 401 "password route exists" -X POST "$base/api/auth/password"
-for route in discover genres media media/sources search search/stream manga/chapters tracked updates sources downloads extensions settings status kavita/status kavita/libraries kavita/series; do
+for route in discover genres media media/sources search search/stream manga/chapters tracked tracked/covers updates sources downloads extensions settings status kavita/status kavita/libraries kavita/series; do
   check 401 "route /api/$route exists" "$base/api/$route"
 done
 credentials='{"username":"SmokeAdmin","password":"synthetic-smoke-password"}'

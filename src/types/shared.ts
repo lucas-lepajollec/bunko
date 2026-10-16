@@ -264,6 +264,38 @@ export interface TrackedMedia {
   /** Chapters detected on sources and not yet in the library. */
   newChapters: number;
   lastReadAt: string | null;
+  /** One entry per linked source, same order as `sources`, refreshed in the background. */
+  sourceStatus: SourceLinkStatus[];
+  /** Where the displayed cover comes from; `auto` = best available (catalog, then sources, then Kavita). */
+  coverChoice: CoverChoice;
+  /** Identity of the entry: a catalog work, or off-catalog (known only from Kavita or a source). */
+  identity: 'catalog' | 'off-catalog';
+}
+export interface SourceLinkStatus {
+  sourceId: string;
+  suwayomiMangaId: number;
+  /** Title of the entry on that source. */
+  title: string;
+  thumbnailUrl: string | null;
+  /** Highest numbered chapter on that source at the last check. */
+  latestChapter: number | null;
+  chapterCount: number | null;
+  checkedAt: string | null;
+  /** Linked automatically (by background matching) rather than chosen by the user. */
+  auto: boolean;
+  /** Safe error code of the last check, if it failed. */
+  error: string | null;
+}
+export type CoverChoice = 'auto' | { origin: 'catalog' | 'source' | 'kavita'; id: string };
+/** GET /api/tracked/covers?id= — every cover that can be chosen for a followed title. */
+export interface CoverOption {
+  origin: 'catalog' | 'source' | 'kavita';
+  /** Stable id to send back in `TrackPatch.cover`. */
+  id: string;
+  /** Short label: provider, source name or volume. */
+  label: string;
+  /** Displayable URL (proxied when needed). */
+  url: string;
 }
 /** User reading state. "Caught up" is derived (READING and nothing unread), never stored. */
 export type ReadingStatus = 'PLANNING' | 'READING' | 'PAUSED' | 'COMPLETED' | 'DROPPED';
@@ -283,6 +315,10 @@ export interface TrackPatch {
   id: number;
   /** Replace a wrong catalog match; status, sources and history are kept. */
   media?: UnifiedMedia;
+  /** Detach from the catalog (wrong match, title not catalogued): identity becomes the Kavita series or the first source. */
+  offCatalog?: true;
+  /** Pick a cover (`CoverOption.id` with its origin) or go back to automatic. */
+  cover?: CoverChoice;
   status?: ReadingStatus;
   autoDownload?: boolean;
   kavitaSeriesId?: number | null;
@@ -427,7 +463,8 @@ export interface LibraryTarget {
   /** Kavita-side folder path chosen inside that library. */
   folder: string;
 }
-export type LibraryTargets = Partial<Record<LibraryKind, LibraryTarget>>;
+/** `null` = explicitly no library for that format (downloads of that format are refused). */
+export type LibraryTargets = Partial<Record<LibraryKind, LibraryTarget | null>>;
 export interface KavitaSeriesSummary {
   seriesId: number;
   libraryId: number;

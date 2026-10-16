@@ -4,6 +4,8 @@ import { chaptersFor } from './suwayomi';
 import { getSettings } from './settings';
 import { refreshLibraryProgress } from './kavita';
 import { syncKavitaIndex, matchKavita } from './kavita-index';
+import { matchTrackedSources, refreshSourceStatuses } from './tracked-sources';
+import { syncTrackedCovers } from './tracked-covers';
 export function workerValue(key: string): string | null {
   return (
     (
@@ -87,14 +89,22 @@ export async function runUpdateCheck(create: (input: EnqueueRequest) => Download
   setWorkerValue('last_check_at', new Date().toISOString());
   try {
     await syncKavitaIndex();
+    await matchTrackedSources(AbortSignal.timeout(45_000)).catch(() => {});
     const signal = AbortSignal.timeout(120_000);
-    const queue = listTracked().filter((t) => t.type === 'MANGA' && t.sources.length);
+    const queue = listTracked()
+      .filter((t) => t.sources.length)
+      .sort(
+        (a, b) =>
+          Math.min(...a.sourceStatus.map((s) => (s.checkedAt ? Date.parse(s.checkedAt) : 0))) -
+          Math.min(...b.sourceStatus.map((s) => (s.checkedAt ? Date.parse(s.checkedAt) : 0))),
+      );
     await Promise.allSettled(
       Array.from({ length: Math.min(3, queue.length) }, async () => {
         while (queue.length && !signal.aborted) {
           const t = queue.shift()!;
           try {
             const result = await chaptersFor(t.sources, signal);
+            await refreshSourceStatuses(t, result, signal);
             const seen = db()
               .prepare('SELECT chapter_id,number FROM observed_chapters WHERE tracked_id=?')
               .all(t.id) as { chapter_id: number; number: number | null }[];
@@ -167,6 +177,7 @@ export async function runUpdateCheck(create: (input: EnqueueRequest) => Download
       }),
     );
     await refreshLibraryProgress();
+    await syncTrackedCovers();
     setWorkerValue('check_requested', signal.aborted ? '1' : '0');
   } finally {
     setWorkerValue('checking', '0');

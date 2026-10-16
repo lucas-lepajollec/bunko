@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- One "Matches" panel per title: catalog work (or off-catalog), sources with their latest chapter (scan all, reorder, remove wrong ones), Kavita series, and cover (automatic, or picked from the catalog, a source or Kavita).
+- Followed titles without sources are matched to sources in the background; each source's latest chapter is refreshed for the whole library, so release counts stay current without opening a title.
+- Kavita libraries: a format can be set to "no library"; manhua no longer falls back to the manga library.
 - Renamed to **Bunko**, with its own logo and browser icon (old `KAVISEERR_*` variables and database still work).
 - Kavita folders are mapped automatically through the single mounted folder; each format gets a suggested library, and downloads refuse to run without a target instead of landing in the mount root.
 - The library mirrors Kavita: every Kavita series is followed automatically, matched to the catalog when possible (cover pushed to Kavita) or kept as an off-catalog entry with its Kavita cover.

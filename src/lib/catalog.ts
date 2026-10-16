@@ -1,11 +1,13 @@
 import type { DiscoverPage, DiscoverQuery, MediaDetail, UnifiedMedia } from '@/types/shared';
 import { requestJson } from './http';
 import { AppError } from './errors';
-import { listTracked } from './db';
+import { listTracked, trackedForMedia } from './db';
 import { kavitaMedia } from './kavita-track';
 import { withKavita } from './kavita-index';
 import { graphql } from './suwayomi';
 import { proxyImage } from './images';
+import { sharedConcurrencyGate } from './concurrency';
+const sourceCall = sharedConcurrencyGate('sources', 6);
 import {
   aniFields,
   cleanSynopsis,
@@ -45,14 +47,14 @@ async function cached<T>(key: string, ttl: number, load: () => Promise<T>): Prom
 export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
   const tracked = listTracked();
   return items.map((m) => {
-    const t = tracked.find(
-      (t) =>
-        t.media.id === m.id ||
-        (m.anilistId !== null && t.anilistId === m.anilistId) ||
-        (m.mangadexId !== null && t.mangadexId === m.mangadexId),
-    );
+    const t = trackedForMedia(m, tracked);
     return withKavita(
-      { ...m, trackedId: t?.id ?? null, kavitaSeriesId: t?.kavitaSeriesId ?? null },
+      {
+        ...m,
+        coverUrl: t ? t.coverUrl : m.coverUrl,
+        trackedId: t?.id ?? null,
+        kavitaSeriesId: t?.kavitaSeriesId ?? null,
+      },
       t?.kavitaSeriesId,
     );
   });
@@ -179,25 +181,29 @@ async function mangaupdatesDetail(id: string, signal?: AbortSignal): Promise<Med
   );
   return { ...fromMangaUpdates(record), tags: [], relations: [], recommendations: [] };
 }
-async function suwayomiDetail(id: number, signal?: AbortSignal): Promise<MediaDetail> {
-  const { manga } = await graphql<{
-    manga: {
-      id: number;
-      title: string;
-      url: string;
-      thumbnailUrl: string | null;
-      description: string | null;
-      genre: string[];
-      author: string | null;
-      artist: string | null;
-      status: string | null;
-      sourceId: string;
-      source: { name: string; lang: string } | null;
-    };
-  }>(
-    'query($id: Int!) { manga(id: $id) { id title url thumbnailUrl description genre author artist status sourceId source { name lang } } }',
-    { id },
-    10_000,
+export async function suwayomiDetail(id: number, signal?: AbortSignal): Promise<MediaDetail> {
+  const { manga } = await sourceCall(
+    () =>
+      graphql<{
+        manga: {
+          id: number;
+          title: string;
+          url: string;
+          thumbnailUrl: string | null;
+          description: string | null;
+          genre: string[];
+          author: string | null;
+          artist: string | null;
+          status: string | null;
+          sourceId: string;
+          source: { name: string; lang: string } | null;
+        };
+      }>(
+        'query($id: Int!) { manga(id: $id) { id title url thumbnailUrl description genre author artist status sourceId source { name lang } } }',
+        { id },
+        10_000,
+        signal,
+      ),
     signal,
   );
   return {
@@ -240,6 +246,7 @@ export async function mediaDetail(id: string, signal?: AbortSignal): Promise<Med
   const [tracked] = withTracking([detail]);
   return {
     ...detail,
+    coverUrl: tracked.coverUrl,
     trackedId: tracked.trackedId,
     kavitaSeriesId: tracked.kavitaSeriesId,
     kavita: tracked.kavita,

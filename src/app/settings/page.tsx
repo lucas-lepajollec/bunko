@@ -557,6 +557,7 @@ function KavitaTargets({
     setError(null);
     const next: LibraryTargets = { ...targets };
     if (!value) delete next[kind];
+    else if (value === 'none') next[kind] = null;
     else {
       const [libraryId, ...rest] = value.split('|');
       next[kind] = { libraryId: Number(libraryId), folder: rest.join('|') };
@@ -632,7 +633,9 @@ function KavitaTargets({
           <Row key={kind} label={t(`kavita.kind.${kind}`)}>
             <select
               aria-label={t(`kavita.kind.${kind}`)}
-              value={current ? `${current.libraryId}|${current.folder}` : ''}
+              value={
+                current === null ? 'none' : current ? `${current.libraryId}|${current.folder}` : ''
+              }
               onChange={(e) => save(kind, e.target.value)}
               className={cx(field, 'md:w-[420px]')}
             >
@@ -641,6 +644,7 @@ function KavitaTargets({
                   ? t('kavita.suggested', { name: suggested.name })
                   : t('kavita.chooseTarget')}
               </option>
+              <option value="none">{t('kavita.noLibrary')}</option>
               {(libraries.data ?? []).map((lib) => (
                 <optgroup key={lib.id} label={`${lib.name} · ${lib.type}`}>
                   {lib.folders.map((f) => (

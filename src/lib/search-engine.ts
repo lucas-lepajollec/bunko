@@ -1,5 +1,5 @@
 import type { MediaType, Provider, SearchResponse, UnifiedMedia } from '@/types/shared';
-import { listTracked, searchCatalog } from './db';
+import { trackedForMedia, listTracked, searchCatalog } from './db';
 import { withKavita } from './kavita-index';
 import { requestJson } from './http';
 import {
@@ -135,15 +135,14 @@ async function mangaupdates(
 function enrichSearch(items: UnifiedMedia[]): UnifiedMedia[] {
   const tracked = listTracked();
   return items.map((m) => {
-    const t = tracked.find(
-      (t) =>
-        t.type === m.type &&
-        ((m.anilistId !== null && t.anilistId === m.anilistId) ||
-          (m.mangadexId !== null && t.mangadexId === m.mangadexId) ||
-          t.media.id === m.id),
-    );
+    const t = trackedForMedia(m, tracked);
     return withKavita(
-      { ...m, trackedId: t?.id ?? null, kavitaSeriesId: t?.kavitaSeriesId ?? null },
+      {
+        ...m,
+        coverUrl: t ? t.coverUrl : m.coverUrl,
+        trackedId: t?.id ?? null,
+        kavitaSeriesId: t?.kavitaSeriesId ?? null,
+      },
       t?.kavitaSeriesId,
     );
   });

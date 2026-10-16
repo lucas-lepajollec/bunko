@@ -18,7 +18,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { Backdrop } from '@/components/backdrop';
 import { ChapterTable, isMissing, preferredVariant } from '@/components/chapters';
 import { PosterCard } from '@/components/media';
-import { MatchPanel } from '@/components/relink';
+import { MatchesDrawer, MatchesSummary, type Lane } from '@/components/matches';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import {
   Cover,
@@ -39,7 +39,6 @@ import {
 } from '@/components/ui';
 
 const STATUSES: ReadingStatus[] = ['PLANNING', 'READING', 'PAUSED', 'COMPLETED', 'DROPPED'];
-type Lane = { source: Source; state: 'loading' | 'done' | 'error'; candidates: SourceCandidate[] };
 
 export default function TitlePage() {
   const { provider, key } = useParams<{ provider: string; key: string }>();
@@ -80,6 +79,7 @@ function Title({ media }: { media: MediaDetail }) {
       (media.mangadexId !== null && e.mangadexId === media.mangadexId),
   );
   const [tab, setTab] = useState<'chapters' | 'sources' | 'info'>('chapters');
+  const [drawer, setDrawer] = useState<'catalog' | 'sources' | 'kavita' | 'cover' | null>(null);
   const [override, setOverride] = useState<ChapterSelection[] | null>(null);
   const [lanes, setLanes] = useState<Lane[] | null>(null);
   const [matchRun, setMatchRun] = useState(0);
@@ -284,7 +284,11 @@ function Title({ media }: { media: MediaDetail }) {
       />
       <section className="relative mx-auto flex max-w-[1440px] flex-col gap-4 px-4 pt-[150px] md:flex-row md:items-end md:gap-12 md:px-16 md:pt-[150px]">
         <div className="flex items-end gap-4 md:contents">
-          <Cover src={media.coverUrl} alt={media.title} className="w-28 shrink-0 md:w-[250px]" />
+          <Cover
+            src={entry?.coverUrl ?? media.coverUrl}
+            alt={media.title}
+            className="w-28 shrink-0 md:w-[250px]"
+          />
           <div className="flex flex-col gap-2 md:hidden">
             <Kicker media={media} />
             <h1 className="font-display text-[40px] leading-[0.9] font-extrabold tracking-[-0.05em]">
@@ -410,30 +414,14 @@ function Title({ media }: { media: MediaDetail }) {
               ))}
             </dl>
             {media.synopsis && <Synopsis text={media.synopsis} />}
-            {entry && (
-              <MatchPanel
-                entry={entry}
-                media={media}
-                onChanged={() =>
-                  Promise.all([
-                    library.mutate(),
-                    mutate(`/api/media?id=${encodeURIComponent(media.id)}`),
-                  ])
-                }
-              />
-            )}
           </div>
           {isComic && (
             <div className={cx('flex-col gap-8', tab === 'sources' ? 'flex' : 'hidden md:flex')}>
-              <SourcesPanel
+              <MatchesSummary
+                entry={entry}
+                media={media}
                 sources={sources}
-                lanes={lanes}
-                onChange={updateSources}
-                onSearchAgain={() => {
-                  setLanes(null);
-                  setMatchRun((r) => r + 1);
-                }}
-                title={media.title}
+                onOpen={(section) => setDrawer(section)}
               />
               <Automation entry={entry} disabled={!sources.length} onAuto={setAuto} />
             </div>
@@ -535,6 +523,23 @@ function Title({ media }: { media: MediaDetail }) {
         </section>
       )}
 
+      <MatchesDrawer
+        open={drawer !== null}
+        section={drawer ?? 'catalog'}
+        onClose={() => setDrawer(null)}
+        entry={entry}
+        media={media}
+        sources={sources}
+        lanes={lanes}
+        onScan={() => {
+          setLanes(null);
+          setMatchRun((r) => r + 1);
+        }}
+        onSources={updateSources}
+        onChanged={() =>
+          Promise.all([library.mutate(), mutate(`/api/media?id=${encodeURIComponent(media.id)}`)])
+        }
+      />
       {selected.size > 0 && (
         <div className="bg-fg text-bg fixed inset-x-3 bottom-24 z-30 mx-auto flex max-w-[760px] items-center gap-3 rounded-full py-2 pr-2 pl-5 shadow-[0_20px_40px_rgba(0,0,0,0.5)] md:bottom-6">
           <span className="font-semibold">{t('title.selected', { count: selected.size })}</span>
@@ -604,168 +609,6 @@ function Synopsis({ text }: { text: string }) {
         </button>
       )}
     </div>
-  );
-}
-
-function SourcesPanel({
-  sources,
-  lanes,
-  onChange,
-  onSearchAgain,
-  title,
-}: {
-  sources: ChapterSelection[];
-  lanes: Lane[] | null;
-  onChange: (next: ChapterSelection[]) => void;
-  onSearchAgain: () => void;
-  title: string;
-}) {
-  const { t, n } = useI18n();
-  const chosen = new Set(sources.map((s) => s.suwayomiMangaId));
-  const others = (lanes ?? []).flatMap((l) =>
-    l.candidates
-      .filter((c) => !chosen.has(c.suwayomiMangaId))
-      .map((c) => ({ ...c, sourceName: l.source.name })),
-  );
-  const pending = (lanes ?? []).filter((l) => l.state === 'loading').length;
-  const move = (i: number, d: -1 | 1) => {
-    const next = [...sources];
-    [next[i], next[i + d]] = [next[i + d], next[i]];
-    onChange(next);
-  };
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-baseline justify-between">
-        <span className="text-muted text-xs tracking-[0.16em] uppercase">
-          {t('sources.byPriority')}
-        </span>
-        <button
-          type="button"
-          onClick={onSearchAgain}
-          className="text-mid text-[13px] hover:text-white"
-        >
-          {t('sources.searchAgain')}
-        </button>
-      </div>
-      {sources.length === 0 && pending === 0 && (
-        <p className="text-muted text-sm">{t('sources.noneChosen')}</p>
-      )}
-      <ol className="flex flex-col gap-2">
-        {sources.map((s, i) => (
-          <li
-            key={`${s.sourceId}:${s.suwayomiMangaId}`}
-            className={cx(
-              'flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm',
-              i === 0 ? 'bg-white/[0.07]' : 'bg-white/[0.04]',
-            )}
-          >
-            <span className="text-muted w-4 font-serif text-xl">{n(i + 1)}</span>
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate">{s.sourceName}</span>
-            </span>
-            <span className="flex gap-0.5">
-              <IconBtn
-                label={t('sources.up')}
-                disabled={i === 0}
-                onClick={() => move(i, -1)}
-                d="m6 15 6-6 6 6"
-              />
-              <IconBtn
-                label={t('sources.down')}
-                disabled={i === sources.length - 1}
-                onClick={() => move(i, 1)}
-                d="m6 9 6 6 6-6"
-              />
-              <IconBtn
-                label={t('sources.remove')}
-                onClick={() => onChange(sources.filter((_, j) => j !== i))}
-                d="M6 6l12 12M18 6 6 18"
-              />
-            </span>
-          </li>
-        ))}
-      </ol>
-      {pending > 0 && (
-        <p className="text-muted font-serif text-base italic">
-          {t('sources.matching', { count: pending })}
-        </p>
-      )}
-      {others.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-muted mt-2 text-xs">{t('sources.otherMatches')}</span>
-          {others.slice(0, 6).map((c) => (
-            <button
-              key={`${c.sourceId}:${c.suwayomiMangaId}`}
-              type="button"
-              onClick={() =>
-                onChange([
-                  ...sources,
-                  {
-                    suwayomiMangaId: c.suwayomiMangaId,
-                    sourceId: c.sourceId,
-                    sourceName: c.sourceName,
-                  },
-                ])
-              }
-              className="flex items-center gap-3 rounded-xl px-2 py-2 text-left text-sm hover:bg-white/[0.05]"
-            >
-              <Dot tone={c.score >= 0.9 ? 'ok' : 'warn'} />
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate">{c.sourceName}</span>
-                <span className="text-muted truncate text-xs">{c.title}</span>
-              </span>
-              <span className="text-muted font-serif text-[15px] italic">
-                {c.score >= 0.9 ? t('sources.exact') : t('sources.doubtful')}
-              </span>
-              <span aria-hidden className="text-mid">
-                +
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-      <Link
-        href={`/search?q=${encodeURIComponent(title)}`}
-        className="text-mid text-[13px] hover:text-white"
-      >
-        {t('sources.searchManually')} →
-      </Link>
-    </div>
-  );
-}
-
-function IconBtn({
-  label,
-  onClick,
-  disabled,
-  d,
-}: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  d: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="text-mid flex size-8 items-center justify-center rounded-full hover:bg-white/[0.08] disabled:opacity-25"
-    >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.4"
-        aria-hidden
-      >
-        <path d={d} />
-      </svg>
-    </button>
   );
 }
 
