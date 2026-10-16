@@ -23,3 +23,12 @@ export async function kavitaJson<T>(suffix: string, init: RequestInit = {}): Pro
     20_000,
   );
 }
+
+/** Stable Kavita requires this query key; develop ignores it. Never return this URL to clients. */
+export function kavitaCoverEndpoint(seriesId: string | number) {
+  const settings = getSettings();
+  const url = new URL(endpoint(settings.kavitaUrl, '/api/Image/series-cover'));
+  url.searchParams.set('seriesId', String(seriesId));
+  url.searchParams.set('apiKey', settings.kavitaApiKey);
+  return url.toString();
+}

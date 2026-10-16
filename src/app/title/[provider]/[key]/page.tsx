@@ -1,8 +1,8 @@
 'use client';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
-import useSWR, { useSWRConfig } from 'swr';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import type {
   ChapterSelection,
   ChaptersResponse,
@@ -18,7 +18,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { Backdrop } from '@/components/backdrop';
 import { ChapterTable, isMissing, preferredVariant } from '@/components/chapters';
 import { PosterCard } from '@/components/media';
-import { MatchesDrawer, MatchesSummary, type Lane } from '@/components/matches';
+import { MatchesDrawer, MatchesSummary, type Lane, type Section } from '@/components/matches';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import {
   Cover,
@@ -70,7 +70,6 @@ export default function TitlePage() {
 function Title({ media }: { media: MediaDetail }) {
   const { t, n } = useI18n();
   const library = useApi<TrackedMedia[]>('/api/tracked');
-  const { mutate } = useSWRConfig();
   const batches = useApi<DownloadBatch[]>('/api/downloads/batches', { refreshInterval: 4000 });
   const entry = (library.data ?? []).find(
     (e) =>
@@ -79,7 +78,7 @@ function Title({ media }: { media: MediaDetail }) {
       (media.mangadexId !== null && e.mangadexId === media.mangadexId),
   );
   const [tab, setTab] = useState<'chapters' | 'sources' | 'info'>('chapters');
-  const [drawer, setDrawer] = useState<'catalog' | 'sources' | 'kavita' | 'cover' | null>(null);
+  const [drawer, setDrawer] = useState<Section | null>(null);
   const [override, setOverride] = useState<ChapterSelection[] | null>(null);
   const [lanes, setLanes] = useState<Lane[] | null>(null);
   const [matchRun, setMatchRun] = useState(0);
@@ -133,6 +132,11 @@ function Title({ media }: { media: MediaDetail }) {
     return close;
   }, [needsMatch, matchRun, media.id]);
 
+  const rescan = useCallback(() => {
+    setLanes(null);
+    setMatchRun((r) => r + 1);
+  }, []);
+
   const autoPicked = useMemo(
     () =>
       (lanes ?? [])
@@ -184,9 +188,11 @@ function Title({ media }: { media: MediaDetail }) {
 
   async function updateSources(next: ChapterSelection[]) {
     setOverride(next);
-    if (entry)
-      await send('/api/tracked', 'PATCH', { id: entry.id, sources: next }).catch(() => undefined);
-    void library.mutate();
+    try {
+      if (entry) await send('/api/tracked', 'PATCH', { id: entry.id, sources: next });
+    } finally {
+      void library.mutate();
+    }
   }
   async function setStatus(value: ReadingStatus | 'NONE') {
     setMessage(null);
@@ -286,6 +292,7 @@ function Title({ media }: { media: MediaDetail }) {
         <div className="flex items-end gap-4 md:contents">
           <Cover
             src={entry?.coverUrl ?? media.coverUrl}
+            fallbacks={entry?.coverFallbacks}
             alt={media.title}
             className="w-28 shrink-0 md:w-[250px]"
           />
@@ -526,19 +533,15 @@ function Title({ media }: { media: MediaDetail }) {
       <MatchesDrawer
         open={drawer !== null}
         section={drawer ?? 'catalog'}
+        onSection={setDrawer}
         onClose={() => setDrawer(null)}
         entry={entry}
         media={media}
         sources={sources}
         lanes={lanes}
-        onScan={() => {
-          setLanes(null);
-          setMatchRun((r) => r + 1);
-        }}
+        scanStarted={needsMatch || matchRun > 0}
+        onScan={rescan}
         onSources={updateSources}
-        onChanged={() =>
-          Promise.all([library.mutate(), mutate(`/api/media?id=${encodeURIComponent(media.id)}`)])
-        }
       />
       {selected.size > 0 && (
         <div className="bg-fg text-bg fixed inset-x-3 bottom-24 z-30 mx-auto flex max-w-[760px] items-center gap-3 rounded-full py-2 pr-2 pl-5 shadow-[0_20px_40px_rgba(0,0,0,0.5)] md:bottom-6">

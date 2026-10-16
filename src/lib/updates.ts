@@ -4,7 +4,7 @@ import { chaptersFor } from './suwayomi';
 import { getSettings } from './settings';
 import { refreshLibraryProgress } from './kavita';
 import { syncKavitaIndex, matchKavita } from './kavita-index';
-import { matchTrackedSources, refreshSourceStatuses } from './tracked-sources';
+import { refreshSourceStatuses } from './tracked-sources';
 import { syncTrackedCovers } from './tracked-covers';
 export function workerValue(key: string): string | null {
   return (
@@ -20,6 +20,15 @@ export function setWorkerValue(key: string, value: string) {
       'INSERT INTO worker_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
     )
     .run(key, value);
+}
+export function refreshRunning() {
+  const lease = db().prepare('SELECT owner,expires_at FROM worker_lock WHERE id=1').get() as
+    { owner: string; expires_at: number } | undefined;
+  return (
+    workerValue('checking') === '1' &&
+    (lease?.expires_at ?? 0) > Date.now() &&
+    lease?.owner === workerValue('refresh_owner')
+  );
 }
 export function updatesFeed(): UpdatesFeed {
   const tracked = listTracked();
@@ -59,8 +68,6 @@ export function updatesFeed(): UpdatesFeed {
     ];
   });
   const lastCheckAt = workerValue('last_check_at');
-  const lease = db().prepare('SELECT expires_at FROM worker_lock WHERE id=1').get() as
-    { expires_at: number } | undefined;
   return {
     entries,
     lastCheckAt,
@@ -69,7 +76,7 @@ export function updatesFeed(): UpdatesFeed {
           Date.parse(lastCheckAt) + getSettings().updateIntervalMinutes * 60_000,
         ).toISOString()
       : null,
-    checking: workerValue('checking') === '1' && (lease?.expires_at ?? 0) > Date.now(),
+    checking: refreshRunning(),
     autoCount: tracked.filter((t) => t.type === 'MANGA' && t.sources.length && t.autoDownload)
       .length,
     trackedCount: tracked.filter((t) => t.type === 'MANGA' && t.sources.length).length,
@@ -83,14 +90,26 @@ export function updateCheckDue() {
     Date.now() - Date.parse(last) >= getSettings().updateIntervalMinutes * 60_000
   );
 }
-export async function runUpdateCheck(create: (input: EnqueueRequest) => DownloadBatch) {
+export async function runUpdateCheck(
+  create: (input: EnqueueRequest) => DownloadBatch,
+  parentSignal?: AbortSignal,
+  ownsLease: () => boolean = () => true,
+) {
+  if (parentSignal?.aborted || !ownsLease()) return;
+  const lease = db().prepare('SELECT owner FROM worker_lock WHERE id=1').get() as
+    { owner: string } | undefined;
+  setWorkerValue('refresh_owner', lease?.owner ?? '');
   setWorkerValue('checking', '1');
   setWorkerValue('check_requested', '1'); // Remains set after a crash, so a new lease retries the check.
   setWorkerValue('last_check_at', new Date().toISOString());
+  setWorkerValue('refresh_done', '0');
+  setWorkerValue('refresh_total', '0');
   try {
     await syncKavitaIndex();
-    await matchTrackedSources(AbortSignal.timeout(45_000)).catch(() => {});
-    const signal = AbortSignal.timeout(120_000);
+    const signal = AbortSignal.any([
+      ...(parentSignal ? [parentSignal] : []),
+      AbortSignal.timeout(120_000),
+    ]);
     const queue = listTracked()
       .filter((t) => t.sources.length)
       .sort(
@@ -98,13 +117,17 @@ export async function runUpdateCheck(create: (input: EnqueueRequest) => Download
           Math.min(...a.sourceStatus.map((s) => (s.checkedAt ? Date.parse(s.checkedAt) : 0))) -
           Math.min(...b.sourceStatus.map((s) => (s.checkedAt ? Date.parse(s.checkedAt) : 0))),
       );
+    if (signal.aborted || !ownsLease()) return;
+    setWorkerValue('refresh_total', String(queue.length));
     await Promise.allSettled(
       Array.from({ length: Math.min(3, queue.length) }, async () => {
-        while (queue.length && !signal.aborted) {
+        while (queue.length && !signal.aborted && ownsLease()) {
           const t = queue.shift()!;
           try {
-            const result = await chaptersFor(t.sources, signal);
-            await refreshSourceStatuses(t, result, signal);
+            const result = await chaptersFor(t.sources, signal, undefined, ownsLease);
+            if (signal.aborted || !ownsLease()) return;
+            await refreshSourceStatuses(t, result, signal, ownsLease);
+            if (signal.aborted || !ownsLease()) return;
             const seen = db()
               .prepare('SELECT chapter_id,number FROM observed_chapters WHERE tracked_id=?')
               .all(t.id) as { chapter_id: number; number: number | null }[];
@@ -172,14 +195,18 @@ export async function runUpdateCheck(create: (input: EnqueueRequest) => Download
             })();
           } catch {
             /* Failed sources are retried on the next cycle; partial successes persist. */
+          } finally {
+            if (!signal.aborted && ownsLease())
+              setWorkerValue('refresh_done', String(Number(workerValue('refresh_done') ?? 0) + 1));
           }
         }
       }),
     );
-    await refreshLibraryProgress();
-    await syncTrackedCovers();
-    setWorkerValue('check_requested', signal.aborted ? '1' : '0');
+    if (signal.aborted || !ownsLease()) return;
+    await refreshLibraryProgress(signal);
+    await syncTrackedCovers(signal);
+    if (ownsLease()) setWorkerValue('check_requested', signal.aborted ? '1' : '0');
   } finally {
-    setWorkerValue('checking', '0');
+    if (ownsLease()) setWorkerValue('checking', '0');
   }
 }

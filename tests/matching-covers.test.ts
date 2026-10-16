@@ -10,19 +10,20 @@ const root = path.join(directory, 'library');
 process.env.BUNKO_DATA_DIR = path.join(directory, 'state');
 process.env.BUNKO_LIBRARY_DIR = root;
 process.env.BUNKO_WORKER = 'false';
-const { db, track, listTracked, migrateV6 } = await import('@/lib/db');
+const { db, track, listTracked, migrateV6, acquireWorker, saveSourceStatus } =
+  await import('@/lib/db');
 const { emptyMedia } = await import('@/lib/media');
 const { updateSettings, persistentSecret, getSettings } = await import('@/lib/settings');
 const { matchTrackedSources } = await import('@/lib/tracked-sources');
 const { setSourcePreferences, recordSourceHealth } = await import('@/lib/source-preferences');
-const { runUpdateCheck } = await import('@/lib/updates');
+const { runUpdateCheck, setWorkerValue } = await import('@/lib/updates');
 const { kavitaLibraries } = await import('@/lib/kavita-index');
 const { trackKavitaSeries } = await import('@/lib/kavita-track');
 const { trackedCoverOptions, syncTrackedCover, syncTrackedCovers } =
   await import('@/lib/tracked-covers');
 const { targetFor } = await import('@/lib/library-paths');
 const { settingsPatch } = await import('@/lib/validation');
-const { createBatch } = await import('@/lib/downloads');
+const { createBatch, workerTick } = await import('@/lib/downloads');
 const { mediaDetail, withTracking } = await import('@/lib/catalog');
 const { search } = await import('@/lib/search-engine');
 const trackedRoute = await import('@/app/api/tracked/route');
@@ -37,6 +38,8 @@ let failManga: number | null;
 let uploaded: Record<string, unknown>[];
 let imageBytes: string;
 let kavitaImage: string;
+let requireImageKey: boolean;
+let imageRequests: URL[];
 let requests: { query: string; variables: Record<string, unknown> }[];
 let sourceDelay: number;
 let active: number;
@@ -160,6 +163,7 @@ beforeAll(async () => {
           },
         });
       }
+      if (variables.id === 999) return json({ data: { manga: null } });
       return json({
         data: {
           manga: {
@@ -198,6 +202,14 @@ beforeAll(async () => {
       url.pathname.includes('series-cover') ||
       url.pathname === '/cover'
     ) {
+      if (url.pathname.includes('series-cover')) {
+        imageRequests.push(url);
+        if (requireImageKey) expect(req.headers['x-api-key']).toBe('synthetic-image-key');
+        if (requireImageKey && url.searchParams.get('apiKey') !== 'synthetic-image-key') {
+          res.statusCode = 400;
+          return res.end();
+        }
+      }
       res.setHeader('Content-Type', 'image/jpeg');
       return res.end(url.pathname.includes('series-cover') ? kavitaImage : imageBytes);
     }
@@ -209,7 +221,7 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   db().exec(
-    'DELETE FROM tracked_media; DELETE FROM settings; DELETE FROM worker_state; DELETE FROM kavita_series; DELETE FROM source_health; DELETE FROM imported_chapters; DELETE FROM download_batches; DELETE FROM download_jobs; DELETE FROM kavita_dismissals; DELETE FROM catalog_fts; DELETE FROM catalog_keys;',
+    'DELETE FROM worker_lock; DELETE FROM tracked_media; DELETE FROM settings; DELETE FROM worker_state; DELETE FROM kavita_series; DELETE FROM source_health; DELETE FROM imported_chapters; DELETE FROM download_batches; DELETE FROM download_jobs; DELETE FROM kavita_dismissals; DELETE FROM catalog_fts; DELETE FROM catalog_keys;',
   );
   rmSync(root, { recursive: true, force: true });
   mkdirSync(root, { recursive: true });
@@ -221,6 +233,8 @@ beforeEach(() => {
   requests = [];
   imageBytes = 'fixture-cover';
   kavitaImage = 'kavita-cover';
+  requireImageKey = false;
+  imageRequests = [];
   sourceDelay = 0;
   active = 0;
   peak = 0;
@@ -319,7 +333,7 @@ it('refuses detachment without an alternate identity and leaves the catalog inta
   expect(await response.json()).toMatchObject({ error: { code: 'NO_IDENTITY' } });
   expect(listTracked()[0].identity).toBe('catalog');
 });
-it('matches at most three source-less comics per cycle, only confident best hits, at most three sources, then waits a day', async () => {
+it('processes one queued comic at a time with confident best hits and at most three sources', async () => {
   sources.push({ id: '5', name: 'Source 5', lang: 'fr' });
   searchHits = {
     '1': [
@@ -333,12 +347,12 @@ it('matches at most three source-less comics per cycle, only confident best hits
   };
   for (let i = 1; i <= 5; i++) track({ media: catalog(i) });
   await matchTrackedSources();
-  expect(listTracked().filter((t) => t.sources.length)).toHaveLength(3);
+  expect(listTracked().filter((t) => t.sources.length)).toHaveLength(1);
   for (const t of listTracked().filter((t) => t.sources.length)) {
     expect(t.sources.map((s) => s.suwayomiMangaId)).toEqual([10, 30, 40]);
     expect(t.sourceStatus.every((s) => s.auto)).toBe(true);
   }
-  await matchTrackedSources();
+  for (let i = 0; i < 4; i++) await matchTrackedSources();
   expect(listTracked().filter((t) => t.sources.length)).toHaveLength(5);
   const count = requests.length;
   await matchTrackedSources();
@@ -700,4 +714,242 @@ it('continues with older unchecked covers after a background cover budget is int
   await syncTrackedCovers();
   expect(calls[1]).toBe('https://s4.anilist.co/first.jpg');
   expect(listTracked().map((t) => t.id)).toEqual([second.id, first.id]);
+});
+
+it.each([true, false])(
+  'sends the private image query key for stable/develop API shapes (requires key: %s)',
+  async (required) => {
+    requireImageKey = required;
+    updateSettings({ kavitaApiKey: 'synthetic-image-key' });
+    const imageRoute = await import('@/app/api/kavita/image/route');
+    const { selectedCover } = await import('@/lib/kavita-cover');
+    const response = await imageRoute.GET(
+      request('GET', undefined, '/api/kavita/image?seriesId=77'),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(kavitaImage);
+    expect(response.headers.get('location')).toBeNull();
+    expect(await selectedCover('/api/kavita/image?seriesId=77')).toMatchObject({
+      mime: 'image/jpeg',
+    });
+    expect(imageRequests).toHaveLength(2);
+    expect(
+      imageRequests.every(
+        (url) =>
+          url.searchParams.get('apiKey') === 'synthetic-image-key' &&
+          url.searchParams.get('seriesId') === '77',
+      ),
+    ).toBe(true);
+    indexSeries();
+    const t = track({ media: catalog(), kavitaSeriesId: 77 });
+    const changed = await patch({ id: t.id, cover: { origin: 'kavita', id: '77' } });
+    expect(changed.status).toBe(200);
+    expect(JSON.stringify(await changed.json())).not.toContain('synthetic-image-key');
+    expect(uploaded).toHaveLength(0);
+  },
+);
+
+it('returns ordered deduplicated automatic fallback covers and none for a manual cover', async () => {
+  indexSeries();
+  const t = track({
+    media: catalog(),
+    sources: [source(), source('2', 20), source('3', 30)],
+    kavitaSeriesId: 77,
+  });
+  const status = listTracked()[0].sourceStatus;
+  saveSourceStatus(t.id, { ...status[0], thumbnailUrl: catalog().coverUrl });
+  saveSourceStatus(t.id, { ...status[1], thumbnailUrl: thumbnail(20) });
+  saveSourceStatus(t.id, { ...status[2], thumbnailUrl: thumbnail(20) });
+  expect(listTracked()[0]).toMatchObject({
+    coverUrl: catalog().coverUrl,
+    coverFallbacks: [thumbnail(20), '/api/kavita/image?seriesId=77'],
+  });
+  const response = await patch({ id: t.id, cover: { origin: 'source', id: '2:20' } });
+  expect(await response.json()).toMatchObject({ coverUrl: thumbnail(20), coverFallbacks: [] });
+  await patch({ id: t.id, cover: 'auto' });
+  expect(listTracked()[0].coverFallbacks).toEqual([thumbnail(20), '/api/kavita/image?seriesId=77']);
+});
+
+it('accepts an unlinked source cover and rejects unknown manga or the wrong source with NOT_FOUND', async () => {
+  const t = track({ media: catalog() });
+  const response = await patch({ id: t.id, cover: { origin: 'source', id: '2:20' } });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    id: t.id,
+    sources: [],
+    coverUrl: thumbnail(20),
+    coverChoice: { origin: 'source', id: '2:20' },
+  });
+  for (const id of ['1:20', '1:999']) {
+    const failure = await patch({ id: t.id, cover: { origin: 'source', id } });
+    expect(failure.status).toBe(404);
+    expect(await failure.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
+    expect(listTracked()[0].coverUrl).toBe(thumbnail(20));
+  }
+});
+
+it('drains the matching queue without an update cycle and immediately refreshes status, covers and released counts', async () => {
+  sourceDelay = 10;
+  sources = Array.from({ length: 9 }, (_, i) => ({
+    id: String(i + 1),
+    name: `Source ${i + 1}`,
+    lang: 'fr',
+  }));
+  const first = track({ media: { ...catalog(1, 'First'), coverUrl: null } });
+  const second = track({ media: catalog(2, 'Second') });
+  const third = track({ media: catalog(3, 'Third') });
+  setWorkerValue('last_check_at', new Date().toISOString());
+  updateSettings({ updateIntervalMinutes: 1440 });
+  await workerTick();
+  expect(listTracked().every((t) => t.sourceMatch === 'linked')).toBe(true);
+  expect(listTracked().find((t) => t.id === first.id)).toMatchObject({
+    coverUrl: thumbnail(),
+    progress: { released: 19 },
+  });
+  expect(
+    listTracked().every((t) =>
+      t.sourceStatus.every((s) => s.checkedAt && s.title.startsWith('Source title')),
+    ),
+  ).toBe(true);
+  const searches = requests.filter((r) => r.query.includes('fetchSourceManga'));
+  expect(searches.map((r) => (r.variables.input as { query: string }).query)).toEqual([
+    ...Array(9).fill('First'),
+    ...Array(9).fill('Second'),
+    ...Array(9).fill('Third'),
+  ]);
+  expect(peak).toBeGreaterThan(1);
+  expect(peak).toBeLessThanOrEqual(6);
+  expect(requests.some((r) => r.query.includes('fetchChapters'))).toBe(true);
+  expect(listTracked().map((t) => t.id)).toEqual([third.id, second.id, first.id]);
+}, 10000);
+
+it('prioritizes never-searched titles, retries not-found after seven days and requeues all identity PATCH changes', async () => {
+  sources = sources.slice(0, 1);
+  searchHits = { '1': [] };
+  const retry = track({ media: catalog(1, 'Retry') });
+  const fresh = track({ media: catalog(2, 'Fresh') });
+  db()
+    .prepare('UPDATE tracked_media SET source_match_at=? WHERE id=?')
+    .run(new Date(Date.now() - 8 * 86400_000).toISOString(), retry.id);
+  expect(listTracked().every((t) => t.sourceMatch === 'queued')).toBe(true);
+  await matchTrackedSources();
+  expect(listTracked().find((t) => t.id === fresh.id)?.sourceMatch).toBe('not-found');
+  expect(
+    (
+      requests.find((r) => r.query.includes('fetchSourceManga'))!.variables.input as {
+        query: string;
+      }
+    ).query,
+  ).toBe('Fresh');
+  await matchTrackedSources();
+  db()
+    .prepare('UPDATE tracked_media SET source_match_at=? WHERE id=?')
+    .run(new Date(Date.now() - 6 * 86400_000).toISOString(), retry.id);
+  const count = requests.length;
+  await matchTrackedSources();
+  expect(requests).toHaveLength(count);
+  expect(listTracked().find((t) => t.id === retry.id)?.sourceMatch).toBe('not-found');
+  indexSeries();
+  for (const change of [
+    { media: catalog(3, 'Changed') },
+    { kavitaSeriesId: 77 },
+    { offCatalog: true },
+  ]) {
+    const response = await patch({ id: retry.id, ...change });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ sourceMatch: 'queued' });
+    await matchTrackedSources();
+    expect(listTracked().find((t) => t.id === retry.id)?.sourceMatch).toBe('not-found');
+  }
+});
+
+it('exposes authenticated local activity, searching and refresh progress; stale leases never look active', async () => {
+  const route = await import('@/app/api/library/activity/route');
+  const t = track({ media: catalog() });
+  track({ media: catalog(2, 'Next') });
+  sources = sources.slice(0, 1);
+  expect((await route.GET(new Request(base + '/api/library/activity'))).status).toBe(401);
+  acquireWorker('fixture');
+  let release!: () => void;
+  let started!: () => void;
+  const wait = new Promise<void>((r) => {
+    release = r;
+  });
+  const arrived = new Promise<void>((r) => {
+    started = r;
+  });
+  blockedSearch = async () => {
+    started();
+    await wait;
+  };
+  const matching = matchTrackedSources();
+  await arrived;
+  expect(listTracked().find((v) => v.id === t.id)?.sourceMatch).toBe('searching');
+  setWorkerValue('refresh_owner', 'fixture');
+  setWorkerValue('checking', '1');
+  setWorkerValue('refresh_done', '2');
+  setWorkerValue('refresh_total', '5');
+  setWorkerValue('last_check_at', '2026-10-16T12:00:00.000Z');
+  const count = requests.length;
+  const response = await route.GET(request('GET', undefined, '/api/library/activity'));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    matching: { queued: 1, current: 'Owned Work' },
+    refresh: {
+      running: true,
+      done: 2,
+      total: 5,
+      lastAt: '2026-10-16T12:00:00.000Z',
+      nextAt: '2026-10-16T12:15:00.000Z',
+    },
+  });
+  expect(requests).toHaveLength(count);
+  db().prepare("UPDATE worker_lock SET owner='another-worker'").run();
+  expect(
+    await (await route.GET(request('GET', undefined, '/api/library/activity'))).json(),
+  ).toMatchObject({ matching: { queued: 2, current: null }, refresh: { running: false } });
+  release();
+  await matching;
+});
+
+it.each(['abort', 'lease', 'identity'] as const)(
+  'discards an in-flight matching result after %s changes and keeps it retryable',
+  async (change) => {
+    const t = track({ media: catalog() });
+    sources = sources.slice(0, 1);
+    let release!: () => void;
+    let started!: () => void;
+    const wait = new Promise<void>((r) => {
+      release = r;
+    });
+    const arrived = new Promise<void>((r) => {
+      started = r;
+    });
+    blockedSearch = async () => {
+      started();
+      await wait;
+    };
+    const controller = new AbortController();
+    let owns = true;
+    const matching = matchTrackedSources(controller.signal, () => owns);
+    await arrived;
+    if (change === 'abort') controller.abort();
+    if (change === 'lease') owns = false;
+    if (change === 'identity') await patch({ id: t.id, media: catalog(2, 'Changed') });
+    release();
+    await matching;
+    expect(listTracked()[0]).toMatchObject({ sources: [], sourceMatch: 'queued' });
+    expect(
+      db().prepare("SELECT * FROM worker_state WHERE key='source_matching'").get(),
+    ).toBeUndefined();
+  },
+);
+
+it('completes release refresh counters for every attempted entry', async () => {
+  track({ media: catalog(), sources: [source()] });
+  track({ media: catalog(2), sources: [source('2', 20)] });
+  failManga = 20;
+  await runUpdateCheck(vi.fn());
+  const { libraryActivity } = await import('@/lib/library-activity');
+  expect(libraryActivity().refresh).toMatchObject({ running: false, done: 2, total: 2 });
 });

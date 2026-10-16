@@ -206,6 +206,7 @@ export async function suwayomiDetail(id: number, signal?: AbortSignal): Promise<
       ),
     signal,
   );
+  if (!manga) throw new AppError('NOT_FOUND', 'Suwayomi manga not found', 404);
   return {
     ...emptyMedia(`suwayomi:${manga.id}`, manga.title, 'MANGA'),
     coverUrl: proxyImage(manga.thumbnailUrl),

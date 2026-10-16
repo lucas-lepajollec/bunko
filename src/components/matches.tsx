@@ -1,6 +1,7 @@
 'use client';
 import * as Dialog from '@radix-ui/react-dialog';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { useSWRConfig } from 'swr';
 import type {
   ChapterSelection,
   CoverChoice,
@@ -10,20 +11,24 @@ import type {
   SourceCandidate,
   TrackedMedia,
 } from '@/types/shared';
-import { mediaHref, send, useApi } from '@/lib/client/api';
+import { libraryKeys, mediaHref, send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { useRelativeTime } from './time';
 import { CatalogPicker, KavitaPicker } from './relink';
-import { Cover, Dot, Skeleton, cx, errorText, roman, smallButton } from './ui';
+import { Cover, Dot, Segmented, Skeleton, Spinner, cx, errorText, smallButton } from './ui';
 
 export type Lane = {
   source: Source;
   state: 'loading' | 'done' | 'error';
   candidates: SourceCandidate[];
 };
-type Section = 'catalog' | 'sources' | 'kavita' | 'cover';
+export type Section = 'catalog' | 'sources' | 'kavita' | 'cover';
+type Save = { state: 'saving' } | { state: 'saved' } | { state: 'error'; text: string } | null;
 
-/** Compact "what is this title linked to" block on the title sheet; opens the full manager. */
+const searching = (e: TrackedMedia | undefined) =>
+  e?.sourceMatch === 'queued' || e?.sourceMatch === 'searching';
+
+/** "What is this title linked to", one row per link; each row opens the manager on its tab. */
 export function MatchesSummary({
   entry,
   media,
@@ -37,28 +42,37 @@ export function MatchesSummary({
 }) {
   const { t, n } = useI18n();
   const latest = Math.max(0, ...(entry?.sourceStatus ?? []).map((s) => s.latestChapter ?? 0));
-  const rows: { key: Section; label: string; value: string; tone?: 'warn' }[] = [
+  const offCatalog =
+    entry?.identity === 'off-catalog' || media.providers.every((p) => p === 'kavita');
+  const rows: { key: Section; label: string; value: ReactNode; tone?: 'warn' }[] = [
     {
       key: 'catalog',
       label: t('match.catalog'),
-      value:
-        entry?.identity === 'off-catalog' ||
-        (media.providers.length === 1 && media.providers[0] === 'kavita')
-          ? t('match.offCatalogShort')
-          : media.providers
-              .filter((p) => p !== 'local')
-              .map((p) => t(`provider.${p}`))
-              .join(', ') || '—',
+      value: offCatalog
+        ? t('match.offCatalogShort')
+        : media.providers
+            .filter((p) => p !== 'local')
+            .map((p) => t(`provider.${p}`))
+            .join(', ') || '—',
     },
     {
       key: 'sources',
       label: t('match.sources'),
-      value: sources.length
-        ? latest
-          ? t('match.sourcesValue', { count: sources.length, n: n(latest) })
-          : t('match.sourcesCount', { count: sources.length })
-        : t('match.noSource'),
-      tone: sources.length ? undefined : 'warn',
+      value: sources.length ? (
+        latest ? (
+          t('match.sourcesValue', { count: sources.length, n: n(latest) })
+        ) : (
+          t('match.sourcesCount', { count: sources.length })
+        )
+      ) : searching(entry) ? (
+        <span className="flex items-center gap-2">
+          <Spinner className="size-3" />
+          {t('match.searchingBackground')}
+        </span>
+      ) : (
+        t('match.noSource')
+      ),
+      tone: sources.length || searching(entry) ? undefined : 'warn',
     },
     {
       key: 'kavita',
@@ -77,9 +91,18 @@ export function MatchesSummary({
     },
   ];
   return (
-    <div className="flex flex-col gap-3">
-      <span className="text-muted text-xs tracking-[0.16em] uppercase">{t('match.title')}</span>
-      <dl className="flex flex-col text-sm">
+    <div className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between gap-4">
+        <span className="text-muted text-xs tracking-[0.16em] uppercase">{t('match.title')}</span>
+        <button
+          type="button"
+          onClick={() => onOpen('catalog')}
+          className="text-mid text-sm hover:text-white"
+        >
+          {t('match.edit')}
+        </button>
+      </div>
+      <div className="flex flex-col text-sm">
         {rows.map((r) => (
           <button
             key={r.key}
@@ -87,8 +110,8 @@ export function MatchesSummary({
             onClick={() => onOpen(r.key)}
             className="border-line group flex items-center justify-between gap-4 border-b py-2.5 text-left"
           >
-            <dt className="text-muted shrink-0">{r.label}</dt>
-            <dd
+            <span className="text-muted shrink-0">{r.label}</span>
+            <span
               className={cx(
                 'flex min-w-0 items-center gap-2 text-right',
                 r.tone === 'warn' && 'text-warn',
@@ -98,17 +121,10 @@ export function MatchesSummary({
               <span aria-hidden className="text-faint group-hover:text-fg">
                 ›
               </span>
-            </dd>
+            </span>
           </button>
         ))}
-      </dl>
-      <button
-        type="button"
-        onClick={() => onOpen('catalog')}
-        className={cx(smallButton, 'self-start')}
-      >
-        {t('match.manage')}
-      </button>
+      </div>
     </div>
   );
 }
@@ -117,195 +133,317 @@ export function MatchesSummary({
 export function MatchesDrawer({
   open,
   section,
+  onSection,
   onClose,
   entry,
   media,
   sources,
   lanes,
+  scanStarted,
   onScan,
   onSources,
-  onChanged,
 }: {
   open: boolean;
+  /** A scan already ran or is running for this title (the drawer then never starts another). */
+  scanStarted: boolean;
   section: Section;
+  onSection: (s: Section) => void;
   onClose: () => void;
   entry: TrackedMedia | undefined;
   media: MediaDetail;
   sources: ChapterSelection[];
   lanes: Lane[] | null;
   onScan: () => void;
-  onSources: (next: ChapterSelection[]) => void;
-  onChanged: () => Promise<unknown>;
+  onSources: (next: ChapterSelection[]) => Promise<void>;
 }) {
   const { t } = useI18n();
-  const [error, setError] = useState<string | null>(null);
-  const [picking, setPicking] = useState<'catalog' | 'kavita' | null>(null);
-  async function patch(body: object, after?: (updated: TrackedMedia) => void) {
-    if (!entry) return;
-    setError(null);
+  const { mutate } = useSWRConfig();
+  const [save, setSave] = useState<Save>(null);
+
+  // Sources and covers need the live scan: start it as soon as one of those tabs is shown.
+  const wantsScan = open && (section === 'sources' || section === 'cover');
+  useEffect(() => {
+    if (wantsScan && !scanStarted) onScan();
+  }, [wantsScan, scanStarted, onScan]);
+
+  async function run(action: () => Promise<unknown>) {
+    setSave({ state: 'saving' });
     try {
-      const updated = await send<TrackedMedia>('/api/tracked', 'PATCH', { id: entry.id, ...body });
-      await onChanged();
-      setPicking(null);
-      after?.(updated);
+      await action();
+      await mutate(libraryKeys);
+      setSave({ state: 'saved' });
     } catch (e) {
-      setError(errorText(t, e));
+      setSave({ state: 'error', text: errorText(t, e) });
     }
   }
-  const sections: { key: Section; title: string; body: ReactNode }[] = [
-    {
-      key: 'catalog',
-      title: t('match.catalog'),
-      body: (
-        <div className="flex flex-col gap-3">
-          <p className="text-mid text-sm">
-            {entry?.identity === 'off-catalog'
-              ? t('match.catalogOff')
-              : t('match.catalogOn', { title: media.title })}
-          </p>
-          {entry ? (
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={smallButton}
-                onClick={() => setPicking(picking === 'catalog' ? null : 'catalog')}
-              >
-                {entry.identity === 'off-catalog'
-                  ? t('match.attachCatalog')
-                  : t('match.changeWork')}
-              </button>
-              {entry.identity !== 'off-catalog' && (
-                <button
-                  type="button"
-                  className={smallButton}
-                  onClick={() =>
-                    patch({ offCatalog: true }, (u) =>
-                      window.location.assign(mediaHref(u.media.id)),
-                    )
-                  }
-                >
-                  {t('match.detach')}
-                </button>
-              )}
-            </div>
-          ) : (
-            <p className="text-muted text-xs">{t('match.trackFirst')}</p>
-          )}
-          {picking === 'catalog' && (
-            <CatalogPicker
-              initial={entry?.title ?? media.title}
-              onPick={(m) => patch({ media: m }, () => window.location.assign(mediaHref(m.id)))}
-            />
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'sources',
-      title: t('match.sources'),
-      body: (
-        <SourcesManager
-          entry={entry}
-          sources={sources}
-          lanes={lanes}
-          onScan={onScan}
-          onSources={onSources}
-        />
-      ),
-    },
-    {
-      key: 'kavita',
-      title: 'Kavita',
-      body: (
-        <div className="flex flex-col gap-3">
-          <p className="text-mid text-sm">
-            {media.kavita
-              ? t('match.kavitaLinked', {
-                  library: media.kavita.libraryName,
-                  n: media.kavita.chapters,
-                })
-              : t('match.kavitaNone')}
-          </p>
-          {entry ? (
-            <>
-              <button
-                type="button"
-                className={cx(smallButton, 'self-start')}
-                onClick={() => setPicking(picking === 'kavita' ? null : 'kavita')}
-              >
-                {t('match.change')}
-              </button>
-              {picking === 'kavita' && (
-                <KavitaPicker
-                  initial={entry.title}
-                  onPick={(id) => patch({ kavitaSeriesId: id })}
-                  onNone={() => patch({ kavitaSeriesId: null })}
-                />
-              )}
-            </>
-          ) : (
-            <p className="text-muted text-xs">{t('match.trackFirst')}</p>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'cover',
-      title: t('match.cover'),
-      body: entry ? (
-        <CoverPicker entry={entry} onPick={(cover) => patch({ cover })} />
-      ) : (
-        <p className="text-muted text-xs">{t('match.trackFirst')}</p>
-      ),
-    },
-  ];
+  const patch = (body: object) =>
+    send<TrackedMedia>('/api/tracked', 'PATCH', { id: entry!.id, ...body });
+
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog.Root
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) {
+          setSave(null);
+          onClose();
+        }
+      }}
+    >
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
-        <Dialog.Content className="bg-bg border-line fixed inset-y-0 right-0 z-50 flex w-full max-w-[560px] flex-col overflow-y-auto border-l p-5 outline-none md:p-8">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex flex-col gap-1">
-              <Dialog.Title className="font-display text-[30px] leading-none font-extrabold tracking-[-0.03em]">
-                {t('match.title')}
-              </Dialog.Title>
-              <Dialog.Description className="text-muted font-serif text-lg italic">
-                {media.title}
-              </Dialog.Description>
-            </div>
-            <Dialog.Close
-              className="text-mid flex size-11 items-center justify-center rounded-full hover:bg-white/[0.08]"
-              aria-label={t('common.close')}
-            >
-              ✕
-            </Dialog.Close>
-          </div>
-          {error && <p className="text-bad mt-4 text-sm">{error}</p>}
-          <div className="mt-6 flex flex-col gap-8">
-            {sections.map((s, i) => (
-              <section
-                key={s.key}
-                id={`match-${s.key}`}
-                className={cx(
-                  'flex flex-col gap-3 rounded-2xl p-4',
-                  section === s.key ? 'bg-white/[0.05]' : '',
-                )}
+        <Dialog.Content className="bg-bg border-line fixed inset-y-0 right-0 z-50 flex w-full max-w-[580px] flex-col border-l outline-none">
+          <div className="flex flex-col gap-5 p-5 pb-4 md:p-8 md:pb-5">
+            <div className="flex items-start gap-4">
+              <Cover
+                src={entry?.coverUrl ?? media.coverUrl}
+                fallbacks={entry?.coverFallbacks}
+                className="w-14 shrink-0 shadow-none"
+              />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <Dialog.Title className="font-display text-[28px] leading-none font-extrabold tracking-[-0.03em]">
+                  {t('match.title')}
+                </Dialog.Title>
+                <Dialog.Description className="text-muted truncate font-serif text-lg italic">
+                  {media.title}
+                </Dialog.Description>
+              </div>
+              <Dialog.Close
+                className="text-mid -mt-2 -mr-2 flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08]"
+                aria-label={t('common.close')}
               >
-                <h3 className="flex items-baseline gap-3">
-                  <span className="text-muted font-serif text-lg">{roman(i + 1)}</span>
-                  <span className="font-display text-xl font-bold">{s.title}</span>
-                </h3>
-                {s.body}
-              </section>
-            ))}
+                ✕
+              </Dialog.Close>
+            </div>
+            <Segmented
+              value={section}
+              onChange={onSection}
+              label={t('match.title')}
+              items={[
+                { id: 'catalog', label: t('match.tab.catalog') },
+                { id: 'sources', label: t('match.sources') },
+                { id: 'kavita', label: 'Kavita' },
+                { id: 'cover', label: t('match.cover') },
+              ]}
+            />
           </div>
+          <div className="flex-1 overflow-y-auto px-5 pb-8 md:px-8">
+            {!entry && section !== 'sources' ? (
+              <p className="text-mid">{t('match.trackFirst')}</p>
+            ) : section === 'catalog' ? (
+              <CatalogTab
+                entry={entry!}
+                media={media}
+                onPick={(m) =>
+                  run(async () => {
+                    const u = await patch({ media: m });
+                    window.location.assign(mediaHref(u.media.id));
+                  })
+                }
+                onDetach={() =>
+                  run(async () => {
+                    const u = await patch({ offCatalog: true });
+                    window.location.assign(mediaHref(u.media.id));
+                  })
+                }
+              />
+            ) : section === 'sources' ? (
+              <SourcesTab
+                entry={entry}
+                sources={sources}
+                lanes={lanes}
+                onScan={onScan}
+                onSources={(next) => run(() => onSources(next))}
+              />
+            ) : section === 'kavita' ? (
+              <KavitaTab
+                entry={entry!}
+                media={media}
+                onPick={(id) => run(() => patch({ kavitaSeriesId: id }))}
+              />
+            ) : (
+              <CoverTab
+                entry={entry!}
+                lanes={lanes}
+                sources={sources}
+                onPick={(cover) => run(() => patch({ cover }))}
+              />
+            )}
+          </div>
+          <SaveBar save={save} />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   );
 }
 
-function SourcesManager({
+function SaveBar({ save }: { save: Save }) {
+  const { t } = useI18n();
+  return (
+    <div
+      aria-live="polite"
+      className={cx(
+        'border-line flex min-h-12 items-center gap-2 border-t px-5 text-sm md:px-8',
+        !save && 'text-muted',
+      )}
+    >
+      {save?.state === 'saving' && (
+        <>
+          <Spinner />
+          {t('match.saving')}
+        </>
+      )}
+      {save?.state === 'saved' && (
+        <span className="text-ok flex items-center gap-2">✓ {t('match.saved')}</span>
+      )}
+      {save?.state === 'error' && <span className="text-bad">{save.text}</span>}
+      {!save && t('match.saveHint')}
+    </div>
+  );
+}
+
+/** One linked thing, shown the same way in every tab. */
+function Current({
+  cover,
+  title,
+  detail,
+  empty,
+}: {
+  cover?: string | null;
+  title?: string;
+  detail?: string;
+  empty?: string;
+}) {
+  return (
+    <div className="flex items-center gap-4 rounded-2xl bg-white/[0.05] p-3">
+      {title ? (
+        <>
+          <Cover src={cover} className="w-12 shrink-0 shadow-none" />
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate font-medium">{title}</span>
+            {detail && <span className="text-muted truncate text-sm">{detail}</span>}
+          </span>
+        </>
+      ) : (
+        <span className="text-warn text-sm">{empty}</span>
+      )}
+    </div>
+  );
+}
+
+function Hint({ children }: { children: ReactNode }) {
+  return <p className="text-mid text-sm leading-relaxed">{children}</p>;
+}
+
+function CatalogTab({
+  entry,
+  media,
+  onPick,
+  onDetach,
+}: {
+  entry: TrackedMedia;
+  media: MediaDetail;
+  onPick: (m: Parameters<Parameters<typeof CatalogPicker>[0]['onPick']>[0]) => void;
+  onDetach: () => void;
+}) {
+  const { t } = useI18n();
+  const off = entry.identity === 'off-catalog';
+  return (
+    <div className="flex flex-col gap-4">
+      <Current
+        cover={off ? null : (media.coverUrl ?? entry.coverUrl)}
+        title={off ? undefined : media.title}
+        detail={[
+          media.providers
+            .filter((p) => p !== 'local' && p !== 'kavita')
+            .map((p) => t(`provider.${p}`))
+            .join(', '),
+          media.year,
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+        empty={t('match.offCatalogShort')}
+      />
+      <Hint>{off ? t('match.catalogOff') : t('match.catalogWrongHint')}</Hint>
+      {!off && (
+        <button type="button" onClick={onDetach} className={cx(smallButton, 'self-start')}>
+          {t('match.detach')}
+        </button>
+      )}
+      <span className="text-muted mt-2 text-xs tracking-[0.14em] uppercase">
+        {off ? t('match.attachCatalog') : t('match.changeWork')}
+      </span>
+      <CatalogPicker initial={entry.title} onPick={onPick} />
+    </div>
+  );
+}
+
+function KavitaTab({
+  entry,
+  media,
+  onPick,
+}: {
+  entry: TrackedMedia;
+  media: MediaDetail;
+  onPick: (id: number | null) => void;
+}) {
+  const { t, n } = useI18n();
+  return (
+    <div className="flex flex-col gap-4">
+      <Current
+        cover={media.kavita ? `/api/kavita/image?seriesId=${media.kavita.seriesId}` : null}
+        title={media.kavita ? entry.title : undefined}
+        detail={
+          media.kavita
+            ? `${media.kavita.libraryName} · ${t('kavita.chapterCount', { n: n(media.kavita.chapters) })}`
+            : undefined
+        }
+        empty={t('match.kavitaNone')}
+      />
+      <Hint>{t('match.kavitaHint')}</Hint>
+      <KavitaPicker initial={entry.title} onPick={onPick} onNone={() => onPick(null)} />
+    </div>
+  );
+}
+
+function ScanProgress({ lanes, onScan }: { lanes: Lane[] | null; onScan: () => void }) {
+  const { t, n } = useI18n();
+  const total = lanes?.length ?? 0;
+  const done = (lanes ?? []).filter((l) => l.state !== 'loading').length;
+  const failed = (lanes ?? []).filter((l) => l.state === 'error').length;
+  const running = lanes === null || done < total;
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl bg-white/[0.04] p-3 text-sm">
+      <div className="flex items-center gap-2">
+        {running ? <Spinner /> : <span className="text-ok">✓</span>}
+        <span className="flex-1">
+          {running
+            ? total
+              ? t('match.scanProgress', { done: n(done), total: n(total) })
+              : t('match.scanStarting')
+            : t('match.scanDone', { total: n(total) })}
+          {failed > 0 && (
+            <span className="text-warn"> · {t('match.scanFailed', { count: failed })}</span>
+          )}
+        </span>
+        {!running && (
+          <button type="button" onClick={onScan} className="text-mid text-xs hover:text-white">
+            {t('match.rescan')}
+          </button>
+        )}
+      </div>
+      {running && total > 0 && (
+        <span className="h-1 overflow-hidden rounded-full bg-white/10">
+          <span
+            className="bg-fg block h-full rounded-full transition-[width] duration-500"
+            style={{ width: `${(done / total) * 100}%` }}
+          />
+        </span>
+      )}
+    </div>
+  );
+}
+
+function SourcesTab({
   entry,
   sources,
   lanes,
@@ -320,25 +458,30 @@ function SourcesManager({
 }) {
   const { t, n } = useI18n();
   const relative = useRelativeTime();
-  const linked = new Set(sources.map((s) => s.suwayomiMangaId));
+  const linked = new Set(sources.map((s) => `${s.sourceId}:${s.suwayomiMangaId}`));
   const status = (s: ChapterSelection) =>
-    entry?.sourceStatus?.find((x) => x.suwayomiMangaId === s.suwayomiMangaId);
+    entry?.sourceStatus?.find(
+      (x) => x.suwayomiMangaId === s.suwayomiMangaId && x.sourceId === s.sourceId,
+    );
   const best = Math.max(0, ...(entry?.sourceStatus ?? []).map((x) => x.latestChapter ?? 0));
-  const scanning = (lanes ?? []).some((l) => l.state === 'loading');
-  const candidates = (lanes ?? []).flatMap((l) =>
-    l.candidates
-      .filter((c) => !linked.has(c.suwayomiMangaId))
-      .map((c) => ({ ...c, sourceName: l.source.name })),
-  );
+  const candidates = (lanes ?? [])
+    .flatMap((l) =>
+      l.candidates
+        .filter((c) => !linked.has(`${c.sourceId}:${c.suwayomiMangaId}`))
+        .map((c) => ({ ...c, sourceName: l.source.name })),
+    )
+    .sort((a, b) => b.score - a.score);
   const move = (i: number, d: -1 | 1) => {
     const next = [...sources];
     [next[i], next[i + d]] = [next[i + d], next[i]];
     onSources(next);
   };
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-mid text-sm">{t('match.sourcesHint')}</p>
-      {sources.length === 0 && <p className="text-warn text-sm">{t('match.noSource')}</p>}
+    <div className="flex flex-col gap-4">
+      <Hint>{t('match.sourcesHint')}</Hint>
+      {sources.length === 0 && (
+        <Current empty={searching(entry) ? t('match.searchingBackground') : t('match.noSource')} />
+      )}
       <ol className="flex flex-col gap-2">
         {sources.map((s, i) => {
           const st = status(s);
@@ -346,9 +489,9 @@ function SourcesManager({
           return (
             <li
               key={`${s.sourceId}:${s.suwayomiMangaId}`}
-              className="flex items-center gap-3 rounded-xl bg-white/[0.04] p-2.5 text-sm"
+              className="flex items-center gap-3 rounded-2xl bg-white/[0.05] p-2.5 text-sm"
             >
-              <Cover src={st?.thumbnailUrl} className="w-9 shrink-0 shadow-none" />
+              <Cover src={st?.thumbnailUrl} className="w-10 shrink-0 shadow-none" />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate font-medium">
                   {n(i + 1)}. {s.sourceName}
@@ -364,9 +507,7 @@ function SourcesManager({
                   )}
                 >
                   {st?.error
-                    ? t(`error.${st.error}`) === `error.${st.error}`
-                      ? t('search.laneError')
-                      : t(`error.${st.error}`)
+                    ? t('search.laneError')
                     : st?.latestChapter != null
                       ? t('match.latest', { n: n(st.latestChapter), when: relative(st.checkedAt) })
                       : t('match.notChecked')}
@@ -394,106 +535,188 @@ function SourcesManager({
           );
         })}
       </ol>
-      <button
-        type="button"
-        onClick={onScan}
-        disabled={scanning}
-        className={cx(smallButton, 'self-start')}
-      >
-        {scanning
-          ? t('sources.matching', {
-              count: (lanes ?? []).filter((l) => l.state === 'loading').length,
-            })
-          : t('match.scanAll')}
-      </button>
-      {candidates.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-muted text-xs">{t('sources.otherMatches')}</span>
-          {candidates.slice(0, 12).map((c) => (
-            <button
-              key={`${c.sourceId}:${c.suwayomiMangaId}`}
-              type="button"
-              onClick={() =>
-                onSources([
-                  ...sources,
-                  {
-                    suwayomiMangaId: c.suwayomiMangaId,
-                    sourceId: c.sourceId,
-                    sourceName: c.sourceName,
-                  },
-                ])
-              }
-              className="flex items-center gap-3 rounded-xl p-2 text-left text-sm hover:bg-white/[0.05]"
-            >
-              <Cover src={c.thumbnailUrl} className="w-8 shrink-0 shadow-none" />
-              <Dot tone={c.score >= 0.9 ? 'ok' : 'warn'} />
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate">{c.sourceName}</span>
-                <span className="text-muted truncate text-xs">{c.title}</span>
+      <span className="text-muted mt-2 text-xs tracking-[0.14em] uppercase">
+        {t('match.addSource')}
+      </span>
+      <ScanProgress lanes={lanes} onScan={onScan} />
+      <div className="flex flex-col gap-1">
+        {candidates.slice(0, 20).map((c) => (
+          <button
+            key={`${c.sourceId}:${c.suwayomiMangaId}`}
+            type="button"
+            onClick={() =>
+              onSources([
+                ...sources,
+                {
+                  suwayomiMangaId: c.suwayomiMangaId,
+                  sourceId: c.sourceId,
+                  sourceName: c.sourceName,
+                },
+              ])
+            }
+            className="flex items-center gap-3 rounded-xl p-2 text-left text-sm hover:bg-white/[0.05]"
+          >
+            <Cover src={c.thumbnailUrl} className="w-9 shrink-0 shadow-none" />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate">{c.title}</span>
+              <span className="text-muted flex items-center gap-1.5 truncate text-xs">
+                <Dot tone={c.score >= 0.9 ? 'ok' : 'warn'} />
+                {c.sourceName} · {c.score >= 0.9 ? t('sources.exact') : t('sources.doubtful')}
               </span>
-              <span className="text-muted font-serif italic">
-                {c.score >= 0.9 ? t('sources.exact') : t('sources.doubtful')}
-              </span>
-              <span aria-hidden>+</span>
-            </button>
-          ))}
-        </div>
+            </span>
+            <span className={smallButton}>{t('match.add')}</span>
+          </button>
+        ))}
+        {lanes && !lanes.some((l) => l.state === 'loading') && candidates.length === 0 && (
+          <p className="text-muted text-sm">{t('match.noCandidate')}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CoverTab({
+  entry,
+  lanes,
+  sources,
+  onPick,
+}: {
+  entry: TrackedMedia;
+  lanes: Lane[] | null;
+  sources: ChapterSelection[];
+  onPick: (c: CoverChoice) => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const options = useApi<CoverOption[]>(`/api/tracked/covers?id=${entry.id}`);
+  const [pending, setPending] = useState<string | null>(null);
+  const [dead, setDead] = useState<Set<string>>(new Set());
+  const current = entry.coverChoice;
+  const keyOf = (o: Pick<CoverOption, 'origin' | 'id'>) => `${o.origin}:${o.id}`;
+  // Every source result of the live scan is a candidate too, linked or not.
+  const known = new Set((options.data ?? []).map(keyOf));
+  const scanned: CoverOption[] = (lanes ?? []).flatMap((l) =>
+    l.candidates.flatMap((c) => {
+      const o = {
+        origin: 'source' as const,
+        id: `${c.sourceId}:${c.suwayomiMangaId}`,
+        label: l.source.name,
+        url: c.thumbnailUrl ?? '',
+      };
+      return c.thumbnailUrl && !known.has(keyOf(o)) ? [o] : [];
+    }),
+  );
+  const all = [...(options.data ?? []), ...scanned].filter((o) => !dead.has(keyOf(o)));
+  const linked = new Set(sources.map((s) => `${s.sourceId}:${s.suwayomiMangaId}`));
+  const pick = async (choice: CoverChoice, key: string) => {
+    setPending(key);
+    await onPick(choice);
+    setPending(null);
+  };
+  const isCurrent = (o: CoverOption) =>
+    current !== 'auto' && current.origin === o.origin && current.id === o.id;
+  const scanning = lanes === null || lanes.some((l) => l.state === 'loading');
+  const groups = [
+    { origin: 'catalog' as const, title: t('match.origin.catalog') },
+    { origin: 'kavita' as const, title: t('match.origin.kavita') },
+    { origin: 'source' as const, title: t('match.origin.sources') },
+  ];
+  return (
+    <div className="flex flex-col gap-5">
+      <Hint>{t('match.coverHint')}</Hint>
+      <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+        <Tile
+          selected={current === 'auto'}
+          pending={pending === 'auto'}
+          onClick={() => pick('auto', 'auto')}
+          label={t('match.coverAuto')}
+        >
+          <Cover
+            src={current === 'auto' ? entry.coverUrl : (all[0]?.url ?? null)}
+            fallbacks={current === 'auto' ? entry.coverFallbacks : undefined}
+            className="shadow-none"
+          />
+        </Tile>
+      </div>
+      {groups.map((g) => {
+        const list = all.filter((o) => o.origin === g.origin);
+        const loading = g.origin === 'source' ? scanning : !options.data;
+        if (!list.length && !loading) return null;
+        return (
+          <div key={g.origin} className="flex flex-col gap-2">
+            <span className="text-muted flex items-center gap-2 text-xs tracking-[0.14em] uppercase">
+              {g.title}
+              {loading && <Spinner className="size-3" />}
+            </span>
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+              {list.map((o) => (
+                <Tile
+                  key={keyOf(o)}
+                  selected={isCurrent(o)}
+                  pending={pending === keyOf(o)}
+                  onClick={() => pick({ origin: o.origin, id: o.id }, keyOf(o))}
+                  label={o.label}
+                  note={
+                    o.origin === 'source' && !linked.has(o.id) ? t('match.notLinked') : undefined
+                  }
+                >
+                  <Cover
+                    src={o.url}
+                    className="shadow-none"
+                    onUnavailable={() => setDead((d) => new Set(d).add(keyOf(o)))}
+                  />
+                </Tile>
+              ))}
+              {loading &&
+                Array.from({ length: list.length ? 1 : 3 }, (_, i) => (
+                  <Skeleton key={i} className="aspect-[2/3] rounded-lg" />
+                ))}
+            </div>
+          </div>
+        );
+      })}
+      {!scanning && options.data && all.length === 0 && (
+        <p className="text-muted text-sm">{t('match.noCover')}</p>
       )}
     </div>
   );
 }
 
-function CoverPicker({ entry, onPick }: { entry: TrackedMedia; onPick: (c: CoverChoice) => void }) {
-  const { t } = useI18n();
-  const options = useApi<CoverOption[]>(`/api/tracked/covers?id=${entry.id}`);
-  const current = entry.coverChoice;
-  const isCurrent = (o: CoverOption) =>
-    current !== 'auto' && current.origin === o.origin && current.id === o.id;
+function Tile({
+  selected,
+  pending,
+  onClick,
+  label,
+  note,
+  children,
+}: {
+  selected: boolean;
+  pending: boolean;
+  onClick: () => void;
+  label: string;
+  note?: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="flex flex-col gap-3">
-      <button
-        type="button"
-        aria-pressed={current === 'auto'}
-        onClick={() => onPick('auto')}
-        className={cx(
-          'self-start rounded-full px-4 py-2 text-sm',
-          current === 'auto' ? 'bg-fg text-bg font-semibold' : 'bg-white/[0.08]',
-        )}
-      >
-        {t('match.coverAuto')}
-      </button>
-      {!options.data && <Skeleton className="h-40 rounded-xl" />}
-      {(['catalog', 'source', 'kavita'] as const).map((origin) => {
-        const list = (options.data ?? []).filter((o) => o.origin === origin);
-        if (!list.length) return null;
-        return (
-          <div key={origin} className="flex flex-col gap-2">
-            <span className="text-muted text-xs tracking-[0.14em] uppercase">
-              {t(`match.origin.${origin}`)}
-            </span>
-            <div className="grid grid-cols-4 gap-2.5">
-              {list.map((o) => (
-                <button
-                  key={`${o.origin}:${o.id}`}
-                  type="button"
-                  aria-pressed={isCurrent(o)}
-                  title={o.label}
-                  onClick={() => onPick({ origin: o.origin, id: o.id })}
-                  className={cx(
-                    'flex flex-col gap-1 rounded-lg p-1 text-left',
-                    isCurrent(o) ? 'ring-fg ring-2' : 'hover:bg-white/[0.06]',
-                  )}
-                >
-                  <Cover src={o.url} className="shadow-none" />
-                  <span className="text-muted truncate text-[11px]">{o.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-      {options.data?.length === 0 && <p className="text-muted text-sm">{t('match.noCover')}</p>}
-    </div>
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      className={cx(
+        'relative flex flex-col gap-1.5 rounded-xl p-1.5 text-left transition-colors',
+        selected ? 'ring-fg bg-white/[0.06] ring-2' : 'hover:bg-white/[0.06]',
+      )}
+    >
+      {children}
+      {(pending || selected) && (
+        <span className="bg-fg text-bg absolute top-3 right-3 flex size-6 items-center justify-center rounded-full text-xs font-bold">
+          {pending ? <Spinner className="size-3" /> : '✓'}
+        </span>
+      )}
+      <span className="flex flex-col px-0.5">
+        <span className="truncate text-xs">{label}</span>
+        {note && <span className="text-muted truncate text-[11px]">{note}</span>}
+      </span>
+    </button>
   );
 }
 
@@ -515,7 +738,7 @@ function Small({
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className="text-mid flex size-8 items-center justify-center rounded-full hover:bg-white/[0.08] disabled:opacity-25"
+      className="text-mid flex size-9 items-center justify-center rounded-full hover:bg-white/[0.08] disabled:opacity-25"
     >
       {children}
     </button>

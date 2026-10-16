@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import type { KavitaSeriesSummary, MediaFormat, TrackedMedia } from '@/types/shared';
 import { KavitaUnmatched } from '@/components/kavita';
+import { ActivityLine } from '@/components/activity';
 import { mediaHref, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
@@ -13,6 +14,7 @@ import {
   PageTitle,
   PosterSkeletons,
   ProgressBar,
+  Spinner,
   Tabs,
   cx,
   smallButton,
@@ -21,6 +23,8 @@ import {
 type Shelf = 'READING' | 'CAUGHT_UP' | 'PLANNING' | 'PAUSED' | 'COMPLETED' | 'DROPPED';
 type View = Shelf | 'KAVITA';
 type Kind = 'all' | 'manga' | 'manhwa' | 'manhua' | 'novel';
+/** Needs a look: no source could be found automatically. */
+const needsReview = (e: TrackedMedia) => e.type === 'MANGA' && e.sourceMatch === 'not-found';
 type Sort = 'news' | 'recent' | 'title' | 'added';
 
 const caughtUp = (e: TrackedMedia) =>
@@ -43,6 +47,7 @@ export default function LibraryPage() {
   const unmatched = useApi<KavitaSeriesSummary[]>('/api/kavita/series?unmatched=1');
   const [kind, setKind] = useState<Kind>('all');
   const [sort, setSort] = useState<Sort>('news');
+  const [review, setReview] = useState(false);
   const entries = useMemo(() => library.data ?? [], [library.data]);
   const counts = useMemo(() => {
     const c: Record<Shelf, number> = {
@@ -57,8 +62,9 @@ export default function LibraryPage() {
     return c;
   }, [entries]);
   const owned = entries.reduce((sum, e) => sum + (e.progress?.owned ?? 0), 0);
+  const toReview = entries.filter(needsReview).length;
   const shown = entries
-    .filter((e) => shelfOf(e) === shelf)
+    .filter((e) => (review ? needsReview(e) : shelfOf(e) === shelf))
     .filter(
       (e) =>
         kind === 'all' ||
@@ -85,9 +91,13 @@ export default function LibraryPage() {
             : undefined
         }
       />
+      <ActivityLine className="-mt-4" />
       <Tabs
-        value={shelf}
-        onChange={setShelf}
+        value={review ? ('' as View) : shelf}
+        onChange={(v) => {
+          setReview(false);
+          setShelf(v);
+        }}
         label={t('library.statusLabel')}
         items={(['READING', 'CAUGHT_UP', 'PLANNING', 'PAUSED', 'COMPLETED', 'DROPPED'] as Shelf[])
           .map<{ id: View; label: string; count?: number }>((s) => ({
@@ -123,6 +133,19 @@ export default function LibraryPage() {
                 {t(`kind.${k}`)}
               </button>
             ))}
+            {toReview > 0 && (
+              <button
+                type="button"
+                aria-pressed={review}
+                onClick={() => setReview(!review)}
+                className={cx(
+                  'text-warn h-[34px] rounded-full px-3.5',
+                  review ? 'bg-warn/15' : 'hover:bg-white/[0.06]',
+                )}
+              >
+                {t('library.review', { count: toReview })}
+              </button>
+            )}
             <label className="text-muted ml-auto flex items-center gap-2">
               {t('catalog.sort')}
               <select
@@ -165,8 +188,21 @@ export default function LibraryPage() {
                 <span className="relative block">
                   <Cover
                     src={e.coverUrl ?? e.media.coverUrl}
+                    fallbacks={e.coverFallbacks}
+                    alt={e.title}
                     className="transition-transform duration-300 group-hover:-translate-y-1"
                   />
+                  {e.type === 'MANGA' && e.sourceMatch !== 'linked' && (
+                    <span
+                      className={cx(
+                        'absolute inset-x-2 bottom-2 flex items-center gap-1.5 rounded-full bg-black/75 px-2 py-1 text-[11px] backdrop-blur',
+                        e.sourceMatch === 'not-found' ? 'text-warn' : 'text-mid',
+                      )}
+                    >
+                      {e.sourceMatch === 'searching' && <Spinner className="size-3" />}
+                      <span className="truncate">{t(`library.match.${e.sourceMatch}`)}</span>
+                    </span>
+                  )}
                   {e.newChapters > 0 && (
                     <span className="bg-fg text-bg absolute top-2 right-2 flex h-6 items-center rounded-full px-2 text-xs font-bold">
                       +{n(e.newChapters)}

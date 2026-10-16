@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Kavita covers load on stable Kavita (the image API needs the key as a query parameter).
+- Source matching runs continuously in the background instead of three titles per update cycle; progress shows in the header and the library, and cards say when sources are pending, being searched or not found ("To check" filter).
+- Covers fall back automatically when an image fails; any cover from the live source scan can be chosen without linking that source.
+- The Matches panel is reorganised in tabs (Work, Sources, Kavita, Cover) with a save status, and starts the source scan by itself.
 - One "Matches" panel per title: catalog work (or off-catalog), sources with their latest chapter (scan all, reorder, remove wrong ones), Kavita series, and cover (automatic, or picked from the catalog, a source or Kavita).
 - Followed titles without sources are matched to sources in the background; each source's latest chapter is refreshed for the whole library, so release counts stay current without opening a title.
 - Kavita libraries: a format can be set to "no library"; manhua no longer falls back to the manga library.

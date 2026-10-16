@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as pause } from 'node:timers/promises';
 import type {
   DownloadBatch,
   EnqueueRequest,
@@ -22,6 +23,7 @@ import { sharedConcurrencyGate } from './concurrency';
 import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
 import { targetFor } from './library-paths';
 import { env } from '@/lib/env';
+import { drainSourceMatches } from './tracked-sources';
 const chapterGate = sharedConcurrencyGate('chapters', 1);
 const activeBatches = new Set<string>();
 let transfer = new AbortController();
@@ -253,16 +255,43 @@ let initialized = false;
 export async function workerTick() {
   if (running || !acquireWorker(owner)) return;
   running = true;
-  const lease = setInterval(() => acquireWorker(owner), 30_000);
+  const controller = new AbortController();
+  const ownsLease = () => {
+    const lease = db().prepare('SELECT owner,expires_at FROM worker_lock WHERE id=1').get() as
+      { owner: string; expires_at: number } | undefined;
+    const owns = lease?.owner === owner && lease.expires_at > Date.now();
+    if (!owns) controller.abort();
+    return owns;
+  };
+  const lease = setInterval(() => {
+    if (!ownsLease() || !acquireWorker(owner)) controller.abort();
+  }, 1000);
   lease.unref();
+  let matchingRunning = true;
+  const matching = drainSourceMatches(controller.signal, ownsLease)
+    .catch(() => {
+      /* An aborted/failed lookup remains queued for a subsequent tick. */
+    })
+    .finally(() => {
+      matchingRunning = false;
+    });
   try {
-    for (const batch of listBatches().filter((b) => !['completed', 'error'].includes(b.state))) {
-      if (!acquireWorker(owner)) return;
-      await processBatch(batch);
-    }
-    if (kavitaSyncRequested()) await syncKavitaIndex();
-    if (updateCheckDue()) await runUpdateCheck(createBatch);
+    do {
+      for (const batch of listBatches().filter((b) => !['completed', 'error'].includes(b.state))) {
+        if (!ownsLease()) return;
+        await processBatch(batch);
+      }
+      if (!ownsLease()) return;
+      if (kavitaSyncRequested()) await syncKavitaIndex();
+      if (ownsLease() && updateCheckDue())
+        await runUpdateCheck(createBatch, controller.signal, ownsLease);
+      if (matchingRunning && !controller.signal.aborted)
+        await pause(1500, undefined, { signal: controller.signal });
+    } while (matchingRunning && !controller.signal.aborted);
+    await matching;
   } finally {
+    controller.abort();
+    await matching;
     clearInterval(lease);
     running = false;
   }

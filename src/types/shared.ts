@@ -270,6 +270,23 @@ export interface TrackedMedia {
   coverChoice: CoverChoice;
   /** Identity of the entry: a catalog work, or off-catalog (known only from Kavita or a source). */
   identity: 'catalog' | 'off-catalog';
+  /** Other covers to try, in automatic order, when `coverUrl` fails to load (empty for a manual choice). */
+  coverFallbacks: string[];
+  /** Background source matching for this entry (comics only; `linked` once it has sources). */
+  sourceMatch: 'linked' | 'queued' | 'searching' | 'not-found';
+}
+/** GET /api/library/activity — what Bunko is doing in the background, for progress indicators. */
+export interface LibraryActivity {
+  /** Followed comics waiting for automatic source matching, and the one being searched now. */
+  matching: { queued: number; current: string | null };
+  /** Release refresh across linked sources (latest chapters, thumbnails). */
+  refresh: {
+    running: boolean;
+    done: number;
+    total: number;
+    lastAt: string | null;
+    nextAt: string | null;
+  };
 }
 export interface SourceLinkStatus {
   sourceId: string;
@@ -317,7 +334,10 @@ export interface TrackPatch {
   media?: UnifiedMedia;
   /** Detach from the catalog (wrong match, title not catalogued): identity becomes the Kavita series or the first source. */
   offCatalog?: true;
-  /** Pick a cover (`CoverOption.id` with its origin) or go back to automatic. */
+  /**
+   * Pick a cover (`CoverOption.id` with its origin) or go back to automatic. A `source` id is
+   * `<sourceId>:<suwayomiMangaId>` and may name any Suwayomi entry, linked or not (e.g. a scan result).
+   */
   cover?: CoverChoice;
   status?: ReadingStatus;
   autoDownload?: boolean;

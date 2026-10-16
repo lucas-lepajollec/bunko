@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { activeSourceMatch, SOURCE_MATCH_RETRY_MS } from './source-match-state';
 import { matchKavita, withKavita } from './kavita-index';
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -337,6 +338,7 @@ export function searchCatalog(query: string): (SourceMatch & { title: string })[
   }));
 }
 export function listTracked(): TrackedMedia[] {
+  const matching = activeSourceMatch();
   return (
     db().prepare('SELECT * FROM tracked_media ORDER BY id DESC').all() as Record<string, unknown>[]
   ).map((r) => {
@@ -349,12 +351,17 @@ export function listTracked(): TrackedMedia[] {
       r.off_catalog || /^(kavita|suwayomi|local):/.test(rawMedia.id)
         ? ('off-catalog' as const)
         : ('catalog' as const);
+    const automaticCovers = [
+      ...new Set(
+        [
+          identity === 'catalog' ? rawMedia.coverUrl : null,
+          ...sourceStatus.map((s) => s.thumbnailUrl),
+          kavita ? `/api/kavita/image?seriesId=${kavita.seriesId}` : rawMedia.coverUrl,
+        ].filter((url): url is string => Boolean(url)),
+      ),
+    ];
     const coverUrl =
-      coverChoice === 'auto'
-        ? ((identity === 'catalog' ? rawMedia.coverUrl : null) ??
-          sourceStatus.find((s) => s.thumbnailUrl)?.thumbnailUrl ??
-          (kavita ? `/api/kavita/image?seriesId=${kavita.seriesId}` : rawMedia.coverUrl))
-        : (r.cover_url as string | null);
+      coverChoice === 'auto' ? (automaticCovers[0] ?? null) : (r.cover_url as string | null);
     const media = { ...withKavita(rawMedia, r.kavita_series_id as number | null), coverUrl };
     const imported = db()
       .prepare(
@@ -393,6 +400,15 @@ export function listTracked(): TrackedMedia[] {
       type: r.type as TrackedMedia['type'],
       coverUrl,
       coverChoice,
+      coverFallbacks: coverChoice === 'auto' ? automaticCovers.slice(1) : [],
+      sourceMatch: sources.length
+        ? 'linked'
+        : matching?.id === Number(r.id)
+          ? 'searching'
+          : !r.source_match_at ||
+              Date.parse(String(r.source_match_at)) <= Date.now() - SOURCE_MATCH_RETRY_MS
+            ? 'queued'
+            : 'not-found',
       sourceStatus,
       identity,
       kavitaSeriesId: r.kavita_series_id as number | null,

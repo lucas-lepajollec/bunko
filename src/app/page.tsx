@@ -268,6 +268,7 @@ function ResumeCard({ entry }: { entry: TrackedMedia }) {
     >
       <Cover
         src={entry.coverUrl ?? entry.media.coverUrl}
+        fallbacks={entry.coverFallbacks}
         className="w-[58px] shrink-0 md:w-[72px]"
       />
       <span className="flex min-w-0 flex-1 flex-col gap-1.5">

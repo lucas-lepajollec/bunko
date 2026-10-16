@@ -46,13 +46,26 @@ export const PATCH = route(async (r) => {
   if (input.cover && input.cover !== 'auto') {
     if (input.media || input.offCatalog)
       throw new AppError('VALIDATION_ERROR', 'Choose the cover after changing identity');
-    const options = await trackedCoverOptions(current.id, r.signal);
-    const selected = options.find(
-      (v) => input.cover !== 'auto' && v.origin === input.cover?.origin && v.id === input.cover?.id,
-    );
-    if (!selected)
-      throw new AppError('INVALID_COVER', 'Cover option is not available for this entry', 400);
-    chosenUrl = selected.url;
+    if (input.cover.origin === 'source') {
+      const pair = /^([1-9]\d*):([1-9]\d*)$/.exec(input.cover.id);
+      if (!pair || !Number.isSafeInteger(Number(pair[2])) || Number(pair[2]) > 2147483647)
+        throw new AppError('NOT_FOUND', 'Suwayomi cover not found', 404);
+      const detail = await suwayomiDetail(Number(pair[2]), r.signal);
+      if (
+        !detail.sources.some((s) => s.sourceId === pair[1] && s.suwayomiMangaId === Number(pair[2]))
+      )
+        throw new AppError('NOT_FOUND', 'Suwayomi cover not found', 404);
+      chosenUrl = `/api/suwayomi/image?path=${encodeURIComponent(`/api/v1/manga/${pair[2]}/thumbnail`)}`;
+    } else {
+      const options = await trackedCoverOptions(current.id, r.signal);
+      const selected = options.find(
+        (v) =>
+          input.cover !== 'auto' && v.origin === input.cover?.origin && v.id === input.cover?.id,
+      );
+      if (!selected)
+        throw new AppError('INVALID_COVER', 'Cover option is not available for this entry', 400);
+      chosenUrl = selected.url;
+    }
   }
   const conflict = listTracked().some((t) => t.id !== current.id && sameMedia(t.media, media));
   if (conflict)
@@ -60,6 +73,8 @@ export const PATCH = route(async (r) => {
   try {
     db().transaction(() => {
       if (input.sources) replaceSources(current, input.sources);
+      if (input.media || input.offCatalog || input.kavitaSeriesId !== undefined)
+        db().prepare('UPDATE tracked_media SET source_match_at=NULL WHERE id=?').run(input.id);
       db()
         .prepare(
           `UPDATE tracked_media SET status=?,auto_download=?,sources_json=?,

@@ -9,7 +9,7 @@ import { boundedBuffer } from './chapter-pages';
 import { db } from './db';
 import { endpoint } from './http';
 import { getSettings } from './settings';
-import { kavitaHeaders } from './kavita-client';
+import { kavitaHeaders, kavitaCoverEndpoint } from './kavita-client';
 import { imagePath } from './images';
 import { suwayomiHeaders } from './suwayomi';
 import { sharedConcurrencyGate } from './concurrency';
@@ -176,10 +176,7 @@ export async function selectedCover(url: string, parentSignal?: AbortSignal) {
     parsed.pathname === '/api/kavita/image' &&
     /^[1-9]\d{0,9}$/.test(parsed.searchParams.get('seriesId') ?? '')
   ) {
-    upstream = endpoint(
-      getSettings().kavitaUrl,
-      `/api/Image/series-cover?seriesId=${parsed.searchParams.get('seriesId')}`,
-    );
+    upstream = kavitaCoverEndpoint(parsed.searchParams.get('seriesId')!);
     headers = await kavitaHeaders(signal);
   } else return null;
   const response = await fetch(upstream, { headers, signal, redirect: 'error' });
@@ -246,7 +243,7 @@ export async function syncSeriesCover(
       { value: string } | undefined;
     if (previous?.value === hash || (current && !current())) return;
     // Never upload the reader's own cover back to itself.
-    if (!url.startsWith('/api/kavita/image?'))
+    if (new URL(url, 'http://bunko.invalid').pathname !== '/api/kavita/image')
       await post(
         '/api/Upload/series',
         {

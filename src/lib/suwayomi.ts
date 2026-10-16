@@ -247,6 +247,7 @@ export async function chaptersFor(
   selections: ChapterSelection[],
   signal?: AbortSignal,
   media?: import('@/types/shared').UnifiedMedia,
+  canWrite: () => boolean = () => true,
 ): Promise<ChaptersResponse> {
   const settled = await Promise.allSettled(
     selections.map((s) =>
@@ -282,7 +283,7 @@ export async function chaptersFor(
   );
   const chapters = mergeChapters(settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])));
   const numbers = chapters.flatMap((c) => (c.number === null ? [] : [c.number]));
-  if (numbers.length)
+  if (numbers.length && !signal?.aborted && canWrite())
     for (const tracked of listTracked().filter((t) =>
       t.sources.some((s) =>
         selections.some(

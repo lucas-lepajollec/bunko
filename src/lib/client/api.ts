@@ -88,6 +88,14 @@ export function openStream(
   };
 }
 
+/** SWR keys showing followed titles; revalidate them all after any change to an entry. */
+export const libraryKeys = (key: unknown) =>
+  typeof key === 'string' &&
+  (key.startsWith('/api/tracked') ||
+    key.startsWith('/api/media?') ||
+    key.startsWith('/api/kavita/series') ||
+    key === '/api/library/activity');
+
 export function mediaHref(id: string) {
   const at = id.indexOf(':');
   return `/title/${id.slice(0, at)}/${encodeURIComponent(id.slice(at + 1))}`;

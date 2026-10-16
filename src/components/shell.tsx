@@ -10,6 +10,7 @@ import { UI_LANGUAGES, type UiLanguage } from '@/i18n/messages';
 import { UNAUTHORIZED_EVENT, send, useApi } from '@/lib/client/api';
 import { cx, errorText, field, primaryButton } from './ui';
 import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
+import { ActivityPill } from './activity';
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
@@ -243,6 +244,7 @@ function Header() {
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-1">
+        <ActivityPill />
         <QuickSearch variant="inline" />
         <button
           type="button"

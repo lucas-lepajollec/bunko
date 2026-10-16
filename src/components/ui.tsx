@@ -27,21 +27,34 @@ export function roman(n: number) {
   return `${out}.`;
 }
 
-/** Cover image with a quiet serif placeholder when the artwork is missing or fails to load. */
+/**
+ * Cover image that tries `fallbacks` in order when an image fails, then shows a quiet serif
+ * placeholder.
+ */
 export function Cover({
   src,
+  fallbacks,
+  onUnavailable,
   alt = '',
   className,
   style,
 }: {
   src: string | null | undefined;
+  fallbacks?: string[];
+  /** Called once every candidate failed (lets pickers hide dead options). */
+  onUnavailable?: () => void;
   alt?: string;
   className?: string;
   style?: CSSProperties;
 }) {
-  const [failed, setFailed] = useState(false);
+  const candidates = [src, ...(fallbacks ?? [])].filter((u): u is string => Boolean(u));
+  const key = candidates.join('|');
+  // Failures are remembered per candidate list, so a new cover starts from its first candidate.
+  const [failed, setFailed] = useState<{ key: string; count: number }>({ key, count: 0 });
+  const attempt = failed.key === key ? failed.count : 0;
+  const current = candidates[attempt];
   const { t } = useI18n();
-  if (!src || failed)
+  if (!current)
     return (
       <span
         role={alt ? 'img' : undefined}
@@ -59,12 +72,16 @@ export function Cover({
   return (
     // eslint-disable-next-line @next/next/no-img-element -- covers come from arbitrary providers and the authenticated proxy
     <img
-      src={src}
+      key={current}
+      src={current}
       alt={alt}
       loading="lazy"
       decoding="async"
       referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
+      onError={() => {
+        setFailed({ key, count: attempt + 1 });
+        if (attempt + 1 >= candidates.length) onUnavailable?.();
+      }}
       className={cx('book aspect-[2/3] w-full object-cover', className)}
       style={style}
     />
@@ -224,7 +241,7 @@ export function Segmented<T extends string>({
           aria-selected={value === item.id}
           onClick={() => onChange(item.id)}
           className={cx(
-            'h-9 truncate rounded-full px-2 text-sm',
+            'h-9 truncate rounded-full px-1.5 text-[13px] md:px-2 md:text-sm',
             value === item.id ? 'bg-fg text-bg font-semibold' : 'text-fg',
           )}
         >
@@ -284,6 +301,19 @@ export function Dot({
       aria-hidden
       className={cx('inline-block size-2 shrink-0 rounded-full', className)}
       style={{ background: color }}
+    />
+  );
+}
+
+/** Small inline activity indicator; pair it with visible text saying what is happening. */
+export function Spinner({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cx(
+        'inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent',
+        className,
+      )}
     />
   );
 }
