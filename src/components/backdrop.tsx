@@ -1,9 +1,12 @@
 'use client';
+import { useState } from 'react';
 import { cx } from './ui';
 
 /**
  * Full-bleed artwork behind a hero. It extends below the hero and dissolves into the page with a
  * mask (no visible edge), keeps a left shade for text legibility and a glow of the title colour.
+ * A wide banner is shown sharp; otherwise (or when it fails to load) the cover candidates are tried
+ * in order, blurred.
  */
 export function Backdrop({
   image,
@@ -12,12 +15,19 @@ export function Backdrop({
   className,
 }: {
   image: string | null;
-  /** Used blurred when there is no wide banner (cover art). */
-  fallback?: string | null;
+  /** Cover art used blurred when there is no banner: one URL or candidates in order. */
+  fallback?: string | null | (string | null | undefined)[];
   color?: string | null;
   className?: string;
 }) {
-  const src = image ?? fallback ?? null;
+  const candidates = [image, ...(Array.isArray(fallback) ? fallback : [fallback])].filter(
+    (u): u is string => Boolean(u),
+  );
+  const key = candidates.join('|');
+  const [failed, setFailed] = useState({ key, count: 0 });
+  const attempt = failed.key === key ? failed.count : 0;
+  const src = candidates[attempt] ?? null;
+  const sharp = Boolean(image) && src === image;
   return (
     <div
       aria-hidden
@@ -35,12 +45,14 @@ export function Backdrop({
         {src && (
           // eslint-disable-next-line @next/next/no-img-element -- remote artwork
           <img
+            key={src}
             src={src}
             alt=""
+            onError={() => setFailed({ key, count: attempt + 1 })}
             referrerPolicy="no-referrer"
             className={cx(
               'absolute inset-0 size-full object-cover object-[70%_center] md:object-[center_25%]',
-              !image && 'scale-125 opacity-40 blur-2xl',
+              !sharp && 'scale-125 opacity-40 blur-2xl',
             )}
           />
         )}

@@ -150,6 +150,8 @@ function Title({ media }: { media: MediaDetail }) {
     [lanes],
   );
   const sources = override ?? stored ?? (fromDetail.length ? fromDetail : autoPicked);
+  // Something needs a look: no source, or none could be found automatically.
+  const attention = isComic && Boolean(entry) && sources.length === 0;
   const priority = sources.map((s) => s.sourceId);
   const chaptersKey = isComic && sources.length ? ['chapters', JSON.stringify(sources)] : null;
   const chapters = useSWR<ChaptersResponse>(
@@ -283,8 +285,10 @@ function Title({ media }: { media: MediaDetail }) {
   return (
     <main className="relative" style={{ ['--accent' as string]: media.color ?? '#9fb6ff' }}>
       <Backdrop
-        image={media.bannerUrl}
-        fallback={media.coverUrl}
+        // Only the catalog work's own banner; none when detached, hidden, or missing.
+        image={
+          entry?.identity === 'off-catalog' || entry?.backdrop === 'hidden' ? null : media.bannerUrl
+        }
         color={media.color ?? '#7aa2ff'}
         className="h-[440px] md:h-[780px]"
       />
@@ -307,7 +311,7 @@ function Title({ media }: { media: MediaDetail }) {
           <div className="hidden md:block">
             <Kicker media={media} />
           </div>
-          <h1 className="font-display hidden text-[92px] leading-[0.9] font-extrabold tracking-[-0.05em] md:block">
+          <h1 className="font-display hidden text-[60px] leading-[0.9] font-extrabold tracking-[-0.05em] [overflow-wrap:anywhere] md:block lg:text-[92px]">
             {media.title}
           </h1>
           {media.synopsis && (
@@ -315,7 +319,7 @@ function Title({ media }: { media: MediaDetail }) {
               {t('common.quote', { text: firstSentence(media.synopsis) })}
             </p>
           )}
-          <div className="flex flex-col gap-3 md:mt-1.5 md:flex-row md:items-center">
+          <div className="flex flex-col gap-3 md:mt-1.5 md:flex-row md:flex-wrap md:items-center">
             {isComic && (
               <button
                 type="button"
@@ -357,6 +361,17 @@ function Title({ media }: { media: MediaDetail }) {
               >
                 {t('kavita.read', { n: media.kavita.chapters })} ↗
               </a>
+            )}
+            {isComic && (
+              <button
+                type="button"
+                onClick={() => setDrawer('catalog')}
+                className={cx(ghostButton, 'gap-2.5 bg-transparent ring-1 ring-white/25')}
+              >
+                <LinkIcon />
+                {t('match.title')}
+                {attention && <Dot tone="warn" />}
+              </button>
             )}
           </div>
           {entry && (
@@ -686,5 +701,18 @@ function NoSource({
     >
       {lanes.length === 0 ? t('sources.noSourcesBody') : t('sources.notFoundBody')}
     </Empty>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }

@@ -3,7 +3,10 @@ import { db, listTracked } from './db';
 import { matchKavita } from './kavita-index';
 import { requestJson } from './http';
 import { AppError } from './errors';
-import { syncSeriesCover } from './kavita-cover';
+import { selectedCover, syncSeriesCover } from './kavita-cover';
+import { coverContext } from './cover-state';
+import { sharedConcurrencyGate } from './concurrency';
+import { cached, storedMetadata, saveMetadata } from './metadata-cache';
 
 export function storedMedia(id: number): UnifiedMedia {
   const row = db().prepare('SELECT media_json FROM tracked_media WHERE id=?').get(id) as {
@@ -43,26 +46,33 @@ export async function trackedCoverOptions(
   id: number,
   signal?: AbortSignal,
 ): Promise<CoverOption[]> {
+  signal?.throwIfAborted();
   const t = listTracked().find((t) => t.id === id);
   if (!t) throw new AppError('NOT_FOUND', 'Tracked media not found', 404);
   const options = localCoverOptions(t);
   const media = storedMedia(id);
   if (t.identity === 'catalog' && media.mangadexId) {
-    const key = `dex_covers:${media.mangadexId}`;
-    const row = db().prepare('SELECT value FROM worker_state WHERE key=?').get(key) as
-      { value: string } | undefined;
-    const cached = row ? (JSON.parse(row.value) as { at: number; options: CoverOption[] }) : null;
-    if (cached && Date.now() - cached.at < 24 * 3600_000) options.push(...cached.options);
-    else
-      try {
+    try {
+      const key = `dex_covers:${media.mangadexId}`;
+      // Adopt the earlier durable volume cache so upgrades also work offline.
+      if (!storedMetadata(key)) {
+        const legacy = db().prepare('SELECT value FROM worker_state WHERE key=?').get(key) as
+          { value: string } | undefined;
+        if (legacy) {
+          const previous = JSON.parse(legacy.value) as { at: number; options: CoverOption[] };
+          saveMetadata(key, previous.options, previous.at);
+          if (storedMetadata(key)) db().prepare('DELETE FROM worker_state WHERE key=?').run(key);
+        }
+      }
+      const covers = await cached<CoverOption[]>(key, 24 * 3600_000, async () => {
         const url = new URL('https://api.mangadex.org/cover');
-        url.searchParams.set('manga[]', media.mangadexId);
+        url.searchParams.set('manga[]', media.mangadexId!);
         url.searchParams.set('limit', '20');
         url.searchParams.set('order[volume]', 'asc');
         const result = await requestJson<{
           data: { id: string; attributes: { fileName: string; volume: string | null } }[];
-        }>(url, { signal }, 6000);
-        const covers: CoverOption[] = result.data.slice(0, 20).flatMap((c) =>
+        }>(url, {}, 6000);
+        return result.data.slice(0, 20).flatMap((c) =>
           /^[a-zA-Z0-9_.-]+$/.test(c.attributes.fileName)
             ? [
                 {
@@ -74,35 +84,80 @@ export async function trackedCoverOptions(
               ]
             : [],
         );
-        db()
-          .prepare('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)')
-          .run(key, JSON.stringify({ at: Date.now(), options: covers }));
-        options.push(...covers);
-      } catch {
-        if (cached) options.push(...cached.options);
-      }
+      });
+      options.push(...covers);
+    } catch {
+      /* Local choices remain available when no volume covers were ever cached. */
+    }
   }
   return options;
 }
 
+const resolutionGate = sharedConcurrencyGate('cover-resolution', 1);
 export async function syncTrackedCover(id: number, signal?: AbortSignal) {
-  const t = listTracked().find((t) => t.id === id);
-  if (!t?.coverUrl) return;
-  const series = matchKavita(storedMedia(id), t.kavitaSeriesId);
-  if (!series) return;
-  await syncSeriesCover(
-    series,
-    t.coverUrl,
-    () => {
-      const current = listTracked().find((v) => v.id === id);
+  return resolutionGate(async () => {
+    const t = listTracked().find((t) => t.id === id);
+    if (!t?.coverUrl) return;
+    const series = matchKavita(storedMedia(id), t.kavitaSeriesId);
+    const context = coverContext(
+      t.media.id,
+      t.identity,
+      t.coverChoice,
+      t.sources,
+      series?.seriesId ?? null,
+    );
+    const current = () => {
+      const entry = listTracked().find((v) => v.id === id);
       return (
-        current?.coverUrl === t.coverUrl &&
-        current?.kavitaSeriesId === t.kavitaSeriesId &&
-        current?.media.id === t.media.id
+        entry &&
+        coverContext(
+          entry.media.id,
+          entry.identity,
+          entry.coverChoice,
+          entry.sources,
+          matchKavita(storedMedia(id), entry.kavitaSeriesId)?.seriesId ?? null,
+        ) === context
       );
-    },
-    signal,
-  );
+    };
+    let url = t.coverUrl;
+    let cover: Awaited<ReturnType<typeof selectedCover>> = null;
+    const fetchCandidate = async (candidate: string) => {
+      try {
+        return await selectedCover(candidate, signal);
+      } catch {
+        signal?.throwIfAborted();
+        return null;
+      }
+    };
+    const resolved = db()
+      .prepare('SELECT context,url,failures FROM resolved_covers WHERE tracked_id=?')
+      .get(id) as { context: string; url: string; failures: number } | undefined;
+    cover = await fetchCandidate(url);
+    if (!current()) return;
+    if (t.coverChoice === 'auto') {
+      if (!cover && resolved?.context === context) {
+        db().prepare('UPDATE resolved_covers SET failures=failures+1 WHERE tracked_id=?').run(id);
+        if (resolved.failures + 1 < 2) return;
+      }
+      if (!cover)
+        for (const candidate of t.coverFallbacks) {
+          cover = await fetchCandidate(candidate);
+          if (!current()) return;
+          if (cover) {
+            url = candidate;
+            break;
+          }
+        }
+      if (cover)
+        db()
+          .prepare(
+            `INSERT OR REPLACE INTO resolved_covers(tracked_id,context,url,failures) VALUES(?,?,?,0)`,
+          )
+          .run(id, context, url);
+    }
+    if (!cover || !series || !current()) return;
+    await syncSeriesCover(series, url, () => Boolean(current()), signal, cover);
+  }, signal);
 }
 export async function syncTrackedCovers(parentSignal?: AbortSignal) {
   const signal = AbortSignal.any([

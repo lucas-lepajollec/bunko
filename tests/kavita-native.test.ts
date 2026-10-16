@@ -273,7 +273,7 @@ beforeEach(async () => {
   await engine.controlEngine({ action: 'clear' });
   await engine.controlEngine({ action: 'resume' });
   db().exec(
-    'DELETE FROM tracked_media;DELETE FROM imported_chapters;DELETE FROM download_batches;DELETE FROM download_jobs;DELETE FROM kavita_series;DELETE FROM worker_state;DELETE FROM worker_lock;DELETE FROM source_health;DELETE FROM catalog_fts;',
+    'DELETE FROM metadata_cache;DELETE FROM image_cache;DELETE FROM tracked_media;DELETE FROM imported_chapters;DELETE FROM download_batches;DELETE FROM download_jobs;DELETE FROM kavita_series;DELETE FROM worker_state;DELETE FROM worker_lock;DELETE FROM source_health;DELETE FROM catalog_fts;',
   );
   updateSettings({
     suwayomiUrl: base,
@@ -296,6 +296,7 @@ beforeEach(async () => {
   indexFailure = false;
   duplicate = false;
   coverHtml = false;
+  rmSync(path.join(directory, 'state', 'cache'), { recursive: true, force: true });
   catalogMode = 'one';
   activeSources = 0;
   maxSources = 0;
@@ -506,7 +507,9 @@ describe('Kavita index, paths and presence', () => {
     expect(cover.headers.get('content-type')).toBe('image/png');
     expect(calls.findLast((c) => c.path.startsWith('/api/Image'))?.key).toBe('fixture-key');
     coverHtml = true;
-    expect((await GET(request('/api/kavita/image?seriesId=77'))).status).toBe(502);
+    expect((await GET(request('/api/kavita/image?seriesId=77'))).status).toBe(200);
+    // A cold invalid upstream image is still rejected.
+    expect((await GET(request('/api/kavita/image?seriesId=88'))).status).toBe(502);
     expect((await GET(request('/api/kavita/image?seriesId=-1'))).status).toBe(400);
     const statusRoute = await import('@/app/api/kavita/status/route');
     expect(await (await statusRoute.GET(request('/api/kavita/status'))).json()).toMatchObject({

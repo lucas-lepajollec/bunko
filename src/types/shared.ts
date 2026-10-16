@@ -272,6 +272,8 @@ export interface TrackedMedia {
   identity: 'catalog' | 'off-catalog';
   /** Other covers to try, in automatic order, when `coverUrl` fails to load (empty for a manual choice). */
   coverFallbacks: string[];
+  /** Hero background: the catalog work's banner (`auto`) or none (`hidden`, chosen by the user). */
+  backdrop: 'auto' | 'hidden';
   /** Background source matching for this entry (comics only; `linked` once it has sources). */
   sourceMatch: 'linked' | 'queued' | 'searching' | 'not-found';
 }
@@ -332,6 +334,8 @@ export interface TrackPatch {
   id: number;
   /** Replace a wrong catalog match; status, sources and history are kept. */
   media?: UnifiedMedia;
+  /** Show the catalog banner behind the title (`auto`) or hide it (`hidden`). */
+  backdrop?: 'auto' | 'hidden';
   /** Detach from the catalog (wrong match, title not catalogued): identity becomes the Kavita series or the first source. */
   offCatalog?: true;
   /**

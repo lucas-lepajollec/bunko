@@ -10,7 +10,7 @@ const root = path.join(directory, 'library');
 process.env.BUNKO_DATA_DIR = path.join(directory, 'state');
 process.env.BUNKO_LIBRARY_DIR = root;
 process.env.BUNKO_WORKER = 'false';
-const { db, track, listTracked, migrateV6, acquireWorker, saveSourceStatus } =
+const { db, track, listTracked, migrateV6, migrateV7, acquireWorker, saveSourceStatus } =
   await import('@/lib/db');
 const { emptyMedia } = await import('@/lib/media');
 const { updateSettings, persistentSecret, getSettings } = await import('@/lib/settings');
@@ -221,8 +221,9 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   db().exec(
-    'DELETE FROM worker_lock; DELETE FROM tracked_media; DELETE FROM settings; DELETE FROM worker_state; DELETE FROM kavita_series; DELETE FROM source_health; DELETE FROM imported_chapters; DELETE FROM download_batches; DELETE FROM download_jobs; DELETE FROM kavita_dismissals; DELETE FROM catalog_fts; DELETE FROM catalog_keys;',
+    'DELETE FROM metadata_cache; DELETE FROM image_cache; DELETE FROM worker_lock; DELETE FROM tracked_media; DELETE FROM settings; DELETE FROM worker_state; DELETE FROM kavita_series; DELETE FROM source_health; DELETE FROM imported_chapters; DELETE FROM download_batches; DELETE FROM download_jobs; DELETE FROM kavita_dismissals; DELETE FROM catalog_fts; DELETE FROM catalog_keys;',
   );
+  rmSync(path.join(directory, 'state', 'cache'), { recursive: true, force: true });
   rmSync(root, { recursive: true, force: true });
   mkdirSync(root, { recursive: true });
   sources = ['1', '2', '3', '4'].map((id) => ({ id, name: `Source ${id}`, lang: 'fr' }));
@@ -517,7 +518,8 @@ it('uses catalog then source then Kavita in auto mode and exposes choices everyw
       "UPDATE tracked_media SET media_json=json_set(media_json,'$.coverUrl',NULL) WHERE id=?",
     )
     .run(t.id);
-  expect(listTracked()[0].coverUrl).toBe(thumbnail());
+  // A validated automatic cover survives a metadata thumbnail disappearing.
+  expect(listTracked()[0].coverUrl).toBe(catalog().coverUrl);
   await patch({ id: t.id, sources: [] });
   expect(listTracked()[0].coverUrl).toBe('/api/kavita/image?seriesId=77');
   const bad = await patch({ id: t.id, cover: { origin: 'catalog', id: 'wrong' } });
@@ -952,4 +954,120 @@ it('completes release refresh counters for every attempted entry', async () => {
   await runUpdateCheck(vi.fn());
   const { libraryActivity } = await import('@/lib/library-activity');
   expect(libraryActivity().refresh).toMatchObject({ running: false, done: 2, total: 2 });
+});
+
+it('defaults new entries to automatic backdrops and persists each entry independently', async () => {
+  const response = await trackedRoute.POST(request('POST', { media: catalog() }));
+  expect(response.status).toBe(201);
+  const first = await response.json();
+  expect(first.backdrop).toBe('auto');
+  const second = track({ media: catalog(2, 'Another Work') });
+  expect(second.backdrop).toBe('auto');
+  expect((await patch({ id: first.id, backdrop: 'hidden' })).status).toBe(200);
+  const entries = await (await trackedRoute.GET(request('GET'))).json();
+  expect(entries.find((t: { id: number }) => t.id === first.id).backdrop).toBe('hidden');
+  expect(entries.find((t: { id: number }) => t.id === second.id).backdrop).toBe('auto');
+  expect(track({ media: catalog() }).backdrop).toBe('hidden');
+});
+
+it('patches both backdrop choices and preserves them through unrelated patches', async () => {
+  const t = track({ media: catalog() });
+  expect(await (await patch({ id: t.id, backdrop: 'hidden' })).json()).toMatchObject({
+    id: t.id,
+    backdrop: 'hidden',
+  });
+  expect(await (await patch({ id: t.id, status: 'PAUSED', cover: 'auto' })).json()).toMatchObject({
+    status: 'PAUSED',
+    backdrop: 'hidden',
+  });
+  expect(await (await patch({ id: t.id, backdrop: 'auto' })).json()).toMatchObject({
+    id: t.id,
+    backdrop: 'auto',
+  });
+  expect(db().prepare('SELECT backdrop FROM tracked_media WHERE id=?').get(t.id)).toEqual({
+    backdrop: 'auto',
+  });
+});
+
+it.each(['', 'AUTO', 'visible', null, false, 1, {}, []])(
+  'rejects invalid backdrop %j without mutating the tracked entry',
+  async (backdrop) => {
+    const t = track({ media: catalog() });
+    await patch({ id: t.id, backdrop: 'hidden' });
+    const response = await patch({ id: t.id, backdrop, status: 'DROPPED' });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
+    expect(listTracked()[0]).toMatchObject({ backdrop: 'hidden', status: 'READING' });
+  },
+);
+
+it.each([undefined, 'hidden'])(
+  'resets the backdrop when replacing catalog media (submitted choice: %s)',
+  async (backdrop) => {
+    const t = track({ media: catalog() });
+    await patch({ id: t.id, backdrop: 'hidden' });
+    const response = await patch({ id: t.id, media: catalog(2, 'Correct Work'), backdrop });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      id: t.id,
+      backdrop: 'auto',
+      media: { id: 'anilist:2' },
+    });
+    expect(listTracked()[0].backdrop).toBe('auto');
+  },
+);
+
+it.each(['kavita', 'source'])(
+  'resets the backdrop when detaching to %s, including a simultaneous hidden choice',
+  async (origin) => {
+    if (origin === 'kavita') indexSeries();
+    const t = track({
+      media: catalog(),
+      ...(origin === 'kavita' ? { kavitaSeriesId: 77 } : { sources: [source()] }),
+    });
+    await patch({ id: t.id, backdrop: 'hidden' });
+    const response = await patch({ id: t.id, offCatalog: true, backdrop: 'hidden' });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      id: t.id,
+      identity: 'off-catalog',
+      backdrop: 'auto',
+    });
+    expect(listTracked()[0].backdrop).toBe('auto');
+  },
+);
+
+it('keeps the backdrop when an identity change fails', async () => {
+  const t = track({ media: catalog() });
+  track({ media: catalog(2, 'Already Tracked') });
+  await patch({ id: t.id, backdrop: 'hidden' });
+  expect((await patch({ id: t.id, offCatalog: true })).status).toBe(409);
+  expect((await patch({ id: t.id, media: catalog(2, 'Already Tracked') })).status).toBe(409);
+  expect(listTracked().find((entry) => entry.id === t.id)?.backdrop).toBe('hidden');
+});
+
+it('migrates v6 backdrops with defaults, preserves choices across reopen and never downgrades', () => {
+  const file = path.join(directory, 'backdrop-migration.db');
+  const old = new Database(file);
+  old.exec(`CREATE TABLE tracked_media(id INTEGER PRIMARY KEY,media_json TEXT);
+    INSERT INTO tracked_media VALUES(1,'{"id":"anilist:1"}'); PRAGMA user_version=6;`);
+  migrateV7(old);
+  expect(old.pragma('user_version', { simple: true })).toBe(7);
+  expect(old.prepare('SELECT * FROM tracked_media').get()).toEqual({
+    id: 1,
+    media_json: '{"id":"anilist:1"}',
+    backdrop: 'auto',
+  });
+  old.prepare("UPDATE tracked_media SET backdrop='hidden' WHERE id=1").run();
+  old.close();
+  const reopened = new Database(file);
+  migrateV7(reopened);
+  expect(reopened.prepare('SELECT backdrop FROM tracked_media WHERE id=1').get()).toEqual({
+    backdrop: 'hidden',
+  });
+  expect(() => reopened.exec("UPDATE tracked_media SET backdrop='invalid'")).toThrow();
+  reopened.pragma('user_version=8');
+  migrateV7(reopened);
+  expect(reopened.pragma('user_version', { simple: true })).toBe(8);
+  reopened.close();
 });

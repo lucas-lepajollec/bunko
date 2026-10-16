@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Loaded data stays loaded: images from Kavita and sources are cached on disk, catalog metadata persists across restarts, the automatic cover is fixed once it works (and pushed to Kavita), and the browser keeps the last library and sheets between visits. Background activity no longer refetches whole pages.
+- Title backgrounds show only the catalog work's own banner: none when there is no banner or the title is off-catalog, and they can be hidden per title (Matches → Images).
+- A visible "Matches" button on every title; layouts checked from 360 px to desktop.
+- Banner visibility choices persist per followed title and reset to automatic when changing its catalog identity.
+
 - Kavita covers load on stable Kavita (the image API needs the key as a query parameter).
 - Source matching runs continuously in the background instead of three titles per update cycle; progress shows in the header and the library, and cards say when sources are pending, being searched or not found ("To check" filter).
 - Covers fall back automatically when an image fails; any cover from the live source scan can be chosen without linking that source.

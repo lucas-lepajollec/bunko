@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { coverContext } from './cover-state';
 import { activeSourceMatch, SOURCE_MATCH_RETRY_MS } from './source-match-state';
 import { matchKavita, withKavita } from './kavita-index';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -52,6 +53,18 @@ export function db(): Database.Database {
   migrateV4(connection);
   migrateV5(connection);
   migrateV6(connection);
+  migrateV7(connection);
+  connection.exec(`
+    CREATE TABLE IF NOT EXISTS metadata_cache (
+      key TEXT PRIMARY KEY, payload TEXT NOT NULL, bytes INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL, attempted_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS image_cache (
+      key TEXT PRIMARY KEY, bytes INTEGER NOT NULL, accessed_at INTEGER NOT NULL,
+      attempted_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS resolved_covers (
+      tracked_id INTEGER PRIMARY KEY REFERENCES tracked_media(id) ON DELETE CASCADE,
+      context TEXT NOT NULL, url TEXT NOT NULL, failures INTEGER NOT NULL DEFAULT 0);
+  `);
   resetAccountAtStartup(connection);
   return connection;
 }
@@ -140,6 +153,15 @@ export function migrateV6(database: Database.Database) {
         source_id TEXT NOT NULL, manga_id INTEGER NOT NULL,
         PRIMARY KEY(tracked_id,source_id,manga_id));
       PRAGMA user_version = 6;`);
+  })();
+}
+/** Persist the per-entry banner choice, including for existing tracked entries. */
+export function migrateV7(database: Database.Database) {
+  database.transaction(() => {
+    if (Number(database.pragma('user_version', { simple: true })) >= 7) return;
+    database.exec(`ALTER TABLE tracked_media ADD COLUMN backdrop TEXT NOT NULL DEFAULT 'auto'
+      CHECK(backdrop IN ('auto','hidden'));
+      PRAGMA user_version = 7;`);
   })();
 }
 export function sourceStatuses(
@@ -360,8 +382,22 @@ export function listTracked(): TrackedMedia[] {
         ].filter((url): url is string => Boolean(url)),
       ),
     ];
+    const resolved = db()
+      .prepare('SELECT context,url FROM resolved_covers WHERE tracked_id=?')
+      .get(Number(r.id)) as { context: string; url: string } | undefined;
+    const context = coverContext(
+      rawMedia.id,
+      identity,
+      coverChoice,
+      sources,
+      kavita?.seriesId ?? null,
+    );
     const coverUrl =
-      coverChoice === 'auto' ? (automaticCovers[0] ?? null) : (r.cover_url as string | null);
+      coverChoice === 'auto'
+        ? resolved?.context === context
+          ? resolved.url
+          : (automaticCovers[0] ?? null)
+        : (r.cover_url as string | null);
     const media = { ...withKavita(rawMedia, r.kavita_series_id as number | null), coverUrl };
     const imported = db()
       .prepare(
@@ -400,7 +436,9 @@ export function listTracked(): TrackedMedia[] {
       type: r.type as TrackedMedia['type'],
       coverUrl,
       coverChoice,
-      coverFallbacks: coverChoice === 'auto' ? automaticCovers.slice(1) : [],
+      backdrop: r.backdrop as TrackedMedia['backdrop'],
+      coverFallbacks:
+        coverChoice === 'auto' ? automaticCovers.filter((url) => url !== coverUrl) : [],
       sourceMatch: sources.length
         ? 'linked'
         : matching?.id === Number(r.id)

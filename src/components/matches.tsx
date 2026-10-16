@@ -200,7 +200,7 @@ export function MatchesDrawer({
                 className="w-14 shrink-0 shadow-none"
               />
               <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <Dialog.Title className="font-display text-[28px] leading-none font-extrabold tracking-[-0.03em]">
+                <Dialog.Title className="font-display truncate text-[22px] leading-none font-extrabold tracking-[-0.03em] md:text-[28px]">
                   {t('match.title')}
                 </Dialog.Title>
                 <Dialog.Description className="text-muted truncate font-serif text-lg italic">
@@ -222,7 +222,7 @@ export function MatchesDrawer({
                 { id: 'catalog', label: t('match.tab.catalog') },
                 { id: 'sources', label: t('match.sources') },
                 { id: 'kavita', label: 'Kavita' },
-                { id: 'cover', label: t('match.cover') },
+                { id: 'cover', label: t('match.tab.images') },
               ]}
             />
           </div>
@@ -263,6 +263,8 @@ export function MatchesDrawer({
             ) : (
               <CoverTab
                 entry={entry!}
+                media={media}
+                onBackdrop={(backdrop) => run(() => patch({ backdrop }))}
                 lanes={lanes}
                 sources={sources}
                 onPick={(cover) => run(() => patch({ cover }))}
@@ -577,11 +579,15 @@ function SourcesTab({
 
 function CoverTab({
   entry,
+  media,
+  onBackdrop,
   lanes,
   sources,
   onPick,
 }: {
   entry: TrackedMedia;
+  media: MediaDetail;
+  onBackdrop: (b: 'auto' | 'hidden') => Promise<void>;
   lanes: Lane[] | null;
   sources: ChapterSelection[];
   onPick: (c: CoverChoice) => Promise<void>;
@@ -677,6 +683,7 @@ function CoverTab({
       {!scanning && options.data && all.length === 0 && (
         <p className="text-muted text-sm">{t('match.noCover')}</p>
       )}
+      <BackdropSection entry={entry} media={media} onChange={onBackdrop} />
     </div>
   );
 }
@@ -742,5 +749,52 @@ function Small({
     >
       {children}
     </button>
+  );
+}
+
+function BackdropSection({
+  entry,
+  media,
+  onChange,
+}: {
+  entry: TrackedMedia;
+  media: MediaDetail;
+  onChange: (b: 'auto' | 'hidden') => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const banner = entry.identity === 'catalog' ? media.bannerUrl : null;
+  const shown = Boolean(banner) && entry.backdrop !== 'hidden';
+  return (
+    <div className="border-line mt-2 flex flex-col gap-3 border-t pt-5">
+      <span className="text-muted text-xs tracking-[0.14em] uppercase">{t('match.backdrop')}</span>
+      {banner ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element -- remote catalog banner */}
+          <img
+            src={banner}
+            alt=""
+            referrerPolicy="no-referrer"
+            className={cx(
+              'aspect-[3/1] w-full rounded-xl object-cover transition-opacity',
+              !shown && 'opacity-30 grayscale',
+            )}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-mid text-sm">
+              {shown ? t('match.backdropShown') : t('match.backdropHidden')}
+            </span>
+            <button
+              type="button"
+              onClick={() => onChange(shown ? 'hidden' : 'auto')}
+              className={smallButton}
+            >
+              {shown ? t('match.backdropHide') : t('match.backdropShow')}
+            </button>
+          </div>
+        </>
+      ) : (
+        <p className="text-muted text-sm">{t('match.backdropNone')}</p>
+      )}
+    </div>
   );
 }

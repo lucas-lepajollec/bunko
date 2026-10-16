@@ -613,9 +613,16 @@ const en: Dictionary = {
   'activity.idle': 'Releases checked {when}',
   'activity.next': 'next {when}',
   'library.review': 'To check · {count}',
-  'library.match.queued': 'Sources pending',
-  'library.match.searching': 'Searching sources…',
-  'library.match.not-found': 'No source found',
+  'library.match.queued': 'Pending',
+  'library.match.searching': 'Searching…',
+  'library.match.not-found': 'No source',
+  'match.tab.images': 'Images',
+  'match.backdrop': 'Background',
+  'match.backdropShown': 'The catalog banner is shown behind the title.',
+  'match.backdropHidden': 'Background hidden.',
+  'match.backdropHide': 'Hide',
+  'match.backdropShow': 'Show',
+  'match.backdropNone': 'No banner for this title: no background is shown.',
 };
 
 const fr: Dictionary = {
@@ -1205,9 +1212,16 @@ const fr: Dictionary = {
   'activity.idle': 'Parutions vérifiées {when}',
   'activity.next': 'prochaine {when}',
   'library.review': 'À vérifier · {count}',
-  'library.match.queued': 'Sources en attente',
-  'library.match.searching': 'Recherche de sources…',
-  'library.match.not-found': 'Aucune source trouvée',
+  'library.match.queued': 'En attente',
+  'library.match.searching': 'Recherche…',
+  'library.match.not-found': 'Sans source',
+  'match.tab.images': 'Images',
+  'match.backdrop': 'Fond',
+  'match.backdropShown': 'La bannière du catalogue s’affiche derrière le titre.',
+  'match.backdropHidden': 'Fond masqué.',
+  'match.backdropHide': 'Masquer',
+  'match.backdropShow': 'Afficher',
+  'match.backdropNone': 'Pas de bannière pour ce titre : aucun fond n’est affiché.',
 };
 
 const es: Dictionary = {
@@ -1792,9 +1806,16 @@ const es: Dictionary = {
   'activity.idle': 'Novedades comprobadas {when}',
   'activity.next': 'próxima {when}',
   'library.review': 'Por revisar · {count}',
-  'library.match.queued': 'Fuentes pendientes',
-  'library.match.searching': 'Buscando fuentes…',
-  'library.match.not-found': 'Ninguna fuente encontrada',
+  'library.match.queued': 'Pendiente',
+  'library.match.searching': 'Buscando…',
+  'library.match.not-found': 'Sin fuente',
+  'match.tab.images': 'Imágenes',
+  'match.backdrop': 'Fondo',
+  'match.backdropShown': 'El banner del catálogo se muestra detrás del título.',
+  'match.backdropHidden': 'Fondo oculto.',
+  'match.backdropHide': 'Ocultar',
+  'match.backdropShow': 'Mostrar',
+  'match.backdropNone': 'Sin banner para este título: no se muestra fondo.',
 };
 
 const de: Dictionary = {
@@ -2383,9 +2404,16 @@ const de: Dictionary = {
   'activity.idle': 'Neuerscheinungen geprüft {when}',
   'activity.next': 'nächste {when}',
   'library.review': 'Zu prüfen · {count}',
-  'library.match.queued': 'Quellen ausstehend',
-  'library.match.searching': 'Quellen werden gesucht…',
-  'library.match.not-found': 'Keine Quelle gefunden',
+  'library.match.queued': 'Ausstehend',
+  'library.match.searching': 'Suche…',
+  'library.match.not-found': 'Keine Quelle',
+  'match.tab.images': 'Bilder',
+  'match.backdrop': 'Hintergrund',
+  'match.backdropShown': 'Das Katalogbanner wird hinter dem Titel angezeigt.',
+  'match.backdropHidden': 'Hintergrund ausgeblendet.',
+  'match.backdropHide': 'Ausblenden',
+  'match.backdropShow': 'Anzeigen',
+  'match.backdropNone': 'Kein Banner für diesen Titel: kein Hintergrund.',
 };
 
 const it: Dictionary = {
@@ -2972,9 +3000,16 @@ const it: Dictionary = {
   'activity.idle': 'Uscite controllate {when}',
   'activity.next': 'prossima {when}',
   'library.review': 'Da controllare · {count}',
-  'library.match.queued': 'Fonti in attesa',
-  'library.match.searching': 'Ricerca fonti…',
-  'library.match.not-found': 'Nessuna fonte trovata',
+  'library.match.queued': 'In attesa',
+  'library.match.searching': 'Ricerca…',
+  'library.match.not-found': 'Senza fonte',
+  'match.tab.images': 'Immagini',
+  'match.backdrop': 'Sfondo',
+  'match.backdropShown': 'Il banner del catalogo appare dietro il titolo.',
+  'match.backdropHidden': 'Sfondo nascosto.',
+  'match.backdropHide': 'Nascondi',
+  'match.backdropShow': 'Mostra',
+  'match.backdropNone': 'Nessun banner per questo titolo: nessuno sfondo.',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

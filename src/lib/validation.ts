@@ -235,6 +235,7 @@ export const trackPatch = z
     id,
     media: media.optional(),
     offCatalog: z.literal(true).optional(),
+    backdrop: z.enum(['auto', 'hidden']).optional(),
     cover: z
       .union([
         z.literal('auto'),

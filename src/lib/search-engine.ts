@@ -16,6 +16,7 @@ import {
   type DexManga,
   type UpdatesRecord,
 } from './media';
+import { cached } from './metadata-cache';
 export { emptyMedia, normalizeTitle };
 function identities(m: UnifiedMedia) {
   return [m.title, ...m.altTitles].map(normalizeTitle).filter(Boolean);
@@ -147,7 +148,6 @@ function enrichSearch(items: UnifiedMedia[]): UnifiedMedia[] {
     );
   });
 }
-const cache = new Map<string, { at: number; value: SearchResponse }>();
 export async function search(
   query: string,
   type?: MediaType,
@@ -155,16 +155,12 @@ export async function search(
 ): Promise<SearchResponse> {
   const start = Date.now();
   const key = `${type}:${query.toLowerCase()}`;
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < 30_000)
-    return { ...structuredClone(hit.value), results: enrichSearch(hit.value.results) };
   const jobs: { provider: Provider; run: () => Promise<UnifiedMedia[]> }[] = [
-    { provider: 'anilist', run: () => anilist(query, type, signal) },
+    { provider: 'anilist', run: () => anilist(query, type) },
   ];
-  if (!type || type === 'MANGA')
-    jobs.push({ provider: 'mangadex', run: () => mangadex(query, signal) });
+  if (!type || type === 'MANGA') jobs.push({ provider: 'mangadex', run: () => mangadex(query) });
   if (type !== 'ANIME')
-    jobs.push({ provider: 'mangaupdates', run: () => mangaupdates(query, type, signal) });
+    jobs.push({ provider: 'mangaupdates', run: () => mangaupdates(query, type) });
   if (!type || type === 'MANGA')
     jobs.push({
       provider: 'local',
@@ -180,7 +176,10 @@ export async function search(
     jobs.map(async (j, i) => {
       const at = Date.now();
       try {
-        return await j.run();
+        signal?.throwIfAborted();
+        return j.provider === 'local'
+          ? await j.run()
+          : await cached(`search:${j.provider}:${key}`, 30_000, j.run);
       } finally {
         timings[i] = Date.now() - at;
       }
@@ -201,7 +200,5 @@ export async function search(
     })),
     durationMs: Date.now() - start,
   };
-  if (cache.size >= 100) cache.delete(cache.keys().next().value!);
-  cache.set(key, { at: Date.now(), value });
   return value;
 }

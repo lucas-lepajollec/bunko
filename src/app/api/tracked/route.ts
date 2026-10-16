@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { body, json, route } from '@/lib/api';
 import { db, listTracked, track, untrack, sameMedia } from '@/lib/db';
 import { trackBody, trackPatch } from '@/lib/validation';
-import { refreshLibraryProgress } from '@/lib/kavita';
+import { refreshProgressOnDemand } from '@/lib/progress-refresh';
 import { indexedSeriesById } from '@/lib/kavita-index';
 import { AppError } from '@/lib/errors';
 import { kavitaMedia } from '@/lib/kavita-track';
@@ -15,7 +15,7 @@ export const GET = route(async (r) => {
   const { refresh } = z
     .object({ refresh: z.literal('progress').optional() })
     .parse(Object.fromEntries(new URL(r.url).searchParams));
-  if (refresh) await refreshLibraryProgress(r.signal);
+  if (refresh) await refreshProgressOnDemand();
   return json(listTracked());
 });
 export const POST = route(async (r) => json(track(await body(r, trackBody)), 201));
@@ -73,6 +73,12 @@ export const PATCH = route(async (r) => {
   try {
     db().transaction(() => {
       if (input.sources) replaceSources(current, input.sources);
+      if (
+        input.media ||
+        input.offCatalog ||
+        (input.cover && JSON.stringify(input.cover) !== JSON.stringify(current.coverChoice))
+      )
+        db().prepare('DELETE FROM resolved_covers WHERE tracked_id=?').run(input.id);
       if (input.media || input.offCatalog || input.kavitaSeriesId !== undefined)
         db().prepare('UPDATE tracked_media SET source_match_at=NULL WHERE id=?').run(input.id);
       db()
@@ -84,7 +90,7 @@ export const PATCH = route(async (r) => {
       last_read_at=CASE WHEN ? THEN NULL ELSE last_read_at END,
       progress_checked=CASE WHEN ? THEN 0 ELSE progress_checked END,
       off_catalog=CASE WHEN ? THEN ? ELSE off_catalog END,
-      cover_choice_json=? WHERE id=?`,
+      cover_choice_json=?,backdrop=? WHERE id=?`,
         )
         .run(
           input.status ?? current.status,
@@ -108,6 +114,7 @@ export const PATCH = route(async (r) => {
           JSON.stringify(
             input.cover ?? (input.media || input.offCatalog ? 'auto' : current.coverChoice),
           ),
+          input.media || input.offCatalog ? 'auto' : (input.backdrop ?? current.backdrop),
           input.id,
         );
     })();

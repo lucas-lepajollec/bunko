@@ -26,7 +26,7 @@ check 401 "API requires authentication" "$base/api/settings"
 # Every API route must be present in the image (an ignored folder once dropped one silently).
 check 200 "public auth state" "$base/api/auth"
 check 401 "password route exists" -X POST "$base/api/auth/password"
-for route in discover genres media media/sources search search/stream manga/chapters tracked tracked/covers library/activity updates sources downloads extensions settings status kavita/status kavita/libraries kavita/series; do
+for route in discover genres media media/sources search search/stream manga/chapters tracked tracked/covers library/activity updates sources downloads extensions settings status kavita/status kavita/libraries kavita/series kavita/image suwayomi/image; do
   check 401 "route /api/$route exists" "$base/api/$route"
 done
 credentials='{"username":"SmokeAdmin","password":"synthetic-smoke-password"}'
@@ -39,4 +39,6 @@ check 401 "wrong password rejected" -X POST "$base/api/auth" -H 'Content-Type: a
 check 200 "account login from same origin" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H "Origin: $base" -d "$credentials"
 token="$(docker exec "$name" cat /data/access.token)"
 check 200 "bearer API access" -H "Authorization: Bearer $token" "$base/api/settings"
+check 400 "Kavita image input validated" -H "Authorization: Bearer $token" "$base/api/kavita/image?seriesId=-1"
+check 400 "Suwayomi image input validated" -H "Authorization: Bearer $token" "$base/api/suwayomi/image?path=/api/graphql"
 echo "container smoke passed"

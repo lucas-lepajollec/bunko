@@ -6,7 +6,8 @@ import type { UnifiedMedia } from '@/types/shared';
 import type { IndexedSeries } from './kavita-index';
 import { mapKavitaPath, safeLibraryDirectory, writableFolder } from './library-paths';
 import { boundedBuffer } from './chapter-pages';
-import { db } from './db';
+import { db, listTracked } from './db';
+import { coverContext } from './cover-state';
 import { endpoint } from './http';
 import { getSettings } from './settings';
 import { kavitaHeaders, kavitaCoverEndpoint } from './kavita-client';
@@ -14,6 +15,7 @@ import { imagePath } from './images';
 import { suwayomiHeaders } from './suwayomi';
 import { sharedConcurrencyGate } from './concurrency';
 import { AppError } from './errors';
+import { invalidateKavitaImage, type CachedImage } from './image-cache';
 const limit = 15 * 1024 * 1024;
 export function allowedCoverUrl(value: string) {
   try {
@@ -141,15 +143,36 @@ export async function ensureKavitaCover(series: IndexedSeries, media: UnifiedMed
       return;
     }
   }
+  const tracked = listTracked().find(
+    (t) => t.media.id === media.id && t.coverChoice === 'auto' && t.coverUrl === media.coverUrl,
+  );
+  if (tracked)
+    db()
+      .prepare(
+        'INSERT OR REPLACE INTO resolved_covers(tracked_id,context,url,failures) VALUES(?,?,?,0)',
+      )
+      .run(
+        tracked.id,
+        coverContext(
+          tracked.media.id,
+          tracked.identity,
+          tracked.coverChoice,
+          tracked.sources,
+          series.seriesId,
+        ),
+        media.coverUrl,
+      );
   const uploaded = db()
     .prepare('SELECT value FROM worker_state WHERE key=?')
     .get(`kavita_cover_hash:${series.seriesId}`) as { value: string } | undefined;
-  if (uploaded?.value !== digest(cover.bytes))
+  if (uploaded?.value !== digest(cover.bytes)) {
     await post('/api/Upload/series', {
       id: series.seriesId,
       url: `data:${cover.mime};base64,${cover.bytes.toString('base64')}`,
       lockCover: true,
     });
+    invalidateKavitaImage(series.seriesId);
+  }
   db()
     .prepare('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)')
     .run(`kavita_cover_hash:${series.seriesId}`, digest(cover.bytes));
@@ -194,9 +217,10 @@ export async function syncSeriesCover(
   url: string,
   current?: () => boolean,
   signal?: AbortSignal,
+  fetchedCover?: CachedImage,
 ) {
   return coverGate(async () => {
-    const cover = await selectedCover(url, signal);
+    const cover = fetchedCover ?? (await selectedCover(url, signal));
     if (!cover || (current && !current())) return;
     const hash = digest(cover.bytes);
     // The sidecar is optional when the series folder is not mounted; API upload still works.
@@ -243,7 +267,7 @@ export async function syncSeriesCover(
       { value: string } | undefined;
     if (previous?.value === hash || (current && !current())) return;
     // Never upload the reader's own cover back to itself.
-    if (new URL(url, 'http://bunko.invalid').pathname !== '/api/kavita/image')
+    if (new URL(url, 'http://bunko.invalid').pathname !== '/api/kavita/image') {
       await post(
         '/api/Upload/series',
         {
@@ -253,6 +277,8 @@ export async function syncSeriesCover(
         },
         signal,
       );
+      invalidateKavitaImage(series.seriesId);
+    }
     db().prepare('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)').run(key, hash);
   }, signal);
 }

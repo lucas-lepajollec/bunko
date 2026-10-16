@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { useSWRConfig } from 'swr';
 import type { LibraryActivity } from '@/types/shared';
-import { libraryKeys, useApi } from '@/lib/client/api';
+import { useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { useRelativeTime } from './time';
 import { Spinner, cx } from './ui';
@@ -13,7 +13,7 @@ const busy = (a: LibraryActivity | undefined) =>
 
 /**
  * Background work (source matching, release refresh). Polls quickly while something runs and
- * refreshes the library when a run finishes, so results appear without reloading.
+ * refreshes the library list (only it, at most every 20 s) so results appear without reloading.
  */
 export function useLibraryActivity({ sync = false }: { sync?: boolean } = {}) {
   const { mutate } = useSWRConfig();
@@ -21,6 +21,7 @@ export function useLibraryActivity({ sync = false }: { sync?: boolean } = {}) {
     refreshInterval: (a) => (busy(a) ? 4000 : 60_000),
   });
   const wasBusy = useRef(false);
+  const lastSync = useRef(0);
   const isBusy = busy(activity.data);
   // Changes only when a step completes, so polling alone never refetches the library.
   const progress = activity.data
@@ -28,8 +29,10 @@ export function useLibraryActivity({ sync = false }: { sync?: boolean } = {}) {
     : '';
   useEffect(() => {
     // Only one mounted caller (the header) refreshes, so the library is refetched once per step.
-    if (sync && wasBusy.current)
-      void mutate((key) => libraryKeys(key) && key !== '/api/library/activity');
+    if (sync && wasBusy.current && Date.now() - lastSync.current > 20_000) {
+      lastSync.current = Date.now();
+      void mutate('/api/tracked');
+    }
     wasBusy.current = isBusy;
   }, [progress, isBusy, mutate, sync]);
   return activity.data;
@@ -58,7 +61,7 @@ export function ActivityPill() {
     <Link
       href="/library"
       title={text}
-      className="text-mid hidden h-9 max-w-[260px] items-center gap-2 rounded-full bg-white/[0.06] px-3 text-xs hover:text-white lg:flex"
+      className="text-mid hidden h-9 max-w-[260px] items-center gap-2 rounded-full bg-white/[0.06] px-3 text-xs hover:text-white xl:flex"
     >
       <Spinner />
       <span className="truncate">{text}</span>

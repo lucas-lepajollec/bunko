@@ -11,11 +11,12 @@ import { UNAUTHORIZED_EVENT, send, useApi } from '@/lib/client/api';
 import { cx, errorText, field, primaryButton } from './ui';
 import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
 import { ActivityPill } from './activity';
+import { persistentCache } from '@/lib/client/cache';
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
     <I18nProvider>
-      <SWRConfig value={{ revalidateOnFocus: false }}>
+      <SWRConfig value={{ revalidateOnFocus: false, provider: persistentCache }}>
         <AuthGate>{children}</AuthGate>
       </SWRConfig>
     </I18nProvider>

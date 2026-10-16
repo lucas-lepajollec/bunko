@@ -1,10 +1,10 @@
 'use client';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { KavitaSeriesSummary, MediaFormat, TrackedMedia } from '@/types/shared';
 import { KavitaUnmatched } from '@/components/kavita';
 import { ActivityLine } from '@/components/activity';
-import { mediaHref, useApi } from '@/lib/client/api';
+import { api, mediaHref, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import {
@@ -42,7 +42,16 @@ const KIND_FORMATS: Record<Exclude<Kind, 'all'>, MediaFormat[]> = {
 
 export default function LibraryPage() {
   const { t, n } = useI18n();
-  const library = useApi<TrackedMedia[]>('/api/tracked?refresh=progress');
+  const library = useApi<TrackedMedia[]>('/api/tracked');
+  const { mutate: mutateList } = library;
+  useEffect(() => {
+    // Reading progress comes from Kavita; refresh it once per visit without blanking the shelf.
+    const controller = new AbortController();
+    api<TrackedMedia[]>('/api/tracked?refresh=progress', { signal: controller.signal })
+      .then((fresh) => mutateList(fresh, { revalidate: false }))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [mutateList]);
   const [shelf, setShelf] = useState<View>('READING');
   const unmatched = useApi<KavitaSeriesSummary[]>('/api/kavita/series?unmatched=1');
   const [kind, setKind] = useState<Kind>('all');

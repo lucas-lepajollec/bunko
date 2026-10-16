@@ -1,4 +1,5 @@
 'use client';
+import { clearPersistentCache } from '@/lib/client/cache';
 import Link from 'next/link';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useSWRConfig } from 'swr';
@@ -482,6 +483,7 @@ function Access() {
             type="button"
             onClick={async () => {
               await send('/api/auth', 'DELETE').catch(() => undefined);
+              clearPersistentCache();
               await mutate('/api/auth');
             }}
             className={smallButton}

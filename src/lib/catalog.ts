@@ -1,7 +1,10 @@
 import type { DiscoverPage, DiscoverQuery, MediaDetail, UnifiedMedia } from '@/types/shared';
 import { requestJson } from './http';
+import { createHash } from 'node:crypto';
+import { getSettings } from './settings';
 import { AppError } from './errors';
-import { listTracked, trackedForMedia } from './db';
+import { db, listTracked, trackedForMedia } from './db';
+import { cached, storedMetadata, saveMetadata } from './metadata-cache';
 import { kavitaMedia } from './kavita-track';
 import { withKavita } from './kavita-index';
 import { graphql } from './suwayomi';
@@ -35,15 +38,6 @@ async function anilist<T>(query: string, variables: Record<string, unknown>, sig
     throw new AppError('METADATA_UNAVAILABLE', 'AniList rejected the request', 502);
   return result.data;
 }
-const cache = new Map<string, { at: number; value: unknown }>();
-async function cached<T>(key: string, ttl: number, load: () => Promise<T>): Promise<T> {
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < ttl) return structuredClone(hit.value as T);
-  const value = await load();
-  if (cache.size >= 300) cache.delete(cache.keys().next().value!);
-  cache.set(key, { at: Date.now(), value });
-  return structuredClone(value);
-}
 export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
   const tracked = listTracked();
   return items.map((m) => {
@@ -66,6 +60,7 @@ const sorts = {
   new: ['START_DATE_DESC', 'POPULARITY_DESC'],
 } as const;
 export async function discover(q: DiscoverQuery, signal?: AbortSignal): Promise<DiscoverPage> {
+  signal?.throwIfAborted();
   const kind = q.kind ?? 'all';
   const sort = q.sort ?? 'trending';
   const page = q.page ?? 1;
@@ -106,7 +101,7 @@ export async function discover(q: DiscoverQuery, signal?: AbortSignal): Promise<
         }
       }`,
       variables,
-      signal,
+      undefined,
     ),
   );
   return {
@@ -116,8 +111,9 @@ export async function discover(q: DiscoverQuery, signal?: AbortSignal): Promise<
   };
 }
 export async function genres(signal?: AbortSignal): Promise<string[]> {
+  signal?.throwIfAborted();
   const data = await cached('genres', 24 * 3600_000, () =>
-    anilist<{ GenreCollection: string[] }>('query { GenreCollection }', {}, signal),
+    anilist<{ GenreCollection: string[] }>('query { GenreCollection }', {}),
   );
   return data.GenreCollection.filter((g) => g !== 'Hentai');
 }
@@ -127,17 +123,16 @@ interface AniDetail extends AniMedia {
   recommendations: { nodes: { mediaRecommendation: AniMedia | null }[] };
 }
 async function anilistDetail(id: number, signal?: AbortSignal): Promise<MediaDetail> {
-  const { Media: m } = await cached(`anilist:${id}`, 30 * 60_000, () =>
-    anilist<{ Media: AniDetail | null }>(
-      `query($id: Int) { Media(id: $id) { ${aniFields}
+  signal?.throwIfAborted();
+  const { Media: m } = await anilist<{ Media: AniDetail | null }>(
+    `query($id: Int) { Media(id: $id) { ${aniFields}
         staff(perPage: 10) { edges { role node { name { full } } } }
         tags { name rank isMediaSpoiler }
         relations { edges { relationType node { ${aniFields} } } }
         recommendations(perPage: 18, sort: RATING_DESC) { nodes { mediaRecommendation { ${aniFields} isAdult } } }
       } }`,
-      { id },
-      signal,
-    ),
+    { id },
+    signal,
   );
   if (!m) throw new AppError('NOT_FOUND', 'Title not found', 404);
   return {
@@ -156,9 +151,7 @@ async function anilistDetail(id: number, signal?: AbortSignal): Promise<MediaDet
 async function mangadexDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
   const url = new URL(`https://api.mangadex.org/manga/${encodeURIComponent(id)}`);
   ['cover_art', 'author', 'artist'].forEach((v) => url.searchParams.append('includes[]', v));
-  const { data } = await cached(`mangadex:${id}`, 30 * 60_000, () =>
-    requestJson<{ data: DexManga }>(url, { signal }, 6000),
-  );
+  const { data } = await requestJson<{ data: DexManga }>(url, { signal }, 6000);
   const media = fromMangaDex(data);
   // MangaDex links most catalogued titles to AniList; prefer that richer sheet when available.
   if (media.anilistId) {
@@ -172,39 +165,37 @@ async function mangadexDetail(id: string, signal?: AbortSignal): Promise<MediaDe
   return { ...media, tags: [], relations: [], recommendations: [] };
 }
 async function mangaupdatesDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
-  const record = await cached(`mangaupdates:${id}`, 30 * 60_000, () =>
-    requestJson<UpdatesRecord & { genres: { genre: string }[] }>(
-      `https://api.mangaupdates.com/v1/series/${encodeURIComponent(id)}`,
-      { signal },
-      6000,
-    ),
+  signal?.throwIfAborted();
+  const record = await requestJson<UpdatesRecord & { genres: { genre: string }[] }>(
+    `https://api.mangaupdates.com/v1/series/${encodeURIComponent(id)}`,
+    { signal },
+    6000,
   );
   return { ...fromMangaUpdates(record), tags: [], relations: [], recommendations: [] };
 }
-export async function suwayomiDetail(id: number, signal?: AbortSignal): Promise<MediaDetail> {
-  const { manga } = await sourceCall(
-    () =>
-      graphql<{
-        manga: {
-          id: number;
-          title: string;
-          url: string;
-          thumbnailUrl: string | null;
-          description: string | null;
-          genre: string[];
-          author: string | null;
-          artist: string | null;
-          status: string | null;
-          sourceId: string;
-          source: { name: string; lang: string } | null;
-        };
-      }>(
-        'query($id: Int!) { manga(id: $id) { id title url thumbnailUrl description genre author artist status sourceId source { name lang } } }',
-        { id },
-        10_000,
-        signal,
-      ),
-    signal,
+async function loadSuwayomiDetail(id: number, signal?: AbortSignal): Promise<MediaDetail> {
+  signal?.throwIfAborted();
+  const { manga } = await sourceCall(() =>
+    graphql<{
+      manga: {
+        id: number;
+        title: string;
+        url: string;
+        thumbnailUrl: string | null;
+        description: string | null;
+        genre: string[];
+        author: string | null;
+        artist: string | null;
+        status: string | null;
+        sourceId: string;
+        source: { name: string; lang: string } | null;
+      };
+    }>(
+      'query($id: Int!) { manga(id: $id) { id title url thumbnailUrl description genre author artist status sourceId source { name lang } } }',
+      { id },
+      10_000,
+      undefined,
+    ),
   );
   if (!manga) throw new AppError('NOT_FOUND', 'Suwayomi manga not found', 404);
   return {
@@ -230,7 +221,7 @@ export async function suwayomiDetail(id: number, signal?: AbortSignal): Promise<
     recommendations: [],
   };
 }
-export async function mediaDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
+async function loadDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
   const [provider, key] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
   let detail: MediaDetail;
   if (provider === 'kavita' && /^[1-9]\d{0,9}$/.test(key))
@@ -242,8 +233,11 @@ export async function mediaDetail(id: string, signal?: AbortSignal): Promise<Med
   else if (provider === 'mangaupdates' && /^\d{1,20}$/.test(key))
     detail = await mangaupdatesDetail(key, signal);
   else if (provider === 'suwayomi' && /^\d{1,9}$/.test(key))
-    detail = await suwayomiDetail(Number(key), signal);
+    detail = await loadSuwayomiDetail(Number(key), signal);
   else throw new AppError('VALIDATION_ERROR', 'Unknown media identifier');
+  return detail;
+}
+function enrichDetail(detail: MediaDetail): MediaDetail {
   const [tracked] = withTracking([detail]);
   return {
     ...detail,
@@ -254,4 +248,65 @@ export async function mediaDetail(id: string, signal?: AbortSignal): Promise<Med
     relations: detail.relations.map((r) => ({ ...r, media: withTracking([r.media])[0] })),
     recommendations: withTracking(detail.recommendations),
   };
+}
+
+function detailCacheKey(id: string) {
+  if (!id.startsWith('suwayomi:')) return `detail:${id}`;
+  const s = getSettings();
+  const namespace = createHash('sha256')
+    .update(JSON.stringify([s.suwayomiUrl, s.suwayomiUsername, s.suwayomiPassword]))
+    .digest('hex');
+  return `detail:${namespace}:${id}`;
+}
+export async function mediaDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
+  const followed = listTracked().find(
+    (t) =>
+      t.media.id === id ||
+      (id.startsWith('anilist:') && t.anilistId === Number(id.slice(8))) ||
+      (id.startsWith('mangadex:') && t.mangadexId === id.slice(9)) ||
+      (id.startsWith('kavita:') && t.kavitaSeriesId === Number(id.slice(7))) ||
+      (id.startsWith('suwayomi:') &&
+        t.sources.some((s) => s.suwayomiMangaId === Number(id.slice(9)))),
+  );
+  const key = detailCacheKey(id);
+  const load = async () => {
+    const snapshot = followed
+      ? (db().prepare('SELECT media_json FROM tracked_media WHERE id=?').get(followed.id) as
+          { media_json: string } | undefined)
+      : undefined;
+    const detail = await loadDetail(id);
+    if (followed && followed.media.id === id) {
+      const row = snapshot;
+      if (row && (JSON.parse(row.media_json) as UnifiedMedia).id === id) {
+        const old = JSON.parse(row.media_json) as UnifiedMedia;
+        const fresh = { ...old, ...detail, sources: old.sources };
+        db()
+          .prepare('UPDATE tracked_media SET media_json=?,title=? WHERE id=? AND media_json=?')
+          .run(JSON.stringify(fresh), fresh.title, followed.id, row.media_json);
+      }
+    }
+    return detail;
+  };
+  if (followed) {
+    const detail = storedMetadata<MediaDetail>(key)?.value;
+    if (!detail)
+      saveMetadata(key, { ...followed.media, tags: [], relations: [], recommendations: [] }, 0);
+    void cached(key, 30 * 60_000, load).catch(() => {
+      /* Stored followed metadata remains authoritative offline. */
+    });
+    return enrichDetail({
+      ...detail,
+      ...followed.media,
+      tags: detail?.tags ?? [],
+      relations: detail?.relations ?? [],
+      recommendations: detail?.recommendations ?? [],
+    });
+  }
+  signal?.throwIfAborted();
+  return enrichDetail(await cached(key, 30 * 60_000, load));
+}
+
+export async function suwayomiDetail(id: number, signal?: AbortSignal): Promise<MediaDetail> {
+  signal?.throwIfAborted();
+  return cached(detailCacheKey(`suwayomi:${id}`), 30 * 60_000, () => loadSuwayomiDetail(id));
 }
