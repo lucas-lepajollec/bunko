@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { SWRConfig, useSWRConfig } from 'swr';
-import type { DownloadBatch, Extension } from '@/types/shared';
+import type { AuthState, DownloadBatch, Extension } from '@/types/shared';
+import { PRODUCT_NAME } from '@/lib/client/brand';
 import { I18nProvider, useI18n } from '@/i18n/I18nProvider';
 import { UI_LANGUAGES, type UiLanguage } from '@/i18n/messages';
 import { UNAUTHORIZED_EVENT, send, useApi } from '@/lib/client/api';
@@ -21,7 +22,7 @@ export function Providers({ children }: { children: ReactNode }) {
 }
 
 function AuthGate({ children }: { children: ReactNode }) {
-  const { data, error, isLoading, mutate } = useApi<{ authenticated: boolean }>('/api/auth');
+  const { data, error, isLoading, mutate } = useApi<AuthState>('/api/auth');
   const { mutate: mutateAll } = useSWRConfig();
   useEffect(() => {
     const onUnauthorized = () => void mutate(undefined, { revalidate: true });
@@ -31,7 +32,8 @@ function AuthGate({ children }: { children: ReactNode }) {
   if (isLoading) return <div className="min-h-dvh" />;
   if (error || !data?.authenticated)
     return (
-      <Login
+      <AuthScreen
+        mode={data?.setupRequired ? 'setup' : 'login'}
         onDone={async () => {
           await mutateAll(() => true, undefined, { revalidate: true });
         }}
@@ -85,20 +87,28 @@ export function LanguageSelect({ className }: { className?: string }) {
   );
 }
 
-function Login({ onDone }: { onDone: () => Promise<void> }) {
+/** First start creates the administrator account; afterwards the same screen signs in. */
+function AuthScreen({ mode, onDone }: { mode: 'setup' | 'login'; onDone: () => Promise<void> }) {
   const { t } = useI18n();
-  const [token, setToken] = useState('');
-  const [error, setError] = useState<unknown>(null);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const setup = mode === 'setup';
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setError(null);
+    if (setup && password !== confirm) return setError(t('auth.mismatch'));
+    setBusy(true);
     try {
-      await send('/api/auth', 'POST', { token: token.trim() });
+      await send(setup ? '/api/auth/setup' : '/api/auth', 'POST', {
+        username: username.trim(),
+        password,
+      });
       await onDone();
     } catch (err) {
-      setError(err);
+      setError(errorText(t, err));
     } finally {
       setBusy(false);
     }
@@ -112,39 +122,69 @@ function Login({ onDone }: { onDone: () => Promise<void> }) {
       <div className="absolute top-4 right-4">
         <LanguageSelect />
       </div>
-      <form onSubmit={submit} className="relative flex w-full max-w-md flex-col gap-6">
+      <form onSubmit={submit} className="relative flex w-full max-w-md flex-col gap-5">
         <div className="flex items-center gap-3">
           <Logo size={34} />
           <span className="font-display text-[44px] font-extrabold tracking-[-0.04em]">
-            KaviSeerr
+            {PRODUCT_NAME}
           </span>
         </div>
-        <p className="text-soft font-serif text-[24px] leading-snug italic">{t('login.tagline')}</p>
+        <p className="text-soft font-serif text-[24px] leading-snug italic">
+          {setup ? t('auth.setupTagline') : t('login.tagline')}
+        </p>
+        {setup && <p className="text-mid text-sm leading-relaxed">{t('auth.setupHint')}</p>}
         <label className="text-muted flex flex-col gap-2 text-sm">
-          {t('login.token')}
+          {t('auth.username')}
           <input
-            type="password"
-            autoComplete="current-password"
+            autoComplete="username"
             required
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
+            minLength={setup ? 3 : 1}
+            maxLength={40}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             className={cx(field, 'h-12 text-base')}
           />
         </label>
-        {error !== null && (
+        <label className="text-muted flex flex-col gap-2 text-sm">
+          {t('auth.password')}
+          <input
+            type="password"
+            autoComplete={setup ? 'new-password' : 'current-password'}
+            required
+            minLength={setup ? 10 : 1}
+            maxLength={200}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={cx(field, 'h-12 text-base')}
+          />
+          {setup && <span className="text-faint text-xs">{t('auth.passwordRule')}</span>}
+        </label>
+        {setup && (
+          <label className="text-muted flex flex-col gap-2 text-sm">
+            {t('auth.confirm')}
+            <input
+              type="password"
+              autoComplete="new-password"
+              required
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              className={cx(field, 'h-12 text-base')}
+            />
+          </label>
+        )}
+        {error && (
           <p role="alert" className="text-bad text-sm">
-            {errorText(t, error)}
+            {error}
           </p>
         )}
-        <button type="submit" disabled={busy || !token.trim()} className={primaryButton}>
-          {busy ? t('login.signingIn') : t('login.signIn')}
+        <button
+          type="submit"
+          disabled={busy || !username.trim() || !password}
+          className={primaryButton}
+        >
+          {busy ? t('login.signingIn') : setup ? t('auth.create') : t('login.signIn')}
         </button>
-        <div className="text-muted flex flex-col gap-2 text-[13px] leading-relaxed">
-          <span>{t('login.hint')}</span>
-          <code className="bg-raised text-mid rounded-lg px-3 py-2 font-mono text-xs break-all">
-            docker compose exec kaviseerr cat /data/access.token
-          </code>
-        </div>
+        {!setup && <p className="text-muted text-[13px] leading-relaxed">{t('auth.forgotHint')}</p>}
       </form>
     </main>
   );
@@ -194,7 +234,7 @@ function Header() {
       <Link href="/" className="flex items-center gap-2.5 text-white">
         <Logo />
         <span className="font-display text-[19px] font-extrabold tracking-[-0.03em] md:text-[21px]">
-          KaviSeerr
+          {PRODUCT_NAME}
         </span>
       </Link>
       <nav aria-label={t('nav.label')} className="hidden gap-7 text-[15px] md:flex">

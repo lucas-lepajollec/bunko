@@ -24,12 +24,19 @@ check 200 "health" "$base/api/health"
 check 200 "interface" "$base/"
 check 401 "API requires authentication" "$base/api/settings"
 # Every API route must be present in the image (an ignored folder once dropped one silently).
-for route in auth discover genres media media/sources search search/stream manga/chapters tracked updates sources downloads extensions settings status kavita/status kavita/libraries kavita/series; do
+check 200 "public auth state" "$base/api/auth"
+check 401 "password route exists" -X POST "$base/api/auth/password"
+for route in discover genres media media/sources search search/stream manga/chapters tracked updates sources downloads extensions settings status kavita/status kavita/libraries kavita/series; do
   check 401 "route /api/$route exists" "$base/api/$route"
 done
-check 403 "cross-site login rejected" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H 'Origin: https://evil.invalid' -d '{"token":"x"}'
-check 401 "wrong token rejected" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H "Origin: $base" -d '{"token":"x"}'
+credentials='{"username":"SmokeAdmin","password":"synthetic-smoke-password"}'
+check 403 "cross-site setup rejected" -X POST "$base/api/auth/setup" -H 'Content-Type: application/json' -H 'Origin: https://evil.invalid' -d "$credentials"
+check 403 "cross-site login rejected" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H 'Origin: https://evil.invalid' -d "$credentials"
+check 409 "login requires setup" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H "Origin: $base" -d "$credentials"
+check 200 "first-start setup" -X POST "$base/api/auth/setup" -H 'Content-Type: application/json' -H "Origin: $base" -d "$credentials"
+check 409 "second setup rejected" -X POST "$base/api/auth/setup" -H 'Content-Type: application/json' -H "Origin: $base" -d "$credentials"
+check 401 "wrong password rejected" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H "Origin: $base" -d '{"username":"SmokeAdmin","password":"wrong-password"}'
+check 200 "account login from same origin" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H "Origin: $base" -d "$credentials"
 token="$(docker exec "$name" cat /data/access.token)"
-check 200 "token login from same origin" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H "Origin: $base" -d "{\"token\":\"$token\"}"
 check 200 "bearer API access" -H "Authorization: Bearer $token" "$base/api/settings"
 echo "container smoke passed"

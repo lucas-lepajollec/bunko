@@ -281,7 +281,7 @@ afterAll(async () => {
 });
 // First assertion deliberately runs before destructive fixture resets, on an actual v1 database.
 it('migrates an existing v1 database transactionally and idempotently without losing tracked data', () => {
-  expect(db().pragma('user_version', { simple: true })).toBe(3);
+  expect(db().pragma('user_version', { simple: true })).toBe(4);
   expect(listTracked()[0]).toMatchObject({
     id: 1,
     title: 'Legacy',

@@ -245,6 +245,7 @@ export async function processBatch(batch: DownloadBatch) {
 const owner = randomUUID();
 let timer: ReturnType<typeof setTimeout> | undefined;
 let running = false;
+let initialized = false;
 
 export async function workerTick() {
   if (running || !acquireWorker(owner)) return;
@@ -264,9 +265,13 @@ export async function workerTick() {
   }
 }
 export function startWorker() {
+  // Startup authentication/recovery also runs when the background worker is disabled.
+  if (!initialized) {
+    db();
+    persistentSecret('access.token', 32);
+    initialized = true;
+  }
   if (timer || process.env.KAVISEERR_WORKER === 'false') return;
-  db();
-  persistentSecret('access.token', 32);
   const loop = async () => {
     try {
       await workerTick();

@@ -1,22 +1,16 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-import { z } from 'zod';
-import { login, authenticate } from '@/lib/auth';
+import { login, authState, credentials } from '@/lib/auth';
 import { body, json, route } from '@/lib/api';
 export const POST = route(async (r) => {
-  const input = await body(r, z.object({ token: z.string().min(1).max(200) }));
-  return new Response(JSON.stringify({ authenticated: true }), {
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-store',
-      'Set-Cookie': login(r, input.token),
-    },
-  });
+  const cookie = await login(r, await body(r, credentials));
+  const response = json(
+    authState(new Request(r.url, { headers: { cookie: cookie.split(';')[0] } })),
+  );
+  response.headers.set('Set-Cookie', cookie);
+  return response;
 }, false);
-export const GET = route((r) => {
-  authenticate(r);
-  return json({ authenticated: true });
-});
+export const GET = route((r) => json(authState(r)), false);
 export const DELETE = route(
   () =>
     new Response(null, {

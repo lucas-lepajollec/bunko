@@ -18,7 +18,30 @@ const json = (method, value) => ({
 });
 assert.equal((await fetch(`${base}/api/health`)).status, 200);
 assert.equal((await fetch(`${base}/api/settings`)).status, 401);
-const login = await fetch(`${base}/api/auth`, json('POST', { token }));
+const credentials = { username: 'SmokeAdmin', password: 'synthetic-smoke-password' };
+const authPost = (path, value, origin = base) =>
+  fetch(`${base}${path}`, {
+    ...json('POST', value),
+    headers: { 'Content-Type': 'application/json', Origin: origin },
+  });
+assert.deepEqual(await (await fetch(`${base}/api/auth`)).json(), {
+  authenticated: false,
+  setupRequired: true,
+  username: null,
+});
+assert.equal(
+  (await authPost('/api/auth/setup', credentials, 'https://invalid.example')).status,
+  403,
+);
+assert.equal((await authPost('/api/auth', credentials, 'https://invalid.example')).status, 403);
+assert.equal((await authPost('/api/auth', credentials)).status, 409);
+assert.equal((await authPost('/api/auth/setup', credentials)).status, 200);
+assert.equal((await authPost('/api/auth/setup', credentials)).status, 409);
+assert.equal(
+  (await authPost('/api/auth', { ...credentials, password: 'wrong-password' })).status,
+  401,
+);
+const login = await authPost('/api/auth', credentials);
 assert.equal(login.status, 200);
 const cookie = login.headers.get('set-cookie').split(';')[0];
 assert.equal((await fetch(`${base}/api/settings`, { headers: { Cookie: cookie } })).status, 200);
@@ -70,7 +93,7 @@ assert.equal(result.providers.length, 4);
 console.log(
   JSON.stringify({
     status: 'passed',
-    checks: 18,
+    checks: 26,
     providers: result.providers,
     results: result.results.length,
   }),

@@ -10,8 +10,10 @@ Types below refer to **the complete browser-safe definitions in `src/types/share
 | ------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `GET /` (public)                | None                                                                       | French browser interface; service health remains at `/api/health`                                             |
 | `GET /api/health` (public)      | None                                                                       | `{status:"ok",version:"0.1.0"}`; 503 on SQLite failure                                                        |
-| `POST /api/auth` (public)       | `{token:string}`                                                           | 200 `{authenticated:true}` plus HttpOnly SameSite=Strict cookie, seven days                                   |
-| `GET /api/auth`                 | None                                                                       | `{authenticated:true}`                                                                                        |
+| `POST /api/auth/setup` (public) | `Credentials` (first start only)                                           | 200 `AuthState` plus HttpOnly SameSite=Strict cookie, seven days                                              |
+| `POST /api/auth` (public)       | `Credentials`                                                              | 200 `AuthState` plus the same session cookie                                                                  |
+| `GET /api/auth` (public)        | None                                                                       | 200 `AuthState`, including when signed out                                                                    |
+| `POST /api/auth/password`       | `PasswordChange`                                                           | 200 `AuthState`; rotates password/session epoch and reissues cookie                                           |
 | `DELETE /api/auth`              | None                                                                       | 204; expires cookie                                                                                           |
 | `GET /api/settings`             | None                                                                       | `PublicSettings`                                                                                              |
 | `PATCH /api/settings`           | `SettingsPatch`                                                            | `PublicSettings`; if extensionRepos is supplied, applies it to Suwayomi too                                   |
@@ -53,6 +55,20 @@ Types below refer to **the complete browser-safe definitions in `src/types/share
 All chapter/manga/tracked numeric IDs must be positive integers. **Source IDs are 64-bit decimal strings**, never JavaScript numbers. Normal source IDs fit signed 64-bit positive integers. Chapter `number:null` means an unnumbered special; each special retains a unique source/ID key. Duplicate chapter numbers retain `variants[]` so the user can select the desired team/source. Enqueue only the chosen variant of each chapter.
 
 The URL-based chapter lookup resolves an already discovered Suwayomi manga by exact source ID and source-relative manga URL. If unknown it returns `MANGA_NOT_INDEXED` (404); perform a deep search first. There is no universal arbitrary-URL scraper. Source display fields from chapter POST are labels only; they cannot change the upstream manga ID. Both chapter methods return `inKavita:number[]`. POST accepts optional `mediaId` (for example `anilist:123`) to resolve Kavita presence even before tracking; otherwise selected tracked sources or exact source/manga titles in the local catalog resolve the series. Ambiguous or unknown matches return `[]`. `isDownloaded` still reflects Suwayomi for compatibility and does not establish a KaviSeerr import's success.
+
+## Administrator account and browser sessions
+
+`GET /api/auth` is public and **always returns 200 for normal authentication state**, replacing the old signed-out 401. Before setup it returns `{authenticated:false,setupRequired:true,username:null}`. After setup, signed-out, expired and invalid-cookie requests return `{authenticated:false,setupRequired:false,username:null}`; a valid session returns `{authenticated:true,setupRequired:false,username:"<saved username>"}`. Other protected routes still return 401 `UNAUTHORIZED` without valid cookie/Bearer authentication. Responses are `Cache-Control: no-store`.
+
+On the first visit, `POST /api/auth/setup` takes `Credentials`: `{username,password}`. The username is 3–40 ASCII letters/digits/`.`/`_`/`-`; the password is 10–200 characters, with no trimming. Successful setup creates the single administrator and signs in the browser. Creation is enforced atomically by SQLite: concurrent and later valid setup calls return 409 `ALREADY_SET_UP`. No default account or password is seeded. Existing installations migrate to this same setup flow; their settings, media and API token are preserved, and old token-login browser cookies must be replaced by account sign-in.
+
+`POST /api/auth` takes the same credentials. Username matching is case-insensitive; the saved spelling is returned. Before setup it returns 409 `SETUP_REQUIRED`; a wrong username or password returns 401 `INVALID_CREDENTIALS` with the same generic message. Unknown usernames perform a dummy scrypt derivation with the same parameters and constant-time digest comparison. Validation failures return 400 `VALIDATION_ERROR`. Login and password verification share a process-wide budget of 20 attempts per minute and 10 per normalized username per minute, returning 429 `RATE_LIMITED` before hashing after exhaustion. Successful attempts count too; the fixed window resets after 60 seconds. No forwarded IP is trusted.
+
+`POST /api/auth/password` takes `{currentPassword,newPassword}` (`PasswordChange`, each 10–200 characters) while authenticated. The current password must verify; a wrong current password returns 401 `INVALID_CREDENTIALS`. The new hash and a fresh random session epoch replace the previous values atomically. All previously issued browser cookies become invalid immediately, and the current browser receives a replacement cookie. Concurrent changes cannot overwrite a newer password using stale verification. `DELETE /api/auth` expires the current browser cookie with 204, as before. Cookies use `HttpOnly; SameSite=Strict; Path=/`, last seven days, and include `Secure` for HTTPS request URLs. A supplied Origin must match the incoming Host on setup, login, password changes and sign-out; cross-site requests return 403 `FORBIDDEN`.
+
+API automation continues to send `Authorization: Bearer <contents of data/access.token>` to protected endpoints, including before account setup. The token cannot be submitted to the browser login endpoint. Account/password resets preserve this token. Cookie signing still uses that existing secret; rotating it also invalidates browser cookies.
+
+For account recovery, start/recreate the container with `KAVISEERR_RESET_ACCOUNT=true`. Startup deletes only the administrator account, immediately invalidating its browser sessions, and emits one clear line announcing the reset without secrets. The next visit shows first-start setup again. Settings, media and the API token are preserved. **Remove the flag after this recovery start**: leaving it enabled resets the account again on every server/container restart. Reset runs even with `KAVISEERR_WORKER=false` and only once per process/volume across Next route module instances. Restrict access while setup is open; the first successful setup request becomes the administrator.
 
 ## Settings
 
@@ -170,10 +186,10 @@ For a pending entry, find its `TrackedMedia` using `trackedId`, POST its ordered
 | HTTP | Typical codes                                                                                    |
 | ---- | ------------------------------------------------------------------------------------------------ |
 | 400  | VALIDATION_ERROR, INVALID_STATE payload validation                                               |
-| 401  | UNAUTHORIZED                                                                                     |
+| 401  | UNAUTHORIZED, INVALID_CREDENTIALS                                                                |
 | 403  | FORBIDDEN (origin)                                                                               |
 | 404  | NOT_FOUND, MANGA_NOT_INDEXED                                                                     |
-| 409  | SERVICE_NOT_CONFIGURED, INVALID_STATE                                                            |
+| 409  | SERVICE_NOT_CONFIGURED, INVALID_STATE, SETUP_REQUIRED, ALREADY_SET_UP                            |
 | 413  | PAYLOAD_TOO_LARGE                                                                                |
 | 415  | CONTENT_TYPE                                                                                     |
 | 429  | RATE_LIMITED (login)                                                                             |

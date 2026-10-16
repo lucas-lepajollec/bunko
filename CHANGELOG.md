@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Accounts: choose a username and password on first start (no more token sign-in), change it in Settings, reset with `KAVISEERR_RESET_ACCOUNT=true`. The bearer token remains for API clients.
 - KaviSeerr now downloads chapter pages from Suwayomi and builds Kavita-named CBZ files itself (no Suwayomi download queue or storage), with its own pausable download engine.
 - Kavita libraries: choose a target library folder per format, index existing Kavita series, show what you already own, skip owned chapters, follow series already in Kavita.
 - Sources: longer deadlines with a concurrency limit, and readable error reasons (Cloudflare, HTTP error, login required).

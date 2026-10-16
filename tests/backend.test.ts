@@ -12,7 +12,7 @@ const { db, indexCatalog, searchCatalog, track, listTracked, listBatches, saveBa
   await import('@/lib/db');
 const { updateSettings, getSettings, publicSettings, persistentSecret } =
   await import('@/lib/settings');
-const { authenticate, login, checkOrigin } = await import('@/lib/auth');
+const { authenticate, setup, checkOrigin } = await import('@/lib/auth');
 const { search, deduplicate, emptyMedia } = await import('@/lib/search-engine');
 const {
   chapterNumber,
@@ -217,18 +217,18 @@ describe('storage and authentication', () => {
     ).not.toContain('test-only-key');
     expect(readFileSync(path.join(directory, 'data/settings.key')).length).toBe(64);
   });
-  it('rejects missing auth, accepts bearer/cookie and blocks cross-origin login', () => {
+  it('rejects missing auth, accepts bearer/cookie and blocks cross-origin setup', async () => {
     expect(() => authenticate(new Request(base))).toThrow('Authentication');
     expect(() => authenticate(request('/api/settings'))).not.toThrow();
-    const token = persistentSecret('access.token', 32).toString('hex');
-    const cookie = login(new Request(base), token).split(';')[0];
+    const credentials = { username: 'Fixture', password: 'test-password-only' };
+    const cookie = (await setup(new Request(base), credentials)).split(';')[0];
     expect(() => authenticate(new Request(base, { headers: { Cookie: cookie } }))).not.toThrow();
     expect(() =>
       authenticate(new Request(base, { headers: { Cookie: `${cookie}bad` } })),
     ).toThrow();
-    expect(() =>
-      login(new Request(base, { headers: { Origin: 'https://evil.invalid' } }), token),
-    ).toThrow('Cross-origin');
+    await expect(
+      setup(new Request(base, { headers: { Origin: 'https://evil.invalid' } }), credentials),
+    ).rejects.toThrow('Cross-origin');
   });
   it('validates browser Origin against the incoming Host behind Next standalone', () => {
     const internal = 'http://0.0.0.0:2512/api/auth';

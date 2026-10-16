@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useSWRConfig } from 'swr';
 import type {
+  AuthState,
   KavitaIndexStatus,
   KavitaLibrary,
   LibraryKind,
@@ -449,19 +450,86 @@ function Modules() {
 function Access() {
   const { t } = useI18n();
   const { mutate } = useSWRConfig();
+  const auth = useApi<AuthState>('/api/auth');
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function change(e: FormEvent) {
+    e.preventDefault();
+    setMessage(null);
+    if (next !== confirm) return setMessage({ ok: false, text: t('auth.mismatch') });
+    setBusy(true);
+    try {
+      await send('/api/auth/password', 'POST', { currentPassword: current, newPassword: next });
+      setCurrent('');
+      setNext('');
+      setConfirm('');
+      setMessage({ ok: true, text: t('auth.passwordChanged') });
+    } catch (err) {
+      setMessage({ ok: false, text: errorText(t, err) });
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
-    <div className="flex flex-col gap-4 text-sm">
-      <p className="text-mid leading-relaxed">{t('settings.accessBody')}</p>
-      <button
-        type="button"
-        onClick={async () => {
-          await send('/api/auth', 'DELETE').catch(() => undefined);
-          await mutate('/api/auth');
-        }}
-        className={cx(smallButton, 'self-start')}
+    <div className="flex flex-col gap-5 text-sm">
+      <Row label={t('auth.signedInAs')}>
+        <span className="flex items-center gap-4">
+          <strong className="font-semibold">{auth.data?.username ?? '—'}</strong>
+          <button
+            type="button"
+            onClick={async () => {
+              await send('/api/auth', 'DELETE').catch(() => undefined);
+              await mutate('/api/auth');
+            }}
+            className={smallButton}
+          >
+            {t('settings.signOut')}
+          </button>
+        </span>
+      </Row>
+      <form
+        onSubmit={change}
+        className="flex flex-col gap-3.5 rounded-[18px] bg-white/[0.045] p-4 md:p-[22px]"
       >
-        {t('settings.signOut')}
-      </button>
+        <span className="font-semibold">{t('auth.changePassword')}</span>
+        <div className="grid gap-3.5 md:grid-cols-3">
+          {(
+            [
+              ['current', t('auth.currentPassword'), current, setCurrent, 'current-password'],
+              ['next', t('auth.newPassword'), next, setNext, 'new-password'],
+              ['confirm', t('auth.confirm'), confirm, setConfirm, 'new-password'],
+            ] as const
+          ).map(([key, label, value, set, ac]) => (
+            <label key={key} className="text-muted flex flex-col gap-1.5 text-[13px]">
+              {label}
+              <input
+                type="password"
+                required
+                minLength={key === 'current' ? 1 : 10}
+                maxLength={200}
+                autoComplete={ac}
+                value={value}
+                onChange={(e) => set(e.target.value)}
+                className={field}
+              />
+            </label>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={busy}
+            className="bg-fg text-bg h-10 rounded-full px-5 text-sm font-semibold disabled:opacity-50"
+          >
+            {busy ? t('common.working') : t('auth.changePassword')}
+          </button>
+          {message && <span className={message.ok ? 'text-ok' : 'text-bad'}>{message.text}</span>}
+        </div>
+      </form>
+      <p className="text-muted leading-relaxed">{t('auth.apiTokenHint')}</p>
     </div>
   );
 }

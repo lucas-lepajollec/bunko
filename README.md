@@ -70,20 +70,19 @@ volumes:
   kaviseerr-data:
 ```
 
-That is the only path to adapt. A container can only write where you let it, so KaviSeerr needs **one** mount: the folder your Kavita libraries live in (for example the parent of `manga/` and `webtoons/`). Everything else — Suwayomi and Kavita addresses, keys, and which library receives which format — is set in the interface. `kaviseerr-data` keeps the database, the access token and the encryption key.
+That is the only path to adapt. A container can only write where you let it, so KaviSeerr needs **one** mount: the folder your Kavita libraries live in (for example the parent of `manga/` and `webtoons/`). Everything else — Suwayomi and Kavita addresses, keys, and which library receives which format — is set in the interface. `kaviseerr-data` keeps the database, your account, the API token and the encryption key.
 
 The repository's [`docker-compose.yml`](docker-compose.yml) is the same service with hardening options (read-only filesystem, no capabilities) and an optional [`.env`](.env.example).
 
-**2. Start and get the access token**
+**2. Start it**
 
 ```sh
 docker compose up -d
-docker compose exec kaviseerr cat /data/access.token
 ```
 
-**3. Sign in and connect your services**
+**3. Create your account and connect your services**
 
-Open `http://<your-host>:2512` and paste the token. In **Settings → Connections**:
+Open `http://<your-host>:2512`. On first start you choose a username and a password (the first visitor creates the administrator account, so do this right away). Then, in **Settings → Connections**:
 
 | Setting | Example | Notes |
 | --- | --- | --- |
@@ -131,12 +130,13 @@ Then add an extension repository you trust under **Sources → Repositories** an
 Everything else lives in **Settings**: connections, new-chapter check interval (5 minutes to 24 hours), interface language. Source order, languages and repositories live in **Sources**.
 
 - **Back up the `/data` volume as a whole** while the container is stopped: the database, the access token and the encryption key belong together.
-- **To rotate the access token**, stop the container, delete `access.token` from the data volume and start again; existing sessions are signed out.
+- **Forgot your password?** Start the container once with `KAVISEERR_RESET_ACCOUNT=true`, create the account again, then remove the variable (otherwise the account is reset at every start). Settings and library are kept.
+- **API and scripts** authenticate with `Authorization: Bearer <token>`, the token being in `/data/access.token`. To rotate it, stop the container, delete that file and start again.
 - **To update**, `docker compose pull && docker compose up -d`. Images are published for `amd64` and `arm64`; pin a version tag (`ghcr.io/lucas-lepajollec/kaviseer:x.y.z`) once releases are tagged.
 
 ## Security, privacy, and limitations
 
-- Every request needs the access token or the HttpOnly session obtained with it; state-changing requests from other origins are rejected. Behind a reverse proxy, keep the original `Host` header, disable buffering for server-sent events and use TLS outside your LAN.
+- The interface requires the account created on first start (scrypt-hashed password, HttpOnly session; changing the password signs other sessions out). API clients use a separate bearer token. State-changing requests from other origins are rejected. Behind a reverse proxy, keep the original `Host` header, disable buffering for server-sent events and use TLS outside your LAN.
 - Service credentials are encrypted at rest and never returned by the API. The container runs read-only, as a non-root user, without capabilities.
 - Catalog metadata comes from the public AniList, MangaDex and MangaUpdates APIs; titles and synopses stay in their source language.
 - Sources depend on third-party extensions and websites. Matching is title-based and labels doubtful candidates instead of guessing.

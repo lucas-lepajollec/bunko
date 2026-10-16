@@ -24,7 +24,6 @@ import {
   smallButton,
 } from '@/components/ui';
 
-
 function dayGroup(iso: string) {
   const d = new Date(iso);
   const today = new Date();

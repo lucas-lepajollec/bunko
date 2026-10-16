@@ -438,3 +438,21 @@ export interface KavitaIndexStatus {
   series: number;
   syncedAt: string | null;
 }
+
+/* ---- Accounts ---- */
+/** GET /api/auth. `setupRequired` is true only until the first account is created. */
+export interface AuthState {
+  authenticated: boolean;
+  setupRequired: boolean;
+  username: string | null;
+}
+/** POST /api/auth/setup (first start only) and POST /api/auth (sign in). */
+export interface Credentials {
+  username: string;
+  password: string;
+}
+/** POST /api/auth/password (signed in). */
+export interface PasswordChange {
+  currentPassword: string;
+  newPassword: string;
+}

@@ -41,6 +41,8 @@ export function db(): Database.Database {
   `);
   migrateV2(connection);
   migrateV3(connection);
+  migrateV4(connection);
+  resetAccountAtStartup(connection);
   return connection;
 }
 /** Transactional, repeatable migration; never resets a newer schema version. */
@@ -91,6 +93,28 @@ export function migrateV3(database: Database.Database) {
       CREATE TABLE IF NOT EXISTS download_jobs (chapter_id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
       PRAGMA user_version = 3;`);
   })();
+}
+/** Single administrator account; preserves all pre-account application data. */
+export function migrateV4(database: Database.Database) {
+  database.transaction(() => {
+    if (Number(database.pragma('user_version', { simple: true })) >= 4) return;
+    database.exec(`CREATE TABLE IF NOT EXISTS administrator (
+      id INTEGER PRIMARY KEY CHECK(id=1), username TEXT NOT NULL,
+      password_hash TEXT NOT NULL, session_epoch TEXT NOT NULL);
+      PRAGMA user_version = 4;`);
+  })();
+}
+// Next can load db.ts in multiple route bundles; reset only once per server process/volume.
+const runtime = globalThis as typeof globalThis & { __kaviseerrAccountReset?: Set<string> };
+function resetAccountAtStartup(database: Database.Database) {
+  if (process.env.KAVISEERR_RESET_ACCOUNT !== 'true') return;
+  const reset = (runtime.__kaviseerrAccountReset ??= new Set());
+  if (reset.has(dataDir)) return;
+  database.prepare('DELETE FROM administrator').run();
+  reset.add(dataDir);
+  console.info(
+    'KaviSeerr: administrator account and browser sessions reset; first-start setup is required.',
+  );
 }
 export function sameMedia(a: UnifiedMedia, b: UnifiedMedia) {
   return (
