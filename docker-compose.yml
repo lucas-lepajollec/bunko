@@ -1,7 +1,7 @@
-# KaviSeerr alone, connected to the Suwayomi and Kavita you already run.
-# 1. Copy .env.example to .env and adjust it (or edit the values below).
-# 2. docker compose up -d
-# 3. docker compose exec kaviseerr cat /data/access.token   -> sign in at http://<host>:2512
+# KaviSeerr alone, next to the Suwayomi and Kavita you already run.
+#   docker compose up -d
+#   docker compose exec kaviseerr cat /data/access.token   -> sign in at http://<host>:2512
+# Addresses, keys and target libraries are set in the interface (Settings).
 services:
   kaviseerr:
     image: ghcr.io/lucas-lepajollec/kaviseer:latest
@@ -9,16 +9,14 @@ services:
     restart: unless-stopped
     ports:
       - "${KAVISEERR_PORT:-2512}:2512"
-    environment:
-      # Your existing Suwayomi, as reachable FROM this container (not "localhost").
-      # It can also be changed later in Settings -> Connections.
-      SUWAYOMI_URL: ${SUWAYOMI_URL:-http://192.168.1.10:4567}
     volumes:
       # Database, access token and settings key. Back it up.
       - kaviseerr-data:/data
-      # Where imported chapters (CBZ) are written. Mount the same folder in Kavita
-      # and add it to a manga library. Must be writable by UID 1000.
-      - ${KAVISEERR_LIBRARY:-./library}:/library
+      # The folder that contains your Kavita libraries (writable by UID 1000).
+      - ${KAVITA_LIBRARIES:-./library}:/library
+    # Optional: pre-fill the Suwayomi address (Settings can change it).
+    # environment:
+    #   SUWAYOMI_URL: http://192.168.1.10:4567
     read_only: true
     tmpfs:
       - /tmp

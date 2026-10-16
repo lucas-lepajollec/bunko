@@ -61,49 +61,39 @@ services:
     restart: unless-stopped
     ports:
       - "2512:2512"
-    environment:
-      # Your existing Suwayomi, as reachable FROM this container (not "localhost").
-      SUWAYOMI_URL: http://192.168.1.10:4567
     volumes:
-      - kaviseerr-data:/data                         # database, access token, settings key
-      - /srv/media/manga/kaviseerr:/library          # imported chapters — also mounted in Kavita
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop: [ALL]
+      - kaviseerr-data:/data
+      # Replace the left side with the folder that contains your Kavita libraries.
+      - /path/to/your/kavita/libraries:/library
 
 volumes:
   kaviseerr-data:
 ```
 
-The repository's [`docker-compose.yml`](docker-compose.yml) is the same file driven by a [`.env`](.env.example), if you prefer variables.
+That is the only path to adapt. A container can only write where you let it, so KaviSeerr needs **one** mount: the folder your Kavita libraries live in (for example the parent of `manga/` and `webtoons/`). Everything else — Suwayomi and Kavita addresses, keys, and which library receives which format — is set in the interface. `kaviseerr-data` keeps the database, the access token and the encryption key.
 
-**2. Prepare the library folder and start**
+The repository's [`docker-compose.yml`](docker-compose.yml) is the same service with hardening options (read-only filesystem, no capabilities) and an optional [`.env`](.env.example).
+
+**2. Start and get the access token**
 
 ```sh
-sudo mkdir -p /srv/media/manga/kaviseerr && sudo chown 1000:1000 /srv/media/manga/kaviseerr
 docker compose up -d
 docker compose exec kaviseerr cat /data/access.token
 ```
 
 **3. Sign in and connect your services**
 
-Open `http://<your-host>:2512`, paste the access token, then go to **Settings → Connections**:
+Open `http://<your-host>:2512` and paste the token. In **Settings → Connections**:
 
 | Setting | Example | Notes |
 | --- | --- | --- |
-| Suwayomi address | `http://192.168.1.10:4567` | Pre-filled from `SUWAYOMI_URL`. Add a username and password if your Suwayomi uses basic authentication. |
-| Kavita address | `http://192.168.1.10:5000` | Reachable from the KaviSeerr container. |
-| Kavita API key | from Kavita → *User settings* | Needs permission to scan libraries. |
-| Library folder as seen by Kavita | `/manga/kaviseerr` | The path **inside Kavita** of the folder mounted at `/library` above. |
+| Suwayomi address | `http://192.168.1.10:4567` | As reachable **from the KaviSeerr container**. Username and password if Suwayomi uses basic authentication. |
+| Kavita address and API key | `http://192.168.1.10:5000` | The key needs permission to scan libraries. |
+| Kavita path of the mounted folder | `/manga` | How **Kavita** names the folder you mounted at `/library`. If Kavita mounts the same host folder at `/manga`, enter `/manga`. |
 
-In Kavita, mount the same host folder (for example `/srv/media/manga/kaviseerr:/manga/kaviseerr`) and add it to a **manga** library.
+Then, in **Settings → Kavita libraries**, pick the library folder that receives each format (manga, manhwa & webtoons, manhua, novels). Your Suwayomi extensions are listed under **Sources**: choose which ones join global search, open a title and pick chapters.
 
-Your Suwayomi extensions appear under **Sources** right away. Choose which ones join global search, then open a title and pick chapters.
-
-To store each format in its own Kavita library (for example manga and webtoons separately), mount the **parent** folder of your Kavita libraries at `/library`, set its Kavita path in Connections, then pick a library folder per format in **Settings → Kavita libraries**. KaviSeerr also indexes what Kavita already holds: titles you own show an *In Kavita* badge, owned chapters are not downloaded again, and existing series can be followed from **Library → In Kavita**.
+KaviSeerr also indexes what Kavita already holds: titles you own show an *In Kavita* badge, owned chapters are never downloaded again, and existing series can be followed from **Library → In Kavita**.
 
 > **Good to know.** KaviSeerr asks Suwayomi only for the chapter pages, then builds each CBZ itself, named the way Kavita expects (`Series/Series Ch. 0012.cbz`) with embedded metadata. Suwayomi's own download folder and settings are left untouched, and the two containers do not need to share a volume.
 
@@ -124,8 +114,8 @@ Then add an extension repository you trust under **Sources → Repositories** an
 <summary><b>Troubleshooting</b></summary>
 
 - **Suwayomi shows "unreachable".** Inside a container, `localhost` is the container itself. Use the host's LAN address, a shared Docker network and the Suwayomi service name, or `host.docker.internal` with `extra_hosts: ["host.docker.internal:host-gateway"]`.
-- **Imports fail with a permission error.** The container runs as UID 1000: the library folder must be writable by that user.
-- **Kavita does not show new chapters.** Check that the "library folder as seen by Kavita" matches Kavita's own mount path, and that this folder belongs to a Kavita library.
+- **Imports fail, or a library folder is greyed out in Settings.** The container runs as UID 1000: the mounted folder must be writable by that user (`chown 1000:1000` or matching ACLs). Folders outside the mounted one cannot be selected.
+- **Kavita does not show new chapters.** Check that "Kavita path of the mounted folder" matches Kavita's own mount of the same host folder, and that the target folder belongs to a Kavita library.
 - **A source fails or is slow.** The source list shows the reason reported by the extension (Cloudflare, HTTP error, login required). Update the extension under **Sources**; Cloudflare-protected sites may need FlareSolverr configured in Suwayomi.
 
 </details>
@@ -134,7 +124,7 @@ Then add an extension repository you trust under **Sources → Repositories** an
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `SUWAYOMI_URL` | `http://suwayomi:4567` | Initial Suwayomi address (editable in Settings). |
+| `SUWAYOMI_URL` | `http://suwayomi:4567` | Optional initial Suwayomi address; the address saved in Settings takes precedence. |
 | `KAVISEERR_DATA_DIR` | `/data` in the image | Database, `access.token`, `settings.key`. |
 | `KAVISEERR_LIBRARY_DIR` | `/library` in the image | Folder receiving imported CBZ files. |
 
