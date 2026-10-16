@@ -10,14 +10,15 @@ import {
 } from 'react';
 import { BCP47, interpolate, isUiLanguage, messages, type UiLanguage } from './messages';
 
-const STORAGE_KEY = 'kaviseerr.language';
+const STORAGE_KEY = 'bunko.language';
+const LEGACY_STORAGE_KEY = 'kaviseerr.language';
 const listeners = new Set<() => void>();
 let chosen: UiLanguage | null = null;
 
 function detect(): UiLanguage {
   if (chosen) return chosen;
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (isUiLanguage(stored)) return (chosen = stored);
   } catch {
     /* Storage can be unavailable (private mode); fall back to the browser language. */

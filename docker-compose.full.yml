@@ -1,10 +1,10 @@
-# Complete stack for a fresh install: KaviSeerr + its own Suwayomi engine + FlareSolverr.
+# Complete stack for a fresh install: Bunko + its own Suwayomi engine + FlareSolverr.
 # Already running Suwayomi? Use docker-compose.yml instead.
 # docker compose -f docker-compose.full.yml up -d
 services:
-  kaviseerr:
+  bunko:
     # Published by .github/workflows/docker.yml; `docker compose up --build` builds from source instead.
-    image: ghcr.io/lucas-lepajollec/kaviseer:latest
+    image: ghcr.io/lucas-lepajollec/bunko:latest
     build: .
     ports:
       - "2512:2512"

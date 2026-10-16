@@ -1,4 +1,4 @@
-# KaviSeerr
+# Bunko
 
 Self-hosted reading hub over Suwayomi and Kavita: manga, manhwa/webtoons, manhua and light/web novels. Node 22, Next.js App Router, SQLite/FTS5, one container.
 

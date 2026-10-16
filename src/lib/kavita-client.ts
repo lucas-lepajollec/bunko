@@ -9,7 +9,7 @@ export async function kavitaHeaders(signal?: AbortSignal): Promise<Record<string
   if (s.kavitaAuthMode === 'jwt') {
     const url = new URL(endpoint(s.kavitaUrl, '/api/Plugin/authenticate'));
     url.searchParams.set('apiKey', s.kavitaApiKey);
-    url.searchParams.set('pluginName', 'KaviSeerr');
+    url.searchParams.set('pluginName', 'Bunko');
     const auth = await requestJson<{ token: string }>(url, { method: 'POST', signal });
     if (!auth.token) throw new AppError('KAVITA_AUTH_ERROR', 'Kavita authentication failed', 502);
     headers.Authorization = `Bearer ${auth.token}`;

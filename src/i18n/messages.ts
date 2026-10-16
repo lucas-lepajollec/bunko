@@ -71,7 +71,7 @@ const en: Dictionary = {
   'library.statusLabel': 'Reading status',
   'library.empty': 'Your library is empty',
   'library.emptyBody':
-    'Add a title from the catalog: KaviSeerr follows its new chapters and files them in Kavita.',
+    'Add a title from the catalog: Bunko follows its new chapters and files them in Kavita.',
   'library.browse': 'Browse the catalog',
   'library.shelfEmpty': 'Nothing on this shelf.',
   'library.readUpTo': 'Read up to ch. {n}',
@@ -288,7 +288,7 @@ const en: Dictionary = {
   'sources.filterExtensions': 'Filter extensions',
   'sources.myLanguages': 'My languages only',
   'sources.reposHint':
-    'KaviSeerr ships with no repository. Add the extension repositories you trust (Mihon/Tachiyomi format), then refresh the list.',
+    'Bunko ships with no repository. Add the extension repositories you trust (Mihon/Tachiyomi format), then refresh the list.',
   'sources.noRepos': 'No repository yet.',
   'sources.repoUrl': 'Repository URL',
   'sources.addRepo': 'Add',
@@ -375,8 +375,7 @@ const en: Dictionary = {
   'settings.service.suwayomi': 'Suwayomi',
   'settings.service.kavita': 'Kavita',
   'settings.service.suwayomiTip': 'The engine that runs the extensions and downloads chapters.',
-  'settings.service.kavitaTip':
-    'Your reader. KaviSeerr files chapters there and reads your progress.',
+  'settings.service.kavitaTip': 'Your reader. Bunko files chapters there and reads your progress.',
   'settings.state.ok': 'connected',
   'settings.state.error': 'unreachable',
   'settings.state.unconfigured': 'not configured',
@@ -415,7 +414,7 @@ const en: Dictionary = {
   'settings.module.videoState': 'later',
   'settings.signOut': 'Sign out',
   'error.generic': 'Something went wrong. Try again.',
-  'error.NETWORK_ERROR': 'KaviSeerr cannot be reached. Check your connection.',
+  'error.NETWORK_ERROR': 'Bunko cannot be reached. Check your connection.',
   'error.STREAM_ERROR': 'The live connection was interrupted.',
   'error.UNAUTHORIZED': 'Invalid token or expired session.',
   'error.FORBIDDEN': 'Request refused by the server.',
@@ -441,7 +440,7 @@ const en: Dictionary = {
   'error.METADATA_UNAVAILABLE': 'The catalog is unavailable right now.',
   'error.IMAGE_UNAVAILABLE': 'Image unavailable.',
   'error.PAYLOAD_TOO_LARGE': 'Request too large.',
-  'error.INTERNAL_ERROR': 'KaviSeerr hit an internal error.',
+  'error.INTERNAL_ERROR': 'Bunko hit an internal error.',
   'service.suwayomiDown': 'Suwayomi cannot be reached',
   'service.suwayomiUnconfigured': 'Suwayomi is not set up yet',
   'service.suwayomiBody':
@@ -494,7 +493,7 @@ const en: Dictionary = {
   'kavita.targetsHint':
     'Choose where each format is stored. Only folders inside the one mounted at /library (seen by Kavita as {path}) can be written.',
   'kavita.noUsableFolder':
-    'No Kavita folder is reachable from KaviSeerr. Mount the parent folder of your Kavita libraries at /library and set its Kavita path ({path}) in Connections.',
+    'No Kavita folder is reachable from Bunko. Mount the parent folder of your Kavita libraries at /library and set its Kavita path ({path}) in Connections.',
   'kavita.kind.MANGA': 'Manga',
   'kavita.kind.MANHWA': 'Manhwa & webtoons',
   'kavita.kind.MANHUA': 'Manhua',
@@ -526,7 +525,7 @@ const en: Dictionary = {
   'auth.mismatch': 'The passwords do not match.',
   'auth.create': 'Create my account',
   'auth.forgotHint':
-    'Forgot your password? Restart the container with KAVISEERR_RESET_ACCOUNT=true to create the account again.',
+    'Forgot your password? Restart the container with BUNKO_RESET_ACCOUNT=true to create the account again.',
   'auth.signedInAs': 'Signed in as',
   'auth.changePassword': 'Change password',
   'auth.currentPassword': 'Current password',
@@ -582,7 +581,7 @@ const fr: Dictionary = {
   'library.statusLabel': 'Statut de lecture',
   'library.empty': 'Ta bibliothèque est vide',
   'library.emptyBody':
-    'Ajoute une œuvre depuis le catalogue : KaviSeerr suit ses nouveaux chapitres et les range dans Kavita.',
+    'Ajoute une œuvre depuis le catalogue : Bunko suit ses nouveaux chapitres et les range dans Kavita.',
   'library.browse': 'Parcourir le catalogue',
   'library.shelfEmpty': 'Rien sur cette étagère.',
   'library.readUpTo': 'Lu jusqu’au ch. {n}',
@@ -799,7 +798,7 @@ const fr: Dictionary = {
   'sources.filterExtensions': 'Filtrer les extensions',
   'sources.myLanguages': 'Mes langues seulement',
   'sources.reposHint':
-    'KaviSeerr n’inclut aucun dépôt. Ajoute les dépôts d’extensions en qui tu as confiance (format Mihon/Tachiyomi), puis actualise la liste.',
+    'Bunko n’inclut aucun dépôt. Ajoute les dépôts d’extensions en qui tu as confiance (format Mihon/Tachiyomi), puis actualise la liste.',
   'sources.noRepos': 'Aucun dépôt pour l’instant.',
   'sources.repoUrl': 'Adresse du dépôt',
   'sources.addRepo': 'Ajouter',
@@ -889,8 +888,7 @@ const fr: Dictionary = {
   'settings.service.kavita': 'Kavita',
   'settings.service.suwayomiTip':
     'Le moteur qui fait tourner les extensions et télécharge les chapitres.',
-  'settings.service.kavitaTip':
-    'Ton lecteur. KaviSeerr y range les chapitres et lit ta progression.',
+  'settings.service.kavitaTip': 'Ton lecteur. Bunko y range les chapitres et lit ta progression.',
   'settings.state.ok': 'connecté',
   'settings.state.error': 'injoignable',
   'settings.state.unconfigured': 'non configuré',
@@ -929,7 +927,7 @@ const fr: Dictionary = {
   'settings.module.videoState': 'plus tard',
   'settings.signOut': 'Se déconnecter',
   'error.generic': 'Quelque chose a échoué. Réessaie.',
-  'error.NETWORK_ERROR': 'KaviSeerr est injoignable. Vérifie ta connexion.',
+  'error.NETWORK_ERROR': 'Bunko est injoignable. Vérifie ta connexion.',
   'error.STREAM_ERROR': 'La connexion en direct a été interrompue.',
   'error.UNAUTHORIZED': 'Jeton invalide ou session expirée.',
   'error.FORBIDDEN': 'Requête refusée par le serveur.',
@@ -955,7 +953,7 @@ const fr: Dictionary = {
   'error.METADATA_UNAVAILABLE': 'Le catalogue est indisponible pour le moment.',
   'error.IMAGE_UNAVAILABLE': 'Image indisponible.',
   'error.PAYLOAD_TOO_LARGE': 'Requête trop volumineuse.',
-  'error.INTERNAL_ERROR': 'KaviSeerr a rencontré une erreur interne.',
+  'error.INTERNAL_ERROR': 'Bunko a rencontré une erreur interne.',
   'service.suwayomiDown': 'Suwayomi est injoignable',
   'service.suwayomiUnconfigured': 'Suwayomi n’est pas encore configuré',
   'service.suwayomiBody':
@@ -1008,7 +1006,7 @@ const fr: Dictionary = {
   'kavita.targetsHint':
     'Choisis où ranger chaque format. Seuls les dossiers contenus dans celui monté sur /library (vu par Kavita comme {path}) sont accessibles en écriture.',
   'kavita.noUsableFolder':
-    'Aucun dossier Kavita n’est accessible depuis KaviSeerr. Monte le dossier parent de tes bibliothèques Kavita sur /library et indique son chemin côté Kavita ({path}) dans Connexions.',
+    'Aucun dossier Kavita n’est accessible depuis Bunko. Monte le dossier parent de tes bibliothèques Kavita sur /library et indique son chemin côté Kavita ({path}) dans Connexions.',
   'kavita.kind.MANGA': 'Manga',
   'kavita.kind.MANHWA': 'Manhwa & webtoons',
   'kavita.kind.MANHUA': 'Manhua',
@@ -1040,7 +1038,7 @@ const fr: Dictionary = {
   'auth.mismatch': 'Les mots de passe ne correspondent pas.',
   'auth.create': 'Créer mon compte',
   'auth.forgotHint':
-    'Mot de passe oublié ? Redémarre le conteneur avec KAVISEERR_RESET_ACCOUNT=true pour recréer le compte.',
+    'Mot de passe oublié ? Redémarre le conteneur avec BUNKO_RESET_ACCOUNT=true pour recréer le compte.',
   'auth.signedInAs': 'Connecté en tant que',
   'auth.changePassword': 'Changer le mot de passe',
   'auth.currentPassword': 'Mot de passe actuel',
@@ -1096,7 +1094,7 @@ const es: Dictionary = {
   'library.statusLabel': 'Estado de lectura',
   'library.empty': 'Tu biblioteca está vacía',
   'library.emptyBody':
-    'Añade una obra desde el catálogo: KaviSeerr sigue sus capítulos nuevos y los guarda en Kavita.',
+    'Añade una obra desde el catálogo: Bunko sigue sus capítulos nuevos y los guarda en Kavita.',
   'library.browse': 'Explorar el catálogo',
   'library.shelfEmpty': 'Nada en este estante.',
   'library.readUpTo': 'Leído hasta el cap. {n}',
@@ -1312,7 +1310,7 @@ const es: Dictionary = {
   'sources.filterExtensions': 'Filtrar extensiones',
   'sources.myLanguages': 'Solo mis idiomas',
   'sources.reposHint':
-    'KaviSeerr no incluye repositorios. Añade los repositorios de extensiones en los que confíes (formato Mihon/Tachiyomi) y actualiza la lista.',
+    'Bunko no incluye repositorios. Añade los repositorios de extensiones en los que confíes (formato Mihon/Tachiyomi) y actualiza la lista.',
   'sources.noRepos': 'Aún no hay repositorios.',
   'sources.repoUrl': 'URL del repositorio',
   'sources.addRepo': 'Añadir',
@@ -1399,7 +1397,7 @@ const es: Dictionary = {
   'settings.service.suwayomi': 'Suwayomi',
   'settings.service.kavita': 'Kavita',
   'settings.service.suwayomiTip': 'El motor que ejecuta las extensiones y descarga capítulos.',
-  'settings.service.kavitaTip': 'Tu lector. KaviSeerr guarda ahí los capítulos y lee tu progreso.',
+  'settings.service.kavitaTip': 'Tu lector. Bunko guarda ahí los capítulos y lee tu progreso.',
   'settings.state.ok': 'conectado',
   'settings.state.error': 'inaccesible',
   'settings.state.unconfigured': 'sin configurar',
@@ -1437,7 +1435,7 @@ const es: Dictionary = {
   'settings.module.videoState': 'más adelante',
   'settings.signOut': 'Cerrar sesión',
   'error.generic': 'Algo falló. Inténtalo de nuevo.',
-  'error.NETWORK_ERROR': 'No se puede contactar con KaviSeerr. Revisa tu conexión.',
+  'error.NETWORK_ERROR': 'No se puede contactar con Bunko. Revisa tu conexión.',
   'error.STREAM_ERROR': 'Se interrumpió la conexión en directo.',
   'error.UNAUTHORIZED': 'Token no válido o sesión caducada.',
   'error.FORBIDDEN': 'El servidor rechazó la solicitud.',
@@ -1463,7 +1461,7 @@ const es: Dictionary = {
   'error.METADATA_UNAVAILABLE': 'El catálogo no está disponible ahora.',
   'error.IMAGE_UNAVAILABLE': 'Imagen no disponible.',
   'error.PAYLOAD_TOO_LARGE': 'Solicitud demasiado grande.',
-  'error.INTERNAL_ERROR': 'KaviSeerr tuvo un error interno.',
+  'error.INTERNAL_ERROR': 'Bunko tuvo un error interno.',
   'service.suwayomiDown': 'No se puede contactar con Suwayomi',
   'service.suwayomiUnconfigured': 'Suwayomi aún no está configurado',
   'service.suwayomiBody':
@@ -1516,7 +1514,7 @@ const es: Dictionary = {
   'kavita.targetsHint':
     'Elige dónde guardar cada formato. Solo se puede escribir en carpetas dentro de la montada en /library (que Kavita ve como {path}).',
   'kavita.noUsableFolder':
-    'Ninguna carpeta de Kavita es accesible desde KaviSeerr. Monta la carpeta padre de tus bibliotecas en /library e indica su ruta en Kavita ({path}) en Conexiones.',
+    'Ninguna carpeta de Kavita es accesible desde Bunko. Monta la carpeta padre de tus bibliotecas en /library e indica su ruta en Kavita ({path}) en Conexiones.',
   'kavita.kind.MANGA': 'Manga',
   'kavita.kind.MANHWA': 'Manhwa y webtoons',
   'kavita.kind.MANHUA': 'Manhua',
@@ -1548,7 +1546,7 @@ const es: Dictionary = {
   'auth.mismatch': 'Las contraseñas no coinciden.',
   'auth.create': 'Crear mi cuenta',
   'auth.forgotHint':
-    '¿Olvidaste la contraseña? Reinicia el contenedor con KAVISEERR_RESET_ACCOUNT=true para volver a crear la cuenta.',
+    '¿Olvidaste la contraseña? Reinicia el contenedor con BUNKO_RESET_ACCOUNT=true para volver a crear la cuenta.',
   'auth.signedInAs': 'Sesión iniciada como',
   'auth.changePassword': 'Cambiar contraseña',
   'auth.currentPassword': 'Contraseña actual',
@@ -1604,7 +1602,7 @@ const de: Dictionary = {
   'library.statusLabel': 'Lesestatus',
   'library.empty': 'Deine Bibliothek ist leer',
   'library.emptyBody':
-    'Füge ein Werk aus dem Katalog hinzu: KaviSeerr verfolgt neue Kapitel und legt sie in Kavita ab.',
+    'Füge ein Werk aus dem Katalog hinzu: Bunko verfolgt neue Kapitel und legt sie in Kavita ab.',
   'library.browse': 'Katalog durchsuchen',
   'library.shelfEmpty': 'Nichts in diesem Regal.',
   'library.readUpTo': 'Gelesen bis Kap. {n}',
@@ -1822,7 +1820,7 @@ const de: Dictionary = {
   'sources.filterExtensions': 'Erweiterungen filtern',
   'sources.myLanguages': 'Nur meine Sprachen',
   'sources.reposHint':
-    'KaviSeerr enthält kein Repository. Füge vertrauenswürdige Erweiterungs-Repositorys (Mihon/Tachiyomi-Format) hinzu und aktualisiere die Liste.',
+    'Bunko enthält kein Repository. Füge vertrauenswürdige Erweiterungs-Repositorys (Mihon/Tachiyomi-Format) hinzu und aktualisiere die Liste.',
   'sources.noRepos': 'Noch kein Repository.',
   'sources.repoUrl': 'Repository-URL',
   'sources.addRepo': 'Hinzufügen',
@@ -1910,7 +1908,7 @@ const de: Dictionary = {
   'settings.service.kavita': 'Kavita',
   'settings.service.suwayomiTip': 'Die Engine, die Erweiterungen ausführt und Kapitel lädt.',
   'settings.service.kavitaTip':
-    'Dein Reader. KaviSeerr legt dort Kapitel ab und liest deinen Fortschritt.',
+    'Dein Reader. Bunko legt dort Kapitel ab und liest deinen Fortschritt.',
   'settings.state.ok': 'verbunden',
   'settings.state.error': 'nicht erreichbar',
   'settings.state.unconfigured': 'nicht eingerichtet',
@@ -1949,7 +1947,7 @@ const de: Dictionary = {
   'settings.module.videoState': 'später',
   'settings.signOut': 'Abmelden',
   'error.generic': 'Etwas ist schiefgelaufen. Versuch es erneut.',
-  'error.NETWORK_ERROR': 'KaviSeerr ist nicht erreichbar. Prüfe deine Verbindung.',
+  'error.NETWORK_ERROR': 'Bunko ist nicht erreichbar. Prüfe deine Verbindung.',
   'error.STREAM_ERROR': 'Die Live-Verbindung wurde unterbrochen.',
   'error.UNAUTHORIZED': 'Ungültiges Token oder abgelaufene Sitzung.',
   'error.FORBIDDEN': 'Anfrage vom Server abgelehnt.',
@@ -1975,7 +1973,7 @@ const de: Dictionary = {
   'error.METADATA_UNAVAILABLE': 'Der Katalog ist gerade nicht verfügbar.',
   'error.IMAGE_UNAVAILABLE': 'Bild nicht verfügbar.',
   'error.PAYLOAD_TOO_LARGE': 'Anfrage zu groß.',
-  'error.INTERNAL_ERROR': 'KaviSeerr hatte einen internen Fehler.',
+  'error.INTERNAL_ERROR': 'Bunko hatte einen internen Fehler.',
   'service.suwayomiDown': 'Suwayomi ist nicht erreichbar',
   'service.suwayomiUnconfigured': 'Suwayomi ist noch nicht eingerichtet',
   'service.suwayomiBody':
@@ -2028,7 +2026,7 @@ const de: Dictionary = {
   'kavita.targetsHint':
     'Wähle, wo jedes Format abgelegt wird. Beschreibbar sind nur Ordner innerhalb des unter /library eingebundenen Ordners (in Kavita {path}).',
   'kavita.noUsableFolder':
-    'Kein Kavita-Ordner ist für KaviSeerr erreichbar. Binde den übergeordneten Ordner deiner Kavita-Bibliotheken unter /library ein und trage seinen Kavita-Pfad ({path}) unter Verbindungen ein.',
+    'Kein Kavita-Ordner ist für Bunko erreichbar. Binde den übergeordneten Ordner deiner Kavita-Bibliotheken unter /library ein und trage seinen Kavita-Pfad ({path}) unter Verbindungen ein.',
   'kavita.kind.MANGA': 'Manga',
   'kavita.kind.MANHWA': 'Manhwa & Webtoons',
   'kavita.kind.MANHUA': 'Manhua',
@@ -2060,7 +2058,7 @@ const de: Dictionary = {
   'auth.mismatch': 'Die Passwörter stimmen nicht überein.',
   'auth.create': 'Konto anlegen',
   'auth.forgotHint':
-    'Passwort vergessen? Starte den Container mit KAVISEERR_RESET_ACCOUNT=true neu, um das Konto neu anzulegen.',
+    'Passwort vergessen? Starte den Container mit BUNKO_RESET_ACCOUNT=true neu, um das Konto neu anzulegen.',
   'auth.signedInAs': 'Angemeldet als',
   'auth.changePassword': 'Passwort ändern',
   'auth.currentPassword': 'Aktuelles Passwort',
@@ -2116,7 +2114,7 @@ const it: Dictionary = {
   'library.statusLabel': 'Stato di lettura',
   'library.empty': 'La tua libreria è vuota',
   'library.emptyBody':
-    'Aggiungi un titolo dal catalogo: KaviSeerr ne segue i nuovi capitoli e li archivia in Kavita.',
+    'Aggiungi un titolo dal catalogo: Bunko ne segue i nuovi capitoli e li archivia in Kavita.',
   'library.browse': 'Sfoglia il catalogo',
   'library.shelfEmpty': 'Niente su questo scaffale.',
   'library.readUpTo': 'Letto fino al cap. {n}',
@@ -2333,7 +2331,7 @@ const it: Dictionary = {
   'sources.filterExtensions': 'Filtra estensioni',
   'sources.myLanguages': 'Solo le mie lingue',
   'sources.reposHint':
-    'KaviSeerr non include repository. Aggiungi i repository di estensioni di cui ti fidi (formato Mihon/Tachiyomi), poi aggiorna l’elenco.',
+    'Bunko non include repository. Aggiungi i repository di estensioni di cui ti fidi (formato Mihon/Tachiyomi), poi aggiorna l’elenco.',
   'sources.noRepos': 'Ancora nessun repository.',
   'sources.repoUrl': 'URL del repository',
   'sources.addRepo': 'Aggiungi',
@@ -2421,7 +2419,7 @@ const it: Dictionary = {
   'settings.service.kavita': 'Kavita',
   'settings.service.suwayomiTip': 'Il motore che esegue le estensioni e scarica i capitoli.',
   'settings.service.kavitaTip':
-    'Il tuo lettore. KaviSeerr vi archivia i capitoli e legge i tuoi progressi.',
+    'Il tuo lettore. Bunko vi archivia i capitoli e legge i tuoi progressi.',
   'settings.state.ok': 'collegato',
   'settings.state.error': 'non raggiungibile',
   'settings.state.unconfigured': 'non configurato',
@@ -2459,7 +2457,7 @@ const it: Dictionary = {
   'settings.module.videoState': 'più avanti',
   'settings.signOut': 'Esci',
   'error.generic': 'Qualcosa è andato storto. Riprova.',
-  'error.NETWORK_ERROR': 'KaviSeerr non è raggiungibile. Controlla la connessione.',
+  'error.NETWORK_ERROR': 'Bunko non è raggiungibile. Controlla la connessione.',
   'error.STREAM_ERROR': 'La connessione in diretta si è interrotta.',
   'error.UNAUTHORIZED': 'Token non valido o sessione scaduta.',
   'error.FORBIDDEN': 'Richiesta rifiutata dal server.',
@@ -2485,7 +2483,7 @@ const it: Dictionary = {
   'error.METADATA_UNAVAILABLE': 'Il catalogo non è disponibile ora.',
   'error.IMAGE_UNAVAILABLE': 'Immagine non disponibile.',
   'error.PAYLOAD_TOO_LARGE': 'Richiesta troppo grande.',
-  'error.INTERNAL_ERROR': 'KaviSeerr ha avuto un errore interno.',
+  'error.INTERNAL_ERROR': 'Bunko ha avuto un errore interno.',
   'service.suwayomiDown': 'Suwayomi non è raggiungibile',
   'service.suwayomiUnconfigured': 'Suwayomi non è ancora configurato',
   'service.suwayomiBody':
@@ -2538,7 +2536,7 @@ const it: Dictionary = {
   'kavita.targetsHint':
     'Scegli dove salvare ogni formato. Sono scrivibili solo le cartelle dentro quella montata su /library (vista da Kavita come {path}).',
   'kavita.noUsableFolder':
-    'Nessuna cartella di Kavita è raggiungibile da KaviSeerr. Monta la cartella padre delle librerie Kavita su /library e indica il suo percorso in Kavita ({path}) in Connessioni.',
+    'Nessuna cartella di Kavita è raggiungibile da Bunko. Monta la cartella padre delle librerie Kavita su /library e indica il suo percorso in Kavita ({path}) in Connessioni.',
   'kavita.kind.MANGA': 'Manga',
   'kavita.kind.MANHWA': 'Manhwa e webtoon',
   'kavita.kind.MANHUA': 'Manhua',
@@ -2570,7 +2568,7 @@ const it: Dictionary = {
   'auth.mismatch': 'Le password non coincidono.',
   'auth.create': 'Crea il mio account',
   'auth.forgotHint':
-    'Password dimenticata? Riavvia il container con KAVISEERR_RESET_ACCOUNT=true per ricreare l’account.',
+    'Password dimenticata? Riavvia il container con BUNKO_RESET_ACCOUNT=true per ricreare l’account.',
   'auth.signedInAs': 'Connesso come',
   'auth.changePassword': 'Cambia password',
   'auth.currentPassword': 'Password attuale',

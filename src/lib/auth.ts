@@ -48,8 +48,8 @@ export function authenticate(request: Request) {
     .get('cookie')
     ?.split(';')
     .map((v) => v.trim())
-    .find((v) => v.startsWith('kaviseerr_session='))
-    ?.slice('kaviseerr_session='.length);
+    .find((v) => v.startsWith('bunko_session='))
+    ?.slice('bunko_session='.length);
   if (cookie) {
     const parts = cookie.split('.');
     const [version, expiry, sessionEpoch, signature] = parts;
@@ -99,10 +99,10 @@ interface AttemptWindow {
   usernames: Map<string, number>;
 }
 // Share the budget across Next's separately bundled route modules. Never trust forwarded IPs.
-const runtime = globalThis as typeof globalThis & { __kaviseerrLoginAttempts?: AttemptWindow };
+const runtime = globalThis as typeof globalThis & { __bunkoLoginAttempts?: AttemptWindow };
 function limit(username: string) {
   const now = Date.now();
-  const window = (runtime.__kaviseerrLoginAttempts ??= {
+  const window = (runtime.__bunkoLoginAttempts ??= {
     start: now,
     total: 0,
     usernames: new Map(),
@@ -122,7 +122,7 @@ function invalidCredentials(): never {
 }
 function sessionCookie(request: Request, sessionEpoch: string) {
   const value = `v1.${Date.now() + sessionSeconds * 1000}.${sessionEpoch}`;
-  return `kaviseerr_session=${value}.${sign(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${sessionSeconds}${new URL(request.url).protocol === 'https:' ? '; Secure' : ''}`;
+  return `bunko_session=${value}.${sign(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${sessionSeconds}${new URL(request.url).protocol === 'https:' ? '; Secure' : ''}`;
 }
 export async function setup(request: Request, input: Credentials) {
   checkOrigin(request);

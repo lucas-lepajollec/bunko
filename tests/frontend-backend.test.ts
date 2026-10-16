@@ -4,12 +4,12 @@ import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, type Server } from 'node:http';
-const directory = mkdtempSync(path.join(tmpdir(), 'kaviseerr-v2-'));
-process.env.KAVISEERR_DATA_DIR = path.join(directory, 'data');
-process.env.KAVISEERR_LIBRARY_DIR = path.join(directory, 'library');
-process.env.KAVISEERR_WORKER = 'false';
-mkdirSync(process.env.KAVISEERR_DATA_DIR);
-const old = new Database(path.join(process.env.KAVISEERR_DATA_DIR, 'kaviseerr.db'));
+const directory = mkdtempSync(path.join(tmpdir(), 'bunko-v2-'));
+process.env.BUNKO_DATA_DIR = path.join(directory, 'data');
+process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
+process.env.BUNKO_WORKER = 'false';
+mkdirSync(process.env.BUNKO_DATA_DIR);
+const old = new Database(path.join(process.env.BUNKO_DATA_DIR, 'kaviseerr.db'));
 old.exec(`CREATE TABLE tracked_media (
   id INTEGER PRIMARY KEY, anilist_id INTEGER, mangadex_id TEXT, title TEXT NOT NULL,
   type TEXT NOT NULL, cover_url TEXT, kavita_series_id INTEGER, auto_download INTEGER NOT NULL DEFAULT 0,

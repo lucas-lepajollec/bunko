@@ -60,12 +60,9 @@ export function sharedConcurrencyGate(
   limit: number,
 ): ReturnType<typeof concurrencyGate> {
   const scope = globalThis as typeof globalThis & {
-    __kaviseerrGates?: Map<string, ReturnType<typeof concurrencyGate>>;
+    __bunkoGates?: Map<string, ReturnType<typeof concurrencyGate>>;
   };
-  const registry = (scope.__kaviseerrGates ??= new Map<
-    string,
-    ReturnType<typeof concurrencyGate>
-  >());
+  const registry = (scope.__bunkoGates ??= new Map<string, ReturnType<typeof concurrencyGate>>());
   let gate = registry.get(name);
   if (!gate) {
     gate = concurrencyGate(limit);

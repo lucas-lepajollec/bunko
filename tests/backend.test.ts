@@ -4,10 +4,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, type Server } from 'node:http';
 import AdmZip from 'adm-zip';
-const directory = mkdtempSync(path.join(tmpdir(), 'kaviseerr-test-'));
-process.env.KAVISEERR_DATA_DIR = path.join(directory, 'data');
-process.env.KAVISEERR_LIBRARY_DIR = path.join(directory, 'library');
-process.env.KAVISEERR_WORKER = 'false';
+const directory = mkdtempSync(path.join(tmpdir(), 'bunko-test-'));
+process.env.BUNKO_DATA_DIR = path.join(directory, 'data');
+process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
+process.env.BUNKO_WORKER = 'false';
 const { db, indexCatalog, searchCatalog, track, listTracked, listBatches, saveBatch } =
   await import('@/lib/db');
 const { updateSettings, getSettings, publicSettings, persistentSecret } =

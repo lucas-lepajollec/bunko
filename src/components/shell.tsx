@@ -50,21 +50,12 @@ function AuthGate({ children }: { children: ReactNode }) {
 }
 
 function Logo({ size = 24 }: { size?: number }) {
+  // Bunko mark: a paperback with its obi band and a vertical title line.
   return (
-    <svg width={size} height={size} viewBox="0 0 26 26" fill="none" aria-hidden>
-      <path
-        d="M5 4h9a3 3 0 0 1 3 3v15l-6-3-6 3V4Z"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M17 7h4v15l-4-2"
-        stroke="currentColor"
-        strokeOpacity="0.45"
-        strokeWidth="2.2"
-        strokeLinejoin="round"
-      />
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden>
+      <rect x="15" y="7" width="34" height="50" rx="3.5" stroke="currentColor" strokeWidth="4" />
+      <path d="M41 14v17" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+      <rect x="15" y="39" width="34" height="11" fill="currentColor" />
     </svg>
   );
 }

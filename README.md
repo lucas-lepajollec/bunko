@@ -2,17 +2,17 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-  <img src="docs/assets/logo-light.svg" width="72" height="72" alt="KaviSeerr">
+  <img src="docs/assets/logo-light.svg" width="72" height="72" alt="Bunko">
 </picture>
 
-# KaviSeerr
+# Bunko
 
 **Find a manga, webtoon or light novel, pick its chapters, read them in Kavita.**
 
 A self-hosted reading hub that sits on top of the Suwayomi and Kavita you already run.
 
-[![CI](https://github.com/lucas-lepajollec/kaviseer/actions/workflows/ci.yml/badge.svg)](https://github.com/lucas-lepajollec/kaviseer/actions/workflows/ci.yml)
-[![Docker image](https://github.com/lucas-lepajollec/kaviseer/actions/workflows/docker.yml/badge.svg)](https://github.com/lucas-lepajollec/kaviseer/pkgs/container/kaviseer)
+[![CI](https://github.com/lucas-lepajollec/bunko/actions/workflows/ci.yml/badge.svg)](https://github.com/lucas-lepajollec/bunko/actions/workflows/ci.yml)
+[![Docker image](https://github.com/lucas-lepajollec/bunko/actions/workflows/docker.yml/badge.svg)](https://github.com/lucas-lepajollec/bunko/pkgs/container/bunko)
 [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey.svg)](LICENSE)
 
 [Quick start](#quick-start) · [Configuration](#configuration-and-persistence) · [Security](#security-privacy-and-limitations) · [Contributing](CONTRIBUTING.md)
@@ -21,7 +21,7 @@ A self-hosted reading hub that sits on top of the Suwayomi and Kavita you alread
 
 ## Overview
 
-[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server) runs Mihon/Tachiyomi-compatible extensions and downloads chapters. [Kavita](https://www.kavitareader.com/) is a great reader. Between the two, finding a title, checking which source has it and getting clean files into your library is still tedious. KaviSeerr is that missing layer:
+[Suwayomi](https://github.com/Suwayomi/Suwayomi-Server) runs Mihon/Tachiyomi-compatible extensions and downloads chapters. [Kavita](https://www.kavitareader.com/) is a great reader. Between the two, finding a title, checking which source has it and getting clean files into your library is still tedious. Bunko is that missing layer:
 
 | | What it does |
 | --- | --- |
@@ -30,7 +30,7 @@ A self-hosted reading hub that sits on top of the Suwayomi and Kavita you alread
 | **One click to Kavita** | Pick missing chapters, a range or a specific version per chapter. They arrive as CBZ files with embedded `ComicInfo.xml`, and Kavita rescans the series. |
 | **Follow, don't babysit** | Reading statuses, read / owned / released progress (from Kavita), automatic fetching of new chapters and a daily release feed. |
 
-KaviSeerr does not host, provide or recommend any content source, and ships with no extension repository.
+Bunko does not host, provide or recommend any content source, and ships with no extension repository.
 
 ## Product preview
 
@@ -49,28 +49,28 @@ Light-novel downloads (EPUB into Kavita) are a planned module; novels can alread
 
 ## Quick start
 
-You need a running **Suwayomi** server (v2.x) and, to read and track progress, a **Kavita** server. KaviSeerr runs as a single container next to them.
+You need a running **Suwayomi** server (v2.x) and, to read and track progress, a **Kavita** server. Bunko runs as a single container next to them.
 
 **1. Create `docker-compose.yml`**
 
 ```yaml
 services:
-  kaviseerr:
-    image: ghcr.io/lucas-lepajollec/kaviseer:latest
-    container_name: kaviseerr
+  bunko:
+    image: ghcr.io/lucas-lepajollec/bunko:latest
+    container_name: bunko
     restart: unless-stopped
     ports:
       - "2512:2512"
     volumes:
-      - kaviseerr-data:/data
+      - bunko-data:/data
       # Replace the left side with the folder that contains your Kavita libraries.
       - /path/to/your/kavita/libraries:/library
 
 volumes:
-  kaviseerr-data:
+  bunko-data:
 ```
 
-That is the only path to adapt. A container can only write where you let it, so KaviSeerr needs **one** mount: the folder your Kavita libraries live in (for example the parent of `manga/` and `webtoons/`). Everything else — Suwayomi and Kavita addresses, keys, and which library receives which format — is set in the interface. `kaviseerr-data` keeps the database, your account, the API token and the encryption key.
+That is the only path to adapt. A container can only write where you let it, so Bunko needs **one** mount: the folder your Kavita libraries live in (for example the parent of `manga/` and `webtoons/`). Everything else — Suwayomi and Kavita addresses, keys, and which library receives which format — is set in the interface. `bunko-data` keeps the database, your account, the API token and the encryption key.
 
 The repository's [`docker-compose.yml`](docker-compose.yml) is the same service with hardening options (read-only filesystem, no capabilities) and an optional [`.env`](.env.example).
 
@@ -86,18 +86,18 @@ Open `http://<your-host>:2512`. On first start you choose a username and a passw
 
 | Setting | Example | Notes |
 | --- | --- | --- |
-| Suwayomi address | `http://192.168.1.10:4567` | As reachable **from the KaviSeerr container**. Username and password if Suwayomi uses basic authentication. |
+| Suwayomi address | `http://192.168.1.10:4567` | As reachable **from the Bunko container**. Username and password if Suwayomi uses basic authentication. |
 | Kavita address and API key | `http://192.168.1.10:5000` | The key needs permission to scan libraries. |
 | Kavita path of the mounted folder | `/manga` | How **Kavita** names the folder you mounted at `/library`. If Kavita mounts the same host folder at `/manga`, enter `/manga`. |
 
 Then, in **Settings → Kavita libraries**, pick the library folder that receives each format (manga, manhwa & webtoons, manhua, novels). Your Suwayomi extensions are listed under **Sources**: choose which ones join global search, open a title and pick chapters.
 
-KaviSeerr also indexes what Kavita already holds: titles you own show an *In Kavita* badge, owned chapters are never downloaded again, and existing series can be followed from **Library → In Kavita**.
+Bunko also indexes what Kavita already holds: titles you own show an *In Kavita* badge, owned chapters are never downloaded again, and existing series can be followed from **Library → In Kavita**.
 
-> **Good to know.** KaviSeerr asks Suwayomi only for the chapter pages, then builds each CBZ itself, named the way Kavita expects (`Series/Series Ch. 0012.cbz`) with embedded metadata. Suwayomi's own download folder and settings are left untouched, and the two containers do not need to share a volume.
+> **Good to know.** Bunko asks Suwayomi only for the chapter pages, then builds each CBZ itself, named the way Kavita expects (`Series/Series Ch. 0012.cbz`) with embedded metadata. Suwayomi's own download folder and settings are left untouched, and the two containers do not need to share a volume.
 
 <details>
-<summary><b>Starting from scratch?</b> Run KaviSeerr with its own Suwayomi and FlareSolverr</summary>
+<summary><b>Starting from scratch?</b> Run Bunko with its own Suwayomi and FlareSolverr</summary>
 
 [`docker-compose.full.yml`](docker-compose.full.yml) adds a headless Suwayomi engine and FlareSolverr on an internal network (no extra published ports):
 
@@ -105,7 +105,7 @@ KaviSeerr also indexes what Kavita already holds: titles you own show an *In Kav
 docker compose -f docker-compose.full.yml up -d
 ```
 
-Then add an extension repository you trust under **Sources → Repositories** and install extensions. KaviSeerr ships with none.
+Then add an extension repository you trust under **Sources → Repositories** and install extensions. Bunko ships with none.
 
 </details>
 
@@ -124,15 +124,15 @@ Then add an extension repository you trust under **Sources → Repositories** an
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `SUWAYOMI_URL` | `http://suwayomi:4567` | Optional initial Suwayomi address; the address saved in Settings takes precedence. |
-| `KAVISEERR_DATA_DIR` | `/data` in the image | Database, `access.token`, `settings.key`. |
-| `KAVISEERR_LIBRARY_DIR` | `/library` in the image | Folder receiving imported CBZ files. |
+| `BUNKO_DATA_DIR` | `/data` in the image | Database, `access.token`, `settings.key`. |
+| `BUNKO_LIBRARY_DIR` | `/library` in the image | Folder receiving imported CBZ files. |
 
 Everything else lives in **Settings**: connections, new-chapter check interval (5 minutes to 24 hours), interface language. Source order, languages and repositories live in **Sources**.
 
 - **Back up the `/data` volume as a whole** while the container is stopped: the database, the access token and the encryption key belong together.
-- **Forgot your password?** Start the container once with `KAVISEERR_RESET_ACCOUNT=true`, create the account again, then remove the variable (otherwise the account is reset at every start). Settings and library are kept.
+- **Forgot your password?** Start the container once with `BUNKO_RESET_ACCOUNT=true`, create the account again, then remove the variable (otherwise the account is reset at every start). Settings and library are kept.
 - **API and scripts** authenticate with `Authorization: Bearer <token>`, the token being in `/data/access.token`. To rotate it, stop the container, delete that file and start again.
-- **To update**, `docker compose pull && docker compose up -d`. Images are published for `amd64` and `arm64`; pin a version tag (`ghcr.io/lucas-lepajollec/kaviseer:x.y.z`) once releases are tagged.
+- **To update**, `docker compose pull && docker compose up -d`. Images are published for `amd64` and `arm64`; pin a version tag (`ghcr.io/lucas-lepajollec/bunko:x.y.z`) once releases are tagged.
 
 ## Security, privacy, and limitations
 
@@ -163,7 +163,7 @@ Tests use temporary storage and local protocol fixtures — never real credentia
 
 ## Public demo
 
-There is no public demo: KaviSeerr is only useful with your own Suwayomi and Kavita.
+There is no public demo: Bunko is only useful with your own Suwayomi and Kavita.
 
 ## Documentation and community
 

@@ -10,7 +10,7 @@ labels: enhancement
 
 ## Proposal
 
-<!-- What should KaviSeerr do? Screens, settings or behavior. -->
+<!-- What should Bunko do? Screens, settings or behavior. -->
 
 ## Alternatives and constraints
 

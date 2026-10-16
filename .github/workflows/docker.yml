@@ -15,7 +15,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: lucas-lepajollec/kaviseer
+  IMAGE_NAME: lucas-lepajollec/bunko
 
 jobs:
   verify:
@@ -39,8 +39,8 @@ jobs:
 
       - name: Build and smoke-test the amd64 image
         run: |
-          docker build --pull --tag kaviseerr:release-candidate .
-          scripts/container-smoke.sh kaviseerr:release-candidate
+          docker build --pull --tag bunko:release-candidate .
+          scripts/container-smoke.sh bunko:release-candidate
 
       # better-sqlite3 is a native module: make sure the arm64 image really starts.
       - name: Set up QEMU
@@ -51,8 +51,8 @@ jobs:
 
       - name: Build and smoke-test the arm64 image
         run: |
-          docker buildx build --platform linux/arm64 --load --tag kaviseerr:release-candidate-arm64 .
-          SMOKE_TIMEOUT=240 scripts/container-smoke.sh kaviseerr:release-candidate-arm64
+          docker buildx build --platform linux/arm64 --load --tag bunko:release-candidate-arm64 .
+          SMOKE_TIMEOUT=240 scripts/container-smoke.sh bunko:release-candidate-arm64
 
   publish:
     name: Publish image

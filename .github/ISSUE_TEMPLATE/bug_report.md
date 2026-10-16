@@ -18,7 +18,7 @@ labels: bug
 
 ## Environment
 
-- KaviSeerr commit or image tag:
+- Bunko commit or image tag:
 - Deployment (Docker Compose, other):
 - Suwayomi version:
 - Kavita version (if relevant):

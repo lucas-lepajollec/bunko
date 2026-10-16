@@ -6,7 +6,7 @@ import { mediaHref, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Cover, Skeleton, cx, useMediaMeta } from './ui';
 
-export const OPEN_SEARCH_EVENT = 'kaviseerr:open-search';
+export const OPEN_SEARCH_EVENT = 'bunko:open-search';
 
 function useDebounced(value: string, ms: number) {
   const [debounced, setDebounced] = useState(value);

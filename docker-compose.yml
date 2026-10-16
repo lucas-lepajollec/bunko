@@ -1,17 +1,17 @@
-# KaviSeerr alone, next to the Suwayomi and Kavita you already run.
+# Bunko alone, next to the Suwayomi and Kavita you already run.
 #   docker compose up -d
-#   docker compose exec kaviseerr cat /data/access.token   -> sign in at http://<host>:2512
+#   docker compose exec bunko cat /data/access.token   -> sign in at http://<host>:2512
 # Addresses, keys and target libraries are set in the interface (Settings).
 services:
-  kaviseerr:
-    image: ghcr.io/lucas-lepajollec/kaviseer:latest
-    container_name: kaviseerr
+  bunko:
+    image: ghcr.io/lucas-lepajollec/bunko:latest
+    container_name: bunko
     restart: unless-stopped
     ports:
-      - "${KAVISEERR_PORT:-2512}:2512"
+      - "${BUNKO_PORT:-2512}:2512"
     volumes:
       # Database, access token and settings key. Back it up.
-      - kaviseerr-data:/data
+      - bunko-data:/data
       # The folder that contains your Kavita libraries (writable by UID 1000).
       - ${KAVITA_LIBRARIES:-./library}:/library
     # Optional: pre-fill the Suwayomi address (Settings can change it).
@@ -28,4 +28,4 @@ services:
     #   - "host.docker.internal:host-gateway"
 
 volumes:
-  kaviseerr-data:
+  bunko-data:

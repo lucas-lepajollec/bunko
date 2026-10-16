@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, type Server } from 'node:http';
 import AdmZip from 'adm-zip';
-const directory = mkdtempSync(path.join(tmpdir(), 'kaviseerr-native-'));
+const directory = mkdtempSync(path.join(tmpdir(), 'bunko-native-'));
 const root = path.join(directory, 'library');
-process.env.KAVISEERR_DATA_DIR = path.join(directory, 'state');
-process.env.KAVISEERR_LIBRARY_DIR = root;
-process.env.KAVISEERR_WORKER = 'false';
+process.env.BUNKO_DATA_DIR = path.join(directory, 'state');
+process.env.BUNKO_LIBRARY_DIR = root;
+process.env.BUNKO_WORKER = 'false';
 mkdirSync(path.join(root, 'Manga', 'Existing Folder'), { recursive: true });
 mkdirSync(path.join(root, 'Novels'), { recursive: true });
 const { db, track, listTracked, listBatches, recordImport, indexCatalog } =
@@ -428,9 +428,9 @@ describe('Kavita index, paths and presence', () => {
         { writable: false },
       ],
     });
-    expect(
-      readdirSync(path.join(root, 'Manga')).some((n) => n.startsWith('.kaviseerr-probe')),
-    ).toBe(false);
+    expect(readdirSync(path.join(root, 'Manga')).some((n) => n.startsWith('.bunko-probe'))).toBe(
+      false,
+    );
     updateSettings({ libraryTargets: { MANGA: { libraryId: 1, folder: '/books/escape' } } });
     await expect(seriesDirectory(media)).rejects.toMatchObject({ code: 'UNSAFE_PATH' });
     expect(readdirSync(external)).toEqual([]);

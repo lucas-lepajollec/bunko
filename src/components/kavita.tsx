@@ -5,7 +5,7 @@ import { ApiFailure, send } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Cover, Empty, PosterSkeletons, errorText } from './ui';
 
-/** Series already in Kavita that KaviSeerr does not follow yet, with a one-click "follow". */
+/** Series already in Kavita that Bunko does not follow yet, with a one-click "follow". */
 export function KavitaUnmatched({
   series,
   onTracked,

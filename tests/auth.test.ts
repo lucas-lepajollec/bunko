@@ -13,9 +13,9 @@ vi.mock('node:crypto', async (original) => {
   };
 });
 const { scrypt, timingSafeEqual } = await import('node:crypto');
-const directory = mkdtempSync(path.join(tmpdir(), 'kaviseerr-auth-'));
-process.env.KAVISEERR_DATA_DIR = directory;
-process.env.KAVISEERR_WORKER = 'false';
+const directory = mkdtempSync(path.join(tmpdir(), 'bunko-auth-'));
+process.env.BUNKO_DATA_DIR = directory;
+process.env.BUNKO_WORKER = 'false';
 const { db, migrateV4 } = await import('@/lib/db');
 const { persistentSecret } = await import('@/lib/settings');
 const { authenticate } = await import('@/lib/auth');
@@ -121,7 +121,7 @@ describe('account routes', () => {
     for (const response of responses.filter((r) => r.status === 409))
       await error(response, 409, 'ALREADY_SET_UP');
     // The invariant is enforced by SQLite, independently of JS's preflight check.
-    const other = new Database(path.join(directory, 'kaviseerr.db'));
+    const other = new Database(path.join(directory, 'bunko.db'));
     expect(() =>
       other.prepare("INSERT INTO administrator VALUES(1,'Other','hash','epoch')").run(),
     ).toThrow();
@@ -345,7 +345,7 @@ describe('account routes', () => {
     for (const invalid of [
       `${session}bad`,
       session.replace('v1.', 'v2.'),
-      'kaviseerr_session=9999999999999.legacy-signature',
+      'bunko_session=9999999999999.legacy-signature',
     ])
       expect(
         (await protectedRoute(request('/api/settings', undefined, { Cookie: invalid }))).status,

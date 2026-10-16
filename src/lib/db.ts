@@ -1,7 +1,8 @@
 import Database from 'better-sqlite3';
 import { matchKavita, withKavita } from './kavita-index';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { env } from '@/lib/env';
 import type {
   DownloadBatch,
   SourceMatch,
@@ -10,14 +11,14 @@ import type {
   UnifiedMedia,
   ChapterVariant,
 } from '@/types/shared';
-export const dataDir = path.resolve(
-  /* turbopackIgnore: true */ process.env.KAVISEERR_DATA_DIR ?? './data',
-);
+export const dataDir = path.resolve(/* turbopackIgnore: true */ env('DATA_DIR') ?? './data');
 let connection: Database.Database | undefined;
 export function db(): Database.Database {
   if (connection) return connection;
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
-  connection = new Database(path.join(dataDir, 'kaviseerr.db'));
+  // Installations created before the rename keep their database file.
+  const legacy = path.join(dataDir, 'kaviseerr.db');
+  connection = new Database(existsSync(legacy) ? legacy : path.join(dataDir, 'bunko.db'));
   connection.pragma('journal_mode = WAL');
   connection.pragma('foreign_keys = ON');
   connection.pragma('busy_timeout = 5000');
@@ -105,15 +106,15 @@ export function migrateV4(database: Database.Database) {
   })();
 }
 // Next can load db.ts in multiple route bundles; reset only once per server process/volume.
-const runtime = globalThis as typeof globalThis & { __kaviseerrAccountReset?: Set<string> };
+const runtime = globalThis as typeof globalThis & { __bunkoAccountReset?: Set<string> };
 function resetAccountAtStartup(database: Database.Database) {
-  if (process.env.KAVISEERR_RESET_ACCOUNT !== 'true') return;
-  const reset = (runtime.__kaviseerrAccountReset ??= new Set());
+  if (env('RESET_ACCOUNT') !== 'true') return;
+  const reset = (runtime.__bunkoAccountReset ??= new Set());
   if (reset.has(dataDir)) return;
   database.prepare('DELETE FROM administrator').run();
   reset.add(dataDir);
   console.info(
-    'KaviSeerr: administrator account and browser sessions reset; first-start setup is required.',
+    'Bunko: administrator account and browser sessions reset; first-start setup is required.',
   );
 }
 export function sameMedia(a: UnifiedMedia, b: UnifiedMedia) {

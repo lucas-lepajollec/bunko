@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve KaviSeerr. Small, focused pull requests with clear evidence are the easiest to review.
+Thanks for helping improve Bunko. Small, focused pull requests with clear evidence are the easiest to review.
 
 ## Development setup
 
@@ -19,7 +19,7 @@ Run before opening a pull request:
 
 ```bash
 npm run check   # lint (0 warnings), strict TypeScript, tests, production build
-docker build -t kaviseerr:dev .
+docker build -t bunko:dev .
 ```
 
 Tests use temporary storage and local protocol fixtures only. Never add real credentials, personal media or private infrastructure data to tests or fixtures.

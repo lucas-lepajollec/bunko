@@ -3,7 +3,7 @@
 set -euo pipefail
 image="${1:?usage: container-smoke.sh <image>}"
 timeout="${SMOKE_TIMEOUT:-90}"
-name="kaviseerr-smoke-$$"
+name="bunko-smoke-$$"
 cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 docker run -d --name "$name" -p 127.0.0.1::2512 --read-only --tmpfs /tmp --tmpfs /data:uid=1000,gid=1000 --tmpfs /library:uid=1000,gid=1000 \

@@ -12,7 +12,7 @@ export class ApiFailure extends Error {
   }
 }
 
-export const UNAUTHORIZED_EVENT = 'kaviseerr:unauthorized';
+export const UNAUTHORIZED_EVENT = 'bunko:unauthorized';
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;

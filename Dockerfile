@@ -9,7 +9,7 @@ RUN npm run build
 
 FROM node:22.23.1-bookworm-slim AS runtime
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=2512 HOSTNAME=0.0.0.0 KAVISEERR_DATA_DIR=/data KAVISEERR_LIBRARY_DIR=/library
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=2512 HOSTNAME=0.0.0.0 BUNKO_DATA_DIR=/data BUNKO_LIBRARY_DIR=/library
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 RUN mkdir -p /data /library && chown node:node /data /library

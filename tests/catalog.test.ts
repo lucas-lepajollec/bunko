@@ -15,9 +15,9 @@ import {
 } from '@/lib/media';
 import { discoverQuery, media as mediaSchema } from '@/lib/validation';
 
-const directory = mkdtempSync(path.join(tmpdir(), 'kaviseerr-catalog-'));
-process.env.KAVISEERR_DATA_DIR = directory;
-process.env.KAVISEERR_WORKER = 'false';
+const directory = mkdtempSync(path.join(tmpdir(), 'bunko-catalog-'));
+process.env.BUNKO_DATA_DIR = directory;
+process.env.BUNKO_WORKER = 'false';
 const { discover } = await import('@/lib/catalog');
 const { deduplicate } = await import('@/lib/search-engine');
 const { db } = await import('@/lib/db');

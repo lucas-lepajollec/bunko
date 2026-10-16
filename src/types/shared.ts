@@ -430,7 +430,7 @@ export interface KavitaSeriesSummary {
   /** Proxied cover (`/api/kavita/image?seriesId=`), never a URL carrying the API key. */
   coverUrl: string | null;
   url: string | null;
-  /** Tracked KaviSeerr entry linked to this series, if any. */
+  /** Tracked Bunko entry linked to this series, if any. */
   trackedId: number | null;
 }
 export interface KavitaIndexStatus {

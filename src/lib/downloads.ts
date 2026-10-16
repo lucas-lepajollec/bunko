@@ -20,6 +20,7 @@ import {
 } from './updates';
 import { sharedConcurrencyGate } from './concurrency';
 import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
+import { env } from '@/lib/env';
 const chapterGate = sharedConcurrencyGate('chapters', 1);
 const activeBatches = new Set<string>();
 let transfer = new AbortController();
@@ -271,12 +272,12 @@ export function startWorker() {
     persistentSecret('access.token', 32);
     initialized = true;
   }
-  if (timer || process.env.KAVISEERR_WORKER === 'false') return;
+  if (timer || env('WORKER') === 'false') return;
   const loop = async () => {
     try {
       await workerTick();
     } catch {
-      console.error('KaviSeerr worker cycle failed');
+      console.error('Bunko worker cycle failed');
     } finally {
       timer = setTimeout(loop, 1500);
       timer.unref();

@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Documentation
-    url: https://github.com/lucas-lepajollec/kaviseer#readme
+    url: https://github.com/lucas-lepajollec/bunko#readme
     about: Check installation, configuration and limitations before opening an issue.
   - name: Private security report
-    url: https://github.com/lucas-lepajollec/kaviseer/security/advisories/new
+    url: https://github.com/lucas-lepajollec/bunko/security/advisories/new
     about: Report suspected vulnerabilities privately.

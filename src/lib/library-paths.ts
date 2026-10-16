@@ -4,8 +4,9 @@ import { randomUUID } from 'node:crypto';
 import type { LibraryKind, UnifiedMedia } from '@/types/shared';
 import { getSettings } from './settings';
 import { AppError } from './errors';
+import { env } from '@/lib/env';
 export const libraryRoot = path.resolve(
-  /* turbopackIgnore: true */ process.env.KAVISEERR_LIBRARY_DIR ?? '/library',
+  /* turbopackIgnore: true */ env('LIBRARY_DIR') ?? '/library',
 );
 export function inside(root: string, folder: string) {
   const relative = path.relative(root, folder);
@@ -53,7 +54,7 @@ export async function writableFolder(folder: string) {
   let probe: string | undefined;
   try {
     const actual = await safeLibraryDirectory(folder);
-    probe = path.join(actual, `.kaviseerr-probe-${randomUUID()}`);
+    probe = path.join(actual, `.bunko-probe-${randomUUID()}`);
     const handle = await open(/* turbopackIgnore: true */ probe, 'wx', 0o600);
     await handle.close();
     await unlink(probe);

@@ -4,15 +4,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
 
-const directory = mkdtempSync(path.join(tmpdir(), 'kaviseerr-reset-'));
+const directory = mkdtempSync(path.join(tmpdir(), 'bunko-reset-'));
 const connections: Database.Database[] = [];
-const resetRuntime = globalThis as typeof globalThis & { __kaviseerrAccountReset?: Set<string> };
-process.env.KAVISEERR_DATA_DIR = directory;
-process.env.KAVISEERR_WORKER = 'false';
+const resetRuntime = globalThis as typeof globalThis & { __bunkoAccountReset?: Set<string> };
+process.env.BUNKO_DATA_DIR = directory;
+process.env.BUNKO_WORKER = 'false';
 async function boot(reset: string | undefined) {
   vi.resetModules();
-  if (reset === undefined) delete process.env.KAVISEERR_RESET_ACCOUNT;
-  else process.env.KAVISEERR_RESET_ACCOUNT = reset;
+  if (reset === undefined) delete process.env.BUNKO_RESET_ACCOUNT;
+  else process.env.BUNKO_RESET_ACCOUNT = reset;
   // This is the entry point invoked by Node instrumentation on server startup.
   const { startWorker } = await import('@/lib/downloads');
   startWorker();
@@ -21,16 +21,16 @@ async function boot(reset: string | undefined) {
   return { db, auth: await import('@/lib/auth'), settings: await import('@/lib/settings') };
 }
 beforeEach(() => {
-  resetRuntime.__kaviseerrAccountReset?.delete(directory);
+  resetRuntime.__bunkoAccountReset?.delete(directory);
   vi.spyOn(console, 'info').mockImplementation(() => {});
 });
 afterEach(() => {
-  delete process.env.KAVISEERR_RESET_ACCOUNT;
+  delete process.env.BUNKO_RESET_ACCOUNT;
   vi.restoreAllMocks();
   for (const database of connections.splice(0)) database.close();
 });
 afterAll(() => {
-  resetRuntime.__kaviseerrAccountReset?.delete(directory);
+  resetRuntime.__bunkoAccountReset?.delete(directory);
   rmSync(directory, { recursive: true, force: true });
 });
 
@@ -49,7 +49,7 @@ it('resets account and sessions at startup once across module bundles, preservin
     username: null,
   });
   expect(console.info).toHaveBeenCalledExactlyOnceWith(
-    'KaviSeerr: administrator account and browser sessions reset; first-start setup is required.',
+    'Bunko: administrator account and browser sessions reset; first-start setup is required.',
   );
   expect(restarted.settings.getSettings().kavitaUrl).toBe('http://fixture.invalid');
   expect(restarted.settings.persistentSecret('access.token', 32).toString('hex')).toBe(token);
@@ -71,7 +71,7 @@ it('resets account and sessions at startup once across module bundles, preservin
   ).toThrow('Authentication');
   expect(console.info).toHaveBeenCalledTimes(1);
   // Simulate a new server process: a retained flag intentionally resets on every restart.
-  resetRuntime.__kaviseerrAccountReset?.delete(directory);
+  resetRuntime.__bunkoAccountReset?.delete(directory);
   const nextRestart = await boot('true');
   expect(nextRestart.auth.authState(request).setupRequired).toBe(true);
   expect(console.info).toHaveBeenCalledTimes(2);

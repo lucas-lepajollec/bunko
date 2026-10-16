@@ -16,7 +16,7 @@ export const DELETE = route(
     new Response(null, {
       status: 204,
       headers: {
-        'Set-Cookie': 'kaviseerr_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
+        'Set-Cookie': 'bunko_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
         'Cache-Control': 'no-store',
       },
     }),
