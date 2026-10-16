@@ -54,8 +54,13 @@ export function saveMetadata(key: string, value: unknown, updatedAt = Date.now()
     });
   })();
 }
-/** Stale values never wait for upstream. Failed refreshes retain the last good value. */
-export async function cached<T>(key: string, ttl: number, load: () => Promise<T>): Promise<T> {
+/** Stale values return immediately by default; ingestion can await revalidation after publishing them. */
+export async function cached<T>(
+  key: string,
+  ttl: number,
+  load: () => Promise<T>,
+  options: { waitForRefresh?: boolean } = {},
+): Promise<T> {
   const hit = storedMetadata<T>(key);
   const pendingKey = `${dataDir}:${key}`;
   const refresh = () => {
@@ -75,10 +80,12 @@ export async function cached<T>(key: string, ttl: number, load: () => Promise<T>
     return pending;
   };
   if (hit) {
-    if (Date.now() - hit.at >= ttl && Date.now() - hit.attempted >= Math.min(ttl, 30_000))
+    if (Date.now() - hit.at >= ttl && Date.now() - hit.attempted >= Math.min(ttl, 30_000)) {
+      if (options.waitForRefresh) return structuredClone(await refresh());
       void refresh().catch(() => {
         /* The persisted value remains available. */
       });
+    }
     return hit.value;
   }
   return structuredClone(await refresh());

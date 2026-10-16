@@ -1,3 +1,5 @@
+import { adultClassifier, visibleMedia, recordSourceFlags } from './adult';
+import { mangaUpdates } from './mangaupdates';
 import type { DiscoverPage, DiscoverQuery, MediaDetail, UnifiedMedia } from '@/types/shared';
 import { requestJson } from './http';
 import { createHash } from 'node:crypto';
@@ -42,11 +44,13 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
   const tracked = listTracked();
   const resolve = kavitaMatcher();
   const baseUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
+  const mediaAdult = adultClassifier();
   return items.map((m) => {
     const t = trackedForMedia(m, tracked);
     return withKavita(
       {
         ...m,
+        adult: mediaAdult(m) || Boolean(t?.media.adult),
         coverUrl: t ? t.coverUrl : m.coverUrl,
         trackedId: t?.id ?? null,
         kavitaSeriesId: t?.kavitaSeriesId ?? null,
@@ -69,7 +73,12 @@ export async function discover(q: DiscoverQuery, signal?: AbortSignal): Promise<
   const sort = q.sort ?? 'trending';
   const page = q.page ?? 1;
   const perPage = q.perPage ?? 24;
-  const variables: Record<string, unknown> = { page, perPage, sort: sorts[sort] };
+  const variables: Record<string, unknown> = {
+    page,
+    perPage,
+    sort: sorts[sort],
+    adult: getSettings().adultContent ? undefined : false,
+  };
   if (kind === 'novel') variables.format = 'NOVEL';
   else if (kind !== 'all') variables.formatNot = 'NOVEL';
   if (kind === 'manga') variables.country = 'JP';
@@ -98,10 +107,10 @@ export async function discover(q: DiscoverQuery, signal?: AbortSignal): Promise<
   }
   const data = await cached(`discover:${JSON.stringify(variables)}`, 10 * 60_000, () =>
     anilist<{ Page: { pageInfo: { hasNextPage: boolean }; media: AniMedia[] } }>(
-      `query($page: Int, $perPage: Int, $sort: [MediaSort], $format: MediaFormat, $formatNot: MediaFormat, $country: CountryCode, $genre: String, $status: MediaStatus, $popularity: Int, $startDateGreater: FuzzyDateInt, $startDateLesser: FuzzyDateInt) {
+      `query($adult: Boolean, $page: Int, $perPage: Int, $sort: [MediaSort], $format: MediaFormat, $formatNot: MediaFormat, $country: CountryCode, $genre: String, $status: MediaStatus, $popularity: Int, $startDateGreater: FuzzyDateInt, $startDateLesser: FuzzyDateInt) {
         Page(page: $page, perPage: $perPage) {
           pageInfo { hasNextPage }
-          media(type: MANGA, isAdult: false, sort: $sort, format: $format, format_not: $formatNot, countryOfOrigin: $country, genre: $genre, status: $status, popularity_greater: $popularity, startDate_greater: $startDateGreater, startDate_lesser: $startDateLesser) { ${aniFields} }
+          media(type: MANGA, isAdult: $adult, sort: $sort, format: $format, format_not: $formatNot, countryOfOrigin: $country, genre: $genre, status: $status, popularity_greater: $popularity, startDate_greater: $startDateGreater, startDate_lesser: $startDateLesser) { ${aniFields} }
         }
       }`,
       variables,
@@ -109,7 +118,7 @@ export async function discover(q: DiscoverQuery, signal?: AbortSignal): Promise<
     ),
   );
   return {
-    items: withTracking(data.Page.media.map(fromAniList)),
+    items: withTracking(data.Page.media.map(fromAniList)).filter(visibleMedia),
     page,
     hasNextPage: data.Page.pageInfo.hasNextPage,
   };
@@ -119,7 +128,7 @@ export async function genres(signal?: AbortSignal): Promise<string[]> {
   const data = await cached('genres', 24 * 3600_000, () =>
     anilist<{ GenreCollection: string[] }>('query { GenreCollection }', {}),
   );
-  return data.GenreCollection.filter((g) => g !== 'Hentai');
+  return data.GenreCollection.filter((g) => getSettings().adultContent || g !== 'Hentai');
 }
 interface AniDetail extends AniMedia {
   tags: { name: string; rank: number; isMediaSpoiler: boolean }[];
@@ -148,7 +157,7 @@ async function anilistDetail(id: number, signal?: AbortSignal): Promise<MediaDet
       .map((e) => ({ relation: e.relationType, media: fromAniList(e.node) })),
     recommendations: m.recommendations.nodes
       .map((n) => n.mediaRecommendation)
-      .filter((r): r is AniMedia => Boolean(r) && !(r as AniMedia & { isAdult?: boolean }).isAdult)
+      .filter((r): r is AniMedia => Boolean(r))
       .map(fromAniList),
   };
 }
@@ -161,7 +170,12 @@ async function mangadexDetail(id: string, signal?: AbortSignal): Promise<MediaDe
   if (media.anilistId) {
     try {
       const rich = await anilistDetail(media.anilistId, signal);
-      return { ...rich, mangadexId: media.mangadexId, providers: ['anilist', 'mangadex'] };
+      return {
+        ...rich,
+        adult: Boolean(rich.adult || media.adult),
+        mangadexId: media.mangadexId,
+        providers: ['anilist', 'mangadex'],
+      };
     } catch {
       /* Fall back to the MangaDex sheet. */
     }
@@ -170,8 +184,8 @@ async function mangadexDetail(id: string, signal?: AbortSignal): Promise<MediaDe
 }
 async function mangaupdatesDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
   signal?.throwIfAborted();
-  const record = await requestJson<UpdatesRecord & { genres: { genre: string }[] }>(
-    `https://api.mangaupdates.com/v1/series/${encodeURIComponent(id)}`,
+  const record = await mangaUpdates<UpdatesRecord>(
+    `/series/${encodeURIComponent(id)}`,
     { signal },
     6000,
   );
@@ -192,18 +206,28 @@ async function loadSuwayomiDetail(id: number, signal?: AbortSignal): Promise<Med
         artist: string | null;
         status: string | null;
         sourceId: string;
-        source: { name: string; lang: string } | null;
+        source: { name: string; lang: string; isNsfw?: boolean } | null;
       };
     }>(
-      'query($id: Int!) { manga(id: $id) { id title url thumbnailUrl description genre author artist status sourceId source { name lang } } }',
+      'query($id: Int!) { manga(id: $id) { id title url thumbnailUrl description genre author artist status sourceId source { name lang isNsfw } } }',
       { id },
       10_000,
       undefined,
     ),
   );
   if (!manga) throw new AppError('NOT_FOUND', 'Suwayomi manga not found', 404);
+  if (manga.source?.isNsfw !== undefined)
+    recordSourceFlags([
+      {
+        id: manga.sourceId,
+        name: manga.source.name,
+        lang: manga.source.lang,
+        nsfw: manga.source.isNsfw,
+      },
+    ]);
   return {
     ...emptyMedia(`suwayomi:${manga.id}`, manga.title, 'MANGA'),
+    adult: Boolean(manga.source?.isNsfw),
     coverUrl: proxyImage(manga.thumbnailUrl),
     synopsis: cleanSynopsis(manga.description),
     genres: manga.genre ?? [],
@@ -244,14 +268,18 @@ async function loadDetail(id: string, signal?: AbortSignal): Promise<MediaDetail
 function enrichDetail(detail: MediaDetail): MediaDetail {
   const [tracked] = withTracking([detail]);
   const relations = withTracking(detail.relations.map((r) => r.media));
+  if (!visibleMedia(tracked)) throw new AppError('NOT_FOUND', 'Title not found', 404);
   return {
     ...detail,
+    adult: tracked.adult,
     coverUrl: tracked.coverUrl,
     trackedId: tracked.trackedId,
     kavitaSeriesId: tracked.kavitaSeriesId,
     kavita: tracked.kavita,
-    relations: detail.relations.map((r, i) => ({ ...r, media: relations[i] })),
-    recommendations: withTracking(detail.recommendations),
+    relations: detail.relations
+      .map((r, i) => ({ ...r, media: relations[i] }))
+      .filter((r) => visibleMedia(r.media)),
+    recommendations: withTracking(detail.recommendations).filter(visibleMedia),
   };
 }
 

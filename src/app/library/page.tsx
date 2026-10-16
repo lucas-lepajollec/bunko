@@ -1,9 +1,11 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import type { KavitaSeriesSummary, MediaFormat, TrackedMedia } from '@/types/shared';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import type { KavitaSeriesSummary, MediaFormat, TrackedMedia, UpdatesFeed } from '@/types/shared';
 import { KavitaUnmatched } from '@/components/kavita';
 import { ActivityLine } from '@/components/activity';
+import { LibraryUpdates } from '@/components/updates';
 import { api, mediaHref, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
@@ -21,7 +23,7 @@ import {
 } from '@/components/ui';
 
 type Shelf = 'READING' | 'CAUGHT_UP' | 'PLANNING' | 'PAUSED' | 'COMPLETED' | 'DROPPED';
-type View = Shelf | 'KAVITA';
+type View = Shelf | 'KAVITA' | 'UPDATES';
 type Kind = 'all' | 'manga' | 'manhwa' | 'manhua' | 'novel';
 /** Needs a look: no source could be found automatically. */
 const needsReview = (e: TrackedMedia) => e.type === 'MANGA' && e.sourceMatch === 'not-found';
@@ -41,6 +43,14 @@ const KIND_FORMATS: Record<Exclude<Kind, 'all'>, MediaFormat[]> = {
 };
 
 export default function LibraryPage() {
+  return (
+    <Suspense>
+      <Library />
+    </Suspense>
+  );
+}
+
+function Library() {
   const { t, n } = useI18n();
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const { mutate: mutateList } = library;
@@ -52,11 +62,17 @@ export default function LibraryPage() {
       .catch(() => undefined);
     return () => controller.abort();
   }, [mutateList]);
-  const [shelf, setShelf] = useState<View>('READING');
+  // Links to library updates (old Updates page, home) open that tab: /library?view=updates.
+  const params = useSearchParams();
+  const [shelf, setShelf] = useState<View>(
+    params.get('view') === 'updates' ? 'UPDATES' : 'READING',
+  );
   const unmatched = useApi<KavitaSeriesSummary[]>('/api/kavita/series?unmatched=1');
   const [kind, setKind] = useState<Kind>('all');
   const [sort, setSort] = useState<Sort>('news');
   const [review, setReview] = useState(false);
+  const updates = useApi<UpdatesFeed>('/api/updates');
+  const pendingUpdates = (updates.data?.entries ?? []).filter((e) => e.state === 'pending').length;
   const entries = useMemo(() => library.data ?? [], [library.data]);
   const counts = useMemo(() => {
     const c: Record<Shelf, number> = {
@@ -114,13 +130,18 @@ export default function LibraryPage() {
             label: t(`shelf.${s}`),
             count: counts[s],
           }))
+          .concat([
+            { id: 'UPDATES', label: t('library.updates'), count: pendingUpdates || undefined },
+          ])
           .concat(
             unmatched.data?.length
               ? [{ id: 'KAVITA', label: t('library.inKavita'), count: unmatched.data.length }]
               : [],
           )}
       />
-      {shelf === 'KAVITA' ? (
+      {shelf === 'UPDATES' && !review ? (
+        <LibraryUpdates />
+      ) : shelf === 'KAVITA' ? (
         <KavitaUnmatched
           series={unmatched.data}
           onTracked={() => Promise.all([unmatched.mutate(), library.mutate()])}

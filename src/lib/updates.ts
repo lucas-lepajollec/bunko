@@ -1,3 +1,4 @@
+import { visibleTracked } from './adult';
 import { randomUUID } from 'node:crypto';
 import type { DownloadBatch, EnqueueRequest, UpdateState, UpdatesFeed } from '@/types/shared';
 import { statement, db, listBatches, listTracked, observeChapters, sameMedia } from './db';
@@ -30,7 +31,8 @@ export function refreshRunning() {
   );
 }
 export function updatesFeed(): UpdatesFeed {
-  const tracked = listTracked();
+  const tracked = visibleTracked(listTracked());
+  const byId = new Map(tracked.map((t) => [t.id, t]));
   const batches = new Map(listBatches().map((b) => [b.id, b]));
   const entries = (
     statement('SELECT * FROM update_entries ORDER BY id DESC LIMIT 200').all() as {
@@ -40,7 +42,7 @@ export function updatesFeed(): UpdatesFeed {
       detected_at: string;
     }[]
   ).flatMap((row) => {
-    const t = tracked.find((t) => t.id === row.tracked_id);
+    const t = byId.get(row.tracked_id);
     if (!t) return [];
     const chapters = statement(
       'SELECT chapter_id,number,batch_id FROM update_chapters WHERE entry_id=? ORDER BY number',

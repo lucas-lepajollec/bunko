@@ -193,7 +193,7 @@ const NAV = [
   { href: '/', key: 'nav.home' },
   { href: '/catalog', key: 'nav.catalog' },
   { href: '/library', key: 'nav.library' },
-  { href: '/updates', key: 'nav.updates' },
+  { href: '/planning', key: 'nav.planning' },
 ];
 
 function useActivity() {
@@ -334,7 +334,11 @@ const TABS = [
     key: 'nav.catalog',
     icon: 'M4 4h4v16H4zM10 4h4v16h-4zM16.5 5l3.8 1-3.9 14.5-3.8-1L16.5 5Z',
   },
-  { href: '/search', key: 'nav.search', icon: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm9 16-3.5-3.5' },
+  {
+    href: '/planning',
+    key: 'nav.planning',
+    icon: 'M4 6h16v14H4zM4 10h16M8 3v4m8-4v4',
+  },
   {
     href: '/library',
     key: 'nav.libraryShort',

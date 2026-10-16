@@ -1,3 +1,5 @@
+import { adultClassifier, visibleMedia } from './adult';
+import { mangaUpdates } from './mangaupdates';
 import { getSettings } from './settings';
 import type { MediaType, Provider, SearchResponse, UnifiedMedia } from '@/types/shared';
 import { trackedForMedia, listTracked, searchCatalog } from './db';
@@ -24,20 +26,36 @@ function identities(m: UnifiedMedia) {
 }
 export function deduplicate(input: UnifiedMedia[]): UnifiedMedia[] {
   const output: UnifiedMedia[] = [];
+  const exact = new Map<string, UnifiedMedia>();
+  const aliases = new Map<string, UnifiedMedia[]>();
+  const index = (m: UnifiedMedia) => {
+    if (m.anilistId) exact.set(`${m.type}:al:${m.anilistId}`, m);
+    if (m.mangadexId) exact.set(`${m.type}:md:${m.mangadexId}`, m);
+    for (const key of identities(m)) {
+      const name = `${m.type}:${key}`;
+      const list = aliases.get(name) ?? [];
+      // Ambiguous aliases never turn into an unbounded candidate scan.
+      if (list.length < 8 && !list.includes(m)) list.push(m);
+      aliases.set(name, list);
+    }
+  };
   for (const media of input) {
     const keys = identities(media);
-    const target = output.find(
-      (m) =>
-        m.type === media.type &&
-        ((m.anilistId !== null && m.anilistId === media.anilistId) ||
-          (!(m.anilistId && media.anilistId && m.anilistId !== media.anilistId) &&
-            !(m.mangadexId && media.mangadexId && m.mangadexId !== media.mangadexId) &&
-            identities(m).some((k) => keys.includes(k)))),
-    );
+    const candidates = new Set(keys.flatMap((k) => aliases.get(`${media.type}:${k}`) ?? []));
+    const target =
+      (media.anilistId ? exact.get(`${media.type}:al:${media.anilistId}`) : undefined) ??
+      [...candidates].find(
+        (m) =>
+          !(m.anilistId && media.anilistId && m.anilistId !== media.anilistId) &&
+          !(m.mangadexId && media.mangadexId && m.mangadexId !== media.mangadexId),
+      );
     if (!target) {
-      output.push(structuredClone(media));
+      const copy = structuredClone(media);
+      output.push(copy);
+      index(copy);
       continue;
     }
+    target.adult = Boolean(target.adult || media.adult);
     target.altTitles = [...new Set([...target.altTitles, media.title, ...media.altTitles])].filter(
       (t) => t !== target.title,
     );
@@ -73,6 +91,7 @@ export function deduplicate(input: UnifiedMedia[]): UnifiedMedia[] {
     if ((media.startDate?.length ?? 0) > (target.startDate?.length ?? 0))
       target.startDate = media.startDate;
     target.authors = [...new Set([...target.authors, ...media.authors])];
+    index(target);
   }
   return output;
 }
@@ -82,7 +101,7 @@ async function anilist(
   signal?: AbortSignal,
 ): Promise<UnifiedMedia[]> {
   const body = {
-    query: `query($search: String!, $type: MediaType!) { Page(perPage: 30) { media(search: $search, type: $type, isAdult: false) { ${aniFields} staff(perPage: 10) { edges { role node { name { full } } } } } } }`,
+    query: `query($search: String!, $type: MediaType!) { Page(perPage: 30) { media(search: $search, type: $type${getSettings().adultContent ? '' : ', isAdult: false'}) { ${aniFields} staff(perPage: 10) { edges { role node { name { full } } } } } } }`,
     variables: { search: query, type: type === 'ANIME' ? 'ANIME' : 'MANGA' },
   };
   const result = await requestJson<{ data?: { Page: { media: AniMedia[] } }; errors?: unknown[] }>(
@@ -107,7 +126,10 @@ async function mangadex(query: string, signal?: AbortSignal): Promise<UnifiedMed
   url.searchParams.set('limit', '30');
   url.searchParams.set('order[relevance]', 'desc');
   ['cover_art', 'author'].forEach((v) => url.searchParams.append('includes[]', v));
-  ['safe', 'suggestive'].forEach((v) => url.searchParams.append('contentRating[]', v));
+  (getSettings().adultContent
+    ? ['safe', 'suggestive', 'erotica', 'pornographic']
+    : ['safe', 'suggestive']
+  ).forEach((v) => url.searchParams.append('contentRating[]', v));
   url.searchParams.append('excludedTags[]', DEX_DOUJINSHI);
   const r = await requestJson<{ data: DexManga[] }>(url, { signal }, 2500);
   return r.data.map(fromMangaDex);
@@ -117,13 +139,13 @@ async function mangaupdates(
   type?: MediaType,
   signal?: AbortSignal,
 ): Promise<UnifiedMedia[]> {
-  const r = await requestJson<{ results: { record: UpdatesRecord }[] }>(
-    'https://api.mangaupdates.com/v1/series/search',
+  const r = await mangaUpdates<{ results: { record: UpdatesRecord }[] }>(
+    '/series/search',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ search: query, perpage: 30 }),
-      signal,
+      signal: signal ?? AbortSignal.timeout(2500),
     },
     2500,
   );
@@ -138,11 +160,13 @@ function enrichSearch(items: UnifiedMedia[]): UnifiedMedia[] {
   const tracked = listTracked();
   const resolve = kavitaMatcher();
   const baseUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
+  const mediaAdult = adultClassifier();
   return items.map((m) => {
     const t = trackedForMedia(m, tracked);
     return withKavita(
       {
         ...m,
+        adult: mediaAdult(m) || Boolean(t?.media.adult),
         coverUrl: t ? t.coverUrl : m.coverUrl,
         trackedId: t?.id ?? null,
         kavitaSeriesId: t?.kavitaSeriesId ?? null,
@@ -159,7 +183,7 @@ export async function search(
   signal?: AbortSignal,
 ): Promise<SearchResponse> {
   const start = Date.now();
-  const key = `${type}:${query.toLowerCase()}`;
+  const key = `${getSettings().adultContent}:${type}:${query.toLowerCase()}`;
   const jobs: { provider: Provider; run: () => Promise<UnifiedMedia[]> }[] = [
     { provider: 'anilist', run: () => anilist(query, type) },
   ];
@@ -193,6 +217,7 @@ export async function search(
   const results = enrichSearch(
     deduplicate(settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))),
   )
+    .filter(visibleMedia)
     .map((m) => ({ m, rank: relevance(m, query) }))
     .sort((a, b) => b.rank - a.rank)
     .map(({ m }) => m);

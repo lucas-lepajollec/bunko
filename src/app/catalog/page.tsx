@@ -8,6 +8,7 @@ import type {
   DiscoverPage,
   DiscoverSort,
   MediaFormat,
+  ReleasesPage,
   SearchResponse,
   Season,
 } from '@/types/shared';
@@ -16,6 +17,7 @@ import { api, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { PosterCard } from '@/components/media';
+import { ReleaseCard } from '@/components/releases';
 import {
   Empty,
   ErrorNote,
@@ -55,6 +57,9 @@ function Catalog() {
     SORTS.includes(params.get('sort') as DiscoverSort) ? params.get('sort') : 'trending'
   ) as DiscoverSort;
   const genre = params.get('genre') ?? '';
+  // Default view is the catalog as before; two visible switches show chapter releases or new series.
+  const view: 'catalog' | 'chapters' | 'new' =
+    params.get('view') === 'chapters' ? 'chapters' : sort === 'new' ? 'new' : 'catalog';
   const status = params.get('status') ?? '';
   const q = params.get('q')?.trim() ?? '';
   const season = (SEASONS.includes(params.get('season') as Season) ? params.get('season') : '') as
@@ -87,10 +92,26 @@ function Catalog() {
   };
   const pages = useSWRInfinite<DiscoverPage>(
     (index, previous: DiscoverPage | null) =>
-      q || (previous && !previous.hasNextPage) ? null : query(index + 1),
+      q || view === 'chapters' || (previous && !previous.hasNextPage) ? null : query(index + 1),
     (path: string) => api<DiscoverPage>(path),
     { revalidateFirstPage: false },
   );
+  const releases = useSWRInfinite<ReleasesPage>(
+    (index, previous: ReleasesPage | null) => {
+      if (q || view !== 'chapters' || (previous && !previous.nextCursor)) return null;
+      const r = new URLSearchParams();
+      if (kind !== 'all') r.set('kind', kind);
+      if (genre) r.set('genre', genre);
+      if (previous?.nextCursor) r.set('cursor', previous.nextCursor);
+      return `/api/releases${r.size ? `?${r}` : ''}`;
+    },
+    (path: string) => api<ReleasesPage>(path),
+    { revalidateFirstPage: false },
+  );
+  const releaseItems = (releases.data ?? []).flatMap((p) => p.items);
+  const releasesMore =
+    releases.isLoading ||
+    (releases.size > 0 && releases.data && typeof releases.data[releases.size - 1] === 'undefined');
   const items = (pages.data ?? []).flatMap((p) => p.items);
   const last = pages.data?.[pages.data.length - 1];
   const loadingMore =
@@ -100,7 +121,7 @@ function Catalog() {
     (m) => kind === 'all' || (m.format ? KIND_FORMATS[kind].includes(m.format) : kind === 'manga'),
   );
   const dated = sort === 'new' || Boolean(season) || Boolean(year);
-  const shownGenres = allGenres ? (genres.data ?? []) : (genres.data ?? []).slice(0, 9);
+
   return (
     <Page>
       <PageTitle
@@ -129,6 +150,35 @@ function Catalog() {
           </Pill>
         ))}
       </div>
+      {!q && (
+        <div className="flex flex-wrap gap-2" role="group" aria-label={t('catalog.view')}>
+          {(
+            [
+              ['chapters', t('catalog.viewChapters')],
+              ['new', t('catalog.viewNew')],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={view === v}
+              onClick={() =>
+                v === 'chapters'
+                  ? set('view', view === 'chapters' ? '' : 'chapters', { sort: '' })
+                  : set('sort', view === 'new' ? '' : 'new', { view: '' })
+              }
+              className={cx(
+                'h-9 rounded-full px-4 text-sm ring-1',
+                view === v
+                  ? 'bg-fg/15 font-semibold text-white ring-white/40'
+                  : 'text-mid ring-white/15 hover:text-white',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       {q ? (
         <div className="border-line flex flex-wrap items-center gap-3 border-y py-3.5 text-sm">
           <Link href={`/search?q=${encodeURIComponent(q)}`} className={smallButton}>
@@ -143,135 +193,168 @@ function Catalog() {
           </button>
         </div>
       ) : (
-        <div className="border-line flex flex-col gap-3 border-y py-3.5 text-sm md:flex-row md:flex-wrap md:items-center">
-          <div
-            className="flex flex-wrap items-center gap-1.5"
-            role="group"
-            aria-label={t('catalog.genres')}
-          >
-            <span className="text-muted mr-1">{t('catalog.genres')}</span>
-            {shownGenres.map((g) => (
+        <div className="border-line flex flex-col gap-3 border-y py-3.5 text-sm">
+          <div className="flex items-start gap-2">
+            <span className="text-muted mt-1.5 shrink-0">{t('catalog.genres')}</span>
+            <div
+              className={cx(
+                'flex min-w-0 flex-1 flex-wrap gap-1.5',
+                !allGenres && 'max-h-8 overflow-hidden',
+              )}
+              role="group"
+              aria-label={t('catalog.genres')}
+            >
+              {(genres.data ?? []).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  aria-pressed={genre === g}
+                  onClick={() => set('genre', genre === g ? '' : g)}
+                  className={cx(
+                    'h-8 shrink-0 rounded-full px-3',
+                    genre === g ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
+                  )}
+                >
+                  {t(`genre.${g}`) === `genre.${g}` ? g : t(`genre.${g}`)}
+                </button>
+              ))}
+            </div>
+            {(genres.data?.length ?? 0) > 0 && (
               <button
-                key={g}
                 type="button"
-                aria-pressed={genre === g}
-                onClick={() => set('genre', genre === g ? '' : g)}
-                className={cx(
-                  'h-8 rounded-full px-3',
-                  genre === g ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
-                )}
-              >
-                {t(`genre.${g}`) === `genre.${g}` ? g : t(`genre.${g}`)}
-              </button>
-            ))}
-            {(genres.data?.length ?? 0) > 9 && (
-              <button
-                type="button"
+                aria-expanded={allGenres}
                 onClick={() => setAllGenres((v) => !v)}
-                className="text-muted h-8 px-2 hover:text-white"
+                className="text-muted h-8 shrink-0 px-2 hover:text-white"
               >
-                {allGenres
-                  ? t('common.less')
-                  : t('common.moreCount', { count: (genres.data?.length ?? 0) - 9 })}
+                {allGenres ? t('common.less') : t('catalog.allGenres')}
               </button>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-4 md:ml-auto">
-            <label className="text-muted flex items-center gap-2">
-              {t('catalog.season')}
-              <select
-                value={season}
-                onChange={(e) =>
-                  set(
-                    'season',
-                    e.target.value,
-                    e.target.value && !year ? { year: String(thisYear) } : undefined,
-                  )
-                }
-                className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
-              >
-                <option value="">{t('catalog.anySeason')}</option>
-                {SEASONS.map((x) => (
-                  <option key={x} value={x}>
-                    {t(`season.${x}`)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-muted flex items-center gap-2">
-              {t('catalog.year')}
-              <select
-                value={year ?? ''}
-                onChange={(e) =>
-                  set('year', e.target.value, e.target.value ? undefined : { season: '' })
-                }
-                className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
-              >
-                <option value="">{t('catalog.anyYear')}</option>
-                {Array.from({ length: thisYear - 1979 }, (_, i) => thisYear - i).map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-muted flex items-center gap-2">
-              {t('catalog.status')}
-              <select
-                value={status}
-                onChange={(e) => set('status', e.target.value)}
-                className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
-              >
-                <option value="">{t('catalog.statusAll')}</option>
-                <option value="RELEASING">{t('status.releasing')}</option>
-                <option value="FINISHED">{t('status.finished')}</option>
-              </select>
-            </label>
-            <label className="text-muted flex items-center gap-2">
-              {t('catalog.sort')}
-              <select
-                value={sort}
-                onChange={(e) => set('sort', e.target.value)}
-                className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
-              >
-                {SORTS.map((s) => (
-                  <option key={s} value={s}>
-                    {t(`sort.${s}`)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          {view !== 'chapters' && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <label className="text-muted flex items-center gap-2">
+                {t('catalog.season')}
+                <select
+                  value={season}
+                  onChange={(e) =>
+                    set(
+                      'season',
+                      e.target.value,
+                      e.target.value && !year ? { year: String(thisYear) } : undefined,
+                    )
+                  }
+                  className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
+                >
+                  <option value="">{t('catalog.anySeason')}</option>
+                  {SEASONS.map((x) => (
+                    <option key={x} value={x}>
+                      {t(`season.${x}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-muted flex items-center gap-2">
+                {t('catalog.year')}
+                <select
+                  value={year ?? ''}
+                  onChange={(e) =>
+                    set('year', e.target.value, e.target.value ? undefined : { season: '' })
+                  }
+                  className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
+                >
+                  <option value="">{t('catalog.anyYear')}</option>
+                  {Array.from({ length: thisYear - 1979 }, (_, i) => thisYear - i).map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-muted flex items-center gap-2">
+                {t('catalog.status')}
+                <select
+                  value={status}
+                  onChange={(e) => set('status', e.target.value)}
+                  className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
+                >
+                  <option value="">{t('catalog.statusAll')}</option>
+                  <option value="RELEASING">{t('status.releasing')}</option>
+                  <option value="FINISHED">{t('status.finished')}</option>
+                </select>
+              </label>
+              <label className="text-muted flex items-center gap-2">
+                {t('catalog.sort')}
+                <select
+                  value={sort}
+                  onChange={(e) => set('sort', e.target.value)}
+                  className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
+                >
+                  {SORTS.map((s) => (
+                    <option key={s} value={s}>
+                      {t(`sort.${s}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
         </div>
       )}
       {pages.error && <ErrorNote error={pages.error} />}
       {searched.error && <ErrorNote error={searched.error} />}
-      <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-6 md:gap-y-9 xl:grid-cols-8">
-        {(q ? searchItems : items).map((m) => (
-          <PosterCard
-            key={m.id}
-            media={m}
-            subtitle={dated ? formatStartDate(m.startDate, locale) : undefined}
-          />
-        ))}
-        {(q ? searched.isLoading : loadingMore) && <PosterSkeletons count={16} />}
-      </div>
-      {!q && !loadingMore && !pages.error && items.length === 0 && (
-        <Empty title={t('catalog.empty')} />
+      {view === 'chapters' && !q ? (
+        <>
+          {releases.error && <ErrorNote error={releases.error} />}
+          <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-6 md:gap-y-9 xl:grid-cols-8">
+            {releaseItems.map((r) => (
+              <ReleaseCard key={r.id} release={r} />
+            ))}
+            {releasesMore && <PosterSkeletons count={16} />}
+          </div>
+          {!releasesMore && !releases.error && releaseItems.length === 0 && (
+            <Empty title={t('catalog.noReleases')}>{t('home.noReleasesBody')}</Empty>
+          )}
+          {releases.data?.[releases.data.length - 1]?.nextCursor && !releasesMore && (
+            <button
+              type="button"
+              onClick={() => releases.setSize(releases.size + 1)}
+              className={cx(smallButton, 'h-11 self-center px-6 text-sm')}
+            >
+              {t('common.loadMore')}
+            </button>
+          )}
+          <div className="h-8" />
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-6 md:gap-y-9 xl:grid-cols-8">
+            {(q ? searchItems : items).map((m) => (
+              <PosterCard
+                key={m.id}
+                media={m}
+                subtitle={dated ? formatStartDate(m.startDate, locale) : undefined}
+              />
+            ))}
+            {(q ? searched.isLoading : loadingMore) && <PosterSkeletons count={16} />}
+          </div>
+          {!q && !loadingMore && !pages.error && items.length === 0 && (
+            <Empty title={t('catalog.empty')} />
+          )}
+          {q && searched.data && searchItems.length === 0 && (
+            <Empty title={t('search.noCatalog')}>{t('search.noCatalogBody')}</Empty>
+          )}
+          {!q && last?.hasNextPage && !loadingMore && (
+            <button
+              type="button"
+              onClick={() => pages.setSize(pages.size + 1)}
+              className={cx(smallButton, 'h-11 self-center px-6 text-sm')}
+            >
+              {t('common.loadMore')}
+            </button>
+          )}
+          <div className="h-8" />
+        </>
       )}
-      {q && searched.data && searchItems.length === 0 && (
-        <Empty title={t('search.noCatalog')}>{t('search.noCatalogBody')}</Empty>
-      )}
-      {!q && last?.hasNextPage && !loadingMore && (
-        <button
-          type="button"
-          onClick={() => pages.setSize(pages.size + 1)}
-          className={cx(smallButton, 'h-11 self-center px-6 text-sm')}
-        >
-          {t('common.loadMore')}
-        </button>
-      )}
-      <div className="h-8" />
     </Page>
   );
 }

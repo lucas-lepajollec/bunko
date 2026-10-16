@@ -1,5 +1,6 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+import { visibleTracked } from '@/lib/adult';
 import { wakeWorker } from '@/lib/worker-events';
 import { z } from 'zod';
 import { body, json, route } from '@/lib/api';
@@ -25,7 +26,7 @@ export const GET = route(async (r) => {
     .object({ refresh: z.literal('progress').optional() })
     .parse(Object.fromEntries(new URL(r.url).searchParams));
   if (refresh) await refreshProgressOnDemand();
-  return json(listTracked());
+  return json(visibleTracked(listTracked()));
 });
 export const POST = route(async (r) => json(track(await body(r, trackBody)), 201));
 export const PATCH = route(async (r) => {

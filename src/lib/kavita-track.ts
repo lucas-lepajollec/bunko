@@ -14,6 +14,7 @@ export function kavitaMedia(seriesId: number): UnifiedMedia {
   const kind = series.kind ?? 'MANGA';
   return {
     ...emptyMedia(`kavita:${seriesId}`, series.name, kind === 'NOVEL' ? 'NOVEL' : 'MANGA'),
+    adult: Boolean(series.adult),
     altTitles: series.names.filter((n) => n !== series.name),
     providers: ['kavita'],
     synopsis: series.summary ?? null,

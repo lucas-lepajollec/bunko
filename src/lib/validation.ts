@@ -51,6 +51,7 @@ export const selection = z.object({
   sourceName: z.string().min(1).max(300),
 });
 export const media = z.object({
+  adult: z.boolean().optional(),
   id: z.string().min(1).max(300),
   type: mediaType,
   title: z.string().min(1).max(500),
@@ -164,6 +165,7 @@ export const settingsPatch = z
       )
       .optional(),
     autoImportKavita: z.boolean().optional(),
+    adultContent: z.boolean().optional(),
     libraryTargets: z
       .object(
         Object.fromEntries(

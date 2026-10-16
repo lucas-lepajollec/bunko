@@ -46,6 +46,11 @@ export interface UnifiedMedia {
   startDate: string | null;
   /** The matching series already present in Kavita, if any. */
   kavita: KavitaPresence | null;
+  /**
+   * Adult (18+) content: AniList isAdult, MangaDex erotica/pornographic, MangaUpdates
+   * Adult/Hentai/Smut genres, or only found on NSFW sources. Hidden everywhere unless enabled.
+   */
+  adult?: boolean;
 }
 export interface KavitaPresence {
   seriesId: number;
@@ -82,6 +87,60 @@ export interface DiscoverQuery {
   page?: number;
   perPage?: number;
 }
+/* ---- Releases feed, weekly planning, home (contract for /api/releases, /api/planning, /api/home) ---- */
+/** One chapter release, newest first in feeds. */
+export interface ChapterRelease {
+  /** Stable id (`<provider>:<release id>`). */
+  id: string;
+  /** The series, resolved to a catalog work when possible (link with `mediaHref(media.id)`). */
+  media: UnifiedMedia;
+  chapter: number | null;
+  volume: number | null;
+  /** Display label as published, e.g. "c.1130" or "v.3 c.12-14". */
+  label: string;
+  /** Scanlation group(s), when known. */
+  group: string | null;
+  /** When the release was published; `hasTime` false when only the day is known. */
+  releasedAt: string;
+  hasTime: boolean;
+  provider: 'mangaupdates' | 'mangadex' | 'source';
+  /** Followed title in the library, if any. */
+  trackedId: number | null;
+}
+/** GET /api/releases?kind=&genre=&library=1&cursor= */
+export interface ReleasesPage {
+  items: ChapterRelease[];
+  /** Opaque cursor for "load more"; null at the end. */
+  nextCursor: string | null;
+}
+/** GET /api/planning?week=YYYY-MM-DD (any day of the week; default current week)&kind=&library=1 */
+export interface PlanningWeek {
+  /** Monday of the week (ISO date) in the server's time zone. */
+  start: string;
+  days: PlanningDay[];
+}
+export interface PlanningDay {
+  date: string;
+  items: PlanningItem[];
+}
+export interface PlanningItem {
+  media: UnifiedMedia;
+  /** `released`: actually published that day; `expected`: usual release day estimated from history. */
+  kind: 'released' | 'expected';
+  chapter: number | null;
+  /** Local time "HH:MM" when known (released with a timestamp, or a regular expected hour), else null. */
+  time: string | null;
+  trackedId: number | null;
+}
+/** GET /api/home */
+export interface HomeFeed {
+  /** Latest releases for the hero carousel (with artwork). */
+  hero: ChapterRelease[];
+  /** Weekly trending top 10, all formats. */
+  top: UnifiedMedia[];
+  /** Latest chapter releases per format (≤ 12 each). */
+  latest: Record<Exclude<DiscoverKind, 'all'>, ChapterRelease[]>;
+}
 export interface DiscoverPage {
   items: UnifiedMedia[];
   page: number;
@@ -115,6 +174,8 @@ export interface Source {
   id: string;
   name: string;
   lang: string;
+  /** Extension flagged NSFW by Suwayomi; skipped unless adult content is enabled. */
+  nsfw?: boolean;
 }
 export interface SourceResult {
   source: Source;
@@ -255,6 +316,8 @@ export interface Settings {
   libraryTargets: LibraryTargets;
   /** Follow every Kavita series automatically (matched to the catalog when possible). Default true. */
   autoImportKavita: boolean;
+  /** Show adult (18+) content. Off by default: such titles are hidden everywhere, library included. */
+  adultContent: boolean;
   favoriteSourceIds: string[];
   extensionRepos: string[];
   /** Worker update-check interval in minutes (5–1440), default 15. */

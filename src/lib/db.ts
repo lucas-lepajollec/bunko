@@ -1,3 +1,4 @@
+import { adultClassifier } from './adult';
 import { storedCover, deleteStoredCoverFile } from './stored-covers';
 import { wakeWorker } from './worker-events';
 import Database from 'better-sqlite3';
@@ -61,6 +62,15 @@ export function db(): Database.Database {
   migrateV6(connection);
   migrateV7(connection);
   connection.exec(`
+    CREATE TABLE IF NOT EXISTS source_flags (id TEXT PRIMARY KEY, nsfw INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS update_chapters_chapter ON update_chapters(chapter_id);
+    CREATE INDEX IF NOT EXISTS update_entries_tracked ON update_entries(tracked_id);
+    CREATE TABLE IF NOT EXISTS observation_dates (
+      tracked_id INTEGER NOT NULL REFERENCES tracked_media(id) ON DELETE CASCADE, chapter_id INTEGER NOT NULL,
+      at TEXT NOT NULL, PRIMARY KEY(tracked_id,chapter_id));
+    CREATE TABLE IF NOT EXISTS chapter_releases (
+      id TEXT PRIMARY KEY, released_at TEXT NOT NULL, payload TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS chapter_releases_date ON chapter_releases(released_at DESC,id DESC);
     CREATE TABLE IF NOT EXISTS metadata_cache (
       key TEXT PRIMARY KEY, payload TEXT NOT NULL, bytes INTEGER NOT NULL,
       updated_at INTEGER NOT NULL, attempted_at INTEGER NOT NULL);
@@ -84,10 +94,12 @@ export function db(): Database.Database {
     context TEXT NOT NULL, hash TEXT NOT NULL, mime TEXT NOT NULL, filename TEXT NOT NULL,
     origin_url TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS write_versions (domain TEXT PRIMARY KEY, version INTEGER NOT NULL);
-    INSERT OR IGNORE INTO write_versions VALUES('library',0),('series',0),('settings',0),('linkage',0),('batches',0);`);
+    INSERT OR IGNORE INTO write_versions VALUES('library',0),('series',0),('settings',0),('linkage',0),('batches',0),('releases',0);`);
   // Database triggers cover every writer, including other Next bundles/connections and rollbacks.
   for (const table of [
     'tracked_media',
+    'source_flags',
+    'chapter_releases',
     'source_links',
     'imported_chapters',
     'observed_chapters',
@@ -100,18 +112,20 @@ export function db(): Database.Database {
   ]) {
     for (const operation of ['INSERT', 'UPDATE', 'DELETE']) {
       const domain =
-        table === 'download_batches'
-          ? 'batches'
-          : table === 'kavita_series'
-            ? 'series'
-            : table === 'settings'
-              ? 'settings'
-              : table === 'tracked_media'
-                ? 'linkage'
-                : null;
+        table === 'chapter_releases'
+          ? 'releases'
+          : table === 'download_batches'
+            ? 'batches'
+            : table === 'kavita_series'
+              ? 'series'
+              : table === 'settings'
+                ? 'settings'
+                : table === 'tracked_media'
+                  ? 'linkage'
+                  : null;
       connection.exec(`CREATE TRIGGER IF NOT EXISTS version_${table}_${operation}
         AFTER ${operation} ON ${table} BEGIN
-        ${table === 'download_batches' ? '' : "UPDATE write_versions SET version=version+1 WHERE domain='library';"}
+        ${['download_batches', 'chapter_releases'].includes(table) ? '' : "UPDATE write_versions SET version=version+1 WHERE domain='library';"}
         ${domain ? `UPDATE write_versions SET version=version+1 WHERE domain='${domain}' ${table === 'tracked_media' && operation === 'UPDATE' ? "AND (OLD.anilist_id IS NOT NEW.anilist_id OR OLD.mangadex_id IS NOT NEW.mangadex_id OR OLD.kavita_series_id IS NOT NEW.kavita_series_id OR OLD.kavita_manual IS NOT NEW.kavita_manual OR json_extract(OLD.media_json,'$.id') IS NOT json_extract(NEW.media_json,'$.id'))" : ''};` : ''}
         END;`);
     }
@@ -340,6 +354,8 @@ export function trackedForMedia(media: UnifiedMedia, entries: TrackedMedia[]) {
     for (const t of entries) {
       exact.set(`${t.type}:id:${t.media.id}`, t);
       if (t.anilistId !== null) exact.set(`${t.type}:anilist:${t.anilistId}`, t);
+      if (t.media.mangaUpdatesId !== null)
+        exact.set(`${t.type}:mangaupdates:${t.media.mangaUpdatesId}`, t);
       if (t.mangadexId !== null) exact.set(`${t.type}:mangadex:${t.mangadexId}`, t);
       if (t.kavitaSeriesId !== null) add(series, `${t.type}:${t.kavitaSeriesId}`, t);
       for (const s of t.sources) add(sources, `${t.type}:${s.sourceId}:${s.suwayomiMangaId}`, t);
@@ -348,7 +364,8 @@ export function trackedForMedia(media: UnifiedMedia, entries: TrackedMedia[]) {
       const direct =
         exact.get(`${m.type}:id:${m.id}`) ??
         exact.get(`${m.type}:anilist:${m.anilistId}`) ??
-        exact.get(`${m.type}:mangadex:${m.mangadexId}`);
+        exact.get(`${m.type}:mangadex:${m.mangadexId}`) ??
+        exact.get(`${m.type}:mangaupdates:${m.mangaUpdatesId}`);
       if (direct) return direct;
       const hits = new Set([
         ...(m.id.startsWith('kavita:') ? (series.get(`${m.type}:${m.id.slice(7)}`) ?? []) : []),
@@ -394,7 +411,12 @@ export function observeChapters(trackedId: number, chapters: ChapterVariant[]) {
     statement(`INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name)
     VALUES(?,?,?,?,?) ON CONFLICT(tracked_id,chapter_id) DO UPDATE SET number=excluded.number`);
   db().transaction(() => {
-    for (const c of chapters) insert.run(trackedId, c.id, c.number, c.sourceId, c.sourceName);
+    for (const c of chapters) {
+      insert.run(trackedId, c.id, c.number, c.sourceId, c.sourceName);
+      statement(
+        'INSERT OR IGNORE INTO observation_dates(tracked_id,chapter_id,at) VALUES(?,?,?)',
+      ).run(trackedId, c.id, new Date().toISOString());
+    }
     const numbers = chapters.flatMap((c) => (c.number === null ? [] : [c.number]));
     if (numbers.length)
       statement('UPDATE tracked_media SET released=MAX(COALESCE(released,0),?) WHERE id=?').run(
@@ -529,6 +551,7 @@ function snapshotTracked(id?: number) {
     const retry = new Map<number, number>();
     const match = kavitaMatcher();
     const kavitaUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
+    const mediaAdult = adultClassifier();
     const entries = rows.map((r): TrackedMedia => {
       const id = Number(r.id);
       const rawMedia = JSON.parse(String(r.media_json)) as UnifiedMedia;
@@ -568,6 +591,7 @@ function snapshotTracked(id?: number) {
             : (r.cover_url as string | null);
       const media = {
         ...rawMedia,
+        adult: mediaAdult(rawMedia, sources) || Boolean(kavita?.adult),
         kavita: kavitaPresence(kavita, kavitaUrl),
         kavitaSeriesId: kavita?.seriesId ?? (r.kavita_series_id as number | null),
         coverUrl,
@@ -670,7 +694,12 @@ export function getTracked(id: number): TrackedMedia | undefined {
 export function authoritativeMedia(media: UnifiedMedia): UnifiedMedia {
   const tracked = trackedForMedia(media, listTracked());
   return tracked
-    ? { ...media, coverUrl: tracked.media.coverUrl, bannerUrl: tracked.media.bannerUrl }
+    ? {
+        ...media,
+        adult: Boolean(media.adult || tracked.media.adult),
+        coverUrl: tracked.media.coverUrl,
+        bannerUrl: tracked.media.bannerUrl,
+      }
     : media;
 }
 

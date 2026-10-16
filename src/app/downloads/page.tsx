@@ -77,7 +77,7 @@ export default function DownloadsPage() {
         />
         <div className="md:hidden">
           <Link
-            href="/updates"
+            href="/library?view=updates"
             className="text-mid flex min-h-11 items-center justify-between rounded-2xl bg-white/[0.05] px-4 text-[15px]"
           >
             {t('nav.updates')} <span aria-hidden>›</span>

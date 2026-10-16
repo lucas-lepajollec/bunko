@@ -272,6 +272,7 @@ describe('discovery publication ranges over local AniList fixture', () => {
   it('omits unset variables instead of explicit null and includes no default date filters', async () => {
     await discover({});
     expect(calls[0].variables).toEqual({
+      adult: false,
       page: 1,
       perPage: 24,
       sort: ['TRENDING_DESC', 'POPULARITY_DESC'],

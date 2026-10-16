@@ -1,0 +1,96 @@
+{
+  "specifications": {
+    "mangaupdates": "OpenAPI 3.0.0 / API 1.0.0",
+    "mangadex": "OpenAPI 3.0.3 / API 5.13.1"
+  },
+  "updates": {
+    "results": [
+      {
+        "record": {
+          "id": 100,
+          "title": "Fixture Story",
+          "volume": "3",
+          "chapter": "12-14",
+          "groups": [
+            {
+              "name": "Fixture Team",
+              "group_id": 42,
+              "url": "https://www.mangaupdates.com/group/16"
+            }
+          ],
+          "release_date": "2026-10-15",
+          "time_added": {
+            "timestamp": 1792101600,
+            "as_rfc3339": "2026-10-15T22:00:00Z",
+            "as_string": "October 15th"
+          }
+        },
+        "metadata": {
+          "series": {
+            "series_id": 12345,
+            "title": "Fixture Story",
+            "url": "https://www.mangaupdates.com/series/9ix"
+          }
+        }
+      }
+    ]
+  },
+  "series": {
+    "series_id": 12345,
+    "title": "Fixture Story",
+    "url": "https://www.mangaupdates.com/series/9ix",
+    "type": "Manhwa",
+    "genres": [{ "genre": "Action" }],
+    "image": { "url": { "original": "https://cdn.mangaupdates.com/fixture.jpg" } }
+  },
+  "dexChapters": {
+    "data": [
+      {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "type": "chapter",
+        "attributes": {
+          "chapter": "14",
+          "volume": "3",
+          "readableAt": "2026-10-15T19:30:00Z",
+          "publishAt": "2026-10-15T18:00:00Z",
+          "createdAt": "2026-10-14T18:00:00Z",
+          "translatedLanguage": "fr",
+          "isUnavailable": false
+        },
+        "relationships": [
+          { "type": "manga", "id": "00000000-0000-4000-8000-000000000010" },
+          {
+            "type": "scanlation_group",
+            "id": "00000000-0000-4000-8000-000000000020",
+            "attributes": { "name": "Dex Team" }
+          }
+        ]
+      }
+    ]
+  },
+  "dexManga": {
+    "data": [
+      {
+        "id": "00000000-0000-4000-8000-000000000010",
+        "type": "manga",
+        "attributes": {
+          "title": { "en": "Fixture Story" },
+          "altTitles": [],
+          "description": {},
+          "status": "ongoing",
+          "originalLanguage": "ko",
+          "contentRating": "safe",
+          "links": { "al": "99" },
+          "tags": []
+        },
+        "relationships": [
+          {
+            "type": "cover_art",
+            "id": "00000000-0000-4000-8000-000000000030",
+            "attributes": { "fileName": "cover.jpg" }
+          }
+        ]
+      }
+    ]
+  }
+}

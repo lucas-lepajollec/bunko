@@ -1,3 +1,4 @@
+import { recordSourceFlags, sourceAllowed } from './adult';
 import type {
   ChapterSelection,
   ChapterVariant,
@@ -74,13 +75,20 @@ export async function graphql<T>(
 }
 export async function sourceInfos(signal?: AbortSignal): Promise<SourceInfo[]> {
   const response = await graphql<{
-    sources: { nodes: (Source & { iconUrl?: string; extension?: { pkgName: string } | null })[] };
+    sources: {
+      nodes: (Source & {
+        isNsfw?: boolean;
+        iconUrl?: string;
+        extension?: { pkgName: string } | null;
+      })[];
+    };
   }>(
-    'query { sources { nodes { id name lang iconUrl extension { pkgName } } } }',
+    'query { sources { nodes { id name lang isNsfw iconUrl extension { pkgName } } } }',
     {},
     4000,
     signal,
   );
+  recordSourceFlags(response.sources.nodes.map((s) => ({ ...s, nsfw: Boolean(s.isNsfw) })));
   const preferences = getSourcePreferences();
   const installed = response.sources.nodes.filter((s) => preferences.languages.includes(s.lang));
   const order = preferences.enabledSourceIds.length
@@ -90,6 +98,7 @@ export async function sourceInfos(signal?: AbortSignal): Promise<SourceInfo[]> {
     .map((s) => {
       const priority = order.indexOf(s.id);
       return {
+        nsfw: Boolean(s.isNsfw),
         id: s.id,
         name: s.name,
         lang: s.lang,
@@ -104,12 +113,12 @@ export async function sourceInfos(signal?: AbortSignal): Promise<SourceInfo[]> {
 }
 export async function sources(signal?: AbortSignal, all = false): Promise<Source[]> {
   return (await sourceInfos(signal))
-    .filter((s) => all || s.enabled)
-    .map(({ id, name, lang }) => ({ id, name, lang }));
+    .filter((s) => (all || s.enabled) && sourceAllowed(s))
+    .map(({ id, name, lang, nsfw }) => ({ id, name, lang, nsfw }));
 }
 export async function sourceInfo(id: string, signal?: AbortSignal) {
   const source = (await sourceInfos(signal)).find((s) => s.id === id);
-  if (!source)
+  if (!source || !sourceAllowed(source))
     throw new AppError('NOT_FOUND', 'Source not installed in the selected languages', 404);
   return source;
 }
@@ -122,6 +131,7 @@ export async function searchSource(
   timeoutMs = 20_000,
   filters?: BrowseRequest['filters'],
 ): Promise<SourceResult> {
+  if (!sourceAllowed(source)) throw new AppError('NOT_FOUND', 'Source is hidden', 404);
   const start = Date.now();
   try {
     const r = await sourceCall(

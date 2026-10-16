@@ -62,6 +62,7 @@ export function getSettings(): Settings {
     kavitaLibraryPath: '/library',
     libraryTargets: {},
     autoImportKavita: true,
+    adultContent: false,
     favoriteSourceIds: [],
     extensionRepos: [],
     updateIntervalMinutes: 15,

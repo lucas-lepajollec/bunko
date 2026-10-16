@@ -38,7 +38,7 @@ let scanFails = false;
 let queueError = false;
 let imports = 0;
 let scans = 0;
-const source = { id: '9223372036854775806', name: 'Protocol fixture', lang: 'fr' };
+const source = { id: '9223372036854775806', name: 'Protocol fixture', lang: 'fr', nsfw: false };
 const calls: { path: string; body: Record<string, unknown>; headers: Record<string, unknown> }[] =
   [];
 const realFetch = globalThis.fetch;

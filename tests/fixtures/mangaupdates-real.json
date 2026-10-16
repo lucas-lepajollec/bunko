@@ -1,0 +1,346 @@
+{
+  "provenance": "Public API captured 2026-10-16; null series, Coral Crown, Dai Dark and Qiu Huo from supplied first-30 sample. Onmyouji (Novel) added from the same full page-1 response. Series sheets trimmed to mapper fields; values unchanged.",
+  "updates": {
+    "results": [
+      {
+        "record": {
+          "id": 1282231,
+          "title": "Only I Don't Know",
+          "chapter": "1",
+          "volume": null,
+          "release_date": "2026-10-16",
+          "groups": [
+            {
+              "name": "Philia Scans"
+            }
+          ],
+          "time_added": {
+            "as_rfc3339": "2026-10-16T14:06:25-07:00",
+            "timestamp": 1792184785
+          }
+        },
+        "metadata": {
+          "series": {
+            "series_id": null,
+            "title": null,
+            "url": null
+          }
+        }
+      },
+      {
+        "record": {
+          "id": 1282230,
+          "title": "Sanho's Coffin",
+          "chapter": "12",
+          "volume": null,
+          "release_date": "2026-10-16",
+          "groups": [
+            {
+              "name": "Temple Scan"
+            }
+          ],
+          "time_added": {
+            "as_rfc3339": "2026-10-16T14:04:54-07:00",
+            "timestamp": 1792184694
+          }
+        },
+        "metadata": {
+          "series": {
+            "series_id": 75449291507,
+            "title": "Coral Crown",
+            "url": "https://www.mangaupdates.com/series/ynsk5wz/coral-crown"
+          }
+        }
+      },
+      {
+        "record": {
+          "id": 1282223,
+          "title": "Dai Dark",
+          "chapter": "67",
+          "volume": null,
+          "release_date": "2026-10-16",
+          "groups": [
+            {
+              "name": "Kirei Cake"
+            }
+          ],
+          "time_added": {
+            "as_rfc3339": "2026-10-16T14:02:45-07:00",
+            "timestamp": 1792184565
+          }
+        },
+        "metadata": {
+          "series": {
+            "series_id": 42106686683,
+            "title": "Dai Dark",
+            "url": "https://www.mangaupdates.com/series/jcd8fdn/dai-dark"
+          }
+        }
+      },
+      {
+        "record": {
+          "id": 1282207,
+          "title": "Qiu Huo",
+          "chapter": "11",
+          "volume": null,
+          "release_date": "2026-10-16",
+          "groups": [
+            {
+              "name": "1BrainCell"
+            }
+          ],
+          "time_added": {
+            "as_rfc3339": "2026-10-16T13:00:34-07:00",
+            "timestamp": 1792180834
+          }
+        },
+        "metadata": {
+          "series": {
+            "series_id": 46101948628,
+            "title": "Qiu Huo",
+            "url": "https://www.mangaupdates.com/series/l6fwr84/qiu-huo"
+          }
+        }
+      },
+      {
+        "record": {
+          "id": 1281743,
+          "title": "Onmyouji (Novel)",
+          "chapter": "Chang'e's Jar",
+          "volume": null,
+          "release_date": "2026-10-15",
+          "groups": [
+            {
+              "name": "Naono Holics"
+            }
+          ],
+          "time_added": {
+            "as_rfc3339": "2026-10-15T09:47:01-07:00",
+            "timestamp": 1792082821
+          }
+        },
+        "metadata": {
+          "series": {
+            "series_id": 9819867951,
+            "title": "Onmyouji (Novel)",
+            "url": "https://www.mangaupdates.com/series/4iehulr/onmyouji-novel"
+          }
+        }
+      }
+    ]
+  },
+  "series": [
+    {
+      "series_id": 75449291507,
+      "title": "Coral Crown",
+      "url": "https://www.mangaupdates.com/series/ynsk5wz/coral-crown",
+      "type": "Manhwa",
+      "year": "2026",
+      "image": {
+        "url": {
+          "original": "https://cdn.mangaupdates.com/image/i540061.jpg"
+        }
+      },
+      "genres": [
+        {
+          "genre": "Drama"
+        },
+        {
+          "genre": "Josei"
+        },
+        {
+          "genre": "Mature"
+        },
+        {
+          "genre": "Mystery"
+        },
+        {
+          "genre": "Romance"
+        },
+        {
+          "genre": "Smut"
+        }
+      ],
+      "associated": [
+        {
+          "title": "Coral Coffin"
+        },
+        {
+          "title": "Crown of Coral"
+        }
+      ],
+      "authors": [
+        {
+          "name": "YUJU",
+          "type": "Author"
+        },
+        {
+          "name": "YUJU",
+          "type": "Artist"
+        }
+      ],
+      "bayesian_rating": 6
+    },
+    {
+      "series_id": 42106686683,
+      "title": "Dai Dark",
+      "url": "https://www.mangaupdates.com/series/jcd8fdn/dai-dark",
+      "type": "Manga",
+      "year": "2019",
+      "image": {
+        "url": {
+          "original": "https://cdn.mangaupdates.com/image/i529395.jpg"
+        }
+      },
+      "genres": [
+        {
+          "genre": "Action"
+        },
+        {
+          "genre": "Adventure"
+        },
+        {
+          "genre": "Comedy"
+        },
+        {
+          "genre": "Horror"
+        },
+        {
+          "genre": "Mature"
+        },
+        {
+          "genre": "Sci-fi"
+        },
+        {
+          "genre": "Shounen"
+        }
+      ],
+      "associated": [
+        {
+          "title": "Big Dark"
+        },
+        {
+          "title": "Dai Daaku"
+        }
+      ],
+      "authors": [
+        {
+          "name": "HAYASHIDA Q.",
+          "type": "Author"
+        },
+        {
+          "name": "HAYASHIDA Q.",
+          "type": "Artist"
+        }
+      ],
+      "bayesian_rating": 7.48
+    },
+    {
+      "series_id": 46101948628,
+      "title": "Qiu Huo",
+      "url": "https://www.mangaupdates.com/series/l6fwr84/qiu-huo",
+      "type": "Manhua",
+      "year": "2025",
+      "image": {
+        "url": {
+          "original": "https://cdn.mangaupdates.com/image/i505623.png"
+        }
+      },
+      "genres": [
+        {
+          "genre": "Drama"
+        },
+        {
+          "genre": "Yaoi"
+        }
+      ],
+      "associated": [
+        {
+          "title": "Caged Fire"
+        },
+        {
+          "title": "Confined Fire"
+        }
+      ],
+      "authors": [
+        {
+          "name": "玖一",
+          "type": "Author"
+        },
+        {
+          "name": "蛛尊",
+          "type": "Author"
+        },
+        {
+          "name": "玖一",
+          "type": "Artist"
+        },
+        {
+          "name": "蛛尊",
+          "type": "Artist"
+        }
+      ],
+      "bayesian_rating": 6.47
+    },
+    {
+      "series_id": 9819867951,
+      "title": "Onmyouji (Novel)",
+      "url": "https://www.mangaupdates.com/series/4iehulr/onmyouji-novel",
+      "type": "Novel",
+      "year": "1988",
+      "image": {
+        "url": {
+          "original": "https://cdn.mangaupdates.com/image/i476741.png"
+        }
+      },
+      "genres": [
+        {
+          "genre": "Comedy"
+        },
+        {
+          "genre": "Drama"
+        },
+        {
+          "genre": "Fantasy"
+        },
+        {
+          "genre": "Historical"
+        },
+        {
+          "genre": "Horror"
+        },
+        {
+          "genre": "Mystery"
+        },
+        {
+          "genre": "Psychological"
+        },
+        {
+          "genre": "Slice of Life"
+        },
+        {
+          "genre": "Supernatural"
+        }
+      ],
+      "associated": [
+        {
+          "title": "Bound by No Spell"
+        },
+        {
+          "title": "Chang'e's Jar"
+        }
+      ],
+      "authors": [
+        {
+          "name": "YUMEMAKURA Baku",
+          "type": "Author"
+        },
+        {
+          "name": "MURAKAMI Yutaka",
+          "type": "Artist"
+        }
+      ],
+      "bayesian_rating": 6.19
+    }
+  ]
+}

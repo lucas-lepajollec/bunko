@@ -26,6 +26,7 @@ const seriesSchema = z.object({
   lowestFolderPath: z.string().nullable().optional(),
 });
 export interface IndexedSeries {
+  adult?: boolean;
   seriesId: number;
   libraryId: number;
   libraryName: string;
@@ -158,6 +159,7 @@ export function withKavita<T extends UnifiedMedia>(
   const match = resolve(media, linkedId);
   return {
     ...media,
+    adult: Boolean(media.adult || match?.adult),
     kavita: kavitaPresence(match, baseUrl),
     kavitaSeriesId: match?.seriesId ?? linkedId ?? null,
   };
@@ -174,6 +176,7 @@ export function kavitaSummaries(unmatched = false, query = ''): KavitaSeriesSumm
   return indexedSeries()
     .filter(
       (s) =>
+        (getSettings().adultContent || !s.adult) &&
         (!unmatched || !links.has(s.seriesId)) &&
         (!query || s.names.some((n) => normalizeTitle(n).includes(normalizeTitle(query)))),
     )
@@ -353,6 +356,7 @@ export async function syncKavitaIndex() {
                 502,
               );
             const metadata = await kavitaJson<{
+              ageRating?: number | string;
               summary?: string | null;
               genres?: { title: string }[] | null;
             }>(`/api/Series/metadata?seriesId=${row.id}`);
@@ -371,6 +375,10 @@ export async function syncKavitaIndex() {
               ],
               folder: row.folderPath || row.lowestFolderPath || null,
               numbers: kavitaChapterNumbers(volumes),
+              adult:
+                typeof metadata.ageRating === 'number'
+                  ? metadata.ageRating >= 14
+                  : /^(x18\+?|x18plus|explicit)$/i.test(metadata.ageRating ?? ''),
               summary: metadata.summary ?? null,
               genres: metadata.genres?.map((g) => g.title) ?? [],
               kind: guessLibraryKind(library.name, library.type),

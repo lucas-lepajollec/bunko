@@ -1,3 +1,4 @@
+import { sourceAllowed } from './adult';
 import type { ChapterSelection, SourceCandidate, TrackedMedia } from '@/types/shared';
 import { statement, db, getTracked, saveSourceStatus } from './db';
 import { sourceInfos, chaptersFor } from './suwayomi';
@@ -56,6 +57,7 @@ export async function matchTrackedSources(
     const t = getTracked(next.id);
     if (!t || t.sources.length) return false;
     const available = (await sourceInfos(signal))
+      .filter(sourceAllowed)
       .filter((s) => s.enabled)
       .filter((s) => {
         const health = sourceHealth(s.id);

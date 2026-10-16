@@ -2,6 +2,7 @@ import type { MediaFormat, MediaType, UnifiedMedia } from '@/types/shared';
 export function emptyMedia(id: string, title: string, type: MediaType): UnifiedMedia {
   return {
     id,
+    adult: false,
     title,
     type,
     altTitles: [],
@@ -65,6 +66,7 @@ export function formatFor(kind: 'comic' | 'novel' | 'oneshot', origin: string | 
   return 'MANGA';
 }
 export interface AniMedia {
+  isAdult?: boolean;
   id: number;
   type: string;
   format: string | null;
@@ -86,7 +88,7 @@ export interface AniMedia {
   staff?: { edges: { role: string; node: { name: { full: string } } }[] };
 }
 export const aniFields =
-  'id type format countryOfOrigin title { romaji english native } synonyms coverImage { extraLarge color } bannerImage description(asHtml: false) genres averageScore popularity status chapters volumes episodes siteUrl startDate { year month day }';
+  'id isAdult type format countryOfOrigin title { romaji english native } synonyms coverImage { extraLarge color } bannerImage description(asHtml: false) genres averageScore popularity status chapters volumes episodes siteUrl startDate { year month day }';
 export function fromAniList(m: AniMedia): UnifiedMedia {
   const novel = m.format === 'NOVEL';
   const type: MediaType = m.type === 'ANIME' ? 'ANIME' : novel ? 'NOVEL' : 'MANGA';
@@ -97,6 +99,7 @@ export function fromAniList(m: AniMedia): UnifiedMedia {
       m.title.english ?? m.title.romaji ?? m.title.native ?? String(m.id),
       type,
     ),
+    adult: Boolean(m.isAdult),
     anilistId: m.id,
     altTitles: [
       ...new Set([
@@ -147,6 +150,7 @@ export interface DexManga {
     status: string;
     year?: number | null;
     originalLanguage?: string;
+    contentRating?: string;
     links?: Record<string, string> | null;
     tags: { id?: string; attributes: { name: Record<string, string> } }[];
   };
@@ -172,6 +176,7 @@ export function fromMangaDex(m: DexManga): UnifiedMedia {
       a.title.fr ?? a.title.en ?? Object.values(a.title)[0],
       'MANGA',
     ),
+    adult: ['erotica', 'pornographic'].includes(a.contentRating ?? ''),
     mangadexId: m.id,
     anilistId: a.links?.al && /^\d+$/.test(a.links.al) ? Number(a.links.al) : null,
     altTitles: [...new Set([...Object.values(a.title), ...a.altTitles.flatMap(Object.values)])],
@@ -226,6 +231,7 @@ export function fromMangaUpdates(m: UpdatesRecord): UnifiedMedia {
   const [kind, origin] = updatesFormat[(m.type ?? '').toLowerCase()] ?? ['comic', null];
   return {
     ...emptyMedia(`mangaupdates:${m.series_id}`, m.title, kind === 'novel' ? 'NOVEL' : 'MANGA'),
+    adult: (m.genres ?? []).some((g) => /^(adult|hentai|smut)$/i.test(g.genre)),
     mangaUpdatesId: String(m.series_id),
     coverUrl: m.image?.url?.original ?? null,
     synopsis: cleanSynopsis(m.description),

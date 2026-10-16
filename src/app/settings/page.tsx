@@ -1,7 +1,7 @@
 'use client';
 import { clearPersistentCache } from '@/lib/client/cache';
 import Link from 'next/link';
-import { Notice } from '@/components/notify';
+import { Notice, toast } from '@/components/notify';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useSWRConfig } from 'swr';
 import type {
@@ -97,8 +97,12 @@ export default function SettingsPage() {
             </Section>
             <Section id="display" index={4}>
               <Row label={t('settings.language')} tip={t('settings.languageTip')}>
-                <LanguageSelect className="h-11 px-4" />
+                <LanguageSelect className="h-11 pr-9 pl-4" />
               </Row>
+              <AdultToggle
+                settings={settings.data}
+                onSaved={(s) => settings.mutate(s, { revalidate: false })}
+              />
             </Section>
             <Section id="sources" index={5}>
               <p className="text-mid text-sm leading-relaxed">{t('settings.sourcesBody')}</p>
@@ -680,5 +684,36 @@ function KavitaTargets({
       })}
       {error && <p className="text-bad">{error}</p>}
     </div>
+  );
+}
+
+/** 18+ content: off by default; switching refetches every list so hidden titles appear/disappear. */
+function AdultToggle({
+  settings,
+  onSaved,
+}: {
+  settings: Settings;
+  onSaved: (s: Settings) => void;
+}) {
+  const { t } = useI18n();
+  const { mutate } = useSWRConfig();
+  return (
+    <Row label={t('settings.adult')} tip={t('settings.adultTip')}>
+      <input
+        type="checkbox"
+        checked={settings.adultContent ?? false}
+        onChange={async (e) => {
+          try {
+            onSaved(
+              await send<Settings>('/api/settings', 'PATCH', { adultContent: e.target.checked }),
+            );
+            await mutate((key) => typeof key === 'string' && key !== '/api/settings');
+          } catch (err) {
+            toast({ tone: 'bad', text: errorText(t, err) });
+          }
+        }}
+        className="accent-fg size-[18px]"
+      />
+    </Row>
   );
 }

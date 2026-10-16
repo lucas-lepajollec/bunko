@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Chapter-by-chapter release feed (MangaUpdates + MangaDex + your sources) with release times: home hero, latest chapters per format on the home page, and a "Latest chapters" view in the catalog (50 at a time).
+- New Planning page: the week Monday–Sunday with release times, actual releases for past days and the usual release day (estimated) for the coming ones; format filters and "My library only".
+- Home: resume, weekly top 10 (all formats), latest chapters per format. Catalog keeps its default view and adds "Latest chapters" and "New series" switches; genres fit on one line and expand; filters on one line.
+- Library updates moved into the Library page ("Updates" tab); the Updates page now redirects there. Planning replaces it in the navigation.
+- 18+ mode, off by default: adult titles and NSFW sources are hidden everywhere, library included, until enabled in Settings → Display.
 - Kavita scans work (the scan API needs the key in its body, from an admin account); Settings warn when the key is not an admin key, and title sheets say whether the cover reached Kavita.
 - Downloads page lists every chapter with its own state, progress and error; one failing chapter no longer fails the series, failed chapters can be retried alone, and finished batches can be removed.
 - Title sheets: cover and details on the left with the Matches button at the bottom, title and chapters on the right; the latest 15 chapters with "See more" and an inner scroll; "Select all" covers every chapter of the filter; 3-line synopsis.
