@@ -316,7 +316,7 @@ export async function chaptersFor(
         const match = matchKavita(t.media, t.kavitaSeriesId);
         return match ? [match] : [];
       });
-      if (!matches.length)
+      if (!matches.length && !tracked.length)
         for (const selection of selections) {
           const row = db()
             .prepare(

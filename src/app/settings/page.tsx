@@ -219,7 +219,7 @@ function Connections({
           type: 'password',
           secret: 'kavitaApiKey',
         },
-        { name: 'kavitaLibraryPath', label: t('settings.libraryPath') },
+        { name: 'kavitaLibraryPath', label: t('settings.libraryPathOptional') },
         { name: 'kavitaAuthMode', label: t('settings.authMode'), options: ['api-key', 'jwt'] },
       ],
     },
@@ -600,17 +600,34 @@ function KavitaTargets({
           {syncing ? t('common.working') : t('kavita.sync')}
         </button>
       </div>
-      <p className="text-mid leading-relaxed">
-        {t('kavita.targetsHint', { path: settings.kavitaLibraryPath })}
-      </p>
+      <Row label={t('kavita.autoImport')} tip={t('kavita.autoImportTip')}>
+        <input
+          type="checkbox"
+          checked={settings.autoImportKavita ?? true}
+          onChange={async (e) => {
+            try {
+              onSaved(
+                await send<Settings>('/api/settings', 'PATCH', {
+                  autoImportKavita: e.target.checked,
+                }),
+              );
+            } catch (err) {
+              setError(errorText(t, err));
+            }
+          }}
+          className="accent-fg size-[18px]"
+        />
+      </Row>
+      <p className="text-mid leading-relaxed">{t('kavita.targetsHint2')}</p>
       {libraries.error && <ErrorNote error={libraries.error} />}
       {libraries.data && !usable && (
-        <p className="text-warn leading-relaxed">
-          {t('kavita.noUsableFolder', { path: settings.kavitaLibraryPath })}
-        </p>
+        <p className="text-warn leading-relaxed">{t('kavita.noUsableFolder2')}</p>
       )}
       {KINDS.map((kind) => {
         const current = targets[kind];
+        const suggested = (libraries.data ?? []).find(
+          (l) => l.suggestedFor?.includes(kind) && l.folders.some((f) => f.localPath && f.writable),
+        );
         return (
           <Row key={kind} label={t(`kavita.kind.${kind}`)}>
             <select
@@ -620,7 +637,9 @@ function KavitaTargets({
               className={cx(field, 'md:w-[420px]')}
             >
               <option value="">
-                {t('kavita.defaultTarget', { path: settings.kavitaLibraryPath })}
+                {suggested
+                  ? t('kavita.suggested', { name: suggested.name })
+                  : t('kavita.chooseTarget')}
               </option>
               {(libraries.data ?? []).map((lib) => (
                 <optgroup key={lib.id} label={`${lib.name} · ${lib.type}`}>

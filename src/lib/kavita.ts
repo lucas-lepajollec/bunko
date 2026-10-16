@@ -3,13 +3,14 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import AdmZip from 'adm-zip';
 import { z } from 'zod';
-import { db, listTracked, recordImport } from './db';
+import { db, listTracked, recordImport, manualKavitaLink } from './db';
 import type { TrackedMedia, UnifiedMedia } from '@/types/shared';
 import { getSettings } from './settings';
 import { endpoint, requestJson } from './http';
 import { chapterNumber } from './suwayomi';
 import { AppError } from './errors';
 import { kavitaHeaders } from './kavita-client';
+import { downloadCover, hasCoverImage, writeCoverFile } from './kavita-cover';
 import { matchKavita } from './kavita-index';
 import {
   libraryRoot,
@@ -17,13 +18,9 @@ import {
   mapKavitaPath,
   safeLibraryDirectory,
   targetFor,
+  kavitaPathForLocal,
 } from './library-paths';
-import {
-  boundedBuffer,
-  chapterPages,
-  discardChapterCache,
-  MAX_CHAPTER_BYTES,
-} from './chapter-pages';
+import { chapterPages, discardChapterCache, MAX_CHAPTER_BYTES } from './chapter-pages';
 export { libraryRoot } from './library-paths';
 export function xmlEscape(value: string) {
   return value
@@ -111,27 +108,9 @@ async function atomicWrite(folder: string, name: string, contents: string | Buff
 export async function writeMetadata(media: UnifiedMedia) {
   const folder = await seriesDirectory(media);
   await atomicWrite(folder, 'ComicInfo.xml', comicInfo(media, null, media.title));
-  if (!media.coverUrl) return;
-  const url = new URL(media.coverUrl);
-  if (
-    url.protocol !== 'https:' ||
-    ![
-      's4.anilist.co',
-      's3.anilist.co',
-      'uploads.mangadex.org',
-      'cdn.mangaupdates.com',
-      'www.mangaupdates.com',
-    ].includes(url.hostname)
-  )
-    return;
-  const response = await fetch(url, { signal: AbortSignal.timeout(15_000), redirect: 'error' });
-  if (
-    !/^image\/(?:jpeg|png|webp|gif|avif)(?:;|$)/i.test(response.headers.get('content-type') ?? '')
-  ) {
-    await response.body?.cancel();
-    return;
-  }
-  await atomicWrite(folder, 'cover.jpg', await boundedBuffer(response, 15 * 1024 * 1024));
+  if (!media.coverUrl || (await hasCoverImage(folder))) return;
+  const cover = await downloadCover(media.coverUrl);
+  if (cover) await writeCoverFile(folder, cover.bytes);
 }
 export function addComicInfo(archive: Buffer, xml: string): Buffer {
   const zip = new AdmZip(archive);
@@ -199,12 +178,7 @@ export async function importChapter(
 }
 export async function scanLibrary(media: UnifiedMedia) {
   const folder = await seriesDirectory(media);
-  const fs = await import('node:fs/promises');
-  const root = await fs.realpath(libraryRoot);
-  const kavitaFolder = path.posix.join(
-    getSettings().kavitaLibraryPath,
-    ...path.relative(root, folder).split(path.sep),
-  );
+  const kavitaFolder = kavitaPathForLocal(folder, targetFor(media));
   const response = await fetch(endpoint(getSettings().kavitaUrl, '/api/Library/scan-folder'), {
     method: 'POST',
     headers: await kavitaHeaders(),
@@ -262,6 +236,7 @@ export function kavitaProgress(input: unknown): { read: number; lastReadAt: stri
   return { read, lastReadAt };
 }
 export async function refreshTrackedProgress(tracked: TrackedMedia, signal?: AbortSignal) {
+  if (manualKavitaLink(tracked.id) && tracked.kavitaSeriesId === null) return;
   const s = getSettings();
   if (!s.kavitaUrl || !s.kavitaApiKey) return;
   const bounded = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(10_000)]);
@@ -307,7 +282,9 @@ export async function refreshTrackedProgress(tracked: TrackedMedia, signal?: Abo
   }
   if (id === null) return;
   db()
-    .prepare('UPDATE tracked_media SET kavita_series_id=? WHERE id=? AND kavita_series_id IS ?')
+    .prepare(
+      'UPDATE tracked_media SET kavita_series_id=? WHERE id=? AND kavita_series_id IS ? AND kavita_manual=0',
+    )
     .run(id, tracked.id, tracked.kavitaSeriesId);
   const progress = kavitaProgress(await get(`/api/Series/volumes?seriesId=${id}`));
   db()

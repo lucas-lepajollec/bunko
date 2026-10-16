@@ -490,15 +490,10 @@ const en: Dictionary = {
   'kavita.indexError': 'Kavita could not be indexed. Check the connection.',
   'kavita.indexPending': 'Kavita has not been indexed yet.',
   'kavita.sync': 'Re-index now',
-  'kavita.targetsHint':
-    'Choose where each format is stored. Only folders inside the one mounted at /library (seen by Kavita as {path}) can be written.',
-  'kavita.noUsableFolder':
-    'No Kavita folder is reachable from Bunko. Mount the parent folder of your Kavita libraries at /library and set its Kavita path ({path}) in Connections.',
   'kavita.kind.MANGA': 'Manga',
   'kavita.kind.MANHWA': 'Manhwa & webtoons',
   'kavita.kind.MANHUA': 'Manhua',
   'kavita.kind.NOVEL': 'Novels',
-  'kavita.defaultTarget': 'Mounted folder ({path})',
   'kavita.notMounted': 'not reachable',
   'kavita.readOnly': 'read-only',
   'kavita.allTracked': 'Every Kavita series is already followed.',
@@ -538,6 +533,30 @@ const en: Dictionary = {
   'error.ALREADY_SET_UP': 'An account already exists. Sign in instead.',
   'login.signIn': 'Sign in',
   'home.featured': 'Featured',
+  'kavita.autoImport': 'Follow every Kavita series automatically',
+  'kavita.autoImportTip':
+    'Your library mirrors Kavita: each series is matched to the catalog when possible (cover written into its folder), otherwise kept as an off-catalog entry.',
+  'kavita.targetsHint2':
+    'Where each format is downloaded. Bunko detects which Kavita folders it can reach through the mounted folder.',
+  'kavita.noUsableFolder2':
+    'No Kavita folder is reachable. Mount the folder that contains your Kavita libraries at /library in Bunko’s compose file.',
+  'kavita.suggested': 'Automatic: {name}',
+  'kavita.chooseTarget': 'Choose a library',
+  'settings.libraryPathOptional': 'Kavita path of the mounted folder (optional, auto-detected)',
+  'match.title': 'Matching',
+  'match.catalogWork': 'Catalog: {provider}',
+  'match.offCatalog': 'Off-catalog (from Kavita)',
+  'match.change': 'Change',
+  'match.kavitaLinked': 'Kavita: {library} · {n} ch.',
+  'match.kavitaNone': 'Not in Kavita',
+  'match.searchCatalog': 'Search the catalog',
+  'match.searchKavita': 'Search Kavita',
+  'match.noKavitaResult': 'No Kavita series found.',
+  'match.notInKavita': 'This title is not in Kavita',
+  'error.TARGET_NOT_CONFIGURED':
+    'Choose a Kavita library for this format in Settings → Kavita libraries.',
+  'error.ALREADY_TRACKED': 'That title is already in your library.',
+  'provider.kavita': 'Kavita',
 };
 
 const fr: Dictionary = {
@@ -1003,15 +1022,10 @@ const fr: Dictionary = {
   'kavita.indexError': 'Impossible d’indexer Kavita. Vérifie la connexion.',
   'kavita.indexPending': 'Kavita n’a pas encore été indexé.',
   'kavita.sync': 'Réindexer maintenant',
-  'kavita.targetsHint':
-    'Choisis où ranger chaque format. Seuls les dossiers contenus dans celui monté sur /library (vu par Kavita comme {path}) sont accessibles en écriture.',
-  'kavita.noUsableFolder':
-    'Aucun dossier Kavita n’est accessible depuis Bunko. Monte le dossier parent de tes bibliothèques Kavita sur /library et indique son chemin côté Kavita ({path}) dans Connexions.',
   'kavita.kind.MANGA': 'Manga',
   'kavita.kind.MANHWA': 'Manhwa & webtoons',
   'kavita.kind.MANHUA': 'Manhua',
   'kavita.kind.NOVEL': 'Romans',
-  'kavita.defaultTarget': 'Dossier monté ({path})',
   'kavita.notMounted': 'non accessible',
   'kavita.readOnly': 'lecture seule',
   'kavita.allTracked': 'Toutes les séries de Kavita sont déjà suivies.',
@@ -1051,6 +1065,31 @@ const fr: Dictionary = {
   'error.ALREADY_SET_UP': 'Un compte existe déjà. Connecte-toi plutôt.',
   'login.signIn': 'Se connecter',
   'home.featured': 'À la une',
+  'kavita.autoImport': 'Suivre automatiquement toutes les séries de Kavita',
+  'kavita.autoImportTip':
+    'Ta bibliothèque reflète Kavita : chaque série est associée au catalogue quand c’est possible (couverture écrite dans son dossier), sinon gardée comme entrée hors catalogue.',
+  'kavita.targetsHint2':
+    'Où chaque format est téléchargé. Bunko détecte les dossiers Kavita qu’il peut atteindre via le dossier monté.',
+  'kavita.noUsableFolder2':
+    'Aucun dossier Kavita n’est accessible. Monte le dossier qui contient tes bibliothèques Kavita sur /library dans le compose de Bunko.',
+  'kavita.suggested': 'Automatique : {name}',
+  'kavita.chooseTarget': 'Choisis une bibliothèque',
+  'settings.libraryPathOptional':
+    'Chemin Kavita du dossier monté (optionnel, détecté automatiquement)',
+  'match.title': 'Correspondances',
+  'match.catalogWork': 'Catalogue : {provider}',
+  'match.offCatalog': 'Hors catalogue (depuis Kavita)',
+  'match.change': 'Changer',
+  'match.kavitaLinked': 'Kavita : {library} · {n} ch.',
+  'match.kavitaNone': 'Pas dans Kavita',
+  'match.searchCatalog': 'Chercher dans le catalogue',
+  'match.searchKavita': 'Chercher dans Kavita',
+  'match.noKavitaResult': 'Aucune série Kavita trouvée.',
+  'match.notInKavita': 'Cette œuvre n’est pas dans Kavita',
+  'error.TARGET_NOT_CONFIGURED':
+    'Choisis une bibliothèque Kavita pour ce format dans Réglages → Bibliothèques Kavita.',
+  'error.ALREADY_TRACKED': 'Cette œuvre est déjà dans ta bibliothèque.',
+  'provider.kavita': 'Kavita',
 };
 
 const es: Dictionary = {
@@ -1511,15 +1550,10 @@ const es: Dictionary = {
   'kavita.indexError': 'No se pudo indexar Kavita. Revisa la conexión.',
   'kavita.indexPending': 'Kavita aún no se ha indexado.',
   'kavita.sync': 'Reindexar ahora',
-  'kavita.targetsHint':
-    'Elige dónde guardar cada formato. Solo se puede escribir en carpetas dentro de la montada en /library (que Kavita ve como {path}).',
-  'kavita.noUsableFolder':
-    'Ninguna carpeta de Kavita es accesible desde Bunko. Monta la carpeta padre de tus bibliotecas en /library e indica su ruta en Kavita ({path}) en Conexiones.',
   'kavita.kind.MANGA': 'Manga',
   'kavita.kind.MANHWA': 'Manhwa y webtoons',
   'kavita.kind.MANHUA': 'Manhua',
   'kavita.kind.NOVEL': 'Novelas',
-  'kavita.defaultTarget': 'Carpeta montada ({path})',
   'kavita.notMounted': 'no accesible',
   'kavita.readOnly': 'solo lectura',
   'kavita.allTracked': 'Todas las series de Kavita ya se siguen.',
@@ -1559,6 +1593,31 @@ const es: Dictionary = {
   'error.ALREADY_SET_UP': 'Ya existe una cuenta. Inicia sesión.',
   'login.signIn': 'Entrar',
   'home.featured': 'Destacados',
+  'kavita.autoImport': 'Seguir automáticamente todas las series de Kavita',
+  'kavita.autoImportTip':
+    'Tu biblioteca refleja Kavita: cada serie se asocia al catálogo cuando es posible (portada escrita en su carpeta) o se conserva fuera de catálogo.',
+  'kavita.targetsHint2':
+    'Dónde se descarga cada formato. Bunko detecta las carpetas de Kavita que puede alcanzar a través de la carpeta montada.',
+  'kavita.noUsableFolder2':
+    'Ninguna carpeta de Kavita es accesible. Monta la carpeta que contiene tus bibliotecas de Kavita en /library en el compose de Bunko.',
+  'kavita.suggested': 'Automático: {name}',
+  'kavita.chooseTarget': 'Elige una biblioteca',
+  'settings.libraryPathOptional':
+    'Ruta en Kavita de la carpeta montada (opcional, detección automática)',
+  'match.title': 'Correspondencias',
+  'match.catalogWork': 'Catálogo: {provider}',
+  'match.offCatalog': 'Fuera de catálogo (desde Kavita)',
+  'match.change': 'Cambiar',
+  'match.kavitaLinked': 'Kavita: {library} · {n} cap.',
+  'match.kavitaNone': 'No está en Kavita',
+  'match.searchCatalog': 'Buscar en el catálogo',
+  'match.searchKavita': 'Buscar en Kavita',
+  'match.noKavitaResult': 'No se encontró ninguna serie de Kavita.',
+  'match.notInKavita': 'Esta obra no está en Kavita',
+  'error.TARGET_NOT_CONFIGURED':
+    'Elige una biblioteca de Kavita para este formato en Ajustes → Bibliotecas de Kavita.',
+  'error.ALREADY_TRACKED': 'Esa obra ya está en tu biblioteca.',
+  'provider.kavita': 'Kavita',
 };
 
 const de: Dictionary = {
@@ -2023,15 +2082,10 @@ const de: Dictionary = {
   'kavita.indexError': 'Kavita konnte nicht indexiert werden. Prüfe die Verbindung.',
   'kavita.indexPending': 'Kavita wurde noch nicht indexiert.',
   'kavita.sync': 'Jetzt neu indexieren',
-  'kavita.targetsHint':
-    'Wähle, wo jedes Format abgelegt wird. Beschreibbar sind nur Ordner innerhalb des unter /library eingebundenen Ordners (in Kavita {path}).',
-  'kavita.noUsableFolder':
-    'Kein Kavita-Ordner ist für Bunko erreichbar. Binde den übergeordneten Ordner deiner Kavita-Bibliotheken unter /library ein und trage seinen Kavita-Pfad ({path}) unter Verbindungen ein.',
   'kavita.kind.MANGA': 'Manga',
   'kavita.kind.MANHWA': 'Manhwa & Webtoons',
   'kavita.kind.MANHUA': 'Manhua',
   'kavita.kind.NOVEL': 'Romane',
-  'kavita.defaultTarget': 'Eingebundener Ordner ({path})',
   'kavita.notMounted': 'nicht erreichbar',
   'kavita.readOnly': 'schreibgeschützt',
   'kavita.allTracked': 'Alle Kavita-Serien werden schon verfolgt.',
@@ -2071,6 +2125,31 @@ const de: Dictionary = {
   'error.ALREADY_SET_UP': 'Es gibt bereits ein Konto. Melde dich an.',
   'login.signIn': 'Anmelden',
   'home.featured': 'Im Fokus',
+  'kavita.autoImport': 'Alle Kavita-Serien automatisch verfolgen',
+  'kavita.autoImportTip':
+    'Deine Bibliothek spiegelt Kavita: Jede Serie wird wenn möglich dem Katalog zugeordnet (Cover in ihren Ordner geschrieben), sonst als Eintrag ohne Katalog behalten.',
+  'kavita.targetsHint2':
+    'Wohin jedes Format geladen wird. Bunko erkennt, welche Kavita-Ordner es über den eingebundenen Ordner erreicht.',
+  'kavita.noUsableFolder2':
+    'Kein Kavita-Ordner ist erreichbar. Binde den Ordner mit deinen Kavita-Bibliotheken in Bunkos Compose-Datei unter /library ein.',
+  'kavita.suggested': 'Automatisch: {name}',
+  'kavita.chooseTarget': 'Bibliothek wählen',
+  'settings.libraryPathOptional':
+    'Kavita-Pfad des eingebundenen Ordners (optional, automatisch erkannt)',
+  'match.title': 'Zuordnung',
+  'match.catalogWork': 'Katalog: {provider}',
+  'match.offCatalog': 'Ohne Katalog (aus Kavita)',
+  'match.change': 'Ändern',
+  'match.kavitaLinked': 'Kavita: {library} · {n} Kap.',
+  'match.kavitaNone': 'Nicht in Kavita',
+  'match.searchCatalog': 'Im Katalog suchen',
+  'match.searchKavita': 'In Kavita suchen',
+  'match.noKavitaResult': 'Keine Kavita-Serie gefunden.',
+  'match.notInKavita': 'Dieses Werk ist nicht in Kavita',
+  'error.TARGET_NOT_CONFIGURED':
+    'Wähle unter Einstellungen → Kavita-Bibliotheken eine Bibliothek für dieses Format.',
+  'error.ALREADY_TRACKED': 'Dieses Werk ist schon in deiner Bibliothek.',
+  'provider.kavita': 'Kavita',
 };
 
 const it: Dictionary = {
@@ -2533,15 +2612,10 @@ const it: Dictionary = {
   'kavita.indexError': 'Impossibile indicizzare Kavita. Controlla la connessione.',
   'kavita.indexPending': 'Kavita non è ancora stato indicizzato.',
   'kavita.sync': 'Reindicizza ora',
-  'kavita.targetsHint':
-    'Scegli dove salvare ogni formato. Sono scrivibili solo le cartelle dentro quella montata su /library (vista da Kavita come {path}).',
-  'kavita.noUsableFolder':
-    'Nessuna cartella di Kavita è raggiungibile da Bunko. Monta la cartella padre delle librerie Kavita su /library e indica il suo percorso in Kavita ({path}) in Connessioni.',
   'kavita.kind.MANGA': 'Manga',
   'kavita.kind.MANHWA': 'Manhwa e webtoon',
   'kavita.kind.MANHUA': 'Manhua',
   'kavita.kind.NOVEL': 'Romanzi',
-  'kavita.defaultTarget': 'Cartella montata ({path})',
   'kavita.notMounted': 'non raggiungibile',
   'kavita.readOnly': 'sola lettura',
   'kavita.allTracked': 'Tutte le serie di Kavita sono già seguite.',
@@ -2581,6 +2655,31 @@ const it: Dictionary = {
   'error.ALREADY_SET_UP': 'Esiste già un account. Accedi.',
   'login.signIn': 'Accedi',
   'home.featured': 'In evidenza',
+  'kavita.autoImport': 'Segui automaticamente tutte le serie di Kavita',
+  'kavita.autoImportTip':
+    'La tua libreria rispecchia Kavita: ogni serie viene associata al catalogo quando possibile (copertina scritta nella cartella), altrimenti tenuta fuori catalogo.',
+  'kavita.targetsHint2':
+    'Dove viene scaricato ogni formato. Bunko rileva le cartelle di Kavita raggiungibili tramite la cartella montata.',
+  'kavita.noUsableFolder2':
+    'Nessuna cartella di Kavita è raggiungibile. Monta la cartella che contiene le librerie Kavita su /library nel compose di Bunko.',
+  'kavita.suggested': 'Automatico: {name}',
+  'kavita.chooseTarget': 'Scegli una libreria',
+  'settings.libraryPathOptional':
+    'Percorso Kavita della cartella montata (facoltativo, rilevato automaticamente)',
+  'match.title': 'Corrispondenze',
+  'match.catalogWork': 'Catalogo: {provider}',
+  'match.offCatalog': 'Fuori catalogo (da Kavita)',
+  'match.change': 'Cambia',
+  'match.kavitaLinked': 'Kavita: {library} · {n} cap.',
+  'match.kavitaNone': 'Non in Kavita',
+  'match.searchCatalog': 'Cerca nel catalogo',
+  'match.searchKavita': 'Cerca in Kavita',
+  'match.noKavitaResult': 'Nessuna serie Kavita trovata.',
+  'match.notInKavita': 'Quest’opera non è in Kavita',
+  'error.TARGET_NOT_CONFIGURED':
+    'Scegli una libreria Kavita per questo formato in Impostazioni → Librerie Kavita.',
+  'error.ALREADY_TRACKED': 'Quest’opera è già nella tua libreria.',
+  'provider.kavita': 'Kavita',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

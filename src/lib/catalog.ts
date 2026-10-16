@@ -2,6 +2,7 @@ import type { DiscoverPage, DiscoverQuery, MediaDetail, UnifiedMedia } from '@/t
 import { requestJson } from './http';
 import { AppError } from './errors';
 import { listTracked } from './db';
+import { kavitaMedia } from './kavita-track';
 import { withKavita } from './kavita-index';
 import { graphql } from './suwayomi';
 import { proxyImage } from './images';
@@ -225,7 +226,9 @@ async function suwayomiDetail(id: number, signal?: AbortSignal): Promise<MediaDe
 export async function mediaDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
   const [provider, key] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
   let detail: MediaDetail;
-  if (provider === 'anilist' && /^\d{1,9}$/.test(key))
+  if (provider === 'kavita' && /^[1-9]\d{0,9}$/.test(key))
+    detail = { ...kavitaMedia(Number(key)), tags: [], relations: [], recommendations: [] };
+  else if (provider === 'anilist' && /^\d{1,9}$/.test(key))
     detail = await anilistDetail(Number(key), signal);
   else if (provider === 'mangadex' && /^[0-9a-f-]{36}$/i.test(key))
     detail = await mangadexDetail(key, signal);

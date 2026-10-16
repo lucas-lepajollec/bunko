@@ -55,7 +55,9 @@ export const media = z.object({
   anilistId: id.nullable(),
   mangadexId: z.uuid().nullable(),
   mangaUpdatesId: z.string().regex(/^\d+$/).max(30).nullable(),
-  coverUrl: nullableUrl,
+  coverUrl: z
+    .union([resourceUrl, z.string().regex(/^\/api\/kavita\/image\?seriesId=[1-9]\d*$/)])
+    .nullable(),
   bannerUrl: nullableUrl,
   synopsis: text.nullable(),
   genres: z.array(text).max(100),
@@ -65,7 +67,7 @@ export const media = z.object({
   chapters: z.number().nonnegative().nullable(),
   episodes: z.number().nonnegative().nullable(),
   webUrl: nullableUrl,
-  providers: z.array(z.enum(['anilist', 'mangadex', 'mangaupdates', 'local'])).max(4),
+  providers: z.array(z.enum(['anilist', 'mangadex', 'mangaupdates', 'local', 'kavita'])).max(5),
   sources: z
     .array(
       z.object({
@@ -112,7 +114,10 @@ export const media = z.object({
 export const mediaId = z
   .string()
   .max(80)
-  .regex(/^(?:anilist|mangadex|mangaupdates|suwayomi):[0-9a-zA-Z-]+$/, 'Unknown media identifier');
+  .regex(
+    /^(?:anilist|mangadex|mangaupdates|suwayomi|kavita):[0-9a-zA-Z-]+$/,
+    'Unknown media identifier',
+  );
 export const discoverQuery = z
   .object({
     kind: z.enum(['all', 'manga', 'manhwa', 'manhua', 'novel']).optional(),
@@ -157,6 +162,7 @@ export const settingsPatch = z
         'Use an absolute Kavita container path',
       )
       .optional(),
+    autoImportKavita: z.boolean().optional(),
     libraryTargets: z
       .object(
         Object.fromEntries(
@@ -225,6 +231,7 @@ export const trackBody = z
   );
 export const trackPatch = z.object({
   id,
+  media: media.optional(),
   status: readingStatus.optional(),
   autoDownload: z.boolean().optional(),
   kavitaSeriesId: id.nullable().optional(),

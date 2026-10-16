@@ -3,7 +3,7 @@ import { db } from './db';
 import { getSettings } from './settings';
 import { normalizeTitle } from './media';
 import { kavitaJson } from './kavita-client';
-import { mapKavitaPath, writableFolder } from './library-paths';
+import { resolveLibraryFolder, writableFolder } from './library-paths';
 import { eachConcurrent } from './concurrency';
 import type {
   KavitaIndexStatus,
@@ -31,6 +31,10 @@ export interface IndexedSeries {
   names: string[];
   folder: string | null;
   numbers: number[];
+  summary?: string | null;
+  genres?: string[];
+  kind?: import('@/types/shared').LibraryKind;
+  completed?: boolean;
 }
 export function indexedSeries(): IndexedSeries[] {
   return (
@@ -47,20 +51,21 @@ export function indexedSeriesById(id: number): IndexedSeries | null {
 type MatchMedia = Pick<UnifiedMedia, 'title' | 'altTitles' | 'kavitaSeriesId'> &
   Partial<Pick<UnifiedMedia, 'id' | 'anilistId' | 'mangadexId' | 'type'>>;
 export function matchKavita(media: MatchMedia, linkedId?: number | null): IndexedSeries | null {
-  if (media.type === 'ANIME') return null;
-  if (linkedId === undefined && media.id) {
+  if (media.id) {
     const row = db()
       .prepare(
-        `SELECT kavita_series_id FROM tracked_media WHERE media_json ->> '$.id'=?
+        `SELECT kavita_series_id,kavita_manual FROM tracked_media WHERE media_json ->> '$.id'=?
       OR (anilist_id IS NOT NULL AND anilist_id=?) OR (mangadex_id IS NOT NULL AND mangadex_id=?) LIMIT 1`,
       )
       .get(media.id, media.anilistId ?? null, media.mangadexId ?? null) as
-      { kavita_series_id: number | null } | undefined;
-    linkedId = row?.kavita_series_id;
+      { kavita_series_id: number | null; kavita_manual: number } | undefined;
+    if (row?.kavita_manual)
+      return row.kavita_series_id === null ? null : indexedSeriesById(row.kavita_series_id);
+    if (linkedId === undefined) linkedId = row?.kavita_series_id;
   }
-  // Only a saved tracked linkage is authoritative; response enrichment is derived.
-  const id = linkedId;
-  if (id != null) return indexedSeriesById(id);
+  // Derived response fields never override a persisted/manual tracked linkage.
+  if (linkedId != null) return indexedSeriesById(linkedId);
+  if (media.type === 'ANIME') return null;
   const names = new Set(
     [media.title, ...(media.altTitles ?? [])]
       .filter((n): n is string => typeof n === 'string')
@@ -93,7 +98,7 @@ export function withKavita<T extends UnifiedMedia>(media: T, linkedId?: number |
     kavitaSeriesId: match?.seriesId ?? linkedId ?? null,
   };
 }
-export function kavitaSummaries(unmatched = false): KavitaSeriesSummary[] {
+export function kavitaSummaries(unmatched = false, query = ''): KavitaSeriesSummary[] {
   const tracked = db()
     .prepare('SELECT id,kavita_series_id,media_json FROM tracked_media')
     .all() as { id: number; kavita_series_id: number | null; media_json: string }[];
@@ -103,7 +108,11 @@ export function kavitaSummaries(unmatched = false): KavitaSeriesSummary[] {
     if (match) links.set(match.seriesId, t.id);
   }
   return indexedSeries()
-    .filter((s) => !unmatched || !links.has(s.seriesId))
+    .filter(
+      (s) =>
+        (!unmatched || !links.has(s.seriesId)) &&
+        (!query || s.names.some((n) => normalizeTitle(n).includes(normalizeTitle(query)))),
+    )
     .map((s) => ({
       seriesId: s.seriesId,
       libraryId: s.libraryId,
@@ -126,27 +135,55 @@ export async function kavitaLibraries(signal?: AbortSignal): Promise<KavitaLibra
       }),
     )
     .parse(await kavitaJson('/api/Library/libraries', { signal }));
-  return Promise.all(
-    libraries.map(async (l) => ({
-      id: l.id,
+  const suggested = suggestLibraries(
+    libraries.map((l) => ({
+      ...l,
       name: l.name ?? '',
       type:
         typeof l.type === 'number'
           ? (['Manga', 'Comic', 'Book', 'Image', 'LightNovel', 'ComicVine'][l.type] ??
             String(l.type))
           : l.type,
+      folders: (l.folders ?? []).map((f) => ({ path: f, localPath: null, writable: false })),
+    })),
+  );
+  stateSet('kavita_libraries', JSON.stringify(suggested));
+  return Promise.all(
+    suggested.map(async (l) => ({
+      ...l,
       folders: await Promise.all(
-        (l.folders ?? []).map(async (folder) => {
-          const localPath = mapKavitaPath(folder);
-          return {
-            path: folder,
-            localPath,
-            writable: localPath ? await writableFolder(localPath) : false,
-          };
+        l.folders.map(async (f) => {
+          const localPath = resolveLibraryFolder(
+            f.path,
+            indexedSeries()
+              .filter((s) => s.libraryId === l.id)
+              .flatMap((s) => (s.folder ? [s.folder] : [])),
+          );
+          return { ...f, localPath, writable: localPath ? await writableFolder(localPath) : false };
         }),
       ),
     })),
   );
+}
+export function guessLibraryKind(name: string, type: string): import('@/types/shared').LibraryKind {
+  const text = name.toLowerCase();
+  if (/manhwa|manwha|webtoon/.test(text)) return 'MANHWA';
+  if (/manhua/.test(text)) return 'MANHUA';
+  if (/novel|\bln\b|book|roman/.test(text)) return 'NOVEL';
+  if (/manga/.test(text)) return 'MANGA';
+  return /book|novel/i.test(type) ? 'NOVEL' : 'MANGA';
+}
+export function suggestLibraries(
+  libraries: Omit<KavitaLibrary, 'suggestedFor'>[],
+): KavitaLibrary[] {
+  const kinds = libraries.map((l) => guessLibraryKind(l.name, l.type));
+  return libraries.map((l, i) => ({
+    ...l,
+    suggestedFor:
+      kinds[i] === 'MANGA'
+        ? ['MANGA', ...(['MANHWA', 'MANHUA'] as const).filter((k) => !kinds.includes(k))]
+        : [kinds[i]],
+  }));
 }
 /** Specials and volume-only (-100000/default chapter) entries are not chapter zero. */
 export function kavitaChapterNumbers(input: unknown): number[] {
@@ -258,6 +295,10 @@ export async function syncKavitaIndex() {
                 'Kavita returned a series in a different library',
                 502,
               );
+            const metadata = await kavitaJson<{
+              summary?: string | null;
+              genres?: { title: string }[] | null;
+            }>(`/api/Series/metadata?seriesId=${row.id}`);
             const volumes = await kavitaJson(`/api/Series/volumes?seriesId=${row.id}`);
             result.push({
               seriesId: row.id,
@@ -273,6 +314,10 @@ export async function syncKavitaIndex() {
               ],
               folder: row.folderPath || row.lowestFolderPath || null,
               numbers: kavitaChapterNumbers(volumes),
+              summary: metadata.summary ?? null,
+              genres: metadata.genres?.map((g) => g.title) ?? [],
+              kind: guessLibraryKind(library.name, library.type),
+              completed: allKavitaRead(volumes),
             });
           });
           if (rows.length < 200) break;
@@ -287,6 +332,10 @@ export async function syncKavitaIndex() {
         stateSet('kavita_retry_at', '0');
         stateSet('kavita_sync_requested', '0');
       })();
+      if (getSettings().autoImportKavita) {
+        const { autoImportKavita } = await import('./kavita-track');
+        await autoImportKavita();
+      }
     } catch {
       stateSet('kavita_error', '1');
       stateSet('kavita_retry_at', String(Date.now() + 60_000));
@@ -297,4 +346,21 @@ export async function syncKavitaIndex() {
   } finally {
     syncing = undefined;
   }
+}
+
+export function allKavitaRead(input: unknown): boolean {
+  const volumes = z
+    .array(
+      z.object({
+        chapters: z
+          .array(z.object({ pages: z.number().optional(), pagesRead: z.number().optional() }))
+          .nullable(),
+      }),
+    )
+    .parse(input);
+  const chapters = volumes.flatMap((v) => v.chapters ?? []);
+  return (
+    chapters.length > 0 &&
+    chapters.every((c) => (c.pages ?? 0) > 0 && (c.pagesRead ?? 0) >= c.pages!)
+  );
 }

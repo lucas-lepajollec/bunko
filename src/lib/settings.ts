@@ -58,6 +58,7 @@ export function getSettings(): Settings {
     prowlarrApiKey: '',
     kavitaLibraryPath: '/library',
     libraryTargets: {},
+    autoImportKavita: true,
     favoriteSourceIds: [],
     extensionRepos: [],
     updateIntervalMinutes: 15,
@@ -91,10 +92,11 @@ export function publicSettings(): PublicSettings {
 }
 export function updateSettings(patch: SettingsPatch) {
   const current = getSettings();
-  validateLibraryTargets(
-    patch.libraryTargets ?? current.libraryTargets,
-    patch.kavitaLibraryPath ?? current.kavitaLibraryPath,
-  );
+  if (patch.libraryTargets !== undefined || patch.kavitaLibraryPath !== undefined)
+    validateLibraryTargets(
+      patch.libraryTargets ?? current.libraryTargets,
+      patch.kavitaLibraryPath ?? current.kavitaLibraryPath,
+    );
   const insert = db().prepare(
     'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
   );

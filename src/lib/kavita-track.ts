@@ -1,43 +1,116 @@
-import { indexedSeriesById } from './kavita-index';
+import { indexedSeries, indexedSeriesById, matchKavita, type IndexedSeries } from './kavita-index';
 import { search, deduplicate } from './search-engine';
 import { titleScore } from './matching';
-import { track, db, listTracked } from './db';
+import { track, db, listTracked, manualKavitaLink, sameMedia } from './db';
 import { AppError } from './errors';
-export async function trackKavitaSeries(seriesId: number, signal?: AbortSignal) {
+import { emptyMedia } from './media';
+import type { UnifiedMedia } from '@/types/shared';
+import { ensureKavitaCover } from './kavita-cover';
+import { getSettings } from './settings';
+
+export function kavitaMedia(seriesId: number): UnifiedMedia {
   const series = indexedSeriesById(seriesId);
   if (!series) throw new AppError('NOT_FOUND', 'Kavita series is not indexed', 404);
-  const linked = listTracked().find((t) => t.kavitaSeriesId === seriesId);
-  if (linked) return linked;
-  const results = [];
+  const kind = series.kind ?? 'MANGA';
+  return {
+    ...emptyMedia(`kavita:${seriesId}`, series.name, kind === 'NOVEL' ? 'NOVEL' : 'MANGA'),
+    altTitles: series.names.filter((n) => n !== series.name),
+    providers: ['kavita'],
+    synopsis: series.summary ?? null,
+    genres: series.genres ?? [],
+    coverUrl: `/api/kavita/image?seriesId=${seriesId}`,
+    format: kind === 'NOVEL' ? 'LIGHT_NOVEL' : kind,
+    kavitaSeriesId: seriesId,
+  };
+}
+async function catalogMatch(series: IndexedSeries, signal?: AbortSignal) {
+  const results: UnifiedMedia[] = [];
   for (const name of series.names.slice(0, 4))
-    results.push(...(await search(name, undefined, signal)).results);
-  const candidates = deduplicate(results)
-    .filter((m) => m.type !== 'ANIME')
-    .map((media) => ({ media, score: 0 }));
-  // Compare every catalog alias to Kavita's names, then require a clear winner.
-  for (const candidate of candidates)
-    candidate.score = Math.max(
-      ...[candidate.media.title, ...candidate.media.altTitles].map((n) =>
-        titleScore(n, series.names),
-      ),
+    results.push(
+      ...(await search(name, series.kind === 'NOVEL' ? 'NOVEL' : 'MANGA', signal)).results,
     );
-  candidates.sort((a, b) => b.score - a.score);
+  const candidates = deduplicate(results)
+    .filter((m) => m.providers.some((p) => ['anilist', 'mangadex', 'mangaupdates'].includes(p)))
+    .map((media) => ({
+      media,
+      score: Math.max(...[media.title, ...media.altTitles].map((n) => titleScore(n, series.names))),
+    }))
+    .sort((a, b) => b.score - a.score);
   const best = candidates[0];
-  if (!best || best.score < 0.85 || (candidates[1] && best.score - candidates[1].score < 0.1))
-    throw new AppError('NO_MATCH', 'No unambiguous catalog match for this Kavita series', 409);
-  const existing = listTracked().find(
+  return !best || best.score < 0.85 || (candidates[1] && best.score - candidates[1].score < 0.1)
+    ? null
+    : best.media;
+}
+export async function trackKavitaSeries(seriesId: number, signal?: AbortSignal, automatic = false) {
+  const series = indexedSeriesById(seriesId);
+  if (!series) throw new AppError('NOT_FOUND', 'Kavita series is not indexed', 404);
+  const linked = listTracked().find(
     (t) =>
-      t.media.id === best.media.id ||
-      (best.media.anilistId !== null && best.media.anilistId === t.anilistId) ||
-      (best.media.mangadexId !== null && best.media.mangadexId === t.mangadexId),
+      t.kavitaSeriesId === seriesId ||
+      matchKavita(t.media, t.kavitaSeriesId)?.seriesId === seriesId,
   );
-  if (existing?.kavitaSeriesId != null && existing.kavitaSeriesId !== seriesId)
-    throw new AppError('NO_MATCH', 'Catalog match is already linked to another Kavita series', 409);
+  if (linked) {
+    if (linked.kavitaSeriesId === null && !manualKavitaLink(linked.id)) {
+      db()
+        .prepare('UPDATE tracked_media SET kavita_series_id=? WHERE id=? AND kavita_manual=0')
+        .run(seriesId, linked.id);
+      return listTracked().find((t) => t.id === linked.id)!;
+    }
+    return linked;
+  }
+  const match = await catalogMatch(series, signal);
+  if (!match && !automatic)
+    throw new AppError('NO_MATCH', 'No unambiguous catalog match for this Kavita series', 409);
+  let media = match ?? kavitaMedia(seriesId);
   return db().transaction(() => {
-    const tracked = track({ media: best.media, kavitaSeriesId: seriesId, status: 'READING' });
+    // Recheck after network work: user edits and concurrent imports take precedence.
+    const entries = listTracked();
+    const already = entries.find((t) => t.kavitaSeriesId === seriesId);
+    if (already) return already;
+    if (
+      automatic &&
+      (!getSettings().autoImportKavita ||
+        db().prepare('SELECT 1 FROM kavita_dismissals WHERE series_id=?').get(seriesId))
+    )
+      return null;
+    let existing = entries.find((t) => sameMedia(t.media, media));
+    if (
+      existing &&
+      (manualKavitaLink(existing.id) ||
+        (existing.kavitaSeriesId !== null && existing.kavitaSeriesId !== seriesId))
+    ) {
+      if (!automatic)
+        throw new AppError(
+          'NO_MATCH',
+          'Catalog match has a user-selected or different Kavita link',
+          409,
+        );
+      // A conflicting/manual catalog identity belongs to another choice. Follow the
+      // actual owned series independently, without changing that catalog entry.
+      media = kavitaMedia(seriesId);
+      existing = entries.find((t) => sameMedia(t.media, media));
+      if (existing && manualKavitaLink(existing.id)) return existing;
+    }
+    const tracked =
+      existing ?? track({ media, status: series.completed ? 'COMPLETED' : 'READING' });
     db()
-      .prepare("UPDATE tracked_media SET kavita_series_id=?,status='READING' WHERE id=?")
+      .prepare('UPDATE tracked_media SET kavita_series_id=? WHERE id=? AND kavita_manual=0')
       .run(seriesId, tracked.id);
+    if (!automatic) db().prepare('DELETE FROM kavita_dismissals WHERE series_id=?').run(seriesId);
     return listTracked().find((t) => t.id === tracked.id)!;
   })();
+}
+export async function autoImportKavita() {
+  for (const series of indexedSeries()) {
+    if (!getSettings().autoImportKavita) return;
+    if (db().prepare('SELECT 1 FROM kavita_dismissals WHERE series_id=?').get(series.seriesId))
+      continue;
+    try {
+      const tracked = await trackKavitaSeries(series.seriesId, undefined, true);
+      if (tracked && !tracked.media.providers.includes('kavita'))
+        await ensureKavitaCover(series, tracked.media);
+    } catch {
+      /* Individual metadata/cover failures must not discard a successful index. Retry next sync. */
+    }
+  }
 }

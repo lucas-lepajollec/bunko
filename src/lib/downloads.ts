@@ -20,6 +20,7 @@ import {
 } from './updates';
 import { sharedConcurrencyGate } from './concurrency';
 import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
+import { targetFor } from './library-paths';
 import { env } from '@/lib/env';
 const chapterGate = sharedConcurrencyGate('chapters', 1);
 const activeBatches = new Set<string>();
@@ -34,6 +35,7 @@ function update(batch: DownloadBatch, patch: Partial<DownloadBatch>) {
 export function createBatch(input: EnqueueRequest): DownloadBatch {
   if (input.media.type === 'ANIME')
     throw new AppError('VALIDATION_ERROR', 'Use Arr releases for anime downloads');
+  targetFor(input.media);
   const ids = [...new Set(input.chapterIds)];
   const current = listBatches().find(
     (b) =>

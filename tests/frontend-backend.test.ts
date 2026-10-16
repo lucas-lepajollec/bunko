@@ -9,6 +9,7 @@ process.env.BUNKO_DATA_DIR = path.join(directory, 'data');
 process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
 process.env.BUNKO_WORKER = 'false';
 mkdirSync(process.env.BUNKO_DATA_DIR);
+mkdirSync(path.join(directory, 'library', 'Manga'), { recursive: true });
 const old = new Database(path.join(process.env.BUNKO_DATA_DIR, 'kaviseerr.db'));
 old.exec(`CREATE TABLE tracked_media (
   id INTEGER PRIMARY KEY, anilist_id INTEGER, mangadex_id TEXT, title TEXT NOT NULL,
@@ -281,7 +282,7 @@ afterAll(async () => {
 });
 // First assertion deliberately runs before destructive fixture resets, on an actual v1 database.
 it('migrates an existing v1 database transactionally and idempotently without losing tracked data', () => {
-  expect(db().pragma('user_version', { simple: true })).toBe(4);
+  expect(db().pragma('user_version', { simple: true })).toBe(5);
   expect(listTracked()[0]).toMatchObject({
     id: 1,
     title: 'Legacy',
@@ -300,6 +301,8 @@ describe('v2 protocol fixtures', () => {
     );
     db().prepare("DELETE FROM settings WHERE key='sourcePreferences'").run();
     updateSettings({
+      libraryTargets: { MANGA: { libraryId: 1, folder: '/library/Manga' } },
+      autoImportKavita: false,
       suwayomiUrl: base,
       kavitaUrl: '',
       kavitaApiKey: '',

@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, type Server } from 'node:http';
@@ -8,6 +8,7 @@ const directory = mkdtempSync(path.join(tmpdir(), 'bunko-test-'));
 process.env.BUNKO_DATA_DIR = path.join(directory, 'data');
 process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
 process.env.BUNKO_WORKER = 'false';
+mkdirSync(path.join(directory, 'library', 'Manga'), { recursive: true });
 const { db, indexCatalog, searchCatalog, track, listTracked, listBatches, saveBatch } =
   await import('@/lib/db');
 const { updateSettings, getSettings, publicSettings, persistentSecret } =
@@ -182,6 +183,7 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`;
   updateSettings({
+    libraryTargets: { MANGA: { libraryId: 1, folder: '/library/Manga' } },
     suwayomiUrl: base,
     kavitaUrl: base,
     kavitaApiKey: 'test-only-key',
@@ -415,7 +417,7 @@ describe('durable download pipeline', () => {
     await processBatch(batch);
     expect(batch.state).toBe('error');
     expect(batch.importedIds).toEqual([10]);
-    const folder = path.join(directory, 'library', seriesName(media));
+    const folder = path.join(directory, 'library', 'Manga', seriesName(media));
     const archive = readdirSync(folder).find((n) => n.endsWith('.cbz'))!;
     expect(
       new AdmZip(readFileSync(path.join(folder, archive))).readAsText('ComicInfo.xml'),

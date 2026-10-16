@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Renamed to **Bunko**, with its own logo and browser icon (old `KAVISEERR_*` variables and database still work).
+- Kavita folders are mapped automatically through the single mounted folder; each format gets a suggested library, and downloads refuse to run without a target instead of landing in the mount root.
+- The library mirrors Kavita: every Kavita series is followed automatically, matched to the catalog when possible (cover pushed to Kavita) or kept as an off-catalog entry with its Kavita cover.
+- Wrong matches can be fixed from a title sheet (catalog work and Kavita series); the released chapter count uses the highest of catalog, sources and Kavita.
 - Accounts: choose a username and password on first start (no more token sign-in), change it in Settings, reset with `BUNKO_RESET_ACCOUNT=true`. The bearer token remains for API clients.
 - Bunko now downloads chapter pages from Suwayomi and builds Kavita-named CBZ files itself (no Suwayomi download queue or storage), with its own pausable download engine.
 - Kavita libraries: choose a target library folder per format, index existing Kavita series, show what you already own, skip owned chapters, follow series already in Kavita.

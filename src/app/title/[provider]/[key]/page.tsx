@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import type {
   ChapterSelection,
   ChaptersResponse,
@@ -18,6 +18,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { Backdrop } from '@/components/backdrop';
 import { ChapterTable, isMissing, preferredVariant } from '@/components/chapters';
 import { PosterCard } from '@/components/media';
+import { MatchPanel } from '@/components/relink';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import {
   Cover,
@@ -70,6 +71,7 @@ export default function TitlePage() {
 function Title({ media }: { media: MediaDetail }) {
   const { t, n } = useI18n();
   const library = useApi<TrackedMedia[]>('/api/tracked');
+  const { mutate } = useSWRConfig();
   const batches = useApi<DownloadBatch[]>('/api/downloads/batches', { refreshInterval: 4000 });
   const entry = (library.data ?? []).find(
     (e) =>
@@ -162,13 +164,23 @@ function Title({ media }: { media: MediaDetail }) {
   );
   const owned = new Set(chapters.data?.inKavita ?? []);
   const missing = (chapters.data?.chapters ?? []).filter((c) => isMissing(c, owned));
-  const progress = entry?.progress ?? {
+  // Catalogs often lag behind: the real count is the highest of catalog, sources and library.
+  const sourceMax = Math.max(0, ...(chapters.data?.chapters ?? []).map((c) => c.number ?? 0));
+  const released =
+    Math.max(
+      media.chapters ?? 0,
+      sourceMax,
+      entry?.progress?.released ?? 0,
+      ...(chapters.data?.inKavita ?? [0]),
+    ) || null;
+  const baseProgress = entry?.progress ?? {
     read: null,
     owned: 0,
-    released: media.chapters,
+    released: null,
     unread: 0,
     readSource: 'none' as const,
   };
+  const progress = { ...baseProgress, released };
 
   async function updateSources(next: ChapterSelection[]) {
     setOverride(next);
@@ -238,7 +250,7 @@ function Title({ media }: { media: MediaDetail }) {
       t('title.facts.publication'),
       [
         media.status ? t(`status.${statusKey(media.status)}`) : null,
-        media.chapters ? t('title.chaptersCount', { count: n(media.chapters) }) : null,
+        released ? t('title.chaptersCount', { count: n(released) }) : null,
         media.volumes ? t('title.volumesCount', { count: n(media.volumes) }) : null,
       ]
         .filter(Boolean)
@@ -398,6 +410,18 @@ function Title({ media }: { media: MediaDetail }) {
               ))}
             </dl>
             {media.synopsis && <Synopsis text={media.synopsis} />}
+            {entry && (
+              <MatchPanel
+                entry={entry}
+                media={media}
+                onChanged={() =>
+                  Promise.all([
+                    library.mutate(),
+                    mutate(`/api/media?id=${encodeURIComponent(media.id)}`),
+                  ])
+                }
+              />
+            )}
           </div>
           {isComic && (
             <div className={cx('flex-col gap-8', tab === 'sources' ? 'flex' : 'hidden md:flex')}>

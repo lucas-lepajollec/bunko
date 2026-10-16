@@ -17,8 +17,12 @@ export function db(): Database.Database {
   if (connection) return connection;
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   // Installations created before the rename keep their database file.
-  const legacy = path.join(dataDir, 'kaviseerr.db');
-  connection = new Database(existsSync(legacy) ? legacy : path.join(dataDir, 'bunko.db'));
+  const legacy = path.join(/* turbopackIgnore: true */ dataDir, 'kaviseerr.db');
+  connection = new Database(
+    existsSync(/* turbopackIgnore: true */ legacy)
+      ? legacy
+      : path.join(/* turbopackIgnore: true */ dataDir, 'bunko.db'),
+  );
   connection.pragma('journal_mode = WAL');
   connection.pragma('foreign_keys = ON');
   connection.pragma('busy_timeout = 5000');
@@ -43,6 +47,7 @@ export function db(): Database.Database {
   migrateV2(connection);
   migrateV3(connection);
   migrateV4(connection);
+  migrateV5(connection);
   resetAccountAtStartup(connection);
   return connection;
 }
@@ -103,6 +108,44 @@ export function migrateV4(database: Database.Database) {
       id INTEGER PRIMARY KEY CHECK(id=1), username TEXT NOT NULL,
       password_hash TEXT NOT NULL, session_epoch TEXT NOT NULL);
       PRAGMA user_version = 4;`);
+  })();
+}
+/** Sticky manual links and dismissals survive index refreshes and restarts. */
+export function migrateV5(database: Database.Database) {
+  database.transaction(() => {
+    if (Number(database.pragma('user_version', { simple: true })) >= 5) return;
+    database.exec(`ALTER TABLE tracked_media ADD COLUMN kavita_manual INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE kavita_dismissals (series_id INTEGER PRIMARY KEY);
+      CREATE UNIQUE INDEX tracked_identity ON tracked_media(json_extract(media_json, '$.id'));
+      PRAGMA user_version = 5;`);
+  })();
+}
+export function manualKavitaLink(id: number) {
+  return Boolean(
+    (
+      db().prepare('SELECT kavita_manual FROM tracked_media WHERE id=?').get(id) as
+        { kavita_manual: number } | undefined
+    )?.kavita_manual,
+  );
+}
+export function untrack(id: number) {
+  db().transaction(() => {
+    const tracked = listTracked().find((t) => t.id === id);
+    const series = tracked
+      ? (matchKavita(tracked.media, tracked.kavitaSeriesId) ??
+        matchKavita({
+          title: tracked.media.title,
+          altTitles: tracked.media.altTitles,
+          kavitaSeriesId: null,
+        }))
+      : null;
+    const seriesId =
+      tracked?.kavitaSeriesId ??
+      series?.seriesId ??
+      (tracked?.media.id.startsWith('kavita:') ? Number(tracked.media.id.slice(7)) : null);
+    if (seriesId)
+      db().prepare('INSERT OR IGNORE INTO kavita_dismissals(series_id) VALUES(?)').run(seriesId);
+    db().prepare('DELETE FROM tracked_media WHERE id=?').run(id);
   })();
 }
 // Next can load db.ts in multiple route bundles; reset only once per server process/volume.
@@ -242,9 +285,15 @@ export function listTracked(): TrackedMedia[] {
       EXCEPT SELECT number FROM imported_chapters WHERE tracked_id=? AND number IS NOT NULL)`,
       )
       .get(r.id as number, r.id as number) as { count: number };
-    const known = [media.chapters, r.released as number | null, ...ownedNumbers].filter(
-      (n): n is number => n !== null,
-    );
+    const observed = db()
+      .prepare('SELECT MAX(number) AS highest FROM observed_chapters WHERE tracked_id=?')
+      .get(r.id as number) as { highest: number | null };
+    const known = [
+      media.chapters,
+      r.released as number | null,
+      observed.highest,
+      ...ownedNumbers,
+    ].filter((n): n is number => n !== null);
     const read = r.last_read as number | null;
     return {
       id: Number(r.id),
@@ -312,6 +361,8 @@ export function track(input: TrackRequest): TrackedMedia {
         input.status ?? 'READING',
       ).lastInsertRowid,
   );
+  if (input.kavitaSeriesId !== undefined)
+    db().prepare('UPDATE tracked_media SET kavita_manual=1 WHERE id=?').run(id);
   // Imports can precede tracking; link their durable identity when the series is added.
   const unlinked = db()
     .prepare('SELECT chapter_id,media_json FROM imported_chapters WHERE tracked_id IS NULL')

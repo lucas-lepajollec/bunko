@@ -1,6 +1,7 @@
 /** Browser-safe API contract. No database/server imports in this file. */
 export type MediaType = 'MANGA' | 'NOVEL' | 'ANIME';
-export type Provider = 'anilist' | 'mangadex' | 'mangaupdates' | 'local';
+/** `kavita` = a series known only from Kavita (no catalog match). */
+export type Provider = 'anilist' | 'mangadex' | 'mangaupdates' | 'local' | 'kavita';
 /** Reading format derived from provider format and country of origin. */
 export type MediaFormat = 'MANGA' | 'MANHWA' | 'MANHUA' | 'ONE_SHOT' | 'LIGHT_NOVEL' | 'WEB_NOVEL';
 export interface SourceMatch {
@@ -231,8 +232,10 @@ export interface Settings {
   prowlarrApiKey: string;
   /** Kavita-side path of the folder mounted at /library in this container. */
   kavitaLibraryPath: string;
-  /** Kavita library and folder receiving each format; unset kinds go to the mounted library root. */
+  /** Kavita library and folder receiving each format; unset kinds use the suggested library. */
   libraryTargets: LibraryTargets;
+  /** Follow every Kavita series automatically (matched to the catalog when possible). Default true. */
+  autoImportKavita: boolean;
   favoriteSourceIds: string[];
   extensionRepos: string[];
   /** Worker update-check interval in minutes (5–1440), default 15. */
@@ -278,6 +281,8 @@ export interface LibraryProgress {
 }
 export interface TrackPatch {
   id: number;
+  /** Replace a wrong catalog match; status, sources and history are kept. */
+  media?: UnifiedMedia;
   status?: ReadingStatus;
   autoDownload?: boolean;
   kavitaSeriesId?: number | null;
@@ -414,6 +419,8 @@ export interface KavitaLibrary {
   /** Kavita library type name (Manga, Comic, Book, LightNovel, …). */
   type: string;
   folders: KavitaFolder[];
+  /** Formats this library receives by default when no explicit target is saved (guessed from its name/type). */
+  suggestedFor: LibraryKind[];
 }
 export interface LibraryTarget {
   libraryId: number;

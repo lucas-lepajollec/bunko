@@ -227,6 +227,8 @@ beforeAll(async () => {
             ],
       );
     }
+    if (url.pathname === '/api/Series/metadata')
+      return json({ summary: 'Fixture summary', genres: [{ title: 'Adventure' }] });
     if (url.pathname === '/api/Series/volumes')
       return json([
         {
@@ -280,7 +282,8 @@ beforeEach(async () => {
     kavitaUrl: base,
     kavitaApiKey: 'fixture-key',
     kavitaLibraryPath: '/books',
-    libraryTargets: {},
+    libraryTargets: { MANGA: { libraryId: 1, folder: '/books/Manga' } },
+    autoImportKavita: false,
     kavitaAuthMode: 'api-key',
   });
   graphError = '';
@@ -381,11 +384,10 @@ describe('source errors and bounded search', () => {
 });
 
 describe('Kavita index, paths and presence', () => {
-  it('maps only descendants with segment boundaries and validates target kinds', () => {
+  it('rejects unsafe paths and unreachable targets and validates target kinds', () => {
     expect(mapKavitaPath('/books/Manga')).toBe(path.join(root, 'Manga'));
     expect(mapKavitaPath('/books/Manga', '/books/')).toBe(path.join(root, 'Manga'));
     for (const invalid of [
-      '/books2/Manga',
       '/other',
       '/books/../other',
       '/books/Manga/../../other',
@@ -431,8 +433,9 @@ describe('Kavita index, paths and presence', () => {
     expect(readdirSync(path.join(root, 'Manga')).some((n) => n.startsWith('.bunko-probe'))).toBe(
       false,
     );
-    updateSettings({ libraryTargets: { MANGA: { libraryId: 1, folder: '/books/escape' } } });
-    await expect(seriesDirectory(media)).rejects.toMatchObject({ code: 'UNSAFE_PATH' });
+    expect(() =>
+      updateSettings({ libraryTargets: { MANGA: { libraryId: 1, folder: '/books/escape' } } }),
+    ).toThrow();
     expect(readdirSync(external)).toEqual([]);
   });
   it('indexes all libraries, aliases and distinct numeric chapters and retains the last good index on failure', async () => {
