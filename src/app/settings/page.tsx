@@ -621,13 +621,34 @@ function KavitaTargets({
         </Notice>
       )}
       <p className="text-mid leading-relaxed">{t('kavita.targetsHint2')}</p>
-      {index.data?.mediaRoot && (
-        <p className="text-muted text-sm">
-          {t('kavita.mediaRoot')}{' '}
-          <code className="text-fg rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[13px]">
-            {index.data.mediaRoot}
-          </code>
-        </p>
+      {index.data?.mediaRootOptions && (
+        <Row label={t('kavita.mediaRoot')} tip={t('kavita.mediaRootTip')}>
+          <Select
+            label={t('kavita.mediaRoot')}
+            value={settings.mediaRoot ?? ''}
+            onChange={async (v) => {
+              try {
+                onSaved(await send<Settings>('/api/settings', 'PATCH', { mediaRoot: v || null }));
+                await Promise.all([index.mutate(), libraries.mutate()]);
+              } catch (err) {
+                toast({ tone: 'bad', text: errorText(t, err) });
+              }
+            }}
+            size="lg"
+            className="w-full rounded-xl md:w-[420px]"
+            options={[
+              { value: '', label: t('kavita.mediaRootNone') },
+              ...index.data.mediaRootOptions.map((o) => ({
+                value: o.path,
+                disabled: !o.available && o.path !== settings.mediaRoot,
+                label:
+                  o.usedBy && o.path !== settings.mediaRoot
+                    ? `${o.path} — ${t('kavita.mediaRootUsedBy', { name: o.usedBy })}`
+                    : o.path,
+              })),
+            ]}
+          />
+        </Row>
       )}
       {libraries.error && <ErrorNote error={libraries.error} />}
       {libraries.data && !usable && (

@@ -6,7 +6,8 @@ import type { ChapterRelease, DiscoverKind, UnifiedMedia, ReleasesPage } from '@
 import { db, statement, listTracked, trackedForMedia, writeVersion, dataDir } from './db';
 import { withTracking } from './catalog';
 import { deduplicate } from './search-engine';
-import { fromAniList, normalizeTitle } from './media';
+import { fromAniList, normalizeTitle, type AniMedia } from './media';
+import { decodeMetadata } from './metadata-cache';
 import { fetchUpdatesReleases, fetchDexReleases } from './release-providers';
 import { AppError, errorCode } from './errors';
 
@@ -81,15 +82,22 @@ function cachedCatalog(): UnifiedMedia[] {
     statement('SELECT media_json FROM tracked_media').all() as { media_json: string }[]
   ).map((r) => JSON.parse(r.media_json) as UnifiedMedia);
   for (const row of statement(
-    "SELECT payload FROM metadata_cache WHERE key LIKE 'discover:%' OR key LIKE 'detail:%' OR key LIKE 'search:%'",
-  ).all() as { payload: string }[]) {
-    const value = JSON.parse(row.payload);
+    "SELECT key,payload FROM metadata_cache WHERE key LIKE 'discover:%' OR key LIKE 'detail:%' OR key LIKE 'search:%'",
+  ).all() as { key: string; payload: string }[]) {
+    const value = decodeMetadata(row.key, row.payload)?.value as
+      unknown[] | { Page?: { media?: unknown[] }; id?: unknown } | undefined;
     const items = Array.isArray(value) ? value : (value?.Page?.media ?? (value?.id ? [value] : []));
     for (const raw of items) {
-      const m =
-        typeof raw.id === 'number' && raw.title?.romaji !== undefined ? fromAniList(raw) : raw;
-      if (typeof m.id === 'string' && Array.isArray(m.altTitles) && Array.isArray(m.providers))
-        result.push(m);
+      if (!raw || typeof raw !== 'object') continue;
+      const item = raw as UnifiedMedia | AniMedia;
+      const media =
+        typeof item.id === 'number' ? fromAniList(item as AniMedia) : (item as UnifiedMedia);
+      if (
+        typeof media.id === 'string' &&
+        Array.isArray(media.altTitles) &&
+        Array.isArray(media.providers)
+      )
+        result.push(media);
     }
   }
   return result;

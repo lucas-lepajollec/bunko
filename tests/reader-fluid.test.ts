@@ -80,6 +80,7 @@ beforeEach(() => {
   for (const id of [1, 2])
     mkdirSync(path.join(directory, 'library', String(id), 'Comics'), { recursive: true });
   updateSettings({
+    mediaRoot: path.join(directory, 'library', '1'),
     suwayomiUrl: 'http://source.test',
     suwayomiUsername: 'fixture',
     suwayomiPassword: 'synthetic',
@@ -278,6 +279,19 @@ it('prefers imported local CBZ, reads a single ZIP entry, and recovers legacy im
   symlinkSync(escaped, linked);
   registerReaderArchive(linked, chapter(88));
   expect((await pageRoute.GET(req('/api/reader/page?chapter=88&index=0'))).status).toBe(502);
+  // A warm local page cache must not bypass clearing or changing the chosen media folder.
+  updateSettings({ mediaRoot: null });
+  expect((await pageRoute.GET(req('/api/reader/page?chapter=10&index=1'))).status).toBe(502);
+  const alternate = path.join(directory, 'library', 'arbitrary-choice');
+  mkdirSync(alternate, { recursive: true });
+  zip.updateFile('0002.png', Buffer.from('replacement-local-page'));
+  const replacement = path.join(alternate, 'replacement.cbz');
+  zip.writeZip(replacement);
+  updateSettings({ mediaRoot: alternate });
+  registerReaderArchive(replacement, chapter());
+  expect(await (await pageRoute.GET(req('/api/reader/page?chapter=10&index=1'))).text()).toBe(
+    'replacement-local-page',
+  );
 });
 it('debounces writes, resumes each chapter, exposes latest position and monotonically marks read alongside Kavita progress', async () => {
   const t = track({ media: media(), sources: [selection] });

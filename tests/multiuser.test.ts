@@ -114,6 +114,7 @@ beforeAll(async () => {
     mkdirSync(path.join(directory, 'library', String(id)), { recursive: true });
   for (const id of [1, 2])
     inTenant(id, () => {
+      updateSettings({ mediaRoot: path.join(directory, 'library', String(id)) });
       mkdirSync(path.join(libraryRoot(), 'Manga'), { recursive: true });
       updateSettings({
         suwayomiUrl: `http://upstream-${id}.test`,

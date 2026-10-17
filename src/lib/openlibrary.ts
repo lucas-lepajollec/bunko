@@ -5,46 +5,60 @@ import { sharedConcurrencyGate } from './concurrency';
 import { BUNKO_USER_AGENT } from './mangaupdates';
 import { setTimeout as delay } from 'node:timers/promises';
 import { AppError } from './errors';
+import { tenantState } from './tenant-context';
 
 const serial = sharedConcurrencyGate('openlibrary', 1);
 const scope = globalThis as typeof globalThis & { __bunkoOlNext?: number };
 const DAY = 86400_000;
 /** Metadata is tenant-local; only public-provider pacing is shared across tenants/bundles. */
-export function openLibraryJson<T>(path: string, ttl = DAY): Promise<T> {
-  return cached(`openlibrary:${path}`, ttl, () =>
-    serial(async () => {
-      const signal = AbortSignal.timeout(15_000);
-      const wait = Math.max(0, (scope.__bunkoOlNext ?? 0) - Date.now());
-      if (wait > 60_000) throw new AppError('RATE_LIMITED', 'Open Library is cooling down', 502);
-      if (wait) await delay(wait, undefined, { signal });
-      scope.__bunkoOlNext = Date.now() + 1000;
-      const response = await fetch(`https://openlibrary.org${path}`, {
-        headers: { Accept: 'application/json', 'User-Agent': BUNKO_USER_AGENT },
-        signal,
-        redirect: 'error',
-        cache: 'no-store',
-      });
-      if (!response.ok) {
-        if (response.status === 429 || response.status === 503) {
-          const value = response.headers.get('retry-after');
-          const retry = /^\d+$/.test(value ?? '')
-            ? Number(value) * 1000
-            : Date.parse(value ?? '') - Date.now();
-          scope.__bunkoOlNext =
-            Date.now() + Math.max(1000, Number.isFinite(retry) ? retry : 60_000);
+const discoveryErrors = tenantState(() => new Set<string>());
+export function openLibraryJson<T>(
+  path: string,
+  ttl = DAY,
+  onError?: (error: unknown) => void,
+): Promise<T> {
+  return cached(
+    `openlibrary:${path}`,
+    ttl,
+    () =>
+      serial(async () => {
+        const signal = AbortSignal.timeout(15_000);
+        const wait = Math.max(0, (scope.__bunkoOlNext ?? 0) - Date.now());
+        if (wait > 60_000) throw new AppError('RATE_LIMITED', 'Open Library is cooling down', 502);
+        if (wait) await delay(wait, undefined, { signal });
+        scope.__bunkoOlNext = Date.now() + 1000;
+        const response = await fetch(`https://openlibrary.org${path}`, {
+          headers: { Accept: 'application/json', 'User-Agent': BUNKO_USER_AGENT },
+          signal,
+          redirect: 'error',
+          cache: 'no-store',
+        });
+        if (!response.ok) {
+          if (response.status === 429 || response.status === 503) {
+            const value = response.headers.get('retry-after');
+            const retry = /^\d+$/.test(value ?? '')
+              ? Number(value) * 1000
+              : Date.parse(value ?? '') - Date.now();
+            scope.__bunkoOlNext =
+              Date.now() + Math.max(1000, Number.isFinite(retry) ? retry : 60_000);
+          }
+          await response.body?.cancel();
+          throw new AppError(
+            response.status === 404 ? 'NOT_FOUND' : 'METADATA_UNAVAILABLE',
+            'Open Library request failed',
+            response.status === 404 ? 404 : 502,
+          );
         }
-        await response.body?.cancel();
-        throw new AppError(
-          response.status === 404 ? 'NOT_FOUND' : 'METADATA_UNAVAILABLE',
-          'Open Library request failed',
-          response.status === 404 ? 404 : 502,
-        );
-      }
-      return (await response.json()) as T;
-    }).catch((error) => {
-      if (error instanceof AppError) throw error;
-      throw new AppError('METADATA_UNAVAILABLE', 'Open Library request failed', 502);
-    }),
+        const value = (await response.json()) as T;
+        if (path.startsWith('/search.json?') && !validSearchResult(value))
+          throw new AppError('METADATA_UNAVAILABLE', 'Open Library request failed', 502);
+        discoveryErrors().delete(path);
+        return value;
+      }).catch((error) => {
+        if (error instanceof AppError) throw error;
+        throw new AppError('METADATA_UNAVAILABLE', 'Open Library request failed', 502);
+      }),
+    { onError },
   );
 }
 // A fiction subject wins over topical subjects (e.g. "History, Fiction"). Unknown books default to fiction.
@@ -123,6 +137,27 @@ interface SearchResult {
   num_found?: number;
   start?: number;
 }
+function validSearchResult(value: unknown): value is SearchResult {
+  if (!value || typeof value !== 'object') return false;
+  const docs = (value as Partial<SearchResult>).docs;
+  return (
+    Array.isArray(docs) &&
+    docs.every(
+      (doc) =>
+        doc &&
+        typeof doc === 'object' &&
+        typeof doc.key === 'string' &&
+        typeof doc.title === 'string' &&
+        ['subject', 'subjects', 'alternative_title', 'author_name'].every((key) => {
+          const entries = doc[key as keyof OpenLibraryDoc];
+          return (
+            entries == null ||
+            (Array.isArray(entries) && entries.every((item) => typeof item === 'string'))
+          );
+        }),
+    )
+  );
+}
 const fields =
   'key,title,alternative_title,author_name,subject,cover_i,edition_count,first_publish_year,ratings_average,readinglog_count';
 export async function searchBooks(query: string): Promise<UnifiedMedia[]> {
@@ -130,7 +165,10 @@ export async function searchBooks(query: string): Promise<UnifiedMedia[]> {
   const data = await openLibraryJson<SearchResult>(`/search.json?${params}`, 30 * 60_000);
   return data.docs.filter((d) => workId(d.key)).map(fromOpenLibrary);
 }
-export async function discoverBooks(q: DiscoverQuery): Promise<DiscoverPage> {
+export type BookDiscoverPage = DiscoverPage & {
+  warnings?: { provider: 'openlibrary'; code: 'METADATA_UNAVAILABLE' }[];
+};
+export async function discoverBooks(q: DiscoverQuery): Promise<BookDiscoverPage> {
   const page = q.page ?? 1,
     perPage = q.perPage ?? 24;
   // Search's subject facets and documented trending/readinglog/rating sorts avoid N+1 sheet requests.
@@ -157,21 +195,40 @@ export async function discoverBooks(q: DiscoverQuery): Promise<DiscoverPage> {
       q.sort ?? 'trending'
     ],
   });
-  const data = await openLibraryJson<SearchResult>(`/search.json?${params}`, 30 * 60_000);
-  const wanted = q.kind === 'book' ? 'BOOK' : 'NOVEL';
-  return {
-    items: data.docs
-      .filter((d) => workId(d.key))
-      .map(fromOpenLibrary)
-      .filter(
-        (m) =>
-          m.format === wanted &&
-          (q.year == null || m.year === q.year) &&
-          (q.sort !== 'new' || (m.year != null && m.year <= year)),
-      ),
-    page,
-    hasNextPage: page * perPage < (data.numFound ?? data.num_found ?? 0),
-  };
+  const resource = `/search.json?${params}`;
+  const warnings: NonNullable<BookDiscoverPage['warnings']> = [
+    { provider: 'openlibrary', code: 'METADATA_UNAVAILABLE' },
+  ];
+  let data: SearchResult;
+  try {
+    data = await openLibraryJson<SearchResult>(resource, 30 * 60_000, () => {
+      discoveryErrors().add(resource);
+    });
+    if (!Array.isArray(data?.docs)) throw new Error('Invalid catalog page');
+  } catch {
+    discoveryErrors().add(resource);
+    return { items: [], page, hasNextPage: false, warnings };
+  }
+  try {
+    const wanted = q.kind === 'book' ? 'BOOK' : 'NOVEL';
+    return {
+      items: data.docs
+        .filter((d) => workId(d.key))
+        .map(fromOpenLibrary)
+        .filter(
+          (m) =>
+            m.format === wanted &&
+            (q.year == null || m.year === q.year) &&
+            (q.sort !== 'new' || (m.year != null && m.year <= year)),
+        ),
+      page,
+      hasNextPage: page * perPage < (data.numFound ?? data.num_found ?? 0),
+      ...(discoveryErrors().has(resource) ? { warnings } : {}),
+    };
+  } catch {
+    discoveryErrors().add(resource);
+    return { items: [], page, hasNextPage: false, warnings };
+  }
 }
 export async function openLibraryDetail(id: string): Promise<MediaDetail> {
   if (!/^OL[1-9]\d*W$/.test(id))

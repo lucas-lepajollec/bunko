@@ -101,13 +101,13 @@ Bunko also indexes what Kavita already holds: titles you own show an *In Kavita*
 
 The administrator creates accounts in **Settings → Users**. Each account is a separate Bunko: its own settings, Suwayomi and Kavita connections, library, downloads and content filter. To share a Suwayomi server, simply enter the same address in both accounts.
 
-Mount each person's Kavita folder under `/library/<username>`:
+Mount each person's Kavita folder as a subfolder of `/library` (any names), then each account picks its folder in **Settings → Kavita libraries**. Two accounts cannot use the same folder.
 
 ```yaml
     volumes:
       - bunko-data:/data
-      - /path/to/lucas/kavita/libraries:/library/lucas
-      - /path/to/marie/kavita/libraries:/library/marie
+      - /path/to/first/kavita/libraries:/library/disk1
+      - /path/to/second/kavita/libraries:/library/disk2
 ```
 
 With a single account you can keep mounting your folder directly at `/library`, as above.

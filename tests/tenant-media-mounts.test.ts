@@ -91,57 +91,41 @@ it('keeps legacy downloads, metadata and scan paths working without changing the
 it('never gives the second account access to the legacy root, even with a manual prefix', async () => {
   mkdirSync(path.join(root, 'Manga'));
   await inTenant(2, async () => {
-    expect(libraryRoot()).toBe(path.join(root, '2'));
+    expect(() => libraryRoot()).toThrow(/No reachable media folder/);
     expect(mapKavitaPath('/library/Manga')).toBeNull();
     expect(mapKavitaPath('/medias/Manga', '/medias')).toBeNull();
     await expect(safeLibraryDirectory(path.join(root, 'Manga'), true)).rejects.toMatchObject({
-      code: 'UNSAFE_PATH',
+      code: 'TARGET_NOT_CONFIGURED',
     });
   });
   expect(libraryRoot()).toBe(root);
 });
-it('uses numeric roots and prefers the exact username when both exist', async () => {
+it('migrates numeric roots once and never switches to newly appearing username roots', async () => {
   mkdirSync(path.join(root, '1', 'Manga'), { recursive: true });
   mkdirSync(path.join(root, '2', 'Manga'), { recursive: true });
   expect(libraryRoot()).toBe(path.join(root, '1'));
   expect(inTenant(2, libraryRoot)).toBe(path.join(root, '2'));
   mkdirSync(path.join(root, 'Lucas', 'Manga'), { recursive: true });
   mkdirSync(path.join(root, 'Alice', 'Manga'), { recursive: true });
-  expect(libraryRoot()).toBe(path.join(root, 'Lucas'));
-  expect(mapKavitaPath('/library/Manga')).toBe(path.join(root, 'Lucas', 'Manga'));
-  expect(inTenant(2, () => mapKavitaPath('/library/Manga'))).toBe(
-    path.join(root, 'Alice', 'Manga'),
-  );
-  expect(await status()).toMatchObject({ mediaRoot: path.join(root, 'Lucas') });
+  expect(libraryRoot()).toBe(path.join(root, '1'));
+  expect(inTenant(2, () => mapKavitaPath('/library/Manga'))).toBe(path.join(root, '2', 'Manga'));
 });
-it('invalidates the legacy decision on settings read as soon as any account root appears', async () => {
+it('does not take away the legacy parent when new account folders appear after migration', async () => {
   mkdirSync(path.join(root, 'Manga'));
   expect(libraryRoot()).toBe(root);
-  expect(await status()).toMatchObject({ mediaRoot: root });
   mkdirSync(path.join(root, 'Alice'));
   getSettings();
-  expect(libraryRoot()).toBe(path.join(root, '1'));
-  expect(mapKavitaPath('/library/Manga')).toBeNull();
-  await expect(safeLibraryDirectory(path.join(root, 'Manga'), true)).rejects.toMatchObject({
-    code: 'UNSAFE_PATH',
-  });
-  expect(await status()).toMatchObject({ mediaRoot: path.join(root, '1') });
-  // A temporarily unmounted tenant must never restore broad legacy access, including after cache reset.
-  rmSync(path.join(root, 'Alice'), { recursive: true });
-  vi.resetModules();
-  const restarted = await import('@/lib/media-root');
-  expect(restarted.resolveMediaRoot()).toBe(path.join(root, '1'));
-  (await import('@/lib/accounts-store')).accountsDb().close();
-});
-it('rechecks account changes and treats usernames case-sensitively', () => {
-  mkdirSync(path.join(root, 'alice'));
   expect(libraryRoot()).toBe(root);
-  accountsDb().prepare("UPDATE users SET username='alice' WHERE id=2").run();
-  expect(inTenant(2, libraryRoot)).toBe(path.join(root, 'alice'));
-  expect(libraryRoot()).toBe(path.join(root, '1'));
+  expect(inTenant(2, () => mapKavitaPath('/library/Manga'))).toBeNull();
+  expect(() => inTenant(2, () => updateSettings({ mediaRoot: path.join(root, 'Alice') }))).toThrow(
+    /overlaps/,
+  );
+  updateSettings({ mediaRoot: null });
+  inTenant(2, () => updateSettings({ mediaRoot: path.join(root, 'Alice') }));
+  expect(() => updateSettings({ mediaRoot: root })).toThrow(/overlaps/);
+  expect(await status()).toMatchObject({ mediaRoot: null });
 });
-it('rejects ambiguous numeric usernames, unsafe legacy names, traversal and escaping symlinks', async () => {
-  accountsDb().prepare("UPDATE users SET username='../escape' WHERE id=1").run();
+it('rejects traversal and escaping symlinks under the chosen root', async () => {
   mkdirSync(path.join(root, '1', 'Manga'), { recursive: true });
   expect(libraryRoot()).toBe(path.join(root, '1'));
   expect(mapKavitaPath('/library/../Manga')).toBeNull();
@@ -152,30 +136,6 @@ it('rejects ambiguous numeric usernames, unsafe legacy names, traversal and esca
   await expect(safeLibraryDirectory(path.join(root, '1', 'escape'), true)).rejects.toMatchObject({
     code: 'UNSAFE_PATH',
   });
-  accountsDb()
-    .prepare(
-      `INSERT INTO users(id,username,role,password_hash,session_epoch,created_at)
-    VALUES(100,'Hundred','member','fixture','fixture','2026-01-01')`,
-    )
-    .run();
-  accountsDb().prepare("UPDATE users SET username='100' WHERE id=1").run();
-  mkdirSync(path.join(root, '100'));
-  expect(() => libraryRoot()).toThrow(/Ambiguous/);
-  expect(await status()).toMatchObject({ mediaRoot: null });
-  accountsDb().prepare('DELETE FROM users WHERE id=100').run();
-});
-it('refuses username roots that are symlinks instead of falling back to numeric or legacy media', async () => {
-  const outside = mkdtempSync(path.join(directory, 'outside-'));
-  mkdirSync(path.join(root, '1', 'Manga'), { recursive: true });
-  symlinkSync(outside, path.join(root, 'Lucas'));
-  expect(() => libraryRoot()).toThrow(/symlink/);
-  expect(await status()).toMatchObject({ mediaRoot: null });
-  await expect(safeLibraryDirectory(path.join(root, '1', 'Manga'))).rejects.toMatchObject({
-    code: 'UNSAFE_PATH',
-  });
-  rmSync(path.join(root, 'Lucas'));
-  symlinkSync(path.join(outside, 'missing'), path.join(root, 'Lucas'));
-  expect(() => libraryRoot()).toThrow(/symlink/);
 });
 it('preserves rejection of ambiguous suffix mappings', () => {
   mkdirSync(path.join(root, 'Lucas', 'medias', 'Manga'), { recursive: true });

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Each account picks its media folder in Settings → Kavita libraries: `/library` or any subfolder, with any name; renaming an account never changes paths again. Existing setups are kept (the first account gets `/library` back when another account's old folder was blocking it).
+- Fixed a home page crash after updating: cached responses are versioned, the home feed always has every row, an unavailable books catalog no longer breaks the page, the browser cache is tied to the build, and a recovery screen clears cached data instead of a blank error.
 - Light novels, web novels, novels and books are now separate formats: novels and books come from Open Library (catalog, search, title sheets), LN/WN releases keep their own home rows; Kavita targets per format.
 - A Kavita series can be linked to the right catalog work for good, and you can choose the name shown for any title (catalog, alternative titles, Kavita name, or your own).
 - Source matching scans every installed source, not only the ones selected for global search.

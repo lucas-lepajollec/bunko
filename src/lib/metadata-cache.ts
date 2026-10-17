@@ -1,7 +1,11 @@
+import { normalizeHome } from './home-shape';
 import { tenantState } from './tenant-context';
 import { rememberAdultIdentities } from './adult';
 import { statement, dataDir, db } from './db';
 
+// Bump when a persisted provider/response contract changes. Older home feeds can be repaired;
+// all other unversioned/incompatible entries are cold misses, never served as current responses.
+const SCHEMA = 1;
 const MAX_ENTRIES = 1000;
 const MAX_BYTES = 64 * 1024 * 1024;
 const scope = globalThis as typeof globalThis & {
@@ -24,7 +28,9 @@ export function storedMetadata<T>(key: string): { value: T; at: number; attempte
   }
   let hit = parsed.get(key);
   if (hit?.payload !== row.payload) {
-    hit = { payload: row.payload, value: JSON.parse(row.payload) };
+    const decoded = decodeMetadata(key, row.payload);
+    if (!decoded) return null;
+    hit = { payload: row.payload, value: decoded.value };
     const size = Buffer.byteLength(row.payload);
     if (parsed.size >= 64 || state.parsedBytes + size > 16 * 1024 * 1024) {
       parsed.clear();
@@ -39,6 +45,29 @@ export function storedMetadata<T>(key: string): { value: T; at: number; attempte
     attempted: row.attempted_at,
   };
 }
+/** Shared with bulk catalog scans: SQL readers must observe the same schema boundary. */
+export function decodeMetadata(key: string, payload: string): { value: unknown } | null {
+  let envelope: { schema?: number; value?: unknown };
+  try {
+    envelope = JSON.parse(payload);
+  } catch {
+    return null;
+  }
+  let value: unknown;
+  if (envelope?.schema === SCHEMA) value = envelope.value;
+  else if (
+    key.startsWith('home:') &&
+    envelope &&
+    typeof envelope === 'object' &&
+    'latest' in envelope
+  )
+    value = normalizeHome(envelope);
+  else if (key.startsWith('home:top:') && Array.isArray(envelope)) value = envelope;
+  else return null;
+  if (key.startsWith('home:') && value && typeof value === 'object' && 'latest' in value)
+    value = normalizeHome(value);
+  return { value };
+}
 export function rememberIdentities(value: unknown) {
   if (!value || typeof value !== 'object') return;
   if (Array.isArray(value)) {
@@ -52,7 +81,7 @@ export function rememberIdentities(value: unknown) {
     if (child && typeof child === 'object') rememberIdentities(child);
 }
 export function saveMetadata(key: string, value: unknown, updatedAt = Date.now()) {
-  const payload = JSON.stringify(value);
+  const payload = JSON.stringify({ schema: SCHEMA, value });
   const size = Buffer.byteLength(payload);
   if (size > 8 * 1024 * 1024) return;
   db().transaction(() => {
@@ -84,7 +113,11 @@ export async function cached<T>(
   key: string,
   ttl: number,
   load: () => Promise<T>,
-  options: { waitForRefresh?: boolean; accept?: (value: T) => boolean } = {},
+  options: {
+    waitForRefresh?: boolean;
+    accept?: (value: T) => boolean;
+    onError?: (error: unknown) => void;
+  } = {},
 ): Promise<T> {
   const stored = storedMetadata<T>(key);
   const hit = stored && (!options.accept || options.accept(stored.value)) ? stored : null;
@@ -99,6 +132,10 @@ export async function cached<T>(
         .then((value) => {
           if (!options.accept || options.accept(value)) saveMetadata(key, value);
           return options.accept && !options.accept(value) && hit ? hit.value : value;
+        })
+        .catch((error) => {
+          options.onError?.(error);
+          throw error;
         })
         .finally(() => loads.delete(pendingKey));
       loads.set(pendingKey, pending);

@@ -1,9 +1,10 @@
 'use client';
 import type { Cache, State } from 'swr';
 
-// v2 drops v1 snapshots, which could hold an empty catalog page that was never refetched.
-const STORAGE_KEY = 'bunko.cache.v2';
-const OLD_KEYS = ['bunko.cache.v1'];
+// One snapshot per build: a new version never reads data cached by an older one.
+const PREFIX = 'bunko.cache.';
+const STORAGE_KEY = `${PREFIX}${process.env.NEXT_PUBLIC_BUNKO_BUILD ?? 'dev'}`;
+let saving = true;
 const MAX_BYTES = 3_000_000;
 /** Data worth showing instantly on the next visit; it is revalidated in the background anyway. */
 // Paged lists (catalog, discover, releases) are never persisted: a stale or empty page would stick.
@@ -17,13 +18,17 @@ export function persistentCache(): Cache {
   const map = new Map<string, State>();
   if (typeof window === 'undefined') return map as unknown as Cache;
   try {
-    for (const old of OLD_KEYS) localStorage.removeItem(old);
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(PREFIX) && key !== STORAGE_KEY) localStorage.removeItem(key);
+    }
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') as [string, unknown][];
     for (const [key, data] of saved) map.set(key, { data });
   } catch {
     /* Corrupt or blocked storage: start empty. */
   }
   const save = () => {
+    if (!saving) return;
     const entries = [...map.entries()]
       .filter(([key, state]) => PERSISTED.test(key) && state.data !== undefined && !state.error)
       .map(([key, state]) => [key, state.data] as const)
@@ -51,6 +56,8 @@ export function persistentCache(): Cache {
 
 /** Forget cached data, e.g. on sign-out, so another account never sees it. */
 export function clearPersistentCache() {
+  // Also stop saving the in-memory cache for this page's lifetime, so a reload starts clean.
+  saving = false;
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {

@@ -1,3 +1,4 @@
+import { normalizeHome } from './home-shape';
 import { heroArtwork } from './hero-artwork';
 import type { ChapterRelease, HomeFeed } from '@/types/shared';
 import { releaseStore, refreshReleases, mediaKind } from './releases';
@@ -44,14 +45,14 @@ export function composeHome(releases: ChapterRelease[], top: HomeFeed['top']): H
 export async function homeFeed(): Promise<HomeFeed> {
   void refreshReleases().catch(() => {});
   const key = `home:top:${includeProviderAdults()}`;
-  const stored = storedMetadata<HomeFeed['top']>(key)?.value;
-  const top = stored?.length ? stored : [];
+  const stored = storedMetadata<HomeFeed['top'] | HomeFeed>(key)?.value;
+  const top = Array.isArray(stored) ? stored : normalizeHome(stored).top;
   void cached<HomeFeed['top']>(
     key,
     5 * 60_000,
     async () =>
       (await discover({ sort: 'trending', kind: 'all', perPage: 20 }, undefined, true)).items,
-    { accept: (items) => items.length > 0 },
+    { accept: (items) => Array.isArray(items) && items.length > 0 },
   ).catch(() => {});
-  return composeHome(heroArtwork(releaseStore()), top);
+  return normalizeHome(composeHome(heroArtwork(releaseStore()), top));
 }

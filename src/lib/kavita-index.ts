@@ -11,7 +11,7 @@ import { getSettings } from './settings';
 import { emptyMedia, normalizeTitle } from './media';
 import { kavitaJson } from './kavita-client';
 import { resolveLibraryFolder, writableFolder } from './library-paths';
-import { mediaRootStatus } from './media-root';
+import { mediaRootStatus, mediaRootOptions } from './media-root';
 import { eachConcurrent } from './concurrency';
 import type {
   KavitaIndexStatus,
@@ -331,10 +331,13 @@ function stateSet(key: string, value: string) {
     )
     .run(key, value);
 }
-export function kavitaIndexStatus(): KavitaIndexStatus & { mediaRoot: string | null } {
+export function kavitaIndexStatus(): KavitaIndexStatus & {
+  mediaRootOptions: ReturnType<typeof mediaRootOptions>;
+} {
   const s = getSettings();
   return {
     mediaRoot: mediaRootStatus(),
+    mediaRootOptions: mediaRootOptions(),
     state:
       !s.kavitaUrl || !s.kavitaApiKey
         ? 'unconfigured'

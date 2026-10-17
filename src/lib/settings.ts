@@ -6,7 +6,7 @@ import { env } from './env';
 import { wakeWorker } from './worker-events';
 import { accountsDir, tenantId, tenantState } from './tenant-context';
 import { validateLibraryTargets } from './library-paths';
-import { mediaRootStatus } from './media-root';
+import { chosenMediaRoot, withMediaRootChoice } from './media-root';
 import type { PublicSettings, SecretSetting, Settings, SettingsPatch } from '@/types/shared';
 export const secretKeys: SecretSetting[] = [
   'suwayomiPassword',
@@ -64,6 +64,7 @@ function serverSettings(): Settings {
   const version = writeVersion('settings');
   if (settingsSnapshot?.version === version) return settingsSnapshot.value;
   const result: Settings = {
+    mediaRoot: null,
     suwayomiUrl: '',
     suwayomiUsername: '',
     suwayomiPassword: '',
@@ -98,8 +99,7 @@ function serverSettings(): Settings {
   return result;
 }
 export function getSettings(): Settings {
-  mediaRootStatus();
-  return structuredClone(serverSettings());
+  return { ...structuredClone(serverSettings()), mediaRoot: chosenMediaRoot() };
 }
 export function publicSettings(): PublicSettings {
   const settings = getSettings();
@@ -116,27 +116,33 @@ export function publicSettings(): PublicSettings {
 }
 export function updateSettings(patch: SettingsPatch) {
   const current = getSettings();
-  if (patch.libraryTargets !== undefined || patch.kavitaLibraryPath !== undefined)
-    validateLibraryTargets(
-      patch.libraryTargets ?? current.libraryTargets,
-      patch.kavitaLibraryPath ?? current.kavitaLibraryPath,
-    );
-  const insert = statement(
-    'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
-  );
-  db().transaction(() => {
-    if (patch.kavitaApiKey !== undefined && patch.kavitaApiKey !== current.kavitaApiKey) {
-      statement(
-        'UPDATE tracked_media SET last_read=NULL,last_read_at=NULL,progress_checked=0',
-      ).run();
-      statement("DELETE FROM worker_state WHERE key LIKE 'progress_refresh_attempt:%'").run();
-    }
-    for (const [key, value] of Object.entries(patch))
-      insert.run(
-        key,
-        secretKeys.includes(key as SecretSetting) ? encrypt(String(value)) : JSON.stringify(value),
+  withMediaRootChoice(patch.mediaRoot, () => {
+    if (patch.libraryTargets !== undefined || patch.kavitaLibraryPath !== undefined)
+      validateLibraryTargets(
+        patch.libraryTargets ?? current.libraryTargets,
+        patch.kavitaLibraryPath ?? current.kavitaLibraryPath,
       );
-  })();
+    const insert = statement(
+      'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+    );
+    db().transaction(() => {
+      if (patch.kavitaApiKey !== undefined && patch.kavitaApiKey !== current.kavitaApiKey) {
+        statement(
+          'UPDATE tracked_media SET last_read=NULL,last_read_at=NULL,progress_checked=0',
+        ).run();
+        statement("DELETE FROM worker_state WHERE key LIKE 'progress_refresh_attempt:%'").run();
+      }
+      for (const [key, value] of Object.entries(patch)) {
+        if (key === 'mediaRoot') continue;
+        insert.run(
+          key,
+          secretKeys.includes(key as SecretSetting)
+            ? encrypt(String(value))
+            : JSON.stringify(value),
+        );
+      }
+    })();
+  });
   wakeWorker();
   return publicSettings();
 }

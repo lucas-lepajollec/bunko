@@ -379,6 +379,11 @@ export interface Settings {
   /** Follow every Kavita series automatically (matched to the catalog when possible). Default true. */
   autoImportKavita: boolean;
   /**
+   * This account's media folder: `/library` or one of its direct subfolders (any name). Exclusive
+   * per account; never nested in another account's folder. Null = not chosen.
+   */
+  mediaRoot: string | null;
+  /**
    * @deprecated Per user since multi-user: reads/writes the signed-in user's preference
    * (see `MyAccount.adultContent`).
    */
@@ -685,8 +690,10 @@ export interface KavitaIndexStatus {
   state: 'ok' | 'error' | 'unconfigured';
   series: number;
   syncedAt: string | null;
-  /** Where this account's Kavita folders are expected inside Bunko (`/library` or `/library/<name>`). */
+  /** This account's media folder inside Bunko (chosen in settings), or null when none is set. */
   mediaRoot: string | null;
+  /** Folders that can be chosen: `/library` itself and its direct subfolders, with who uses each. */
+  mediaRootOptions: { path: string; usedBy: string | null; available: boolean }[];
 }
 
 /* ---- Accounts ---- */

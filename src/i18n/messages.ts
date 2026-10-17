@@ -745,14 +745,12 @@ const en: Dictionary = {
   'users.you': '(you)',
   'error.LAST_ADMIN': 'There must remain at least one administrator.',
   'error.USERNAME_TAKEN': 'This username is already used.',
-  'kavita.mediaRoot': 'Your Kavita folders are expected inside Bunko under',
+  'kavita.mediaRoot': 'Folder of this account',
   'users.rename': 'Rename',
   'users.renamed': 'Renamed to {name}',
-  'users.renamePrompt':
-    'New username for {name}. If their Kavita folders are mounted under /library/{name}, rename that folder in the Docker compose too.',
+  'users.renamePrompt': 'New username for {name}:',
   'account.rename': 'Username',
-  'account.renameInfo':
-    'You stay signed in. If your Kavita folders are mounted under /library/<your name>, rename that path in the Docker compose too.',
+  'account.renameInfo': 'You stay signed in; your folders and settings do not change.',
   'catalog.comicsTitle': 'No public catalog for comics',
   'catalog.comicsBody':
     'Find comics and BD through your Suwayomi extensions; your Kavita comics appear in your library.',
@@ -803,6 +801,15 @@ const en: Dictionary = {
   'match.displayTitle': 'Name shown',
   'match.titleAuto': 'Back to automatic',
   'match.titleCustom': 'Or type your own name…',
+  'crash.title': 'Something went wrong',
+  'crash.body': 'This page could not be displayed. Saved data was cleared; try again.',
+  'crash.retry': 'Try again',
+  'crash.home': 'Home',
+  'kavita.mediaRootTip':
+    'Where your Kavita folders are mounted inside Bunko: /library itself, or one of its subfolders (any name). Each account needs its own folder.',
+  'kavita.mediaRootNone': 'Choose a folder',
+  'kavita.mediaRootUsedBy': 'used by {name}',
+  'error.MEDIA_ROOT_TAKEN': 'This folder is already used by another account (or overlaps it).',
 };
 
 const fr: Dictionary = {
@@ -1525,14 +1532,12 @@ const fr: Dictionary = {
   'users.you': '(toi)',
   'error.LAST_ADMIN': 'Il doit rester au moins un administrateur.',
   'error.USERNAME_TAKEN': 'Ce nom d’utilisateur est déjà pris.',
-  'kavita.mediaRoot': 'Tes dossiers Kavita sont attendus dans Bunko sous',
+  'kavita.mediaRoot': 'Dossier de ce compte',
   'users.rename': 'Renommer',
   'users.renamed': 'Renommé en {name}',
-  'users.renamePrompt':
-    'Nouveau nom pour {name}. Si ses dossiers Kavita sont montés sous /library/{name}, renomme aussi ce dossier dans le compose Docker.',
+  'users.renamePrompt': 'Nouveau nom pour {name} :',
   'account.rename': 'Nom d’utilisateur',
-  'account.renameInfo':
-    'Tu restes connecté. Si tes dossiers Kavita sont montés sous /library/<ton nom>, renomme aussi ce chemin dans le compose Docker.',
+  'account.renameInfo': 'Tu restes connecté ; tes dossiers et réglages ne changent pas.',
   'catalog.comicsTitle': 'Pas de catalogue public pour les BD et comics',
   'catalog.comicsBody':
     'Trouve tes BD et comics via tes extensions Suwayomi ; ceux de ton Kavita apparaissent dans ta bibliothèque.',
@@ -1583,6 +1588,16 @@ const fr: Dictionary = {
   'match.displayTitle': 'Nom affiché',
   'match.titleAuto': 'Revenir à l’automatique',
   'match.titleCustom': 'Ou saisis ton propre nom…',
+  'crash.title': 'Un souci d’affichage',
+  'crash.body':
+    'Cette page n’a pas pu s’afficher. Les données gardées en cache ont été vidées : réessaie.',
+  'crash.retry': 'Réessayer',
+  'crash.home': 'Accueil',
+  'kavita.mediaRootTip':
+    'Où tes dossiers Kavita sont montés dans Bunko : /library entier, ou un de ses sous-dossiers (nom libre). Chaque compte a besoin de son propre dossier.',
+  'kavita.mediaRootNone': 'Choisis un dossier',
+  'kavita.mediaRootUsedBy': 'utilisé par {name}',
+  'error.MEDIA_ROOT_TAKEN': 'Ce dossier est déjà utilisé par un autre compte (ou le chevauche).',
 };
 
 const es: Dictionary = {
@@ -2300,14 +2315,12 @@ const es: Dictionary = {
   'users.you': '(tú)',
   'error.LAST_ADMIN': 'Debe quedar al menos un administrador.',
   'error.USERNAME_TAKEN': 'Este nombre de usuario ya existe.',
-  'kavita.mediaRoot': 'Tus carpetas de Kavita se esperan en Bunko bajo',
+  'kavita.mediaRoot': 'Carpeta de esta cuenta',
   'users.rename': 'Renombrar',
   'users.renamed': 'Renombrado a {name}',
-  'users.renamePrompt':
-    'Nuevo nombre para {name}. Si sus carpetas de Kavita están montadas en /library/{name}, cambia también esa ruta en el compose de Docker.',
+  'users.renamePrompt': 'Nuevo nombre para {name}:',
   'account.rename': 'Nombre de usuario',
-  'account.renameInfo':
-    'Sigues conectado. Si tus carpetas de Kavita están montadas en /library/<tu nombre>, cambia también esa ruta en el compose de Docker.',
+  'account.renameInfo': 'Sigues conectado; tus carpetas y ajustes no cambian.',
   'catalog.comicsTitle': 'No hay catálogo público de cómics',
   'catalog.comicsBody':
     'Busca cómics con tus extensiones de Suwayomi; los de tu Kavita aparecen en tu biblioteca.',
@@ -2358,6 +2371,16 @@ const es: Dictionary = {
   'match.displayTitle': 'Nombre mostrado',
   'match.titleAuto': 'Volver a automático',
   'match.titleCustom': 'O escribe tu propio nombre…',
+  'crash.title': 'Algo salió mal',
+  'crash.body':
+    'No se pudo mostrar esta página. Se borraron los datos guardados; inténtalo de nuevo.',
+  'crash.retry': 'Reintentar',
+  'crash.home': 'Inicio',
+  'kavita.mediaRootTip':
+    'Dónde están montadas tus carpetas de Kavita en Bunko: /library entero o una de sus subcarpetas (cualquier nombre). Cada cuenta necesita su propia carpeta.',
+  'kavita.mediaRootNone': 'Elige una carpeta',
+  'kavita.mediaRootUsedBy': 'usada por {name}',
+  'error.MEDIA_ROOT_TAKEN': 'Esta carpeta ya la usa otra cuenta (o se solapa).',
 };
 
 const de: Dictionary = {
@@ -3079,14 +3102,12 @@ const de: Dictionary = {
   'users.you': '(du)',
   'error.LAST_ADMIN': 'Mindestens ein Administrator muss bleiben.',
   'error.USERNAME_TAKEN': 'Dieser Benutzername ist vergeben.',
-  'kavita.mediaRoot': 'Deine Kavita-Ordner werden in Bunko erwartet unter',
+  'kavita.mediaRoot': 'Ordner dieses Kontos',
   'users.rename': 'Umbenennen',
   'users.renamed': 'Umbenannt in {name}',
-  'users.renamePrompt':
-    'Neuer Name für {name}. Sind die Kavita-Ordner unter /library/{name} eingehängt, benenne diesen Pfad auch im Docker-Compose um.',
+  'users.renamePrompt': 'Neuer Name für {name}:',
   'account.rename': 'Benutzername',
-  'account.renameInfo':
-    'Du bleibst angemeldet. Sind deine Kavita-Ordner unter /library/<dein Name> eingehängt, ändere diesen Pfad auch im Docker-Compose.',
+  'account.renameInfo': 'Du bleibst angemeldet; Ordner und Einstellungen bleiben gleich.',
   'catalog.comicsTitle': 'Kein öffentlicher Comic-Katalog',
   'catalog.comicsBody':
     'Finde Comics über deine Suwayomi-Erweiterungen; die aus deinem Kavita stehen in deiner Bibliothek.',
@@ -3137,6 +3158,17 @@ const de: Dictionary = {
   'match.displayTitle': 'Angezeigter Name',
   'match.titleAuto': 'Zurück zu automatisch',
   'match.titleCustom': 'Oder eigenen Namen eingeben…',
+  'crash.title': 'Etwas ist schiefgelaufen',
+  'crash.body':
+    'Diese Seite konnte nicht angezeigt werden. Gespeicherte Daten wurden geleert; versuche es erneut.',
+  'crash.retry': 'Erneut versuchen',
+  'crash.home': 'Startseite',
+  'kavita.mediaRootTip':
+    'Wo deine Kavita-Ordner in Bunko eingehängt sind: /library selbst oder ein Unterordner (beliebiger Name). Jedes Konto braucht einen eigenen Ordner.',
+  'kavita.mediaRootNone': 'Ordner wählen',
+  'kavita.mediaRootUsedBy': 'genutzt von {name}',
+  'error.MEDIA_ROOT_TAKEN':
+    'Dieser Ordner wird schon von einem anderen Konto genutzt (oder überschneidet sich).',
 };
 
 const it: Dictionary = {
@@ -3854,14 +3886,12 @@ const it: Dictionary = {
   'users.you': '(tu)',
   'error.LAST_ADMIN': 'Deve restare almeno un amministratore.',
   'error.USERNAME_TAKEN': 'Questo nome utente è già usato.',
-  'kavita.mediaRoot': 'Le tue cartelle Kavita sono attese in Bunko sotto',
+  'kavita.mediaRoot': 'Cartella di questo account',
   'users.rename': 'Rinomina',
   'users.renamed': 'Rinominato in {name}',
-  'users.renamePrompt':
-    'Nuovo nome per {name}. Se le sue cartelle Kavita sono montate in /library/{name}, rinomina anche quel percorso nel compose Docker.',
+  'users.renamePrompt': 'Nuovo nome per {name}:',
   'account.rename': 'Nome utente',
-  'account.renameInfo':
-    'Resti connesso. Se le tue cartelle Kavita sono montate in /library/<tuo nome>, rinomina anche quel percorso nel compose Docker.',
+  'account.renameInfo': 'Resti connesso; cartelle e impostazioni non cambiano.',
   'catalog.comicsTitle': 'Nessun catalogo pubblico per i fumetti',
   'catalog.comicsBody':
     'Trova i fumetti con le estensioni Suwayomi; quelli del tuo Kavita compaiono nella libreria.',
@@ -3912,6 +3942,15 @@ const it: Dictionary = {
   'match.displayTitle': 'Nome mostrato',
   'match.titleAuto': 'Torna ad automatico',
   'match.titleCustom': 'O scrivi un nome tuo…',
+  'crash.title': 'Qualcosa è andato storto',
+  'crash.body': 'Impossibile mostrare la pagina. I dati salvati sono stati svuotati: riprova.',
+  'crash.retry': 'Riprova',
+  'crash.home': 'Home',
+  'kavita.mediaRootTip':
+    'Dove sono montate le tue cartelle Kavita in Bunko: /library intera o una sua sottocartella (nome libero). Ogni account ha bisogno della propria cartella.',
+  'kavita.mediaRootNone': 'Scegli una cartella',
+  'kavita.mediaRootUsedBy': 'usata da {name}',
+  'error.MEDIA_ROOT_TAKEN': 'Questa cartella è già usata da un altro account (o si sovrappone).',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

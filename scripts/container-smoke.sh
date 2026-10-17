@@ -56,19 +56,27 @@ check 200 "member own account" -H "Cookie: $member_cookie" "$base/api/me"
 check 200 "member preferences" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"adultContent":true}' "$base/api/me"
 check 403 "member forbidden users list" -H "Cookie: $member_cookie" "$base/api/users"
 check 403 "member forbidden renaming another account" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"id":1,"username":"Hijack"}' "$base/api/users"
-docker exec "$name" mkdir -p /library/SmokeMember/Manga
+docker exec "$name" mkdir -p /library/arbitrary-folder/Manga /library/second-folder/Manga
+check 409 "parent choice excludes member subfolder" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"mediaRoot":"/library/arbitrary-folder"}' "$base/api/settings"
+check 200 "admin clears parent choice" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"mediaRoot":null}' "$base/api/settings"
+check 200 "member chooses arbitrary folder" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"mediaRoot":"/library/arbitrary-folder"}' "$base/api/settings"
+check 409 "member choice excludes parent" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"mediaRoot":"/library"}' "$base/api/settings"
+check 409 "member choice excludes duplicate claim" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"mediaRoot":"/library/arbitrary-folder"}' "$base/api/settings"
+check 400 "unknown media folder rejected" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"mediaRoot":"/library/unknown"}' "$base/api/settings"
+check 200 "admin chooses separate sibling" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"mediaRoot":"/library/second-folder"}' "$base/api/settings"
 check 200 "admin renames member" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":2,"username":"SmokeReader"}' "$base/api/users"
 curl -fsS -H "Cookie: $member_cookie" "$base/api/auth" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b);if(!v.authenticated||v.userId!==2||v.username!=="SmokeReader")process.exit(1)})'
-curl -fsS -H "Cookie: $member_cookie" "$base/api/kavita/status" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).mediaRoot!=="/library/SmokeReader")process.exit(1)})'
+curl -fsS -H "Cookie: $member_cookie" "$base/api/kavita/status" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).mediaRoot!=="/library/arbitrary-folder")process.exit(1)})'
 check 200 "member renames self with existing session" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"username":"SmokeSelf"}' "$base/api/me"
 check 409 "rename case-insensitive conflict" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"username":"smokeADMIN"}' "$base/api/me"
 check 400 "rename input validated" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"username":"../escape"}' "$base/api/me"
 check 401 "old username no longer signs in" -X POST -H 'Content-Type: application/json' -d '{"username":"SmokeMember","password":"synthetic-member-password"}' "$base/api/auth"
 check 200 "new username signs in" -X POST -H 'Content-Type: application/json' -d '{"username":"smokeself","password":"synthetic-member-password"}' "$base/api/auth"
 curl -fsS -H "Cookie: $member_cookie" "$base/api/me" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b);if(v.username!=="SmokeSelf"||v.id!==2||v.adultContent!==true)process.exit(1)})'
-curl -fsS -H "Cookie: $member_cookie" "$base/api/kavita/status" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).mediaRoot!=="/library/SmokeSelf")process.exit(1)})'
-curl -fsS -H "Authorization: Bearer $token" "$base/api/kavita/status" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).mediaRoot!=="/library/1")process.exit(1)})'
-echo "ok   renames preserve identity, preference, sessions and isolated media roots"
+curl -fsS -H "Cookie: $member_cookie" "$base/api/kavita/status" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).mediaRoot!=="/library/arbitrary-folder")process.exit(1)})'
+curl -fsS -H "Authorization: Bearer $token" "$base/api/kavita/status" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).mediaRoot!=="/library/second-folder")process.exit(1)})'
+curl -fsS -H "Cookie: $member_cookie" "$base/api/kavita/status" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const options=JSON.parse(b).mediaRootOptions;const own=options.find(o=>o.path==="/library/arbitrary-folder");const other=options.find(o=>o.path==="/library/second-folder");if(!own.available||own.usedBy!=="SmokeSelf"||other.available||other.usedBy!=="SmokeAdmin")process.exit(1)})'
+echo "ok   renames preserve identity, preference, sessions and chosen media roots"
 check 200 "member own instance settings" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{}' "$base/api/settings"
 check 400 "member extension input validated" -X POST -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{}' "$base/api/extensions/action"
 check 200 "admin private Suwayomi settings" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"suwayomiUrl":"http://admin-suwayomi.invalid:4567"}' "$base/api/settings"

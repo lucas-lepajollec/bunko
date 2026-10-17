@@ -183,6 +183,7 @@ export const searchParams = z.object({
 });
 export const settingsPatch = z
   .object({
+    mediaRoot: z.string().min(1).max(4096).nullable().optional(),
     suwayomiUrl: httpUrl.optional(),
     suwayomiUsername: z.string().max(300).optional(),
     suwayomiPassword: z.string().max(2000).optional(),

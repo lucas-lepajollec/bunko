@@ -141,7 +141,7 @@ export async function readerPage(request: Request, id: number, index: number) {
     const info = await stat(local.filename);
     return cachedImageResponse(
       request,
-      `reader:local:${readerNamespace()}:${id}:${index}:${info.size}:${info.mtimeMs}`,
+      `reader:local:${readerNamespace()}:${id}:${index}:${local.filename}:${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}`,
       () => cbzPage(local.filename, pages[index]),
     );
   }

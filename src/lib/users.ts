@@ -7,7 +7,6 @@ import { inTenant } from './tenant-context';
 import { currentUser } from './user-context';
 import { getSettings, updateSettings } from './settings';
 import { credentials, password } from './account-validation';
-import { rememberMediaRootBeforeRename } from './media-root';
 import { requireAdmin } from './auth';
 import { hashPassword } from './passwords';
 import { AppError } from './errors';
@@ -58,7 +57,6 @@ function renameUser(id: number, username: string | undefined) {
     { username: string } | undefined;
   if (!previous) throw new AppError('NOT_FOUND', 'User not found', 404);
   if (previous.username === username) return;
-  inTenant(id, () => rememberMediaRootBeforeRename(previous.username));
   try {
     accountsDb().prepare('UPDATE users SET username=? WHERE id=?').run(username, id);
   } catch (error) {

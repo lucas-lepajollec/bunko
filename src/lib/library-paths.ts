@@ -7,7 +7,7 @@ import type { LibraryKind, UnifiedMedia } from '@/types/shared';
 import { getSettings } from './settings';
 import { AppError } from './errors';
 import { suggestedLibraryKind } from './library-kinds';
-import { resolveMediaRoot } from './media-root';
+import { resolveMediaRoot, mediaRootStatus } from './media-root';
 /** One shared decision for targets, imports, scans and sidecars. */
 export function libraryRoot() {
   dataDir();
@@ -54,7 +54,7 @@ export function resolveLibraryFolder(
   seriesFolders: string[] = [],
   prefix = getSettings().kavitaLibraryPath,
 ): string | null {
-  if (!validPath(folder) || !validPath(prefix)) return null;
+  if (!validPath(folder) || !validPath(prefix) || !mediaRootStatus()) return null;
   const base = path.posix.normalize(folder).replace(/\/$/, '') || '/';
   const under = (parent: string, child: string) =>
     child === parent || child.startsWith(parent === '/' ? '/' : parent + '/');

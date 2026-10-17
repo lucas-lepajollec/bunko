@@ -46,7 +46,13 @@ const mediaRoot = async (cookie = member) => {
   const r = await status.GET(req('/api/kavita/status', 'GET', undefined, cookie));
   expect(r.status).toBe(200);
   const value = await r.json();
-  expect(Object.keys(value).sort()).toEqual(['mediaRoot', 'series', 'state', 'syncedAt']);
+  expect(Object.keys(value).sort()).toEqual([
+    'mediaRoot',
+    'mediaRootOptions',
+    'series',
+    'state',
+    'syncedAt',
+  ]);
   return value.mediaRoot;
 };
 beforeAll(async () => {
@@ -252,84 +258,49 @@ it('forbids members from renaming any account through /api/users or supplying an
   ).toBe(400);
   expect(account(1)).toEqual(previous);
 });
-it('re-resolves warm media paths after rename, then uses the new mount when it appears', async () => {
+it('keeps the chosen named folder, files and reachability through self/admin renames and restart', async () => {
   mkdirSync(path.join(root, 'Member', 'Manga'), { recursive: true });
+  expect(await mediaRoot()).toBe(path.join(root, 'Member'));
+  expect((await patch('me', 'Renamed')).status).toBe(200);
+  mkdirSync(path.join(root, 'Renamed', 'Manga'), { recursive: true });
+  mkdirSync(path.join(root, '2', 'Manga'), { recursive: true });
   expect(await mediaRoot()).toBe(path.join(root, 'Member'));
   expect(inTenant(2, () => mapKavitaPath('/library/Manga'))).toBe(
     path.join(root, 'Member', 'Manga'),
   );
-  expect((await patch('me', 'Renamed')).status).toBe(200);
-  expect(await mediaRoot()).toBe(path.join(root, 'Renamed'));
-  expect(inTenant(2, () => mapKavitaPath('/library/Manga'))).toBeNull();
-  await expect(
-    inTenant(2, () => safeLibraryDirectory(path.join(root, 'Member', 'Manga'))),
-  ).rejects.toMatchObject({ code: 'UNSAFE_PATH' });
-  mkdirSync(path.join(root, 'Renamed', 'Manga'), { recursive: true });
-  expect(inTenant(2, () => mapKavitaPath('/library/Manga'))).toBe(
-    path.join(root, 'Renamed', 'Manga'),
+  expect(await inTenant(2, () => safeLibraryDirectory(path.join(root, 'Member', 'Manga')))).toBe(
+    path.join(root, 'Member', 'Manga'),
   );
-  expect(existsSync(path.join(root, 'Member', 'Manga'))).toBe(true);
-});
-it('keeps numeric fallback and prefers the new username mount over it', async () => {
-  mkdirSync(path.join(root, 'Member'));
-  mkdirSync(path.join(root, '2'));
-  expect(await mediaRoot()).toBe(path.join(root, 'Member'));
-  expect((await patch('users', 'Renamed')).status).toBe(200);
-  expect(await mediaRoot()).toBe(path.join(root, '2'));
-  mkdirSync(path.join(root, 'Renamed'));
-  expect(await mediaRoot()).toBe(path.join(root, 'Renamed'));
-});
-it('preserves numeric-only missing roots and the first account legacy layout across renames', async () => {
-  mkdirSync(path.join(root, 'Manga'));
-  expect(await mediaRoot(admin)).toBe(root);
-  expect(await mediaRoot()).toBe(path.join(root, '2'));
-  expect((await patch('me', 'Renamed')).status).toBe(200);
-  expect(await mediaRoot()).toBe(path.join(root, '2'));
-  expect(
-    (await users.PATCH(req('/api/users', 'PATCH', { id: 1, username: 'NewAdmin' }))).status,
-  ).toBe(200);
-  expect(await mediaRoot(admin)).toBe(root);
-  expect(inTenant(2, () => mapKavitaPath('/library/Manga'))).toBeNull();
-});
-it('latches isolation before a cold rename of the last named mount, including after a failed rename', async () => {
-  expect(await mediaRoot(admin)).toBe(root); // Warm legacy cache before the member mount appears.
-  mkdirSync(path.join(root, 'Member', 'Manga'), { recursive: true });
-  expect((await patch('me', 'Admin')).status).toBe(409); // Resolver writes must not survive rollback in its cache.
-  expect((await patch('me', 'Renamed')).status).toBe(200);
-  expect(await mediaRoot(admin)).toBe(path.join(root, '1'));
-  expect(await mediaRoot()).toBe(path.join(root, 'Renamed'));
-  expect(inTenant(2, () => mapKavitaPath('/library/Manga'))).toBeNull();
-  // The expected new path and isolated layout are durable, independent of module caches.
+  expect((await patch('users', 'ThirdName')).status).toBe(200);
   vi.resetModules();
   const restarted = await import('@/lib/media-root');
-  expect(inTenant(1, restarted.resolveMediaRoot)).toBe(path.join(root, '1'));
-  expect(inTenant(2, restarted.resolveMediaRoot)).toBe(path.join(root, 'Renamed'));
+  expect(inTenant(2, restarted.resolveMediaRoot)).toBe(path.join(root, 'Member'));
   (await import('@/lib/accounts-store')).accountsDb().close();
 });
-it('does not restore the legacy root when the first account renames its own last named mount', async () => {
-  mkdirSync(path.join(root, 'Admin'));
+it('keeps a numeric choice when named mounts appear after rename', async () => {
+  mkdirSync(path.join(root, '2'));
+  expect(await mediaRoot()).toBe(path.join(root, '2'));
+  expect((await patch('users', 'Renamed')).status).toBe(200);
+  mkdirSync(path.join(root, 'Renamed'));
+  expect(await mediaRoot()).toBe(path.join(root, '2'));
+});
+it('keeps the legacy parent and an unconfigured member through renames', async () => {
+  mkdirSync(path.join(root, 'Manga'));
+  expect(await mediaRoot(admin)).toBe(root);
+  expect(await mediaRoot()).toBeNull();
+  expect((await patch('me', 'Renamed')).status).toBe(200);
   expect(
     (await users.PATCH(req('/api/users', 'PATCH', { id: 1, username: 'NewAdmin' }))).status,
   ).toBe(200);
-  expect(await mediaRoot(admin)).toBe(path.join(root, 'NewAdmin'));
-  expect(await mediaRoot()).toBe(path.join(root, '2'));
+  expect(await mediaRoot(admin)).toBe(root);
+  expect(await mediaRoot()).toBeNull();
+  expect(inTenant(2, () => mapKavitaPath('/library/Manga'))).toBeNull();
 });
-it('retains symlink and numeric namespace rejection after rename', async () => {
+it('new username folders and symlinks never change or invalidate an existing choice', async () => {
   mkdirSync(path.join(root, 'Member'));
+  expect(await mediaRoot()).toBe(path.join(root, 'Member'));
   symlinkSync(root, path.join(root, 'Unsafe'));
   expect((await patch('me', 'Unsafe')).status).toBe(200);
-  expect(await mediaRoot()).toBeNull();
-  accountsDb()
-    .prepare(
-      "INSERT INTO users(id,username,role,password_hash,session_epoch,created_at) VALUES(100,'Hundred','member','fixture','fixture','2026-01-01')",
-    )
-    .run();
-  try {
-    mkdirSync(path.join(root, '100'));
-    expect((await patch('me', '100')).status).toBe(200);
-    expect(await mediaRoot()).toBeNull();
-  } finally {
-    closeTenant(100);
-    accountsDb().prepare('DELETE FROM users WHERE id=100').run();
-  }
+  expect(await mediaRoot()).toBe(path.join(root, 'Member'));
+  expect(existsSync(path.join(root, 'Member'))).toBe(true);
 });

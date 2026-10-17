@@ -261,7 +261,7 @@ beforeEach(() => {
   );
   rmSync(path.join(directory, 'state', 'users', '1', 'cache'), { recursive: true, force: true });
   rmSync(root, { recursive: true, force: true });
-  mkdirSync(root, { recursive: true });
+  mkdirSync(tenantLibraryRoot, { recursive: true });
   sources = ['1', '2', '3', '4'].map((id) => ({ id, name: `Source ${id}`, lang: 'fr' }));
   searchHits = {};
   sourceChapters = { 10: [1, 19], 20: [1, 3] };
@@ -279,7 +279,13 @@ beforeEach(() => {
   peak = 0;
   blockedSearch = null;
   generation++;
-  updateSettings({ suwayomiUrl: base, kavitaUrl: base, kavitaApiKey: '', autoImportKavita: false });
+  updateSettings({
+    mediaRoot: tenantLibraryRoot,
+    suwayomiUrl: base,
+    kavitaUrl: base,
+    kavitaApiKey: '',
+    autoImportKavita: false,
+  });
   setSourcePreferences({ enabledSourceIds: [], languages: ['fr'] });
   vi.stubGlobal('fetch', async (url: string | URL | Request, init?: RequestInit) => {
     const value = String(url);

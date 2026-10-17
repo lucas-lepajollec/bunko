@@ -12,6 +12,7 @@ import {
 import path from 'node:path';
 import { accountsDir, tenantPath } from './tenant-context';
 import { env } from './env';
+import { migrateMediaRoots } from './media-root-store';
 
 let connection: Database.Database | undefined;
 const runtime = globalThis as typeof globalThis & { __bunkoAccountReset?: Set<string> };
@@ -34,6 +35,9 @@ export function accountsDb(): Database.Database {
     id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL COLLATE NOCASE UNIQUE,
     role TEXT NOT NULL CHECK(role IN ('admin','member')), password_hash TEXT NOT NULL,
     session_epoch TEXT NOT NULL, created_at TEXT NOT NULL, last_seen_at TEXT);
+    CREATE TABLE IF NOT EXISTS account_media_roots (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, mount TEXT NOT NULL,
+      path TEXT, PRIMARY KEY(user_id,mount));
     CREATE TABLE IF NOT EXISTS account_state (key TEXT PRIMARY KEY,value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS deleted_tenants (id INTEGER PRIMARY KEY);
     CREATE TABLE IF NOT EXISTS login_attempts (username TEXT PRIMARY KEY, start INTEGER NOT NULL, total INTEGER NOT NULL);`);
@@ -127,6 +131,7 @@ export function accountsDb(): Database.Database {
         'Bunko: first administrator password and sessions reset; account recovery setup is required.',
       );
     }
+    migrateMediaRoots(database);
     cleanupDeletedTenants(database);
     connection = database;
     return database;

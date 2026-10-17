@@ -88,10 +88,10 @@ export default function HomePage() {
               href={`/catalog?view=chapters&kind=${k}`}
               linkLabel={t('home.allReleases')}
             />
-            {feed.data && feed.data.latest[k].length === 0 ? (
+            {feed.data && (feed.data.latest?.[k]?.length ?? 0) === 0 ? (
               <p className="text-muted font-serif text-lg italic">{t('home.noReleasesYet')}</p>
             ) : (
-              <ReleaseRow items={feed.data?.latest[k]} label={t(`home.latestKind.${k}`)} />
+              <ReleaseRow items={feed.data?.latest?.[k]} label={t(`home.latestKind.${k}`)} />
             )}
           </section>
         ))}
