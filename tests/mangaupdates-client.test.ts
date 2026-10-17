@@ -27,6 +27,8 @@ vi.mock('node:timers/promises', () => ({
 const directory = mkdtempSync(path.join(tmpdir(), 'bunko-mu-client-'));
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_WORKER = 'false';
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { db } = await import('@/lib/db');
 const { mangaUpdates, BUNKO_USER_AGENT } = await import('@/lib/mangaupdates');
 const { fetchUpdatesReleases } = await import('@/lib/release-providers');

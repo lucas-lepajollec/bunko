@@ -5,6 +5,8 @@ import path from 'node:path';
 const dir = mkdtempSync(path.join(tmpdir(), 'bunko-home-resilience-'));
 process.env.BUNKO_DATA_DIR = dir;
 process.env.BUNKO_WORKER = 'false';
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { db } = await import('@/lib/db');
 const { homeFeed, composeHome } = await import('@/lib/home');
 const { discover } = await import('@/lib/catalog');

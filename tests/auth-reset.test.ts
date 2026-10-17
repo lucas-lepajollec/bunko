@@ -16,9 +16,24 @@ async function boot(reset: string | undefined) {
   // This is the entry point invoked by Node instrumentation on server startup.
   const { startWorker } = await import('@/lib/downloads');
   startWorker();
-  const { db } = await import('@/lib/db');
+  const { db: tenantDb } = await import('@/lib/db');
+  const { inTenant } = await import('@/lib/tenant-context');
+  const db = () => inTenant(1, tenantDb);
   connections.push(db());
-  return { db, auth: await import('@/lib/auth'), settings: await import('@/lib/settings') };
+  const { accountsDb } = await import('@/lib/accounts-store');
+  connections.push(accountsDb());
+  const settings = await import('@/lib/settings');
+  return {
+    db,
+    accountsDb,
+    auth: await import('@/lib/auth'),
+    settings: {
+      ...settings,
+      getSettings: () => inTenant(1, settings.getSettings),
+      updateSettings: (patch: Parameters<typeof settings.updateSettings>[0]) =>
+        inTenant(1, () => settings.updateSettings(patch)),
+    },
+  };
 }
 beforeEach(() => {
   resetRuntime.__bunkoAccountReset?.delete(directory);
@@ -27,7 +42,7 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.BUNKO_RESET_ACCOUNT;
   vi.restoreAllMocks();
-  for (const database of connections.splice(0)) database.close();
+  for (const database of connections.splice(0)) if (database.open) database.close();
 });
 afterAll(() => {
   resetRuntime.__bunkoAccountReset?.delete(directory);
@@ -36,7 +51,11 @@ afterAll(() => {
 
 it('resets account and sessions at startup once across module bundles, preserving app data and bearer access', async () => {
   const first = await boot(undefined);
-  first.db().exec("DELETE FROM users; DELETE FROM sqlite_sequence WHERE name='users';");
+  first
+    .accountsDb()
+    .exec(
+      "DELETE FROM users; DELETE FROM sqlite_sequence WHERE name='users'; DELETE FROM account_state WHERE key='token_user';",
+    );
   first.settings.updateSettings({ kavitaUrl: 'http://fixture.invalid' });
   const credentials = { username: 'Reader', password: 'synthetic-password' };
   const request = new Request('http://reader.test');
@@ -44,7 +63,7 @@ it('resets account and sessions at startup once across module bundles, preservin
   const token = first.settings.persistentSecret('access.token', 32).toString('hex');
   const { emptyMedia } = await import('@/lib/media');
   first
-    .db()
+    .accountsDb()
     .prepare(
       `INSERT INTO users(username,role,password_hash,session_epoch,created_at)
     SELECT 'Member','member',password_hash,session_epoch,created_at FROM users WHERE id=1`,
@@ -53,7 +72,7 @@ it('resets account and sessions at startup once across module bundles, preservin
   const memberCookie = (
     await first.auth.login(request, { username: 'Member', password: credentials.password })
   ).split(';')[0];
-  first.db().prepare('UPDATE users SET adult_content=1 WHERE id=1').run();
+  first.settings.updateSettings({ adultContent: true });
   first
     .db()
     .prepare('INSERT INTO tracked_media(id,title,type,created_at,media_json) VALUES(1,?,?,?,?)')
@@ -66,7 +85,7 @@ it('resets account and sessions at startup once across module bundles, preservin
   first
     .db()
     .prepare(
-      `INSERT INTO user_library(user_id,tracked_id,status,last_read,created_at) VALUES(1,1,'PAUSED',7,'2025-02-01T00:00:00Z')`,
+      "UPDATE tracked_media SET status='PAUSED',last_read=7,created_at='2025-02-01T00:00:00Z' WHERE id=1",
     )
     .run();
   const restarted = await boot('true');
@@ -93,18 +112,15 @@ it('resets account and sessions at startup once across module bundles, preservin
   expect(
     restarted.auth.authState(new Request(request, { headers: { Cookie: memberCookie } })),
   ).toMatchObject({ authenticated: true, userId: 2, role: 'member' });
+  expect(restarted.accountsDb().prepare('SELECT id,username FROM users WHERE id=1').get()).toEqual({
+    id: 1,
+    username: 'Reader',
+  });
   expect(
-    restarted.db().prepare('SELECT id,username,adult_content FROM users WHERE id=1').get(),
-  ).toEqual({ id: 1, username: 'Reader', adult_content: 1 });
-  expect(
-    restarted
-      .db()
-      .prepare('SELECT user_id,tracked_id,status,last_read,created_at FROM user_library')
-      .all(),
+    restarted.db().prepare('SELECT id,status,last_read,created_at FROM tracked_media').all(),
   ).toEqual([
     {
-      user_id: 1,
-      tracked_id: 1,
+      id: 1,
       status: 'PAUSED',
       last_read: 7,
       created_at: '2025-02-01T00:00:00Z',
@@ -130,7 +146,11 @@ it.each([undefined, 'false', 'TRUE', '1'])(
   'preserves the account on restart without the exact true flag: %s',
   async (flag) => {
     const first = await boot(undefined);
-    first.db().exec("DELETE FROM users; DELETE FROM sqlite_sequence WHERE name='users';");
+    first
+      .accountsDb()
+      .exec(
+        "DELETE FROM users; DELETE FROM sqlite_sequence WHERE name='users'; DELETE FROM account_state WHERE key='token_user';",
+      );
     const request = new Request('http://reader.test');
     const session = (
       await first.auth.setup(request, { username: 'Reader', password: 'synthetic-password' })

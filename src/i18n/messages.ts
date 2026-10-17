@@ -722,16 +722,16 @@ const en: Dictionary = {
   'account.kavitaRemoved': 'Kavita key removed',
   'account.kavitaSaved': 'Kavita key saved',
   'users.intro':
-    'Everyone shares the server, sources, downloads and Kavita files; each user has their own library, statuses, reading progress and content filter.',
+    'Each account is a separate Bunko: its own settings, Suwayomi and Kavita connections, library, downloads and content filter. To share a Suwayomi, simply enter the same address in both accounts.',
   'users.add': 'Add a user',
   'users.create': 'Create the account',
   'users.created': 'Account created',
   'users.delete': 'Delete',
   'users.deleteConfirm':
-    'Delete {name}? Their library and sessions are removed; shared works and files stay.',
+    'Delete {name}? Their whole instance (settings, library, downloads list) is removed; files already in their Kavita stay.',
   'users.deleted': 'User deleted',
-  'users.kavitaLinked': 'Kavita linked',
-  'users.kavitaNotLinked': 'Kavita not linked',
+  'users.kavitaLinked': 'Kavita configured',
+  'users.kavitaNotLinked': 'Kavita not configured',
   'users.lastSeen': 'seen {when}',
   'users.neverSeen': 'never signed in',
   'users.passwordReset': 'Password reset; their sessions were closed',
@@ -745,6 +745,7 @@ const en: Dictionary = {
   'users.you': '(you)',
   'error.LAST_ADMIN': 'There must remain at least one administrator.',
   'error.USERNAME_TAKEN': 'This username is already used.',
+  'kavita.mediaRoot': 'Your Kavita folders are expected inside Bunko under',
 };
 
 const fr: Dictionary = {
@@ -1444,16 +1445,16 @@ const fr: Dictionary = {
   'account.kavitaRemoved': 'Clé Kavita retirée',
   'account.kavitaSaved': 'Clé Kavita enregistrée',
   'users.intro':
-    'Tout le monde partage le serveur, les sources, les téléchargements et les fichiers Kavita ; chaque utilisateur a sa propre bibliothèque, ses statuts, sa progression et son filtre de contenu.',
+    'Chaque compte est un Bunko à part : ses propres réglages, connexions Suwayomi et Kavita, bibliothèque, téléchargements et filtre de contenu. Pour partager un Suwayomi, il suffit d’entrer la même adresse dans les deux comptes.',
   'users.add': 'Ajouter un utilisateur',
   'users.create': 'Créer le compte',
   'users.created': 'Compte créé',
   'users.delete': 'Supprimer',
   'users.deleteConfirm':
-    'Supprimer {name} ? Sa bibliothèque et ses sessions sont retirées ; les œuvres et fichiers partagés restent.',
+    'Supprimer {name} ? Toute son instance (réglages, bibliothèque, liste des téléchargements) est supprimée ; les fichiers déjà dans son Kavita restent.',
   'users.deleted': 'Utilisateur supprimé',
-  'users.kavitaLinked': 'Kavita lié',
-  'users.kavitaNotLinked': 'Kavita non lié',
+  'users.kavitaLinked': 'Kavita configuré',
+  'users.kavitaNotLinked': 'Kavita non configuré',
   'users.lastSeen': 'vu {when}',
   'users.neverSeen': 'jamais connecté',
   'users.passwordReset': 'Mot de passe réinitialisé ; ses sessions ont été fermées',
@@ -1467,6 +1468,7 @@ const fr: Dictionary = {
   'users.you': '(toi)',
   'error.LAST_ADMIN': 'Il doit rester au moins un administrateur.',
   'error.USERNAME_TAKEN': 'Ce nom d’utilisateur est déjà pris.',
+  'kavita.mediaRoot': 'Tes dossiers Kavita sont attendus dans Bunko sous',
 };
 
 const es: Dictionary = {
@@ -2161,16 +2163,16 @@ const es: Dictionary = {
   'account.kavitaRemoved': 'Clave de Kavita eliminada',
   'account.kavitaSaved': 'Clave de Kavita guardada',
   'users.intro':
-    'Todos comparten el servidor, las fuentes, las descargas y los archivos de Kavita; cada usuario tiene su propia biblioteca, estados, progreso y filtro de contenido.',
+    'Cada cuenta es un Bunko independiente: sus propios ajustes, conexiones de Suwayomi y Kavita, biblioteca, descargas y filtro de contenido. Para compartir un Suwayomi, basta con poner la misma dirección en ambas cuentas.',
   'users.add': 'Añadir un usuario',
   'users.create': 'Crear la cuenta',
   'users.created': 'Cuenta creada',
   'users.delete': 'Eliminar',
   'users.deleteConfirm':
-    '¿Eliminar a {name}? Se quitan su biblioteca y sesiones; las obras y archivos compartidos se quedan.',
+    '¿Eliminar a {name}? Se borra toda su instancia (ajustes, biblioteca, lista de descargas); los archivos ya en su Kavita se quedan.',
   'users.deleted': 'Usuario eliminado',
-  'users.kavitaLinked': 'Kavita vinculado',
-  'users.kavitaNotLinked': 'Kavita no vinculado',
+  'users.kavitaLinked': 'Kavita configurado',
+  'users.kavitaNotLinked': 'Kavita sin configurar',
   'users.lastSeen': 'visto {when}',
   'users.neverSeen': 'nunca ha entrado',
   'users.passwordReset': 'Contraseña restablecida; sus sesiones se cerraron',
@@ -2184,6 +2186,7 @@ const es: Dictionary = {
   'users.you': '(tú)',
   'error.LAST_ADMIN': 'Debe quedar al menos un administrador.',
   'error.USERNAME_TAKEN': 'Este nombre de usuario ya existe.',
+  'kavita.mediaRoot': 'Tus carpetas de Kavita se esperan en Bunko bajo',
 };
 
 const de: Dictionary = {
@@ -2882,16 +2885,16 @@ const de: Dictionary = {
   'account.kavitaRemoved': 'Kavita-Schlüssel entfernt',
   'account.kavitaSaved': 'Kavita-Schlüssel gespeichert',
   'users.intro':
-    'Alle teilen Server, Quellen, Downloads und Kavita-Dateien; jeder Benutzer hat eigene Bibliothek, Status, Lesefortschritt und Inhaltsfilter.',
+    'Jedes Konto ist ein eigenes Bunko: eigene Einstellungen, Suwayomi- und Kavita-Verbindungen, Bibliothek, Downloads und Inhaltsfilter. Um ein Suwayomi zu teilen, einfach in beiden Konten dieselbe Adresse eintragen.',
   'users.add': 'Benutzer hinzufügen',
   'users.create': 'Konto erstellen',
   'users.created': 'Konto erstellt',
   'users.delete': 'Löschen',
   'users.deleteConfirm':
-    '{name} löschen? Bibliothek und Sitzungen werden entfernt; geteilte Werke und Dateien bleiben.',
+    '{name} löschen? Die ganze Instanz (Einstellungen, Bibliothek, Downloadliste) wird entfernt; Dateien in seinem Kavita bleiben.',
   'users.deleted': 'Benutzer gelöscht',
-  'users.kavitaLinked': 'Kavita verknüpft',
-  'users.kavitaNotLinked': 'Kavita nicht verknüpft',
+  'users.kavitaLinked': 'Kavita eingerichtet',
+  'users.kavitaNotLinked': 'Kavita nicht eingerichtet',
   'users.lastSeen': 'zuletzt {when}',
   'users.neverSeen': 'nie angemeldet',
   'users.passwordReset': 'Passwort zurückgesetzt; Sitzungen beendet',
@@ -2905,6 +2908,7 @@ const de: Dictionary = {
   'users.you': '(du)',
   'error.LAST_ADMIN': 'Mindestens ein Administrator muss bleiben.',
   'error.USERNAME_TAKEN': 'Dieser Benutzername ist vergeben.',
+  'kavita.mediaRoot': 'Deine Kavita-Ordner werden in Bunko erwartet unter',
 };
 
 const it: Dictionary = {
@@ -3599,16 +3603,16 @@ const it: Dictionary = {
   'account.kavitaRemoved': 'Chiave Kavita rimossa',
   'account.kavitaSaved': 'Chiave Kavita salvata',
   'users.intro':
-    'Tutti condividono server, fonti, download e file Kavita; ogni utente ha la propria libreria, stati, progressi e filtro contenuti.',
+    'Ogni account è un Bunko separato: impostazioni, connessioni Suwayomi e Kavita, libreria, download e filtro contenuti propri. Per condividere un Suwayomi basta inserire lo stesso indirizzo in entrambi gli account.',
   'users.add': 'Aggiungi un utente',
   'users.create': 'Crea l’account',
   'users.created': 'Account creato',
   'users.delete': 'Elimina',
   'users.deleteConfirm':
-    'Eliminare {name}? Libreria e sessioni vengono rimosse; opere e file condivisi restano.',
+    'Eliminare {name}? Tutta la sua istanza (impostazioni, libreria, elenco download) viene rimossa; i file già nel suo Kavita restano.',
   'users.deleted': 'Utente eliminato',
-  'users.kavitaLinked': 'Kavita collegato',
-  'users.kavitaNotLinked': 'Kavita non collegato',
+  'users.kavitaLinked': 'Kavita configurato',
+  'users.kavitaNotLinked': 'Kavita non configurato',
   'users.lastSeen': 'visto {when}',
   'users.neverSeen': 'mai entrato',
   'users.passwordReset': 'Password reimpostata; le sessioni sono state chiuse',
@@ -3622,6 +3626,7 @@ const it: Dictionary = {
   'users.you': '(tu)',
   'error.LAST_ADMIN': 'Deve restare almeno un amministratore.',
   'error.USERNAME_TAKEN': 'Questo nome utente è già usato.',
+  'kavita.mediaRoot': 'Le tue cartelle Kavita sono attese in Bunko sotto',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

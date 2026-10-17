@@ -1,5 +1,3 @@
-import { currentUser, userContext } from './user-context';
-import { progressKey } from './users';
 import { open, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -156,7 +154,7 @@ export async function importChapter(
   zip.addFile('ComicInfo.xml', Buffer.from(xml));
   // Recheck the directory immediately before writing, including cached/existing folders.
   await safeLibraryDirectory(
-    path.join(libraryRoot, path.relative(await realpath(libraryRoot), folder)),
+    path.join(libraryRoot(), path.relative(await realpath(libraryRoot()), folder)),
   );
   const target = path.join(folder, chapterFilename(media, chapter));
   const tmp = `${target}.${randomUUID()}.partial`;
@@ -230,8 +228,7 @@ export function kavitaProgress(input: unknown): { read: number; lastReadAt: stri
 }
 export async function refreshTrackedProgress(tracked: TrackedMedia, signal?: AbortSignal) {
   if (manualKavitaLink(tracked.id) && tracked.kavitaSeriesId === null) return;
-  const user = currentUser();
-  const key = user ? progressKey(user.id) : getSettings().kavitaApiKey;
+  const key = getSettings().kavitaApiKey;
   const s = getSettings();
   if (!s.kavitaUrl || !key) return;
   const bounded = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(10_000)]);
@@ -282,35 +279,15 @@ export async function refreshTrackedProgress(tracked: TrackedMedia, signal?: Abo
     )
     .run(id, tracked.id, tracked.kavitaSeriesId, id);
   const progress = kavitaProgress(await get(`/api/Series/volumes?seriesId=${id}`));
-  if (user) {
-    if (progressKey(user.id) !== key) return;
-    db()
-      .prepare(
-        `UPDATE user_library SET last_read=?,last_read_at=?,progress_checked=1
-      WHERE user_id=? AND tracked_id=? AND EXISTS(SELECT 1 FROM tracked_media WHERE id=? AND kavita_series_id IS ?)`,
-      )
-      .run(progress.read, progress.lastReadAt, user.id, tracked.id, tracked.id, id);
-  } else
-    db()
-      .prepare(
-        'UPDATE tracked_media SET last_read=?,last_read_at=?,progress_checked=1 WHERE id=? AND kavita_series_id IS ?',
-      )
-      .run(progress.read, progress.lastReadAt, tracked.id, id);
+  if (getSettings().kavitaApiKey !== key || getSettings().kavitaUrl !== s.kavitaUrl) return;
+  db()
+    .prepare(
+      'UPDATE tracked_media SET last_read=?,last_read_at=?,progress_checked=1 WHERE id=? AND kavita_series_id IS ?',
+    )
+    .run(progress.read, progress.lastReadAt, tracked.id, id);
 }
 export async function refreshLibraryProgress(signal?: AbortSignal) {
-  if (!currentUser()) {
-    const users = db()
-      .prepare('SELECT id,username,role FROM users')
-      .all() as import('./user-context').Identity[];
-    if (users.length) {
-      for (const user of users) {
-        if (signal?.aborted) break;
-        if (progressKey(user.id)) await userContext.run(user, () => refreshLibraryProgress(signal));
-      }
-      return;
-    }
-  }
-  if (currentUser() && !progressKey(currentUser()!.id)) return;
+  if (!getSettings().kavitaApiKey) return;
   // Four requests in flight and a shared total deadline bound on-demand work for large libraries.
   const bounded = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(15_000)]);
   const queue = listTracked().filter((t) => t.type !== 'ANIME');

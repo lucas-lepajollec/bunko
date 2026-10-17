@@ -1,3 +1,4 @@
+import { tenantState } from './tenant-context';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   createReadStream,
@@ -27,7 +28,7 @@ export interface CachedImage {
   etag?: string;
 }
 const DAY = 86_400_000;
-const directory = path.join(/* turbopackIgnore: true */ dataDir, 'cache', 'images');
+const directory = () => path.join(/* turbopackIgnore: true */ dataDir(), 'cache', 'images');
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 const scope = globalThis as typeof globalThis & {
   __bunkoImageLoads?: Map<string, { promise: Promise<CachedImage>; invalidated: boolean }>;
@@ -41,9 +42,9 @@ export function suwayomiImageKey(relative: string) {
   const s = getSettings();
   return `suwayomi:${hash(JSON.stringify([s.suwayomiUrl, s.suwayomiUsername, s.suwayomiPassword]))}:${relative}`;
 }
-const filename = (key: string) => path.join(/* turbopackIgnore: true */ directory, key);
+const filename = (key: string) => path.join(/* turbopackIgnore: true */ directory(), key);
 function remove(key: string) {
-  diskHeaders.delete(key);
+  diskHeaders().delete(key);
   statement('DELETE FROM image_cache WHERE key=?').run(key);
   try {
     unlinkSync(filename(key));
@@ -54,10 +55,10 @@ function remove(key: string) {
 /** In-flight responses from before an upload must not repopulate the invalidated cache. */
 export function invalidateImage(key: string) {
   const digest = hash(key);
-  const pending = loads.get(`${dataDir}:${digest}`);
+  const pending = loads.get(`${dataDir()}:${digest}`);
   if (pending) {
     pending.invalidated = true;
-    loads.delete(`${dataDir}:${digest}`);
+    loads.delete(`${dataDir()}:${digest}`);
   }
   remove(digest);
 }
@@ -66,20 +67,20 @@ export function invalidateKavitaImage(seriesId: number) {
 }
 /** Includes orphaned files left by a crash between atomic publication and SQLite update. */
 export function pruneImages(maxBytes = 500 * 1024 * 1024) {
-  if (!existsSync(directory)) return;
+  if (!existsSync(directory())) return;
   const rows = statement('SELECT key,accessed_at FROM image_cache').all() as {
     key: string;
     accessed_at: number;
   }[];
   const access = new Map(rows.map((r) => [r.key, r.accessed_at]));
-  for (const file of readdirSync(directory)) {
+  for (const file of readdirSync(directory())) {
     if (
       /^\.[a-f0-9-]+\.partial$/.test(file) &&
-      Date.now() - statSync(path.join(directory, file)).mtimeMs > 3_600_000
+      Date.now() - statSync(path.join(directory(), file)).mtimeMs > 3_600_000
     )
-      unlinkSync(path.join(directory, file));
+      unlinkSync(path.join(directory(), file));
   }
-  const files = readdirSync(directory)
+  const files = readdirSync(directory())
     .filter((key) => /^[a-f0-9]{64}$/.test(key))
     .map((key) => ({ key, bytes: statSync(filename(key)).size, at: access.get(key) ?? 0 }));
   let total = files.reduce((sum, f) => sum + f.bytes, 0);
@@ -117,8 +118,8 @@ function read(key: string): (CachedImage & { at: number }) | null {
   }
 }
 function write(key: string, image: CachedImage) {
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const temporary = path.join(/* turbopackIgnore: true */ directory, `.${randomUUID()}.partial`);
+  mkdirSync(directory(), { recursive: true, mode: 0o700 });
+  const temporary = path.join(/* turbopackIgnore: true */ directory(), `.${randomUUID()}.partial`);
   const packed = Buffer.concat([
     Buffer.from(
       JSON.stringify({ mime: image.mime, at: Date.now(), etag: `"${hash(image.bytes)}"` }) + '\n',
@@ -134,7 +135,7 @@ function write(key: string, image: CachedImage) {
       closeSync(file);
     }
     renameSync(temporary, filename(key));
-    diskHeaders.delete(key);
+    diskHeaders().delete(key);
     statement(
       'INSERT OR REPLACE INTO image_cache(key,bytes,accessed_at,attempted_at) VALUES(?,?,?,?)',
     ).run(key, packed.length, Date.now(), Date.now());
@@ -152,7 +153,7 @@ export async function cachedImage(
   load: () => Promise<CachedImage>,
 ): Promise<CachedImage> {
   const digest = hash(key);
-  const pendingKey = `${dataDir}:${digest}`;
+  const pendingKey = `${dataDir()}:${digest}`;
   const hit = read(digest);
   const refresh = () => {
     let pending = loads.get(pendingKey);
@@ -214,6 +215,7 @@ export async function fetchImage(
 export function imageResponse(request: Request, image: CachedImage) {
   const etag = image.etag ?? `"${hash(image.bytes)}"`;
   const headers = {
+    Vary: 'Cookie, Authorization',
     'Content-Type': image.mime,
     ETag: etag,
     'Cache-Control': 'private, max-age=86400, stale-while-revalidate=604800',
@@ -239,7 +241,7 @@ type DiskHeader = {
   touched: number;
   attempted: number;
 };
-const diskHeaders = new Map<string, DiskHeader>();
+const diskHeaders = tenantState(() => new Map<string, DiskHeader>());
 /** Hot proxy hits open a file stream; payload hashing happens only on publication. */
 export async function cachedImageResponse(
   request: Request,
@@ -247,7 +249,7 @@ export async function cachedImageResponse(
   load: () => Promise<CachedImage>,
 ): Promise<Response> {
   const digest = hash(key);
-  let header = diskHeaders.get(digest);
+  let header = diskHeaders().get(digest);
   try {
     const info = statSync(filename(digest));
     if (!header || header.mtime !== info.mtimeMs || header.size !== info.size) {
@@ -281,8 +283,8 @@ export async function cachedImageResponse(
         touched: 0,
         attempted: row?.attempted_at ?? 0,
       };
-      if (diskHeaders.size >= 1000) diskHeaders.clear();
-      diskHeaders.set(digest, header);
+      if (diskHeaders().size >= 1000) diskHeaders().clear();
+      diskHeaders().set(digest, header);
     }
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') remove(digest);
@@ -306,6 +308,7 @@ export async function cachedImageResponse(
     });
   }
   const headers = {
+    Vary: 'Cookie, Authorization',
     'Content-Type': header.mime,
     ETag: header.etag,
     'Cache-Control': 'private, max-age=86400, stale-while-revalidate=604800',

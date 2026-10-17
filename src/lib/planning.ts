@@ -1,4 +1,4 @@
-import { currentUser } from './user-context';
+import { tenantId } from './tenant-context';
 import { z } from 'zod';
 import type { ChapterRelease, PlanningItem, PlanningWeek } from '@/types/shared';
 import { feedQuery, filterReleases, releaseStore, refreshReleases } from './releases';
@@ -129,7 +129,7 @@ export function planning(q: z.infer<typeof planningQuery>): PlanningWeek {
   void refreshReleases().catch(() => {});
   const items = releaseStore();
   const day = localDate(new Date());
-  const userId = currentUser()?.id ?? 0;
+  const userId = tenantId();
   let snapshot = snapshots.get(userId);
   if (snapshot?.items !== items || snapshot.day !== day)
     snapshots.set(userId, (snapshot = { items, day, values: new Map() }));

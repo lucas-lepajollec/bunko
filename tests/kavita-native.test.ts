@@ -8,11 +8,15 @@ const directory = mkdtempSync(path.join(tmpdir(), 'bunko-native-'));
 const root = path.join(directory, 'library');
 process.env.BUNKO_DATA_DIR = path.join(directory, 'state');
 process.env.BUNKO_LIBRARY_DIR = root;
+const tenantLibraryRoot = path.join(root, '1');
+mkdirSync(tenantLibraryRoot, { recursive: true });
 process.env.BUNKO_WORKER = 'false';
-mkdirSync(path.join(root, 'Manga', 'Existing Folder'), { recursive: true });
-mkdirSync(path.join(root, 'Novels'), { recursive: true });
+mkdirSync(path.join(tenantLibraryRoot, 'Manga', 'Existing Folder'), { recursive: true });
+mkdirSync(path.join(tenantLibraryRoot, 'Novels'), { recursive: true });
 const { db, track, listTracked, listBatches, recordImport, indexCatalog } =
   await import('@/lib/db');
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { emptyMedia } = await import('@/lib/media');
 const { updateSettings, persistentSecret } = await import('@/lib/settings');
 const { workerValue } = await import('@/lib/updates');
@@ -304,14 +308,17 @@ beforeEach(async () => {
   indexFailure = false;
   duplicate = false;
   coverHtml = false;
-  rmSync(path.join(directory, 'state', 'cache'), { recursive: true, force: true });
+  rmSync(path.join(directory, 'state', 'users', '1', 'cache'), { recursive: true, force: true });
   catalogMode = 'one';
   activeSources = 0;
   maxSources = 0;
   maxPages = 0;
   pageHits.clear();
   calls.length = 0;
-  rmSync(path.join(directory, 'state', 'page-cache'), { recursive: true, force: true });
+  rmSync(path.join(directory, 'state', 'users', '1', 'page-cache'), {
+    recursive: true,
+    force: true,
+  });
   setSourcePreferences({ enabledSourceIds: [], languages: ['fr'] });
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -394,8 +401,8 @@ describe('source errors and bounded search', () => {
 
 describe('Kavita index, paths and presence', () => {
   it('rejects unsafe paths and unreachable targets and validates target kinds', () => {
-    expect(mapKavitaPath('/books/Manga')).toBe(path.join(root, 'Manga'));
-    expect(mapKavitaPath('/books/Manga', '/books/')).toBe(path.join(root, 'Manga'));
+    expect(mapKavitaPath('/books/Manga')).toBe(path.join(tenantLibraryRoot, 'Manga'));
+    expect(mapKavitaPath('/books/Manga', '/books/')).toBe(path.join(tenantLibraryRoot, 'Manga'));
     for (const invalid of [
       '/other',
       '/books/../other',
@@ -423,25 +430,27 @@ describe('Kavita index, paths and presence', () => {
     ] as const)
       expect(libraryKind({ ...media, format })).toBe(kind);
     updateSettings({ libraryTargets: { NOVEL: { libraryId: 2, folder: '/books/Novels' } } });
-    expect(targetFor({ ...media, format: 'LIGHT_NOVEL' }).local).toBe(path.join(root, 'Novels'));
+    expect(targetFor({ ...media, format: 'LIGHT_NOVEL' }).local).toBe(
+      path.join(tenantLibraryRoot, 'Novels'),
+    );
   });
   it('lists folders using a real create/remove probe and refuses symlink escapes', async () => {
     const external = path.join(directory, 'outside');
     mkdirSync(external, { recursive: true });
-    const link = path.join(root, 'escape');
+    const link = path.join(tenantLibraryRoot, 'escape');
     if (!readdirSync(root).includes('escape')) symlinkSync(external, link);
     const libraries = await index.kavitaLibraries();
     expect(libraries[0]).toMatchObject({
       type: 'Manga',
       folders: [
-        { path: '/books/Manga', localPath: path.join(root, 'Manga'), writable: true },
+        { path: '/books/Manga', localPath: path.join(tenantLibraryRoot, 'Manga'), writable: true },
         { localPath: null, writable: false },
         { writable: false },
       ],
     });
-    expect(readdirSync(path.join(root, 'Manga')).some((n) => n.startsWith('.bunko-probe'))).toBe(
-      false,
-    );
+    expect(
+      readdirSync(path.join(tenantLibraryRoot, 'Manga')).some((n) => n.startsWith('.bunko-probe')),
+    ).toBe(false);
     expect(() =>
       updateSettings({ libraryTargets: { MANGA: { libraryId: 1, folder: '/books/escape' } } }),
     ).toThrow();
@@ -480,7 +489,9 @@ describe('Kavita index, paths and presence', () => {
   it('reuses an indexed folder inside the chosen target, counts owned union, and returns inKavita', async () => {
     await index.syncKavitaIndex();
     updateSettings({ libraryTargets: { MANGA: { libraryId: 1, folder: '/books/Manga' } } });
-    expect(await seriesDirectory(media)).toBe(path.join(root, 'Manga', 'Existing Folder'));
+    expect(await seriesDirectory(media)).toBe(
+      path.join(tenantLibraryRoot, 'Manga', 'Existing Folder'),
+    );
     const tracked = track({ media, sources: [selection] });
     recordImport(media, { id: 200, chapterNumber: 2, name: 'Chapter 2' });
     recordImport(media, { id: 201, chapterNumber: 4, name: 'Chapter 4' });
@@ -662,7 +673,7 @@ describe('native page-to-CBZ engine', () => {
     const batch = engine.createBatch({ media, chapterIds: [12] });
     await engine.processBatch(batch);
     expect(batch).toMatchObject({ state: 'completed', importedIds: [12] });
-    const folder = path.join(root, 'Manga', 'Existing Folder');
+    const folder = path.join(tenantLibraryRoot, 'Manga', 'Existing Folder');
     const zip = new AdmZip(readFileSync(path.join(folder, 'Fixture Story Ch. 0012.cbz')));
     expect(zip.getEntries().map((e) => e.entryName)).toEqual([
       '0001.jpg',

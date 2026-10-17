@@ -7,6 +7,8 @@ import type { ChapterRelease, UnifiedMedia } from '@/types/shared';
 const directory = mkdtempSync(path.join(tmpdir(), 'bunko-release-tests-'));
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_WORKER = 'false';
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { db, track, observeChapters } = await import('@/lib/db');
 const { emptyMedia, fromMangaUpdates } = await import('@/lib/media');
 const { persistentSecret } = await import('@/lib/settings');

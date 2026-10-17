@@ -2,7 +2,7 @@
 import { Select } from '@/components/select';
 import { clearPersistentCache } from '@/lib/client/cache';
 import Link from 'next/link';
-import { InfoBubble, Notice, toast } from '@/components/notify';
+import { Notice, toast } from '@/components/notify';
 import { useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
 import { useSWRConfig } from 'swr';
 import type {
@@ -46,8 +46,8 @@ const SECTIONS = [
   'sources',
   'modules',
 ] as const;
-/** Members only manage their own account; everything else is server administration. */
-const MEMBER_SECTIONS: readonly SectionId[] = ['account'];
+/** Every user configures their own instance; only admins also manage accounts. */
+const MEMBER_SECTIONS: readonly SectionId[] = SECTIONS.filter((s) => s !== 'users');
 type Settings = PublicSettings & { updateIntervalMinutes?: number };
 
 type SectionId = (typeof SECTIONS)[number];
@@ -612,6 +612,14 @@ function KavitaTargets({
         </Notice>
       )}
       <p className="text-mid leading-relaxed">{t('kavita.targetsHint2')}</p>
+      {index.data?.mediaRoot && (
+        <p className="text-muted text-sm">
+          {t('kavita.mediaRoot')}{' '}
+          <code className="text-fg rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[13px]">
+            {index.data.mediaRoot}
+          </code>
+        </p>
+      )}
       {libraries.error && <ErrorNote error={libraries.error} />}
       {libraries.data && !usable && (
         <p className="text-warn leading-relaxed">{t('kavita.noUsableFolder2')}</p>
@@ -669,7 +677,6 @@ function Account() {
   const { mutate } = useSWRConfig();
   const auth = useApi<AuthState>('/api/auth');
   const me = useApi<MyAccount>('/api/me');
-  const [kavitaKey, setKavitaKey] = useState('');
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -744,49 +751,6 @@ function Account() {
           className="accent-fg size-[18px]"
         />
       </Row>
-      <form
-        onSubmit={async (e) => {
-          e.preventDefault();
-          if (await patchMe({ kavitaApiKey: kavitaKey.trim() }, t('account.kavitaSaved')))
-            setKavitaKey('');
-        }}
-        className="flex flex-col gap-3 rounded-[18px] bg-white/[0.045] p-4 md:p-[22px]"
-      >
-        <span className="flex items-center gap-2 font-semibold">
-          {t('account.kavitaKey')}
-          <InfoBubble label={t('account.kavitaKey')}>{t('account.kavitaKeyInfo')}</InfoBubble>
-        </span>
-        <p className="text-mid">
-          {me.data?.kavitaLinked ? t('account.kavitaLinked') : t('account.kavitaNotLinked')}
-        </p>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            type="password"
-            autoComplete="off"
-            value={kavitaKey}
-            onChange={(e) => setKavitaKey(e.target.value)}
-            placeholder={t('account.kavitaKeyPlaceholder')}
-            aria-label={t('account.kavitaKey')}
-            className={field}
-          />
-          <button
-            type="submit"
-            disabled={!kavitaKey.trim()}
-            className="bg-fg text-bg h-11 shrink-0 rounded-full px-5 font-semibold disabled:opacity-50"
-          >
-            {t('common.save')}
-          </button>
-          {me.data?.kavitaLinked && (
-            <button
-              type="button"
-              onClick={() => patchMe({ kavitaApiKey: null }, t('account.kavitaRemoved'))}
-              className={cx(smallButton, 'h-11 shrink-0')}
-            >
-              {t('account.kavitaRemove')}
-            </button>
-          )}
-        </div>
-      </form>
       <form
         onSubmit={change}
         className="flex flex-col gap-3.5 rounded-[18px] bg-white/[0.045] p-4 md:p-[22px]"
@@ -887,7 +851,11 @@ function Users() {
                 value={u.role}
                 onChange={(role) =>
                   act(
-                    () => send('/api/users', 'PATCH', { id: u.id, role: role as UserRole } satisfies UserPatch),
+                    () =>
+                      send('/api/users', 'PATCH', {
+                        id: u.id,
+                        role: role as UserRole,
+                      } satisfies UserPatch),
                     t('users.updated'),
                   )
                 }

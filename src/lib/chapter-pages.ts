@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+import { tenantSignal } from './tenant-lifecycle';
 import { dataDir } from './db';
 import { fetchChapterPages, suwayomiHeaders } from './suwayomi';
 import { getSettings } from './settings';
@@ -71,9 +72,15 @@ export async function chapterPages(
   signal?: AbortSignal,
   progress?: (done: number, total: number, tries: number) => void,
 ) {
+  signal = AbortSignal.any([tenantSignal(), ...(signal ? [signal] : [])]);
+  signal.throwIfAborted();
   const urls = await fetchChapterPages(id, signal);
-  const folder = path.join(dataDir, 'page-cache', String(id));
+  const folder = path.join(dataDir(), 'page-cache', String(id));
   await mkdir(folder, { recursive: true, mode: 0o700 });
+  if (signal.aborted) {
+    await rm(folder, { recursive: true, force: true });
+    signal.throwIfAborted();
+  }
   const pages: { extension: string; bytes: Buffer }[] = new Array(urls.length);
   let done = 0;
   let totalBytes = 0;
@@ -118,9 +125,12 @@ export async function chapterPages(
             await delay(250 * 2 ** attempt, undefined, { signal });
           }
         }
+        signal.throwIfAborted();
+        dataDir();
         const tmp = `${file}.${randomUUID()}.partial`;
         try {
           await writeFile(tmp, page!.bytes, { mode: 0o600 });
+          signal.throwIfAborted();
           await rename(tmp, file);
         } finally {
           await rm(tmp, { force: true });
@@ -145,5 +155,5 @@ export async function chapterPages(
   return pages;
 }
 export async function discardChapterCache(id: number) {
-  await rm(path.join(dataDir, 'page-cache', String(id)), { recursive: true, force: true });
+  await rm(path.join(dataDir(), 'page-cache', String(id)), { recursive: true, force: true });
 }

@@ -9,7 +9,7 @@ process.env.BUNKO_DATA_DIR = path.join(directory, 'data');
 process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
 process.env.BUNKO_WORKER = 'false';
 mkdirSync(process.env.BUNKO_DATA_DIR);
-mkdirSync(path.join(directory, 'library', 'Manga'), { recursive: true });
+mkdirSync(path.join(directory, 'library', '1', 'Manga'), { recursive: true });
 const old = new Database(path.join(process.env.BUNKO_DATA_DIR, 'kaviseerr.db'));
 old.exec(`CREATE TABLE tracked_media (
   id INTEGER PRIMARY KEY, anilist_id INTEGER, mangadex_id TEXT, title TEXT NOT NULL,
@@ -32,6 +32,8 @@ old
 old.close();
 const { db, migrateV2, track, listTracked, recordImport, listBatches, observeChapters } =
   await import('@/lib/db');
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { emptyMedia } = await import('@/lib/media');
 const { updateSettings, publicSettings, persistentSecret } = await import('@/lib/settings');
 const { getSourcePreferences, setSourcePreferences, recordSourceHealth, sourceHealth } =
@@ -283,7 +285,7 @@ afterAll(async () => {
 });
 // First assertion deliberately runs before destructive fixture resets, on an actual v1 database.
 it('migrates an existing v1 database transactionally and idempotently without losing tracked data', () => {
-  expect(db().pragma('user_version', { simple: true })).toBe(9);
+  expect(db().pragma('user_version', { simple: true })).toBe(10);
   expect(listTracked()[0]).toMatchObject({
     id: 1,
     title: 'Legacy',

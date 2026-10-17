@@ -9,6 +9,8 @@ const directory = mkdtempSync(path.join(tmpdir(), 'bunko-persistent-cache-'));
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
 process.env.BUNKO_WORKER = 'false';
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { db, track, listTracked } = await import('@/lib/db');
 const connections = [db()];
 const { updateSettings, persistentSecret } = await import('@/lib/settings');
@@ -77,7 +79,7 @@ beforeEach(() => {
   db().exec(
     'DELETE FROM tracked_media;DELETE FROM kavita_series;DELETE FROM metadata_cache;DELETE FROM image_cache;DELETE FROM worker_state;DELETE FROM settings;',
   );
-  rmSync(path.join(directory, 'cache'), { recursive: true, force: true });
+  rmSync(path.join(directory, 'users', '1', 'cache'), { recursive: true, force: true });
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-16T10:00:00Z'));
   imageBytes = 'kavita-original';
@@ -208,10 +210,12 @@ describe.each(proxies)('%s persistent images', (_label, get, url, bytes) => {
       ).bytes.toString(),
     ).toBe(bytes);
     expect(calls).toHaveLength(1);
-    const files = readdirSync(path.join(directory, 'cache', 'images'));
+    const files = readdirSync(path.join(directory, 'users', '1', 'cache', 'images'));
     expect(files).toHaveLength(1);
     expect(files[0]).toMatch(/^[a-f0-9]{64}$/);
-    expect(statSync(path.join(directory, 'cache', 'images', files[0])).mode & 0o777).toBe(0o600);
+    expect(
+      statSync(path.join(directory, 'users', '1', 'cache', 'images', files[0])).mode & 0o777,
+    ).toBe(0o600);
   });
   it('returns stale bytes immediately, coalesces refresh, and retries failed upstream at most daily', async () => {
     await get(request(url));
@@ -264,8 +268,8 @@ it('evicts the least recently accessed complete image and leaves no temporary fi
   await imageCache.cachedImage('a', load);
   vi.setSystemTime(Date.now() + 1);
   await imageCache.cachedImage('c', load);
-  const files = readdirSync(path.join(directory, 'cache', 'images'));
-  const size = readFileSync(path.join(directory, 'cache', 'images', files[0])).length;
+  const files = readdirSync(path.join(directory, 'users', '1', 'cache', 'images'));
+  const size = readFileSync(path.join(directory, 'users', '1', 'cache', 'images', files[0])).length;
   imageCache.pruneImages(size * 2);
   expect(db().prepare('SELECT * FROM image_cache').all()).toHaveLength(2);
   await imageCache.cachedImage('a', load);
@@ -274,7 +278,9 @@ it('evicts the least recently accessed complete image and leaves no temporary fi
   await imageCache.cachedImage('b', load);
   expect(load).toHaveBeenCalledTimes(4);
   expect(
-    readdirSync(path.join(directory, 'cache', 'images')).every((f) => /^[a-f0-9]{64}$/.test(f)),
+    readdirSync(path.join(directory, 'users', '1', 'cache', 'images')).every((f) =>
+      /^[a-f0-9]{64}$/.test(f),
+    ),
   ).toBe(true);
 });
 it('invalidates a Kavita image after upload, uploads equal bytes once, and blocks stale in-flight repopulation', async () => {
@@ -588,15 +594,19 @@ it('serves stored bytes with immutable headers, ETag/304, authenticated access a
   expect(second).not.toBe(firstUrl);
   expect(await (await GET(request(second))).text()).toBe(sourceBytes);
   expect((await GET(request(firstUrl))).status).toBe(404);
-  expect(readdirSync(path.join(directory, 'covers'))).not.toContain(file.filename);
+  expect(readdirSync(path.join(directory, 'users', '1', 'covers'))).not.toContain(file.filename);
   expect(
-    readdirSync(path.join(directory, 'covers')).filter((f) => f.startsWith(`${t.id}-`)),
+    readdirSync(path.join(directory, 'users', '1', 'covers')).filter((f) =>
+      f.startsWith(`${t.id}-`),
+    ),
   ).toHaveLength(1);
   const { untrack } = await import('@/lib/db');
   untrack(t.id);
   expect((await GET(request(second))).status).toBe(404);
   expect(
-    readdirSync(path.join(directory, 'covers')).filter((f) => f.startsWith(`${t.id}-`)),
+    readdirSync(path.join(directory, 'users', '1', 'covers')).filter((f) =>
+      f.startsWith(`${t.id}-`),
+    ),
   ).toHaveLength(0);
 });
 it('backfills existing covers serially, stores before Kavita upload and retains null when every candidate fails', async () => {
@@ -633,7 +643,7 @@ it('invalidates snapshots across connections and never caches rolled-back librar
   const { indexedSeriesById } = await import('@/lib/kavita-index');
   const t = track({ media: media() });
   listTracked();
-  const other = new Database(path.join(directory, 'bunko.db'));
+  const other = new Database(path.join(directory, 'users', '1', 'bunko.db'));
   try {
     other.prepare("UPDATE tracked_media SET status='PAUSED' WHERE id=?").run(t.id);
     expect(getTracked(t.id)?.status).toBe('PAUSED');

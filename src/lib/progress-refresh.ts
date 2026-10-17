@@ -1,4 +1,4 @@
-import { currentUser } from './user-context';
+import { tenantId } from './tenant-context';
 import { dataDir, db } from './db';
 import { refreshLibraryProgress } from './kavita';
 const scope = globalThis as typeof globalThis & {
@@ -7,8 +7,8 @@ const scope = globalThis as typeof globalThis & {
 const runs = (scope.__bunkoProgressRefreshes ??= new Map());
 /** All route bundles share the run; SQLite also shares the two-minute attempt budget. */
 export async function refreshProgressOnDemand() {
-  const userId = currentUser()?.id ?? 0;
-  const scopeKey = `${dataDir}:${userId}`;
+  const userId = tenantId();
+  const scopeKey = `${dataDir()}:${userId}`;
   const attemptKey = `progress_refresh_attempt:${userId}`;
   const running = runs.get(scopeKey);
   if (running) return running;

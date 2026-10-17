@@ -5,6 +5,8 @@ import path from 'node:path';
 const dir = mkdtempSync(path.join(tmpdir(), 'bunko-feed-perf-'));
 process.env.BUNKO_DATA_DIR = dir;
 process.env.BUNKO_WORKER = 'false';
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { db } = await import('@/lib/db');
 const { emptyMedia } = await import('@/lib/media');
 const { saveMetadata } = await import('@/lib/metadata-cache');

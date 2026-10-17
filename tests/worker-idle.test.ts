@@ -20,6 +20,8 @@ vi.mock('@/lib/library-paths', async (original) => ({
   ...(await original<object>()),
   targetFor: () => ({}),
 }));
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { db } = await import('@/lib/db');
 const { setWorkerValue } = await import('@/lib/updates');
 const { startWorker, createBatch, requestUpdateCheck } = await import('@/lib/downloads');
@@ -40,6 +42,8 @@ it('sleeps 30 seconds when idle, wakes immediately on enqueue/request/identity e
   vi.setSystemTime(new Date('2026-10-16T10:00:00Z'));
   process.env.BUNKO_WORKER = 'true';
   expect(workerIdleMs()).toBe(30_000);
+  const { updateSettings } = await import('@/lib/settings');
+  updateSettings({ suwayomiUrl: 'http://fixture.test' });
   setWorkerValue('last_check_at', new Date().toISOString());
   startWorker();
   await vi.advanceTimersByTimeAsync(60_000);

@@ -8,11 +8,13 @@ const directory = mkdtempSync(path.join(tmpdir(), 'bunko-test-'));
 process.env.BUNKO_DATA_DIR = path.join(directory, 'data');
 process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
 process.env.BUNKO_WORKER = 'false';
-mkdirSync(path.join(directory, 'library', 'Manga'), { recursive: true });
+mkdirSync(path.join(directory, 'library', '1', 'Manga'), { recursive: true });
 const { db, indexCatalog, searchCatalog, track, listTracked, listBatches, saveBatch } =
   await import('@/lib/db');
 const { updateSettings, getSettings, publicSettings, persistentSecret } =
   await import('@/lib/settings');
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { authenticate, setup, checkOrigin } = await import('@/lib/auth');
 const { search, deduplicate, emptyMedia } = await import('@/lib/search-engine');
 const {
@@ -223,6 +225,8 @@ describe('storage and authentication', () => {
     expect(() => authenticate(new Request(base))).toThrow('Authentication');
     expect(() => authenticate(request('/api/settings'))).not.toThrow();
     const credentials = { username: 'Fixture', password: 'test-password-only' };
+    const { accountsDb } = await import('@/lib/accounts-store');
+    accountsDb().prepare("UPDATE users SET password_hash='' WHERE id=1").run();
     const cookie = (await setup(new Request(base), credentials)).split(';')[0];
     expect(() => authenticate(new Request(base, { headers: { Cookie: cookie } }))).not.toThrow();
     expect(() =>
@@ -417,7 +421,7 @@ describe('durable download pipeline', () => {
     await processBatch(batch);
     expect(batch.state).toBe('completed');
     expect(batch.importedIds).toEqual([10]);
-    const folder = path.join(directory, 'library', 'Manga', seriesName(media));
+    const folder = path.join(directory, 'library', '1', 'Manga', seriesName(media));
     const archive = readdirSync(folder).find((n) => n.endsWith('.cbz'))!;
     expect(
       new AdmZip(readFileSync(path.join(folder, archive))).readAsText('ComicInfo.xml'),

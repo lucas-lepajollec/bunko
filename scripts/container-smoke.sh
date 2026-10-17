@@ -54,10 +54,13 @@ member_cookie="$(curl -fsS -D - -o /dev/null -X POST "$base/api/auth" -H 'Conten
 check 200 "member own account" -H "Cookie: $member_cookie" "$base/api/me"
 check 200 "member preferences" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"adultContent":true}' "$base/api/me"
 check 403 "member forbidden users list" -H "Cookie: $member_cookie" "$base/api/users"
-check 403 "member forbidden server settings" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{}' "$base/api/settings"
-check 403 "member forbidden extensions" -X POST -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"action":"refresh"}' "$base/api/extensions/action"
-curl -fsS -H "Cookie: $member_cookie" "$base/api/settings" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b);if(JSON.stringify(v)!==JSON.stringify({adultContent:true}))process.exit(1)})'
-echo "ok   member settings contain only their content filter preference"
+check 200 "member own instance settings" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{}' "$base/api/settings"
+check 400 "member extension input validated" -X POST -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{}' "$base/api/extensions/action"
+check 200 "admin private Suwayomi settings" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"suwayomiUrl":"http://admin-suwayomi.invalid:4567"}' "$base/api/settings"
+check 200 "member private Suwayomi settings" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"suwayomiUrl":"http://member-suwayomi.invalid:4567"}' "$base/api/settings"
+curl -fsS -H "Cookie: $member_cookie" "$base/api/settings" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b);if(v.suwayomiUrl!=="http://member-suwayomi.invalid:4567"||v.adultContent!==true||"suwayomiPassword" in v)process.exit(1)})'
+curl -fsS -H "Authorization: Bearer $token" "$base/api/settings" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).suwayomiUrl!=="http://admin-suwayomi.invalid:4567")process.exit(1)})'
+echo "ok   two users retain separate upstream settings"
 # Synthetic followed work only, in this container's disposable tmpfs.
 fixture='{"media":{"id":"suwayomi:7","adult":true,"title":"Smoke work","type":"MANGA","altTitles":[],"anilistId":123,"mangadexId":null,"mangaUpdatesId":"987","coverUrl":null,"bannerUrl":null,"synopsis":null,"genres":[],"authors":[],"score":null,"status":null,"chapters":null,"episodes":null,"webUrl":null,"providers":["local"],"sources":[],"trackedId":null,"kavitaSeriesId":null}}'
 check 201 "content filter fixture tracked" -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$fixture" "$base/api/tracked"
@@ -72,8 +75,17 @@ check 200 "content filter override reset via AniList alias" -X PATCH -H "Authori
 curl -fsS -H "Authorization: Bearer $token" "$base/api/media?id=suwayomi:7" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b);if(v.adult!==true||v.adultOverride!==null)process.exit(1)})'
 echo "ok   hidden detail stays accessible and reset restores the automatic flag"
 curl -fsS -H "Cookie: $member_cookie" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).length!==0)process.exit(1)})'
-check 201 "member follows existing shared work" -X POST -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d "$fixture" "$base/api/tracked"
+check 201 "member follows same identity in own instance" -X POST -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d "$fixture" "$base/api/tracked"
 curl -fsS -H "Cookie: $member_cookie" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).length!==1)process.exit(1)})'
 curl -fsS -H "Authorization: Bearer $token" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).length!==0)process.exit(1)})'
-echo "ok   overlapping libraries retain separate content filter preferences"
+check 200 "member edits own work" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"id":1,"status":"PAUSED"}' "$base/api/tracked"
+curl -fsS -H "Cookie: $member_cookie" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b);if(v.length!==1||v[0].status!=="PAUSED")process.exit(1)})'
+check 200 "member unfollows own work" -X DELETE -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"id":1}' "$base/api/tracked"
+check 200 "admin enables own content filter preference" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"adultContent":true}' "$base/api/me"
+curl -fsS -H "Authorization: Bearer $token" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).length!==1)process.exit(1)})'
+curl -fsS -H "Cookie: $member_cookie" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).length!==0)process.exit(1)})'
+docker exec "$name" test -f /data/accounts.db
+docker exec "$name" test -f /data/users/1/bunko.db
+docker exec "$name" test -f /data/users/2/bunko.db
+echo "ok   private library mutations and tenant volume layout"
 echo "container smoke passed"

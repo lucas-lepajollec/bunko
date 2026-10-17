@@ -50,8 +50,9 @@ export function heroArtwork(items: ChapterRelease[]): ChapterRelease[] {
     .filter((m) => !m.bannerUrl)
     .slice(0, 12);
   if (!candidates.length) return items;
-  if (!active.has(dataDir)) {
-    active.add(dataDir);
+  const tenantKey = dataDir();
+  if (!active.has(tenantKey)) {
+    active.add(tenantKey);
     const queue = [...candidates];
     void Promise.all(
       Array.from({ length: 3 }, async () => {
@@ -60,7 +61,7 @@ export function heroArtwork(items: ChapterRelease[]): ChapterRelease[] {
           await cached(key(m), 24 * 3600000, () => resolveBanner(m)).catch(() => {});
         }
       }),
-    ).finally(() => active.delete(dataDir));
+    ).finally(() => active.delete(tenantKey));
   }
   const artwork = new Map<string, UnifiedMedia | null>();
   for (const m of candidates)

@@ -1,4 +1,5 @@
-import { currentUser } from './user-context';
+import { tenantState } from './tenant-context';
+import { tenantId } from './tenant-context';
 import { mediaVisibility, rememberAdultIdentities, automaticMedia, adultResolver } from './adult';
 import { z } from 'zod';
 import type { ChapterRelease, DiscoverKind, UnifiedMedia, ReleasesPage } from '@/types/shared';
@@ -189,7 +190,8 @@ const scope = globalThis as typeof globalThis & {
 };
 export function refreshReleases(): Promise<void> {
   const pending = (scope.__bunkoReleaseRefresh ??= new Map());
-  const old = pending.get(dataDir);
+  const tenantKey = dataDir();
+  const old = pending.get(tenantKey);
   if (old) return old;
   const last = statement("SELECT value FROM worker_state WHERE key='release_refresh'").get() as
     { value: string } | undefined;
@@ -256,16 +258,19 @@ export function refreshReleases(): Promise<void> {
       "INSERT INTO worker_state(key,value) VALUES('release_refresh_result',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
     ).run(JSON.stringify({ at: Date.now(), failed: failures.length > 0 }));
     if (failures.length) console.warn(`[releases] refresh incomplete: ${failures.join('; ')}`);
-  })().finally(() => pending.delete(dataDir));
-  pending.set(dataDir, job);
+  })().finally(() => pending.delete(tenantKey));
+  pending.set(tenantKey, job);
   return job;
 }
-let rawSnapshot: { version: number; items: ChapterRelease[] } | undefined;
+const rawSnapshotCache = tenantState(() => ({
+  value: undefined as { version: number; items: ChapterRelease[] } | undefined,
+}));
 const snapshots = new Map<number, { key: string; at: number; items: ChapterRelease[] }>();
 export function releaseStore(now = new Date()): ChapterRelease[] {
-  const userId = currentUser()?.id ?? 0;
+  const rawSnapshot = rawSnapshotCache().value;
+  const userId = tenantId();
   const snapshot = snapshots.get(userId);
-  const key = `${writeVersion('releases')}:${writeVersion()}:${writeVersion('settings')}:${userId ? writeVersion(`user:${userId}`) : 0}`;
+  const key = `${writeVersion('releases')}:${writeVersion()}:${writeVersion('settings')}:${userId}`;
   if (snapshot?.key === key && now.getTime() - snapshot.at < 60_000 && now.getTime() >= snapshot.at)
     return snapshot.items;
   const tracked = listTracked();
@@ -283,7 +288,7 @@ export function releaseStore(now = new Date()): ChapterRelease[] {
             ).all() as { payload: string }[]
           ).map((r) => JSON.parse(r.payload) as ChapterRelease),
         };
-  if (!db().inTransaction) rawSnapshot = raw;
+  if (!db().inTransaction) rawSnapshotCache().value = raw;
   const releases = raw.items.filter(
     (r) => Date.parse(r.releasedAt) >= now.getTime() - 42 * DAY && r.provider !== 'source',
   );

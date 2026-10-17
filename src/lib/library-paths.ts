@@ -1,16 +1,18 @@
 import path from 'node:path';
-import { realpathSync, statSync, accessSync, constants } from 'node:fs';
-import { db } from './db';
+import { realpathSync, lstatSync, statSync, accessSync, constants } from 'node:fs';
+import { db, dataDir } from './db';
 import { mkdir, realpath, open, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { LibraryKind, UnifiedMedia } from '@/types/shared';
 import { getSettings } from './settings';
 import { AppError } from './errors';
 import { suggestedLibraryKind } from './library-kinds';
-import { env } from '@/lib/env';
-export const libraryRoot = path.resolve(
-  /* turbopackIgnore: true */ env('LIBRARY_DIR') ?? '/library',
-);
+import { resolveMediaRoot } from './media-root';
+/** One shared decision for targets, imports, scans and sidecars. */
+export function libraryRoot() {
+  dataDir();
+  return resolveMediaRoot();
+}
 export function inside(root: string, folder: string) {
   const relative = path.relative(root, folder);
   return (
@@ -29,7 +31,9 @@ function validPath(folder: string) {
 function reachable(folder: string) {
   try {
     return (
-      statSync(folder).isDirectory() && inside(realpathSync(libraryRoot), realpathSync(folder))
+      !lstatSync(libraryRoot()).isSymbolicLink() &&
+      statSync(folder).isDirectory() &&
+      inside(realpathSync(libraryRoot()), realpathSync(folder))
     );
   } catch {
     return false;
@@ -61,14 +65,14 @@ export function resolveLibraryFolder(
     relatives.some((f) => reachable(path.join(candidate, f)));
   const manual = path.posix.normalize(prefix).replace(/\/$/, '') || '/';
   if (manual !== '/library' && under(manual, base)) {
-    const local = path.resolve(libraryRoot, path.posix.relative(manual, base));
+    const local = path.resolve(libraryRoot(), path.posix.relative(manual, base));
     if (reachable(local) && (!relatives.length || confirmed(local))) return local;
   }
   const parts = base.split('/').filter(Boolean);
   const candidates = [
-    ...new Set(parts.map((_, i) => path.join(libraryRoot, ...parts.slice(i)))),
+    ...new Set(parts.map((_, i) => path.join(libraryRoot(), ...parts.slice(i)))),
   ].filter(reachable);
-  if (relatives.length && confirmed(libraryRoot)) candidates.push(libraryRoot);
+  if (relatives.length && confirmed(libraryRoot())) candidates.push(libraryRoot());
   const proven = [...new Set(candidates.filter(confirmed))];
   if (proven.length) return proven.length === 1 ? proven[0] : null;
   return candidates.length === 1 ? candidates[0] : null;
@@ -106,12 +110,15 @@ export function kavitaPathForLocal(local: string, target: { folder: string; loca
 }
 /** Check every ancestor before creating anything, then check realpath again. */
 export async function safeLibraryDirectory(folder: string, create = false) {
-  if (!inside(libraryRoot, folder))
+  const selected = libraryRoot();
+  if (!inside(selected, folder))
     throw new AppError('UNSAFE_PATH', 'Folder escapes mounted library');
-  if (create) await mkdir(libraryRoot, { recursive: true });
-  const root = await realpath(/* turbopackIgnore: true */ libraryRoot);
+  if (create) await mkdir(selected, { recursive: true });
+  if (lstatSync(selected).isSymbolicLink())
+    throw new AppError('UNSAFE_PATH', 'Instance library root must not be a symlink');
+  const root = await realpath(/* turbopackIgnore: true */ selected);
   let current = root;
-  for (const part of path.relative(libraryRoot, folder).split(path.sep).filter(Boolean)) {
+  for (const part of path.relative(selected, folder).split(path.sep).filter(Boolean)) {
     const next = path.join(current, part);
     if (create)
       await mkdir(next).catch((e) => {
@@ -120,6 +127,9 @@ export async function safeLibraryDirectory(folder: string, create = false) {
     current = await realpath(next);
     if (!inside(root, current)) throw new AppError('UNSAFE_PATH', 'Folder escapes mounted library');
   }
+  dataDir();
+  if (libraryRoot() !== selected)
+    throw new AppError('UNSAFE_PATH', 'Instance library root changed during operation');
   return current;
 }
 export async function writableFolder(folder: string) {

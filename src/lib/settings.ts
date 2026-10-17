@@ -1,10 +1,12 @@
-import { currentUser } from './user-context';
-import { userAdultContent, patchMyAccount } from './users';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { statement, writeVersion, db, dataDir } from './db';
+import { statement, writeVersion, db } from './db';
+import { env } from './env';
+import { wakeWorker } from './worker-events';
+import { accountsDir, tenantId, tenantState } from './tenant-context';
 import { validateLibraryTargets } from './library-paths';
+import { mediaRootStatus } from './media-root';
 import type { PublicSettings, SecretSetting, Settings, SettingsPatch } from '@/types/shared';
 export const secretKeys: SecretSetting[] = [
   'suwayomiPassword',
@@ -13,8 +15,10 @@ export const secretKeys: SecretSetting[] = [
   'prowlarrApiKey',
 ];
 export function persistentSecret(name: string, bytes: number): Buffer {
-  db();
-  const file = path.join(dataDir, name);
+  if (!['access.token', 'settings.key'].includes(name))
+    throw new Error('Unknown persistent secret');
+  mkdirSync(accountsDir, { recursive: true, mode: 0o700 });
+  const file = path.join(accountsDir, name);
   try {
     writeFileSync(file, randomBytes(bytes).toString('hex'), { flag: 'wx', mode: 0o600 });
   } catch (e) {
@@ -46,12 +50,21 @@ export function decrypt(value: string) {
     'utf8',
   );
 }
-let settingsSnapshot: { version: number; value: Settings } | undefined;
+const settingsState = tenantState(() => ({
+  seeded: false,
+  snapshot: undefined as { version: number; value: Settings } | undefined,
+}));
 function serverSettings(): Settings {
+  const state = settingsState();
+  if (!state.seeded) {
+    seedEnvironment();
+    if (!db().inTransaction) state.seeded = true;
+  }
+  const settingsSnapshot = state.snapshot;
   const version = writeVersion('settings');
   if (settingsSnapshot?.version === version) return settingsSnapshot.value;
   const result: Settings = {
-    suwayomiUrl: process.env.SUWAYOMI_URL ?? 'http://suwayomi:4567',
+    suwayomiUrl: '',
     suwayomiUsername: '',
     suwayomiPassword: '',
     kavitaUrl: '',
@@ -81,12 +94,12 @@ function serverSettings(): Settings {
     });
   }
   result.updateIntervalMinutes = Math.max(5, Math.min(1440, result.updateIntervalMinutes));
-  if (!db().inTransaction) settingsSnapshot = { version, value: result };
+  if (!db().inTransaction) state.snapshot = { version, value: result };
   return result;
 }
 export function getSettings(): Settings {
-  const settings = serverSettings();
-  return currentUser()?.id ? { ...settings, adultContent: userAdultContent() } : settings;
+  mediaRootStatus();
+  return structuredClone(serverSettings());
 }
 export function publicSettings(): PublicSettings {
   const settings = getSettings();
@@ -103,11 +116,6 @@ export function publicSettings(): PublicSettings {
 }
 export function updateSettings(patch: SettingsPatch) {
   const current = getSettings();
-  const preference = currentUser()?.id ? patch.adultContent : undefined;
-  if (preference !== undefined) {
-    patch = { ...patch };
-    delete patch.adultContent;
-  }
   if (patch.libraryTargets !== undefined || patch.kavitaLibraryPath !== undefined)
     validateLibraryTargets(
       patch.libraryTargets ?? current.libraryTargets,
@@ -117,12 +125,11 @@ export function updateSettings(patch: SettingsPatch) {
     'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
   );
   db().transaction(() => {
-    if (preference !== undefined) patchMyAccount({ adultContent: preference });
     if (patch.kavitaApiKey !== undefined && patch.kavitaApiKey !== current.kavitaApiKey) {
       statement(
-        'UPDATE user_library SET last_read=NULL,last_read_at=NULL,progress_checked=0 WHERE user_id=1 AND EXISTS(SELECT 1 FROM users WHERE id=1 AND kavita_key IS NULL)',
+        'UPDATE tracked_media SET last_read=NULL,last_read_at=NULL,progress_checked=0',
       ).run();
-      statement('DELETE FROM worker_state WHERE key=?').run('progress_refresh_attempt:1');
+      statement("DELETE FROM worker_state WHERE key LIKE 'progress_refresh_attempt:%'").run();
     }
     for (const [key, value] of Object.entries(patch))
       insert.run(
@@ -130,5 +137,40 @@ export function updateSettings(patch: SettingsPatch) {
         secretKeys.includes(key as SecretSetting) ? encrypt(String(value)) : JSON.stringify(value),
       );
   })();
+  wakeWorker();
   return publicSettings();
+}
+
+/** Environment values seed only tenant 1, once, and never overwrite persisted settings. */
+function seedEnvironment() {
+  const database = db();
+  if (database.prepare("SELECT 1 FROM worker_state WHERE key='environment_seeded'").get()) return;
+  database
+    .transaction(() => {
+      if (tenantId() === 1) {
+        const keys = {
+          suwayomiUrl: 'SUWAYOMI_URL',
+          suwayomiUsername: 'SUWAYOMI_USERNAME',
+          suwayomiPassword: 'SUWAYOMI_PASSWORD',
+          kavitaUrl: 'KAVITA_URL',
+          kavitaApiKey: 'KAVITA_API_KEY',
+          sonarrUrl: 'SONARR_URL',
+          sonarrApiKey: 'SONARR_API_KEY',
+          prowlarrUrl: 'PROWLARR_URL',
+          prowlarrApiKey: 'PROWLARR_API_KEY',
+        };
+        for (const [key, name] of Object.entries(keys)) {
+          const value = process.env[name] ?? env(name);
+          if (value !== undefined)
+            database
+              .prepare('INSERT OR IGNORE INTO settings VALUES(?,?)')
+              .run(
+                key,
+                secretKeys.includes(key as SecretSetting) ? encrypt(value) : JSON.stringify(value),
+              );
+        }
+      }
+      database.prepare("INSERT OR IGNORE INTO worker_state VALUES('environment_seeded','1')").run();
+    })
+    .immediate();
 }

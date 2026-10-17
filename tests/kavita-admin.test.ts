@@ -5,6 +5,8 @@ import path from 'node:path';
 const directory = mkdtempSync(path.join(tmpdir(), 'bunko-admin-'));
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_WORKER = 'false';
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { db } = await import('@/lib/db');
 const { updateSettings, persistentSecret } = await import('@/lib/settings');
 const { kavitaAdmin, scanKavitaFolder } = await import('@/lib/kavita-client');

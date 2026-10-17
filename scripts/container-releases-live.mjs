@@ -14,6 +14,13 @@ for (let attempt = 0; attempt < 60; attempt++) {
   await delay(1000);
 }
 // Authentication material stays in process memory and is never included in output.
+// Each disposable run creates the first private instance before using its Bearer token.
+const setup = await fetch(`${base}/api/auth/setup`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: 'FixtureAdmin', password: 'synthetic-fixture-password' }),
+});
+assert.ok([200, 409].includes(setup.status), 'fixture account setup');
 const headers = { Authorization: `Bearer ${fs.readFileSync('/data/access.token', 'utf8').trim()}` };
 async function api(path, init = {}) {
   const response = await fetch(`${base}${path}`, {
@@ -27,7 +34,10 @@ async function api(path, init = {}) {
 const started = Date.now();
 await api('/api/releases');
 const firstResponseMs = Date.now() - started;
-const database = new Database('/data/bunko.db', { readonly: true });
+const database = new Database(
+  fs.existsSync('/data/users/1/bunko.db') ? '/data/users/1/bunko.db' : '/data/bunko.db',
+  { readonly: true },
+);
 let firstStoredMuMs;
 let result;
 let lastProgress = 0;

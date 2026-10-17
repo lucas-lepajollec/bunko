@@ -16,9 +16,13 @@ const directory = mkdtempSync(path.join(tmpdir(), 'bunko-library-'));
 const root = path.join(directory, 'library');
 process.env.BUNKO_DATA_DIR = path.join(directory, 'state');
 process.env.BUNKO_LIBRARY_DIR = root;
+const tenantLibraryRoot = path.join(root, '1');
+mkdirSync(tenantLibraryRoot, { recursive: true });
 process.env.BUNKO_WORKER = 'false';
 const { db, track, listTracked, recordImport, observeChapters, migrateV5, indexCatalog } =
   await import('@/lib/db');
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { updateSettings, getSettings, persistentSecret } = await import('@/lib/settings');
 const { emptyMedia } = await import('@/lib/media');
 const { resolveLibraryFolder, mapKavitaPath, targetFor } = await import('@/lib/library-paths');
@@ -45,7 +49,7 @@ let catalogId = 600;
 const calls: { url: string; body: Record<string, unknown>; redirect?: RequestRedirect }[] = [];
 const realFetch = globalThis.fetch;
 const mkdir = (relative: string) => {
-  const folder = path.join(root, relative);
+  const folder = path.join(tenantLibraryRoot, relative);
   mkdirSync(folder, { recursive: true });
   return folder;
 };
@@ -186,31 +190,31 @@ afterAll(async () => {
 describe('automatic mapping and target selection', () => {
   it('resolves suffix layouts and prefers a folder proven by indexed series', () => {
     expect(resolveLibraryFolder('/medias/Mangas', [rows[0].folderPath])).toBe(
-      path.join(root, 'Mangas'),
+      path.join(tenantLibraryRoot, 'Mangas'),
     );
     mkdir(`medias/Mangas/${names[0]}`);
-    rmSync(path.join(root, 'Mangas', names[0]), { recursive: true });
+    rmSync(path.join(tenantLibraryRoot, 'Mangas', names[0]), { recursive: true });
     expect(resolveLibraryFolder('/medias/Mangas', [rows[0].folderPath])).toBe(
-      path.join(root, 'medias/Mangas'),
+      path.join(tenantLibraryRoot, 'medias/Mangas'),
     );
   });
   it('recognizes a library mounted directly at the root only with series evidence', () => {
-    rmSync(path.join(root, 'Mangas'), { recursive: true });
+    rmSync(path.join(tenantLibraryRoot, 'Mangas'), { recursive: true });
     expect(resolveLibraryFolder('/medias/Mangas', [rows[0].folderPath])).toBeNull();
     mkdir(names[0]);
-    expect(resolveLibraryFolder('/medias/Mangas', [rows[0].folderPath])).toBe(root);
+    expect(resolveLibraryFolder('/medias/Mangas', [rows[0].folderPath])).toBe(tenantLibraryRoot);
   });
   it('refuses ambiguity and unsafe/symlink candidates; honors only matching nondefault overrides', () => {
     mkdir(`medias/Mangas/${names[0]}`);
     expect(resolveLibraryFolder('/medias/Mangas', [rows[0].folderPath])).toBeNull();
     expect(resolveLibraryFolder('/medias/Mangas', [rows[0].folderPath], '/medias')).toBe(
-      path.join(root, 'Mangas'),
+      path.join(tenantLibraryRoot, 'Mangas'),
     );
     expect(resolveLibraryFolder('/medias/Mangas', [rows[0].folderPath], '/wrong')).toBeNull();
     expect(resolveLibraryFolder('/medias/../Mangas')).toBeNull();
     const outside = path.join(directory, 'outside');
     mkdirSync(outside, { recursive: true });
-    symlinkSync(outside, path.join(root, 'escape'));
+    symlinkSync(outside, path.join(tenantLibraryRoot, 'escape'));
     expect(resolveLibraryFolder('/medias/escape')).toBeNull();
   });
   it('reports writable paths and uses suggested Manga/Manwha targets with the default prefix', async () => {
@@ -218,13 +222,17 @@ describe('automatic mapping and target selection', () => {
     const libs = await index.kavitaLibraries();
     expect(libs[0]).toMatchObject({
       suggestedFor: ['MANGA'],
-      folders: [{ localPath: path.join(root, 'Mangas'), writable: true }],
+      folders: [{ localPath: path.join(tenantLibraryRoot, 'Mangas'), writable: true }],
     });
     expect(libs[1].suggestedFor).toEqual(['MANHWA']);
-    expect(targetFor(catalogMedia()).local).toBe(path.join(root, 'Mangas'));
+    expect(targetFor(catalogMedia()).local).toBe(path.join(tenantLibraryRoot, 'Mangas'));
     expect(targetFor({ ...catalogMedia(), format: 'MANHWA' }).folder).toBe('/medias/Manwha');
-    expect(mapKavitaPath(rows[0].folderPath)).toBe(path.join(root, 'Mangas', names[0]));
-    expect(await seriesDirectory(catalogMedia())).toBe(path.join(root, 'Mangas', names[0]));
+    expect(mapKavitaPath(rows[0].folderPath)).toBe(
+      path.join(tenantLibraryRoot, 'Mangas', names[0]),
+    );
+    expect(await seriesDirectory(catalogMedia())).toBe(
+      path.join(tenantLibraryRoot, 'Mangas', names[0]),
+    );
     await scanLibrary(catalogMedia());
     expect(calls.at(-1)?.body.folderPath).toBe(rows[0].folderPath);
   });
@@ -258,7 +266,7 @@ describe('automatic mapping and target selection', () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ error: { code: 'TARGET_NOT_CONFIGURED' } });
     expect(db().prepare('SELECT COUNT(*) AS n FROM download_batches').get()).toEqual({ n: 0 });
-    expect(readdirSync(root)).toEqual(['Mangas', 'Manwha']);
+    expect(readdirSync(tenantLibraryRoot)).toEqual(['Mangas', 'Manwha']);
     updateSettings({ autoImportKavita: false });
     libraries.push({ id: 3, name: 'Manga 2', type: 0, folders: ['/other/Manga2'] });
     mkdir('Manga2');
@@ -357,7 +365,7 @@ describe('catalog cover sidecars and Kavita upload', () => {
   it('writes an absent allowed catalog cover, uploads it with auth, rescans and preserves it on repeat', async () => {
     coverEnabled = true;
     await index.syncKavitaIndex();
-    const folder = path.join(root, 'Mangas', names[0]);
+    const folder = path.join(tenantLibraryRoot, 'Mangas', names[0]);
     expect(readFileSync(path.join(folder, 'cover.jpg'), 'utf8')).toBe('fixture-cover');
     const upload = calls.find((c) => c.url === '/api/Upload/series');
     expect(upload?.body).toMatchObject({
@@ -380,13 +388,15 @@ describe('catalog cover sidecars and Kavita upload', () => {
   it.each(['cover.png', 'Folder.JPG', 'cover.jpg'])(
     'preserves existing %s without fetching or uploading',
     async (file) => {
-      writeFileSync(path.join(root, 'Mangas', names[0], file), 'user-cover');
+      writeFileSync(path.join(tenantLibraryRoot, 'Mangas', names[0], file), 'user-cover');
       coverEnabled = true;
       await index.syncKavitaIndex();
       expect(
         calls.some((c) => c.url.includes('fixture.jpg') || c.url === '/api/Upload/series'),
       ).toBe(false);
-      expect(readFileSync(path.join(root, 'Mangas', names[0], file), 'utf8')).toBe('user-cover');
+      expect(readFileSync(path.join(tenantLibraryRoot, 'Mangas', names[0], file), 'utf8')).toBe(
+        'user-cover',
+      );
     },
   );
   it('retries a failed upload/scan without redownloading or overwriting the sidecar', async () => {
@@ -417,13 +427,13 @@ describe('catalog cover sidecars and Kavita upload', () => {
     const media = { ...catalogMedia(), coverUrl: 'https://s4.anilist.co/fixture.jpg' };
     coverMime = 'text/html';
     await ensureKavitaCover(indexed(), media);
-    expect(readdirSync(path.join(root, 'Mangas', names[0]))).toEqual([]);
+    expect(readdirSync(path.join(tenantLibraryRoot, 'Mangas', names[0]))).toEqual([]);
     coverMime = 'image/jpeg';
     coverSize = 16 * 1024 * 1024;
     await expect(ensureKavitaCover(indexed(), media)).rejects.toMatchObject({
       code: 'IMPORT_TOO_LARGE',
     });
-    expect(readdirSync(path.join(root, 'Mangas', names[0]))).toEqual([]);
+    expect(readdirSync(path.join(tenantLibraryRoot, 'Mangas', names[0]))).toEqual([]);
   });
 });
 
@@ -566,12 +576,12 @@ it('abandons a pending cover upload if the user replaces its sidecar', async () 
   coverEnabled = true;
   scanFails = true;
   await index.syncKavitaIndex();
-  writeFileSync(path.join(root, 'Mangas', names[0], 'cover.jpg'), 'user-replacement');
+  writeFileSync(path.join(tenantLibraryRoot, 'Mangas', names[0], 'cover.jpg'), 'user-replacement');
   const uploads = calls.filter((c) => c.url === '/api/Upload/series').length;
   scanFails = false;
   await index.syncKavitaIndex();
   expect(calls.filter((c) => c.url === '/api/Upload/series')).toHaveLength(uploads);
-  expect(readFileSync(path.join(root, 'Mangas', names[0], 'cover.jpg'), 'utf8')).toBe(
+  expect(readFileSync(path.join(tenantLibraryRoot, 'Mangas', names[0], 'cover.jpg'), 'utf8')).toBe(
     'user-replacement',
   );
 });
@@ -599,11 +609,11 @@ it('uses the same resolver for a library mounted directly at the root and its sc
   mkdir(names[0]);
   await index.syncKavitaIndex();
   expect((await index.kavitaLibraries())[0].folders[0]).toMatchObject({
-    localPath: root,
+    localPath: tenantLibraryRoot,
     writable: true,
   });
-  expect(targetFor(catalogMedia()).local).toBe(root);
-  expect(await seriesDirectory(catalogMedia())).toBe(path.join(root, names[0]));
+  expect(targetFor(catalogMedia()).local).toBe(tenantLibraryRoot);
+  expect(await seriesDirectory(catalogMedia())).toBe(path.join(tenantLibraryRoot, names[0]));
   await scanLibrary(catalogMedia());
   expect(calls.at(-1)?.body.folderPath).toBe(rows[0].folderPath);
 });

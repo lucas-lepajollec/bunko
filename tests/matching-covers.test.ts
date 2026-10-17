@@ -10,9 +10,13 @@ const directory = mkdtempSync(path.join(tmpdir(), 'bunko-matching-'));
 const root = path.join(directory, 'library');
 process.env.BUNKO_DATA_DIR = path.join(directory, 'state');
 process.env.BUNKO_LIBRARY_DIR = root;
+const tenantLibraryRoot = path.join(root, '1');
+mkdirSync(tenantLibraryRoot, { recursive: true });
 process.env.BUNKO_WORKER = 'false';
 const { db, track, listTracked, migrateV6, migrateV7, acquireWorker, saveSourceStatus } =
   await import('@/lib/db');
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { emptyMedia } = await import('@/lib/media');
 const { updateSettings, persistentSecret, getSettings } = await import('@/lib/settings');
 const { matchTrackedSources } = await import('@/lib/tracked-sources');
@@ -67,7 +71,7 @@ const catalog = (id = 1, title = 'Owned Work'): UnifiedMedia => ({
   coverUrl: 'https://s4.anilist.co/fixture.jpg',
 });
 function indexSeries() {
-  mkdirSync(path.join(root, 'Mangas', 'Owned Work'), { recursive: true });
+  mkdirSync(path.join(tenantLibraryRoot, 'Mangas', 'Owned Work'), { recursive: true });
   db()
     .prepare('INSERT OR REPLACE INTO kavita_series VALUES(?,?)')
     .run(
@@ -96,7 +100,11 @@ function indexSeries() {
           type: 'Manga',
           suggestedFor: ['MANGA'],
           folders: [
-            { path: '/medias/Mangas', localPath: path.join(root, 'Mangas'), writable: true },
+            {
+              path: '/medias/Mangas',
+              localPath: path.join(tenantLibraryRoot, 'Mangas'),
+              writable: true,
+            },
           ],
         },
       ]),
@@ -235,7 +243,7 @@ beforeEach(() => {
   db().exec(
     'DELETE FROM metadata_cache; DELETE FROM image_cache; DELETE FROM worker_lock; DELETE FROM tracked_media; DELETE FROM settings; DELETE FROM worker_state; DELETE FROM kavita_series; DELETE FROM source_health; DELETE FROM imported_chapters; DELETE FROM download_batches; DELETE FROM download_jobs; DELETE FROM kavita_dismissals; DELETE FROM catalog_fts; DELETE FROM catalog_keys;',
   );
-  rmSync(path.join(directory, 'state', 'cache'), { recursive: true, force: true });
+  rmSync(path.join(directory, 'state', 'users', '1', 'cache'), { recursive: true, force: true });
   rmSync(root, { recursive: true, force: true });
   mkdirSync(root, { recursive: true });
   sources = ['1', '2', '3', '4'].map((id) => ({ id, name: `Source ${id}`, lang: 'fr' }));
@@ -554,9 +562,9 @@ it('uploads a changed cover once, keeps its sidecar consistent, and skips identi
   await patch({ id: t.id, cover: { origin: 'source', id: '1:10' } });
   await syncTrackedCovers();
   expect(uploaded).toHaveLength(2);
-  expect(readFileSync(path.join(root, 'Mangas', 'Owned Work', 'cover.jpg'), 'utf8')).toBe(
-    'changed-cover',
-  );
+  expect(
+    readFileSync(path.join(tenantLibraryRoot, 'Mangas', 'Owned Work', 'cover.jpg'), 'utf8'),
+  ).toBe('changed-cover');
   vi.resetModules();
   const fresh = await import('@/lib/tracked-covers');
   await fresh.syncTrackedCover(t.id);
@@ -569,9 +577,9 @@ it('uploads a changed cover once, keeps its sidecar consistent, and skips identi
   await patch({ id: t.id, cover: { origin: 'kavita', id: '77' } });
   await syncTrackedCover(t.id);
   expect(uploaded).toHaveLength(2);
-  expect(readFileSync(path.join(root, 'Mangas', 'Owned Work', 'cover.jpg'), 'utf8')).toBe(
-    'kavita-cover',
-  );
+  expect(
+    readFileSync(path.join(tenantLibraryRoot, 'Mangas', 'Owned Work', 'cover.jpg'), 'utf8'),
+  ).toBe('kavita-cover');
 });
 it('preserves a selected MangaDex volume after restarting and returns its cover in entry detail and search presence', async () => {
   indexSeries();
@@ -682,9 +690,9 @@ it('stores automatic artwork during the worker cycle and retries a failed explic
   await syncTrackedCover(t.id);
   await syncTrackedCover(t.id);
   expect(uploaded).toHaveLength(2);
-  expect(readFileSync(path.join(root, 'Mangas', 'Owned Work', 'cover.jpg'), 'utf8')).toBe(
-    imageBytes,
-  );
+  expect(
+    readFileSync(path.join(tenantLibraryRoot, 'Mangas', 'Owned Work', 'cover.jpg'), 'utf8'),
+  ).toBe(imageBytes);
 });
 it('uploads the selected cover even if the Kavita series folder is not mounted locally', async () => {
   indexSeries();

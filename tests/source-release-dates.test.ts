@@ -13,6 +13,8 @@ vi.mock('@/lib/kavita-index', async (original) => ({
 }));
 vi.mock('@/lib/tracked-sources', () => ({ refreshSourceStatuses: async () => {} }));
 vi.mock('@/lib/tracked-covers', () => ({ syncTrackedCovers: async () => {} }));
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { db, track, observeChapters, migrateV8 } = await import('@/lib/db');
 const { emptyMedia } = await import('@/lib/media');
 const { updateSettings } = await import('@/lib/settings');

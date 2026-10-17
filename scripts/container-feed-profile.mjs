@@ -12,8 +12,17 @@ for (let i = 0; i < 60; i++) {
     break;
   await delay(500);
 }
+// Each disposable run creates the first private instance before using its Bearer token.
+const setup = await fetch(`${base}/api/auth/setup`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: 'FixtureAdmin', password: 'synthetic-fixture-password' }),
+});
+assert.ok([200, 409].includes(setup.status), 'fixture account setup');
 const headers = { Authorization: `Bearer ${fs.readFileSync('/data/access.token', 'utf8').trim()}` };
-const db = new Database('/data/bunko.db');
+const db = new Database(
+  fs.existsSync('/data/users/1/bunko.db') ? '/data/users/1/bunko.db' : '/data/bunko.db',
+);
 const works = Array.from({ length: 100 }, (_, i) => ({
   id: `anilist:${i + 1}`,
   adult: false,
@@ -106,16 +115,14 @@ db.transaction(() => {
     {
       Page: {
         pageInfo: { hasNextPage: true },
-        media: works
-          .slice(0, 24)
-          .map((m) => ({
-            id: m.anilistId,
-            type: 'MANGA',
-            format: 'MANGA',
-            title: { english: m.title },
-            coverImage: {},
-            bannerImage: null,
-          })),
+        media: works.slice(0, 24).map((m) => ({
+          id: m.anilistId,
+          type: 'MANGA',
+          format: 'MANGA',
+          title: { english: m.title },
+          coverImage: {},
+          bannerImage: null,
+        })),
       },
     },
   );

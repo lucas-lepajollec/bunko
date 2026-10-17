@@ -2,7 +2,9 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { credentials, passwordChange } from './account-validation';
 export { credentials, passwordChange } from './account-validation';
 import { persistentSecret } from './settings';
-import { db } from './db';
+import { accountsDb as db } from './accounts-store';
+import { inTenant } from './tenant-context';
+import { getSettings } from './settings';
 import { AppError } from './errors';
 import { hashPassword, verifyPassword } from './passwords';
 import { currentUser } from './user-context';
@@ -41,8 +43,14 @@ function sign(value: string) {
 }
 export function authenticate(request: Request) {
   const auth = request.headers.get('authorization');
-  if (auth?.startsWith('Bearer ') && equal(auth.slice(7), secret()))
-    return firstAdmin() ?? { id: 0, username: '', role: 'admin' as const };
+  if (auth?.startsWith('Bearer ') && equal(auth.slice(7), secret())) {
+    const row = db().prepare("SELECT value FROM account_state WHERE key='token_user'").get() as
+      { value: string } | undefined;
+    const owner = row ? account(Number(row.value)) : undefined;
+    if (owner) return owner;
+    if (row) throw new AppError('UNAUTHORIZED', 'Access token owner no longer exists', 401);
+    throw new AppError('SETUP_REQUIRED', 'Create the administrator account first', 409);
+  }
   const cookie = request.headers
     .get('cookie')
     ?.split(';')
@@ -91,7 +99,7 @@ export function authState(request: Request): AuthState {
   }
 }
 export function requireAdmin() {
-  if (currentUser()?.role === 'member')
+  if (currentUser()?.role !== 'admin')
     throw new AppError('FORBIDDEN', 'Administrator access required', 403);
 }
 export function checkOrigin(request: Request) {
@@ -109,29 +117,31 @@ export function checkOrigin(request: Request) {
     if (!valid) throw new AppError('FORBIDDEN', 'Cross-origin request rejected', 403);
   }
 }
-interface AttemptWindow {
-  start: number;
-  total: number;
-  usernames: Map<string, number>;
-}
-// Share the budget across Next's separately bundled route modules. Never trust forwarded IPs.
-const runtime = globalThis as typeof globalThis & { __bunkoLoginAttempts?: AttemptWindow };
 function limit(username: string) {
-  const now = Date.now();
-  const window = (runtime.__bunkoLoginAttempts ??= {
-    start: now,
-    total: 0,
-    usernames: new Map(),
-  });
-  if (now - window.start >= 60_000) {
-    window.start = now;
-    window.total = 0;
-    window.usernames.clear();
-  }
-  if (window.total >= 20 || (window.usernames.get(username) ?? 0) >= 10)
-    throw new AppError('RATE_LIMITED', 'Try again in one minute', 429);
-  window.total++;
-  window.usernames.set(username, (window.usernames.get(username) ?? 0) + 1);
+  const database = db();
+  database
+    .transaction(() => {
+      const now = Date.now();
+      database.prepare('DELETE FROM login_attempts WHERE start<=?').run(now - 60_000);
+      for (const [key, maximum] of [
+        ['*', 20],
+        [username, 10],
+      ] as const) {
+        const row = database
+          .prepare('SELECT total FROM login_attempts WHERE username=?')
+          .get(key) as { total: number } | undefined;
+        if ((row?.total ?? 0) >= maximum)
+          throw new AppError('RATE_LIMITED', 'Try again in one minute', 429);
+      }
+      for (const key of ['*', username])
+        database
+          .prepare(
+            `INSERT INTO login_attempts VALUES(?,?,1)
+      ON CONFLICT(username) DO UPDATE SET total=total+1`,
+          )
+          .run(key, now);
+    })
+    .immediate();
 }
 function invalidCredentials(): never {
   throw new AppError('INVALID_CREDENTIALS', 'Invalid username or password', 401);
@@ -162,21 +172,16 @@ export async function setup(request: Request, input: Credentials) {
       }
       const result = db()
         .prepare(
-          `INSERT INTO users(username,role,password_hash,session_epoch,created_at,adult_content)
-      VALUES(?,'admin',?,?,?,COALESCE((SELECT value='true' FROM settings WHERE key='adultContent'),0))`,
+          `INSERT INTO users(username,role,password_hash,session_epoch,created_at)
+        VALUES(?,'admin',?,?,?)`,
         )
         .run(value.username, hash, sessionEpoch, new Date().toISOString());
       const id = Number(result.lastInsertRowid);
-      // Installations predating account setup also retain their followed works.
-      db()
-        .prepare(
-          `INSERT OR IGNORE INTO user_library(user_id,tracked_id,status,last_read,last_read_at,progress_checked,created_at)
-      SELECT ?,id,status,last_read,last_read_at,progress_checked,created_at FROM tracked_media`,
-        )
-        .run(id);
+      db().prepare("INSERT OR IGNORE INTO account_state VALUES('token_user',?)").run(String(id));
       return id;
     })
     .immediate();
+  inTenant(id, () => getSettings());
   return sessionCookie(request, id, sessionEpoch);
 }
 export async function login(request: Request, input: Credentials) {

@@ -1,4 +1,4 @@
-import { currentUser } from './user-context';
+import { tenantState } from './tenant-context';
 import { mediaVisibility } from './adult';
 import { wakeWorker } from './worker-events';
 import { z } from 'zod';
@@ -7,6 +7,7 @@ import { getSettings } from './settings';
 import { emptyMedia, normalizeTitle } from './media';
 import { kavitaJson } from './kavita-client';
 import { resolveLibraryFolder, writableFolder } from './library-paths';
+import { mediaRootStatus } from './media-root';
 import { eachConcurrent } from './concurrency';
 import type {
   KavitaIndexStatus,
@@ -41,15 +42,18 @@ export interface IndexedSeries {
   kind?: import('@/types/shared').LibraryKind;
   completed?: boolean;
 }
-let seriesSnapshot:
-  | {
-      version: number;
-      entries: IndexedSeries[];
-      ids: Map<number, IndexedSeries>;
-      names: Map<string, IndexedSeries[]>;
-    }
-  | undefined;
+const seriesSnapshotCache = tenantState(() => ({
+  value: undefined as
+    | {
+        version: number;
+        entries: IndexedSeries[];
+        ids: Map<number, IndexedSeries>;
+        names: Map<string, IndexedSeries[]>;
+      }
+    | undefined,
+}));
 function seriesIndex() {
+  const seriesSnapshot = seriesSnapshotCache().value;
   const version = writeVersion('series');
   if (seriesSnapshot?.version === version) return seriesSnapshot;
   const entries = (
@@ -63,7 +67,7 @@ function seriesIndex() {
       names.set(name, hits);
     }
   const snapshot = { version, entries, ids: new Map(entries.map((s) => [s.seriesId, s])), names };
-  if (!db().inTransaction) seriesSnapshot = snapshot;
+  if (!db().inTransaction) seriesSnapshotCache().value = snapshot;
   return snapshot;
 }
 export function indexedSeries(): IndexedSeries[] {
@@ -74,17 +78,20 @@ export function indexedSeriesById(id: number): IndexedSeries | null {
 }
 type MatchMedia = Pick<UnifiedMedia, 'title' | 'altTitles' | 'kavitaSeriesId'> &
   Partial<Pick<UnifiedMedia, 'id' | 'anilistId' | 'mangadexId' | 'type'>>;
-let linkage:
-  | {
-      version: number;
-      ids: Map<string, Link>;
-      anilist: Map<number, Link>;
-      mangadex: Map<string, Link>;
-    }
-  | undefined;
+const linkageCache = tenantState(() => ({
+  value: undefined as
+    | {
+        version: number;
+        ids: Map<string, Link>;
+        anilist: Map<number, Link>;
+        mangadex: Map<string, Link>;
+      }
+    | undefined,
+}));
 type Link = { kavita_series_id: number | null; kavita_manual: number };
 /** Capture an indexed resolver once per catalog/library operation. */
 export function kavitaMatcher() {
+  const linkage = linkageCache().value;
   const version = writeVersion('linkage');
   let links = linkage;
   if (links?.version !== version) {
@@ -104,7 +111,7 @@ export function kavitaMatcher() {
       if (r.mangadex_id !== null) mangadex.set(r.mangadex_id, r);
     }
     links = { version, ids, anilist, mangadex };
-    if (!db().inTransaction) linkage = links;
+    if (!db().inTransaction) linkageCache().value = links;
   }
   const index = seriesIndex();
   return (media: MatchMedia, linkedId?: number | null): IndexedSeries | null => {
@@ -168,10 +175,8 @@ export function withKavita<T extends UnifiedMedia>(
 }
 export function kavitaSummaries(unmatched = false, query = ''): KavitaSeriesSummary[] {
   const tracked = db()
-    .prepare(
-      `SELECT id,kavita_series_id,media_json FROM tracked_media ${currentUser() ? 'WHERE id IN (SELECT tracked_id FROM user_library WHERE user_id=?)' : ''}`,
-    )
-    .all(...(currentUser() ? [currentUser()!.id] : [])) as {
+    .prepare('SELECT id,kavita_series_id,media_json FROM tracked_media')
+    .all() as {
     id: number;
     kavita_series_id: number | null;
     media_json: string;
@@ -311,9 +316,10 @@ function stateSet(key: string, value: string) {
     )
     .run(key, value);
 }
-export function kavitaIndexStatus(): KavitaIndexStatus {
+export function kavitaIndexStatus(): KavitaIndexStatus & { mediaRoot: string | null } {
   const s = getSettings();
   return {
+    mediaRoot: mediaRootStatus(),
     state:
       !s.kavitaUrl || !s.kavitaApiKey
         ? 'unconfigured'
@@ -335,10 +341,11 @@ export function kavitaSyncRequested() {
     Date.now() >= Number(stateValue('kavita_retry_at') ?? 0)
   );
 }
-let syncing: Promise<void> | undefined;
+const syncState = tenantState(() => ({ syncing: undefined as Promise<void> | undefined }));
 export async function syncKavitaIndex() {
-  if (syncing) return syncing;
-  syncing = (async () => {
+  const state = syncState();
+  if (state.syncing) return state.syncing;
+  state.syncing = (async () => {
     const settings = getSettings();
     if (!settings.kavitaUrl || !settings.kavitaApiKey) return;
     try {
@@ -420,9 +427,9 @@ export async function syncKavitaIndex() {
     }
   })();
   try {
-    await syncing;
+    await state.syncing;
   } finally {
-    syncing = undefined;
+    state.syncing = undefined;
   }
 }
 

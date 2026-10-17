@@ -13,6 +13,13 @@ for (let i = 0; i < 60; i++) {
     break;
   await delay(500);
 }
+// Each disposable run creates the first private instance before using its Bearer token.
+const setup = await fetch(`${base}/api/auth/setup`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: 'FixtureAdmin', password: 'synthetic-fixture-password' }),
+});
+assert.ok([200, 409].includes(setup.status), 'fixture account setup');
 const headers = { Authorization: `Bearer ${fs.readFileSync('/data/access.token', 'utf8').trim()}` };
 async function api(path, body) {
   const r = await fetch(base + path, {
@@ -23,7 +30,9 @@ async function api(path, body) {
   assert.equal(r.status, 200, path);
   return r.json();
 }
-const db = new Database('/data/bunko.db');
+const db = new Database(
+  fs.existsSync('/data/users/1/bunko.db') ? '/data/users/1/bunko.db' : '/data/bunko.db',
+);
 const normal = {
   id: 'anilist:1',
   adult: false,

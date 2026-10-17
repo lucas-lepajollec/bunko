@@ -19,6 +19,8 @@ vi.mock('@/lib/tracked-sources', async (original) => ({
   ...(await original<object>()),
   drainSourceMatches: async () => {},
 }));
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { db, listTracked } = await import('@/lib/db');
 const { emptyMedia } = await import('@/lib/media');
 const { persistentSecret } = await import('@/lib/settings');

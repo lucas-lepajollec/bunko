@@ -7,6 +7,8 @@ import type { AniMedia } from '@/lib/media';
 const directory = mkdtempSync(path.join(tmpdir(), 'bunko-adult-tests-'));
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_WORKER = 'false';
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
 const { db, track, untrack, listTracked, indexCatalog, observeChapters } = await import('@/lib/db');
 const { emptyMedia, fromAniList, fromMangaDex, fromMangaUpdates } = await import('@/lib/media');
 const { recordSourceFlags, mediaAdult } = await import('@/lib/adult');
@@ -516,7 +518,7 @@ describe('manual adult decisions', () => {
     expect(adultResolver()(normal).adultOverride).toBe(false);
     // A second SQLite connection sees the durable decision and invalidates warmed snapshots.
     const Database = (await import('better-sqlite3')).default;
-    const external = new Database(path.join(directory, 'bunko.db'));
+    const external = new Database(path.join(directory, 'users', '1', 'bunko.db'));
     external
       .prepare('UPDATE adult_overrides SET adult=1,revision=revision+10 WHERE identity=?')
       .run('anilist:1');

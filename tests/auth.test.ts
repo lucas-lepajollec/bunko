@@ -16,7 +16,10 @@ const { scrypt, timingSafeEqual } = await import('node:crypto');
 const directory = mkdtempSync(path.join(tmpdir(), 'bunko-auth-'));
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_WORKER = 'false';
-const { db, migrateV4 } = await import('@/lib/db');
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant(false);
+const { migrateV4 } = await import('@/lib/db');
+const { accountsDb: db } = await import('@/lib/accounts-store');
 const { persistentSecret } = await import('@/lib/settings');
 const { authenticate } = await import('@/lib/auth');
 const { hashPassword, verifyPassword } = await import('@/lib/passwords');
@@ -48,7 +51,9 @@ async function error(response: Response, status: number, code: string) {
   expect(response.headers.get('set-cookie')).toBeNull();
 }
 beforeEach(() => {
-  db().exec("DELETE FROM users; DELETE FROM sqlite_sequence WHERE name='users';");
+  db().exec(
+    "DELETE FROM users; DELETE FROM sqlite_sequence WHERE name='users'; DELETE FROM account_state WHERE key='token_user';",
+  );
   // Advance only Date.now, leaving real asynchronous scrypt/streams intact.
   clock += 61_000;
   vi.spyOn(Date, 'now').mockImplementation(() => clock);
@@ -129,7 +134,7 @@ describe('account routes', () => {
     for (const response of responses.filter((r) => r.status === 409))
       await error(response, 409, 'ALREADY_SET_UP');
     // The invariant is enforced by SQLite, independently of JS's preflight check.
-    const other = new Database(path.join(directory, 'bunko.db'));
+    const other = new Database(path.join(directory, 'accounts.db'));
     expect(() =>
       other
         .prepare(
@@ -182,7 +187,9 @@ describe('account routes', () => {
     expect(await verifyPassword('a'.repeat(200), stored.password_hash)).toBe(true);
     expect(await verifyPassword('wrong-password', stored.password_hash)).toBe(false);
     expect(await verifyPassword('wrong-password', 'malformed')).toBe(false);
-    db().exec("DELETE FROM users; DELETE FROM sqlite_sequence WHERE name='users';");
+    db().exec(
+      "DELETE FROM users; DELETE FROM sqlite_sequence WHERE name='users'; DELETE FROM account_state WHERE key='token_user';",
+    );
     expect(
       (await setup(request('/api/auth/setup', { username: 'abc', password: 'a'.repeat(10) })))
         .status,
@@ -329,10 +336,10 @@ describe('account routes', () => {
       ).toBe(index === winner ? 200 : 401);
   });
 
-  it('keeps bearer automation before/after setup and password rotation; tokens cannot sign in browsers', async () => {
+  it('binds bearer automation to the first account after setup and password rotation; tokens cannot sign in browsers', async () => {
     const token = persistentSecret('access.token', 32).toString('hex');
     const headers = { Authorization: `Bearer ${token}` };
-    expect((await protectedRoute(request('/api/settings', undefined, headers))).status).toBe(200);
+    expect((await protectedRoute(request('/api/settings', undefined, headers))).status).toBe(409);
     const created = await setup(request('/api/auth/setup', credentials));
     await error(await POST(request('/api/auth', { token })), 400, 'VALIDATION_ERROR');
     await password(

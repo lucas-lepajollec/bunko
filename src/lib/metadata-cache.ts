@@ -1,3 +1,4 @@
+import { tenantState } from './tenant-context';
 import { rememberAdultIdentities } from './adult';
 import { statement, dataDir, db } from './db';
 
@@ -6,10 +7,14 @@ const MAX_BYTES = 64 * 1024 * 1024;
 const scope = globalThis as typeof globalThis & {
   __bunkoMetadataLoads?: Map<string, Promise<unknown>>;
 };
-const parsed = new Map<string, { payload: string; value: unknown }>();
-let parsedBytes = 0;
+const parsedState = tenantState(() => ({
+  parsed: new Map<string, { payload: string; value: unknown }>(),
+  parsedBytes: 0,
+}));
 const loads = (scope.__bunkoMetadataLoads ??= new Map());
 export function storedMetadata<T>(key: string): { value: T; at: number; attempted: number } | null {
+  const state = parsedState();
+  const parsed = state.parsed;
   const row = statement(
     'SELECT payload,updated_at,attempted_at FROM metadata_cache WHERE key=?',
   ).get(key) as { payload: string; updated_at: number; attempted_at: number } | undefined;
@@ -21,11 +26,11 @@ export function storedMetadata<T>(key: string): { value: T; at: number; attempte
   if (hit?.payload !== row.payload) {
     hit = { payload: row.payload, value: JSON.parse(row.payload) };
     const size = Buffer.byteLength(row.payload);
-    if (parsed.size >= 64 || parsedBytes + size > 16 * 1024 * 1024) {
+    if (parsed.size >= 64 || state.parsedBytes + size > 16 * 1024 * 1024) {
       parsed.clear();
-      parsedBytes = 0;
+      state.parsedBytes = 0;
     }
-    parsedBytes += size;
+    state.parsedBytes += size;
     parsed.set(key, hit);
   }
   return {
@@ -79,7 +84,7 @@ export async function cached<T>(
 ): Promise<T> {
   const stored = storedMetadata<T>(key);
   const hit = stored && (!options.accept || options.accept(stored.value)) ? stored : null;
-  const pendingKey = `${dataDir}:${key}`;
+  const pendingKey = `${dataDir()}:${key}`;
   const refresh = () => {
     let pending = loads.get(pendingKey) as Promise<T> | undefined;
     if (!pending) {

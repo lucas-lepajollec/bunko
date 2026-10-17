@@ -1,5 +1,7 @@
 import { ZodError, type ZodType } from 'zod';
-import { currentUser, userContext, asServer } from './user-context';
+import { userContext } from './user-context';
+import { inTenant, tenantContext } from './tenant-context';
+import { requireAdmin } from './auth';
 import { authenticate, checkOrigin } from './auth';
 import { AppError } from './errors';
 import { startWorker } from './downloads';
@@ -31,68 +33,18 @@ export function route(handler: (r: Request) => Promise<Response> | Response, pro
     try {
       const user = protect ? authenticate(r) : undefined;
       if (!['GET', 'HEAD'].includes(r.method)) checkOrigin(r);
-      asServer(() => startWorker());
+      startWorker();
       return await userContext.run(user?.id ? user : undefined, async () => {
-        if (protect) authorizeRoute(r);
-        return await handler(r);
+        if (!protect) return await tenantContext.exit(() => handler(r));
+        return await inTenant(user!.id, async () => {
+          if (new URL(r.url).pathname.replace(/\/$/, '') === '/api/users') requireAdmin();
+          return await handler(r);
+        });
       });
     } catch (e) {
       return failure(e);
     }
   };
-}
-/** Deny new endpoints by default for members. Body-dependent permissions are checked by handlers. */
-function authorizeRoute(request: Request) {
-  if (currentUser()?.role !== 'member') return;
-  const path = new URL(request.url).pathname.replace(/\/$/, '');
-  const method = request.method;
-  const reads = new Set([
-    '/api/auth',
-    '/api/settings',
-    '/api/me',
-    '/api/search',
-    '/api/search/stream',
-    '/api/releases',
-    '/api/planning',
-    '/api/home',
-    '/api/discover',
-    '/api/genres',
-    '/api/media',
-    '/api/media/sources',
-    '/api/sources',
-    '/api/sources/preferences',
-    '/api/updates',
-    '/api/library/activity',
-    '/api/tracked',
-    '/api/tracked/covers',
-    '/api/manga/chapters',
-    '/api/downloads',
-    '/api/downloads/stream',
-    '/api/downloads/batches',
-    '/api/kavita/status',
-    '/api/kavita/series',
-    '/api/kavita/image',
-    '/api/suwayomi/image',
-  ]);
-  const allowed =
-    method === 'GET' || method === 'HEAD'
-      ? reads.has(path) ||
-        /^\/api\/covers\/[1-9]\d*$/.test(path) ||
-        /^\/api\/sources\/[1-9]\d*\/filters$/.test(path)
-      : (method === 'PATCH' && ['/api/me', '/api/tracked', '/api/media/adult'].includes(path)) ||
-        (method === 'DELETE' && ['/api/auth', '/api/tracked'].includes(path)) ||
-        (method === 'POST' &&
-          [
-            '/api/auth/password',
-            '/api/tracked',
-            '/api/downloads/enqueue',
-            '/api/downloads/batches',
-            '/api/downloads/control',
-            '/api/manga/chapters',
-            '/api/kavita/track',
-          ].includes(path)) ||
-        (method === 'POST' && /^\/api\/sources\/[1-9]\d*\/browse$/.test(path));
-  if (!allowed) throw new AppError('FORBIDDEN', 'Administrator access required', 403);
 }
 export async function body<T>(r: Request, schema: ZodType<T>): Promise<T> {
   if (!r.headers.get('content-type')?.includes('application/json'))

@@ -1,4 +1,3 @@
-import { currentUser } from './user-context';
 import { recentSourceChapter } from './source-chapters';
 import { visibleTracked } from './adult';
 import { randomUUID } from 'node:crypto';
@@ -46,9 +45,7 @@ export function updatesFeed(): UpdatesFeed {
     ]),
   );
   const entries = (
-    statement(
-      `SELECT * FROM update_entries ${currentUser() ? 'WHERE tracked_id IN (SELECT tracked_id FROM user_library WHERE user_id=?)' : ''} ORDER BY id DESC LIMIT 200`,
-    ).all(...(currentUser() ? [currentUser()!.id] : [])) as {
+    statement('SELECT * FROM update_entries ORDER BY id DESC LIMIT 200').all() as {
       id: number;
       tracked_id: number;
       source_name: string;

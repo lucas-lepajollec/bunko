@@ -87,14 +87,32 @@ Open `http://<your-host>:2512`. On first start you choose a username and a passw
 | Setting | Example | Notes |
 | --- | --- | --- |
 | Suwayomi address | `http://192.168.1.10:4567` | As reachable **from the Bunko container**. Username and password if Suwayomi uses basic authentication. |
-| Kavita address and API key | `http://192.168.1.10:5000` | The key needs permission to scan libraries. |
-| Kavita path of the mounted folder | `/manga` | How **Kavita** names the folder you mounted at `/library`. If Kavita mounts the same host folder at `/manga`, enter `/manga`. |
+| Kavita address and API key | `http://192.168.1.10:5000` | Use the API key of a Kavita **administrator**: only admins may scan folders and set covers. |
+| Kavita path of the mounted folder | *(empty)* | Optional. Bunko finds which of Kavita's folders sit under `/library` by itself; fill it only if detection fails. |
 
 Then, in **Settings → Kavita libraries**, pick the library folder that receives each format (manga, manhwa & webtoons, manhua, novels). Your Suwayomi extensions are listed under **Sources**: choose which ones join global search, open a title and pick chapters.
 
 Bunko also indexes what Kavita already holds: titles you own show an *In Kavita* badge, owned chapters are never downloaded again, and existing series can be followed from **Library → In Kavita**.
 
 > **Good to know.** Bunko asks Suwayomi only for the chapter pages, then builds each CBZ itself, named the way Kavita expects (`Series/Series Ch. 0012.cbz`) with embedded metadata. Suwayomi's own download folder and settings are left untouched, and the two containers do not need to share a volume.
+
+<details>
+<summary><b>Several people?</b> One Bunko, one separate instance per account</summary>
+
+The administrator creates accounts in **Settings → Users**. Each account is a separate Bunko: its own settings, Suwayomi and Kavita connections, library, downloads and content filter. To share a Suwayomi server, simply enter the same address in both accounts.
+
+Mount each person's Kavita folder under `/library/<username>`:
+
+```yaml
+    volumes:
+      - bunko-data:/data
+      - /path/to/lucas/kavita/libraries:/library/lucas
+      - /path/to/marie/kavita/libraries:/library/marie
+```
+
+With a single account you can keep mounting your folder directly at `/library`, as above.
+
+</details>
 
 <details>
 <summary><b>Starting from scratch?</b> Run Bunko with its own Suwayomi and FlareSolverr</summary>

@@ -605,6 +605,8 @@ export interface KavitaIndexStatus {
   state: 'ok' | 'error' | 'unconfigured';
   series: number;
   syncedAt: string | null;
+  /** Where this account's Kavita folders are expected inside Bunko (`/library` or `/library/<name>`). */
+  mediaRoot: string | null;
 }
 
 /* ---- Accounts ---- */
@@ -618,9 +620,8 @@ export interface AuthState {
   role: UserRole | null;
 }
 /**
- * `admin`: everything, including users and server settings (connections, Kavita libraries,
- * downloads, sources/extensions, modules). `member`: their own library and account, downloads,
- * matches of followed works.
+ * Every user is a fully separate Bunko instance (own settings, Suwayomi/Kavita connections,
+ * library, downloads, matches). `admin` additionally manages accounts; otherwise roles are equal.
  */
 export type UserRole = 'admin' | 'member';
 /** GET /api/users (admin). */
@@ -630,7 +631,7 @@ export interface UserAccount {
   role: UserRole;
   createdAt: string;
   lastSeenAt: string | null;
-  /** The user saved their own Kavita API key (reading progress). */
+  /** The user's instance has a Kavita connection configured. */
   kavitaLinked: boolean;
 }
 /** POST /api/users (admin). */
@@ -652,13 +653,9 @@ export interface MyAccount {
   role: UserRole;
   /** Show filtered content (per user, off by default). */
   adultContent: boolean;
-  /** Whether a personal Kavita API key is saved (never returned). */
-  kavitaLinked: boolean;
 }
 export interface MyAccountPatch {
   adultContent?: boolean;
-  /** Personal Kavita API key for reading progress; null removes it. */
-  kavitaApiKey?: string | null;
 }
 /** POST /api/auth/setup (first start only) and POST /api/auth (sign in). */
 export interface Credentials {

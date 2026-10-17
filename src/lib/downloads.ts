@@ -1,9 +1,14 @@
-import { currentUser, asServer } from './user-context';
+import { tenantSignal } from './tenant-lifecycle';
+import { accountsDb, accountIdentities } from './accounts-store';
+import { accountsDir, inTenant, tenantState, tenantContext } from './tenant-context';
+import { userContext } from './user-context';
+import { eachConcurrent } from './concurrency';
+import { getSettings } from './settings';
 import { withTracking } from './catalog';
-import { listTracked, trackedForMedia } from './db';
+import { listTracked } from './db';
 import { chapterLabels } from './chapter-labels';
 import { randomUUID } from 'node:crypto';
-import { onWorkerWake, wakeWorker, waitForWorker, workerIdleMs } from './worker-events';
+import { onAllTenantsWake, wakeWorker, waitForWorker, workerIdleMs } from './worker-events';
 import { syncTrackedCovers } from './tracked-covers';
 import type {
   DownloadBatch,
@@ -15,8 +20,6 @@ import type {
 import {
   statement,
   acquireWorker,
-  db,
-  dataDir,
   listBatches,
   saveBatch,
   sameMedia,
@@ -39,8 +42,11 @@ import { targetFor } from './library-paths';
 import { env } from '@/lib/env';
 import { drainSourceMatches } from './tracked-sources';
 const chapterGate = sharedConcurrencyGate('chapters', 1);
-const activeBatches = new Set<string>();
-let transfer = new AbortController();
+const downloadState = tenantState(() => ({
+  activeBatches: new Set<string>(),
+  transfer: new AbortController(),
+  running: false,
+}));
 function paused() {
   return workerValue('download_paused') === '1';
 }
@@ -48,20 +54,11 @@ function update(batch: DownloadBatch, patch: Partial<DownloadBatch>) {
   Object.assign(batch, patch, { updatedAt: new Date().toISOString() });
   saveBatch(batch, false);
 }
-export function requireDownloadWork(media: EnqueueRequest['media']) {
-  if (currentUser()?.role === 'member' && !trackedForMedia(media, listTracked()))
-    throw new AppError('FORBIDDEN', 'Follow this work to manage its downloads', 403);
-}
 function requireBatch(id: string) {
-  if (currentUser()?.role !== 'member') return;
-  const batch = listBatches().find((b) => b.id === id);
-  if (!batch) throw new AppError('NOT_FOUND', 'Batch not found', 404);
-  requireDownloadWork(batch.media);
+  if (!listBatches().some((b) => b.id === id))
+    throw new AppError('NOT_FOUND', 'Batch not found', 404);
 }
 export function createBatch(input: EnqueueRequest): DownloadBatch {
-  requireDownloadWork(input.media);
-  if (currentUser()?.role === 'member')
-    input = { ...input, media: trackedForMedia(input.media, listTracked())!.media };
   input = { ...input, media: authoritativeMedia(input.media) };
   if (input.media.type === 'ANIME')
     throw new AppError('VALIDATION_ERROR', 'Use Arr releases for anime downloads');
@@ -181,11 +178,6 @@ export function engineStatus(): DownloadStatus {
   };
 }
 export async function controlEngine(control: DownloadControl): Promise<DownloadStatus> {
-  if (currentUser()?.role === 'member') {
-    if (!('batchId' in control) || !control.batchId)
-      throw new AppError('FORBIDDEN', 'Administrator access required for queue controls', 403);
-    requireBatch(control.batchId);
-  }
   if (control.action === 'retry_failed') {
     const batches = listBatches();
     if (control.batchId && !batches.some((b) => b.id === control.batchId))
@@ -231,14 +223,14 @@ export async function controlEngine(control: DownloadControl): Promise<DownloadS
   if (control.action === 'pause') {
     setWorkerValue('download_paused', '1');
     setWorkerValue('download_generation', randomUUID());
-    transfer.abort();
-    transfer = new AbortController();
+    downloadState().transfer.abort();
+    downloadState().transfer = new AbortController();
   }
   if (control.action === 'resume') setWorkerValue('download_paused', '0');
   if (control.action === 'clear') {
     setWorkerValue('download_generation', randomUUID());
-    transfer.abort();
-    transfer = new AbortController();
+    downloadState().transfer.abort();
+    downloadState().transfer = new AbortController();
     for (const batch of listBatches().filter(
       (b) =>
         ['enqueuing', 'downloading', 'importing', 'error'].includes(b.state) &&
@@ -263,7 +255,11 @@ function cancelBatch(batch: DownloadBatch) {
   update(batch, { state: batch.importedIds.length ? 'completed' : 'error', error: 'CANCELLED' });
 }
 export async function processBatch(batch: DownloadBatch) {
-  if (activeBatches.has(batch.id) || paused() || ['completed', 'error'].includes(batch.state))
+  if (
+    downloadState().activeBatches.has(batch.id) ||
+    paused() ||
+    ['completed', 'error'].includes(batch.state)
+  )
     return;
   batch.chapters = batch.chapterIds.slice(0, 500).map(
     (id) =>
@@ -278,7 +274,7 @@ export async function processBatch(batch: DownloadBatch) {
       },
   );
   batch.scan ??= null;
-  activeBatches.add(batch.id);
+  downloadState().activeBatches.add(batch.id);
   const generation = workerValue('download_generation');
   const cancellation = workerValue(`download_cancel:${batch.id}`);
   const controller = new AbortController();
@@ -295,7 +291,7 @@ export async function processBatch(batch: DownloadBatch) {
   };
   const controlPoll = setInterval(checkControl, 100);
   controlPoll.unref();
-  const signal = AbortSignal.any([transfer.signal, controller.signal]);
+  const signal = AbortSignal.any([downloadState().transfer.signal, controller.signal]);
   const persist = () => {
     checkControl();
     signal.throwIfAborted();
@@ -404,7 +400,7 @@ export async function processBatch(batch: DownloadBatch) {
       });
   } finally {
     clearInterval(controlPoll);
-    activeBatches.delete(batch.id);
+    downloadState().activeBatches.delete(batch.id);
     const key = `download_retry_failed:${batch.id}`;
     const pending = workerValue(key);
     const current = listBatches().find((b) => b.id === batch.id);
@@ -421,17 +417,16 @@ export async function processBatch(batch: DownloadBatch) {
 }
 const owner = randomUUID();
 let timer: ReturnType<typeof setTimeout> | undefined;
-let running = false;
 let initialized = false;
 
-export function workerTick() {
-  return asServer(workerTickShared);
-}
-async function workerTickShared() {
-  if (running || !acquireWorker(owner)) return;
-  running = true;
+export async function workerTick() {
+  const state = downloadState();
+  if (state.running || !acquireWorker(owner)) return;
+  state.running = true;
   const controller = new AbortController();
+  const signal = AbortSignal.any([controller.signal, tenantSignal()]);
   const ownsLease = () => {
+    if (signal.aborted) return false;
     const lease = statement('SELECT owner,expires_at FROM worker_lock WHERE id=1').get() as
       { owner: string; expires_at: number } | undefined;
     const owns = lease?.owner === owner && lease.expires_at > Date.now();
@@ -443,12 +438,12 @@ async function workerTickShared() {
   }, 10_000);
   lease.unref();
   // Covers must not wait for a large matching queue or a long chapter transfer to finish.
-  const covers = syncTrackedCovers(controller.signal, true).catch(() => {
+  const covers = syncTrackedCovers(signal, true).catch(() => {
     /* Retry after a later wake. */
   });
   let matchingRunning = true;
   const matchingDone = new AbortController();
-  const matching = drainSourceMatches(controller.signal, ownsLease)
+  const matching = drainSourceMatches(signal, ownsLease)
     .catch(() => {
       /* An aborted/failed lookup remains queued for a subsequent tick. */
     })
@@ -464,42 +459,37 @@ async function workerTickShared() {
       }
       if (!ownsLease()) return;
       if (kavitaSyncRequested()) await syncKavitaIndex();
-      if (ownsLease() && updateCheckDue())
-        await runUpdateCheck(createBatch, controller.signal, ownsLease);
-      if (matchingRunning && !controller.signal.aborted)
-        await waitForWorker(
-          workerIdleMs(),
-          AbortSignal.any([controller.signal, matchingDone.signal]),
-        );
-    } while (matchingRunning && !controller.signal.aborted);
+      if (ownsLease() && updateCheckDue()) await runUpdateCheck(createBatch, signal, ownsLease);
+      if (matchingRunning && !signal.aborted)
+        await waitForWorker(workerIdleMs(), AbortSignal.any([signal, matchingDone.signal]));
+    } while (matchingRunning && !signal.aborted);
     await matching;
     await covers;
-    if (ownsLease()) await syncTrackedCovers(controller.signal, true);
+    if (ownsLease()) await syncTrackedCovers(signal, true);
   } finally {
     controller.abort();
     await matching;
     await covers;
     clearInterval(lease);
-    running = false;
+    state.running = false;
   }
 }
 export function startWorker() {
-  // Startup authentication/recovery also runs when the background worker is disabled.
   if (!initialized) {
-    db();
+    accountsDb();
     persistentSecret('access.token', 32);
     initialized = true;
   }
   if (timer || env('WORKER') === 'false') return;
   const scope = globalThis as typeof globalThis & { __bunkoWorkers?: Set<string> };
   const workers = (scope.__bunkoWorkers ??= new Set());
-  if (workers.has(dataDir)) return;
-  workers.add(dataDir);
+  if (workers.has(accountsDir)) return;
+  workers.add(accountsDir);
   let looping = false;
   let pending = false;
   const schedule = (ms: number) => {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(loop, ms);
+    timer = tenantContext.exit(() => userContext.run(undefined, () => setTimeout(loop, ms)));
     timer.unref();
   };
   const loop = async () => {
@@ -510,7 +500,7 @@ export function startWorker() {
     looping = true;
     pending = false;
     try {
-      await workerTick();
+      await runTenantWorkers();
     } catch {
       console.error('Bunko worker cycle failed');
     } finally {
@@ -518,13 +508,30 @@ export function startWorker() {
       schedule(pending ? 0 : workerIdleMs());
     }
   };
-  onWorkerWake(() => {
+  onAllTenantsWake(() => {
     if (looping) pending = true;
     else if (env('WORKER') !== 'false') schedule(0);
   });
   schedule(0);
 }
-/** Enrich shared batch metadata only at the response boundary. Never persist a user's membership flags. */
+/** One scheduler, at most two private instances active at once. */
+export async function runTenantWorkers() {
+  await eachConcurrent(accountIdentities(), 2, (user) =>
+    inTenant(user.id, async () => {
+      // Blank instances have no upstream work. Local requests/batches still wake their own tick.
+      try {
+        const s = getSettings();
+        if (!s.suwayomiUrl && !s.kavitaUrl && !listTracked().length && !listBatches().length)
+          return;
+        await workerTick();
+      } catch {
+        // One failed/deleted tenant must not prevent the remaining instances from running.
+        console.error('Bunko tenant worker cycle failed');
+      }
+    }),
+  );
+}
+/** Recompute tenant library flags at the response boundary. */
 export function publicBatches(batches = listBatches()): DownloadBatch[] {
   const media = withTracking(batches.map((b) => b.media));
   return batches.map((b, i) => ({ ...b, media: media[i] }));

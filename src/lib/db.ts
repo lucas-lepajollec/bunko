@@ -1,5 +1,3 @@
-import { progressKey } from './users';
-import { currentUser, asServer } from './user-context';
 import { AppError } from './errors';
 import { sourceUploadDate, type SourceChapter } from './source-chapters';
 import { adultResolver, automaticMedia } from './adult';
@@ -9,10 +7,11 @@ import Database from 'better-sqlite3';
 import { coverContext } from './cover-state';
 import { activeSourceMatch, SOURCE_MATCH_RETRY_MS } from './source-match-state';
 import { matchKavita, kavitaPresence, kavitaMatcher } from './kavita-index';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, lstatSync } from 'node:fs';
 import path from 'node:path';
 import { getSettings } from './settings';
-import { env } from '@/lib/env';
+import { tenantId, tenantPath, tenantState } from './tenant-context';
+import { accountsDb, tenantExists } from './accounts-store';
 import type {
   DownloadBatch,
   SourceMatch,
@@ -22,25 +21,32 @@ import type {
   SourceLinkStatus,
   CoverChoice,
 } from '@/types/shared';
-export const dataDir = path.resolve(/* turbopackIgnore: true */ env('DATA_DIR') ?? './data');
-let connection: Database.Database | undefined;
+export function dataDir(): string {
+  const id = tenantId();
+  if (!tenantExists(id)) throw new AppError('UNAUTHORIZED', 'Account has been deleted', 401);
+  const folder = tenantPath(id);
+  for (const part of [path.dirname(folder), folder])
+    if (existsSync(part) && lstatSync(part).isSymbolicLink())
+      throw new Error('Tenant directory must not be a symlink');
+  return folder;
+}
+const connections = new Map<string, Database.Database>();
 export function db(): Database.Database {
-  if (connection) return connection;
-  mkdirSync(dataDir, { recursive: true, mode: 0o700 });
-  // Installations created before the rename keep their database file.
-  const legacy = path.join(/* turbopackIgnore: true */ dataDir, 'kaviseerr.db');
-  connection = new Database(
-    existsSync(/* turbopackIgnore: true */ legacy)
-      ? legacy
-      : path.join(/* turbopackIgnore: true */ dataDir, 'bunko.db'),
-  );
-  connection.pragma('journal_mode = WAL');
-  connection.pragma('synchronous = NORMAL');
-  connection.pragma('cache_size = -16384');
-  connection.pragma('temp_store = MEMORY');
-  connection.pragma('foreign_keys = ON');
-  connection.pragma('busy_timeout = 5000');
-  connection.exec(`
+  accountsDb();
+  const folder = dataDir();
+  const existing = connections.get(folder);
+  if (existing?.open) return existing;
+  mkdirSync(folder, { recursive: true, mode: 0o700 });
+  const legacy = path.join(/* turbopackIgnore: true */ folder, 'kaviseerr.db');
+  const connection = new Database(existsSync(legacy) ? legacy : path.join(folder, 'bunko.db'));
+  try {
+    connection.pragma('journal_mode = WAL');
+    connection.pragma('synchronous = NORMAL');
+    connection.pragma('cache_size = -16384');
+    connection.pragma('temp_store = MEMORY');
+    connection.pragma('foreign_keys = ON');
+    connection.pragma('busy_timeout = 5000');
+    connection.exec(`
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS tracked_media (
       id INTEGER PRIMARY KEY, anilist_id INTEGER, mangadex_id TEXT, title TEXT NOT NULL,
@@ -58,13 +64,13 @@ export function db(): Database.Database {
     CREATE TABLE IF NOT EXISTS worker_lock (id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, expires_at INTEGER NOT NULL);
 
   `);
-  migrateV2(connection);
-  migrateV3(connection);
-  migrateV4(connection);
-  migrateV5(connection);
-  migrateV6(connection);
-  migrateV7(connection);
-  connection.exec(`
+    migrateV2(connection);
+    migrateV3(connection);
+    migrateV4(connection);
+    migrateV5(connection);
+    migrateV6(connection);
+    migrateV7(connection);
+    connection.exec(`
     CREATE TABLE IF NOT EXISTS source_flags (id TEXT PRIMARY KEY, nsfw INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS update_chapters_chapter ON update_chapters(chapter_id);
     CREATE INDEX IF NOT EXISTS update_entries_tracked ON update_entries(tracked_id);
@@ -88,7 +94,7 @@ export function db(): Database.Database {
       tracked_id INTEGER PRIMARY KEY REFERENCES tracked_media(id) ON DELETE CASCADE,
       context TEXT NOT NULL, url TEXT NOT NULL, failures INTEGER NOT NULL DEFAULT 0);
   `);
-  connection.exec(`CREATE TABLE IF NOT EXISTS kavita_cover_status (
+    connection.exec(`CREATE TABLE IF NOT EXISTS kavita_cover_status (
     tracked_id INTEGER PRIMARY KEY REFERENCES tracked_media(id) ON DELETE CASCADE,
     context TEXT NOT NULL, hash TEXT NOT NULL, series_id INTEGER NOT NULL,
     state TEXT NOT NULL, error TEXT);
@@ -102,61 +108,74 @@ export function db(): Database.Database {
       identity TEXT PRIMARY KEY, adult INTEGER NOT NULL CHECK(adult IN (0,1)), revision INTEGER NOT NULL, automatic INTEGER NOT NULL CHECK(automatic IN (0,1)));
     CREATE TABLE IF NOT EXISTS write_versions (domain TEXT PRIMARY KEY, version INTEGER NOT NULL);
     INSERT OR IGNORE INTO write_versions VALUES('library',0),('series',0),('settings',0),('linkage',0),('batches',0),('releases',0);`);
-  migrateV8(connection);
-  migrateV9(connection);
-  // Replace older trigger definitions atomically: every route bundle observes settings writes.
-  const versionConnection = connection;
-  connection.transaction(() => {
-    for (const table of [
-      'tracked_media',
-      'source_flags',
-      'adult_identity_edges',
-      'adult_overrides',
-      'chapter_releases',
-      'source_links',
-      'imported_chapters',
-      'observed_chapters',
-      'observation_dates',
-      'resolved_covers',
-      'stored_covers',
-      'kavita_cover_status',
-      'kavita_series',
-      'settings',
-      'download_batches',
-    ]) {
-      for (const operation of ['INSERT', 'UPDATE', 'DELETE']) {
-        const domain =
-          table === 'chapter_releases'
-            ? 'releases'
-            : table === 'download_batches'
-              ? 'batches'
-              : table === 'kavita_series'
-                ? 'series'
-                : table === 'settings'
-                  ? 'settings'
-                  : table === 'tracked_media'
-                    ? 'linkage'
-                    : null;
-        versionConnection.exec(`DROP TRIGGER IF EXISTS version_${table}_${operation}; CREATE TRIGGER version_${table}_${operation}
+    migrateV8(connection);
+    migrateV9(connection);
+    // Replace older trigger definitions atomically: every route bundle observes settings writes.
+    const versionConnection = connection;
+    connection.transaction(() => {
+      for (const table of [
+        'tracked_media',
+        'source_flags',
+        'adult_identity_edges',
+        'adult_overrides',
+        'chapter_releases',
+        'source_links',
+        'imported_chapters',
+        'observed_chapters',
+        'observation_dates',
+        'resolved_covers',
+        'stored_covers',
+        'kavita_cover_status',
+        'kavita_series',
+        'settings',
+        'download_batches',
+      ]) {
+        for (const operation of ['INSERT', 'UPDATE', 'DELETE']) {
+          const domain =
+            table === 'chapter_releases'
+              ? 'releases'
+              : table === 'download_batches'
+                ? 'batches'
+                : table === 'kavita_series'
+                  ? 'series'
+                  : table === 'settings'
+                    ? 'settings'
+                    : table === 'tracked_media'
+                      ? 'linkage'
+                      : null;
+          versionConnection.exec(`DROP TRIGGER IF EXISTS version_${table}_${operation}; CREATE TRIGGER version_${table}_${operation}
         AFTER ${operation} ON ${table} BEGIN
         ${['download_batches', 'chapter_releases'].includes(table) ? '' : "UPDATE write_versions SET version=version+1 WHERE domain='library';"}
         ${domain ? `UPDATE write_versions SET version=version+1 WHERE domain='${domain}' ${table === 'tracked_media' && operation === 'UPDATE' ? "AND (OLD.anilist_id IS NOT NEW.anilist_id OR OLD.mangadex_id IS NOT NEW.mangadex_id OR OLD.kavita_series_id IS NOT NEW.kavita_series_id OR OLD.kavita_manual IS NOT NEW.kavita_manual OR json_extract(OLD.media_json,'$.id') IS NOT json_extract(NEW.media_json,'$.id'))" : ''};` : ''}
         END;`);
+        }
       }
-    }
-  })();
-  resetAccountAtStartup(connection);
-  return connection;
+    })();
+    migrateV10(connection);
+    connections.set(folder, connection);
+    return connection;
+  } catch (error) {
+    connection.close();
+    throw error;
+  }
 }
-const statements = new Map<string, Database.Statement>();
+export function closeTenant(id: number) {
+  const folder = tenantPath(id);
+  connections.get(folder)?.close();
+  connections.delete(folder);
+}
+const prepared = new WeakMap<Database.Database, Map<string, Database.Statement>>();
 /** Reuse SQL bytecode in hot paths. Statements belong to this module's lazy connection. */
 export function statement(sql: string): Database.Statement {
-  let prepared = statements.get(sql);
-  if (!prepared) {
-    prepared = db().prepare(sql);
-    statements.set(sql, prepared);
+  const database = db();
+  let statements = prepared.get(database);
+  if (!statements) prepared.set(database, (statements = new Map()));
+  let value = statements.get(sql);
+  if (!value) {
+    value = database.prepare(sql);
+    statements.set(sql, value);
   }
-  return prepared;
+  return value;
 }
 export function writeVersion(domain = 'library'): number {
   return (
@@ -309,19 +328,6 @@ export function manualKavitaLink(id: number) {
   );
 }
 export function untrack(id: number) {
-  const user = currentUser();
-  if (user) {
-    return db().transaction(() => {
-      requireFollowed(id);
-      statement('INSERT OR IGNORE INTO user_dismissals(user_id,tracked_id) VALUES(?,?)').run(
-        user.id,
-        id,
-      );
-      statement('DELETE FROM user_library WHERE user_id=? AND tracked_id=?').run(user.id, id);
-      if (!statement('SELECT 1 FROM user_library WHERE tracked_id=? LIMIT 1').get(id))
-        asServer(() => untrack(id));
-    })();
-  }
   const cover = storedCover(id);
   db().transaction(() => {
     const tracked = getTracked(id);
@@ -342,22 +348,6 @@ export function untrack(id: number) {
     statement('DELETE FROM tracked_media WHERE id=?').run(id);
   })();
   if (cover) deleteStoredCoverFile(cover);
-}
-// Next can load db.ts in multiple route bundles; reset only once per server process/volume.
-const runtime = globalThis as typeof globalThis & { __bunkoAccountReset?: Set<string> };
-function resetAccountAtStartup(database: Database.Database) {
-  if (env('RESET_ACCOUNT') !== 'true') return;
-  const reset = (runtime.__bunkoAccountReset ??= new Set());
-  if (reset.has(dataDir)) return;
-  database
-    .prepare(
-      "UPDATE users SET password_hash='',session_epoch=lower(hex(randomblob(32))) WHERE id=(SELECT MIN(id) FROM users WHERE role='admin')",
-    )
-    .run();
-  reset.add(dataDir);
-  console.info(
-    'Bunko: first administrator password and sessions reset; account recovery setup is required.',
-  );
 }
 export function sameMedia(a: UnifiedMedia, b: UnifiedMedia) {
   return (
@@ -518,13 +508,13 @@ type TrackedSnapshot = {
 };
 const trackedSnapshots = new Map<number, TrackedSnapshot>();
 function snapshotTracked(id?: number) {
-  const userId = currentUser()?.id ?? 0;
-  const version = writeVersion() + (userId ? writeVersion(`user:${userId}`) : 0);
+  const userId = tenantId();
+  const version = writeVersion();
   const trackedSnapshot = trackedSnapshots.get(userId);
   if (!db().inTransaction && trackedSnapshot?.version === version) return trackedSnapshot;
   const outerTransaction = db().inTransaction;
   const resolveAdult = adultResolver();
-  const linkedProgress = !userId || Boolean(progressKey(userId));
+  const linkedProgress = Boolean(getSettings().kavitaApiKey);
   const kavitaUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
   // A read transaction gives one consistent snapshot when another process commits concurrently.
   const result = db().transaction(() => {
@@ -532,16 +522,10 @@ function snapshotTracked(id?: number) {
       statement(sql + (id === undefined ? '' : ` WHERE ${column}=?`) + suffix).all(
         ...(id === undefined ? [] : [id]),
       );
-    const rows = (
-      userId
-        ? statement(`SELECT t.*,u.status,u.last_read,u.last_read_at,u.progress_checked,u.created_at
-          FROM tracked_media t JOIN user_library u ON u.tracked_id=t.id
-          WHERE u.user_id=? ${id === undefined ? '' : 'AND t.id=?'} ORDER BY t.id DESC`).all(
-            userId,
-            ...(id === undefined ? [] : [id]),
-          )
-        : select('SELECT * FROM tracked_media', 'id', ' ORDER BY id DESC')
-    ) as Record<string, unknown>[];
+    const rows = select('SELECT * FROM tracked_media', 'id', ' ORDER BY id DESC') as Record<
+      string,
+      unknown
+    >[];
     const links = new Map<number, SourceLinkStatus[]>();
     for (const r of select('SELECT tracked_id,payload FROM source_links', 'tracked_id') as {
       tracked_id: number;
@@ -740,7 +724,7 @@ export function getTracked(id: number): TrackedMedia | undefined {
 /** Client artwork cannot replace the authoritative artwork of an already followed work. */
 export function authoritativeMedia(media: UnifiedMedia): UnifiedMedia {
   media = automaticMedia(media);
-  const tracked = asServer(() => trackedForMedia(media, listTracked()));
+  const tracked = trackedForMedia(media, listTracked());
   return tracked
     ? {
         ...media,
@@ -761,44 +745,14 @@ export function authoritativeMedia(media: UnifiedMedia): UnifiedMedia {
 }
 
 export function track(input: TrackRequest): TrackedMedia {
-  const user = currentUser();
   return db()
-    .transaction(() => {
-      const shared = asServer(() => insertTracked(input));
-      if (user) addToLibrary(user.id, shared.id, input.status ?? 'READING');
-      return getTracked(shared.id)!;
-    })
+    .transaction(() => insertTracked(input))
     .immediate();
 }
-export function addToLibrary(
-  userId: number,
-  trackedId: number,
-  status = 'READING',
-  automatic = false,
-) {
-  if (
-    automatic &&
-    statement('SELECT 1 FROM user_dismissals WHERE user_id=? AND tracked_id=?').get(
-      userId,
-      trackedId,
-    )
-  )
-    return;
-  if (!automatic)
-    statement('DELETE FROM user_dismissals WHERE user_id=? AND tracked_id=?').run(
-      userId,
-      trackedId,
-    );
-  statement(`INSERT OR IGNORE INTO user_library(user_id,tracked_id,status,created_at)
-    VALUES(?,?,?,?)`).run(userId, trackedId, status, new Date().toISOString());
-}
+/** All works in this database belong to the current tenant. */
 export function requireFollowed(id: number) {
-  const user = currentUser();
-  if (
-    user &&
-    !statement('SELECT 1 FROM user_library WHERE user_id=? AND tracked_id=?').get(user.id, id)
-  )
-    throw new AppError('FORBIDDEN', 'Follow this work to perform this action', 403);
+  if (!statement('SELECT 1 FROM tracked_media WHERE id=?').get(id))
+    throw new AppError('NOT_FOUND', 'Work not found', 404);
 }
 function insertTracked(input: TrackRequest): TrackedMedia {
   const existing = listTracked().find(
@@ -860,8 +814,12 @@ export function saveBatch(batch: DownloadBatch, linkUpdates = true) {
     }
   }
 }
-let batchSnapshot: { version: number; entries: DownloadBatch[] } | undefined;
+const batchState = tenantState(() => ({
+  snapshot: undefined as { version: number; entries: DownloadBatch[] } | undefined,
+}));
 export function listBatches(): DownloadBatch[] {
+  const state = batchState();
+  const batchSnapshot = state.snapshot;
   const version = writeVersion('batches');
   if (batchSnapshot?.version === version) return structuredClone(batchSnapshot.entries);
   const entries = (
@@ -890,7 +848,7 @@ export function listBatches(): DownloadBatch[] {
     batch.scan ??= null;
     return batch;
   });
-  if (!db().inTransaction) batchSnapshot = { version, entries };
+  if (!db().inTransaction) state.snapshot = { version, entries };
   return structuredClone(entries);
 }
 export function acquireWorker(owner: string): boolean {
@@ -968,6 +926,26 @@ export function migrateV9(database: Database.Database) {
       UPDATE write_versions SET version=version+1 WHERE domain='users' OR domain='user:'||NEW.id; END;
       CREATE TRIGGER version_users_DELETE AFTER DELETE ON users BEGIN
       UPDATE write_versions SET version=version+1 WHERE domain='users' OR domain='user:'||OLD.id; END;`);
+    })
+    .immediate();
+}
+
+/** Retire v9 memberships after preserving user 1's current reading state. Accounts are already copied. */
+export function migrateV10(database: Database.Database) {
+  database
+    .transaction(() => {
+      if (Number(database.pragma('user_version', { simple: true })) >= 10) return;
+      if (tenantId() === 1) {
+        database.exec(`UPDATE tracked_media SET
+        status=u.status,last_read=u.last_read,last_read_at=u.last_read_at,
+        progress_checked=u.progress_checked,created_at=u.created_at
+        FROM user_library u WHERE u.tracked_id=tracked_media.id AND u.user_id=1;
+        INSERT INTO settings(key,value) SELECT 'adultContent',CASE WHEN adult_content=1 THEN 'true' ELSE 'false' END FROM users WHERE id=1
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value;`);
+      }
+      database.exec(`DROP TABLE user_dismissals; DROP TABLE user_library; DROP TABLE users; DROP TABLE administrator;
+      DELETE FROM write_versions WHERE domain='users' OR domain LIKE 'user:%';
+      PRAGMA user_version=10;`);
     })
     .immediate();
 }

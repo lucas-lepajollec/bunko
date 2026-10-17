@@ -16,7 +16,7 @@ import path from 'node:path';
 import { dataDir, db, statement } from './db';
 import type { CachedImage } from './image-cache';
 import { AppError } from './errors';
-const directory = () => path.join(/* turbopackIgnore: true */ dataDir, 'covers');
+const directory = () => path.join(/* turbopackIgnore: true */ dataDir(), 'covers');
 const extensions: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -121,6 +121,7 @@ export function storedCoverResponse(request: Request, id: number) {
     throw new AppError('NOT_FOUND', 'Cover not found', 404);
   const etag = `"${cover.hash}"`;
   const headers = {
+    Vary: 'Cookie, Authorization',
     'Content-Type': cover.mime,
     ETag: etag,
     'Cache-Control': version

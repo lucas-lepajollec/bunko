@@ -11,7 +11,6 @@ import { requestJson } from './http';
 import { createHash } from 'node:crypto';
 import { getSettings } from './settings';
 import { AppError } from './errors';
-import { asServer } from './user-context';
 import { db, listTracked, trackedForMedia } from './db';
 import { cached, storedMetadata, saveMetadata } from './metadata-cache';
 import { kavitaMedia } from './kavita-track';
@@ -49,7 +48,7 @@ async function anilist<T>(query: string, variables: Record<string, unknown>, sig
 }
 export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
   const tracked = listTracked();
-  const shared = asServer(() => listTracked());
+  const shared = listTracked();
   const resolve = kavitaMatcher();
   const baseUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
   const resolveAdult = adultResolver();
@@ -319,7 +318,7 @@ function detailCacheKey(id: string) {
   return `detail:${namespace}:${id}`;
 }
 export async function mediaDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
-  const followed = asServer(() => listTracked()).find(
+  const followed = listTracked().find(
     (t) =>
       t.media.id === id ||
       (id.startsWith('anilist:') && t.anilistId === Number(id.slice(8))) ||

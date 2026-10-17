@@ -1,9 +1,13 @@
+import { tenantState } from './tenant-context';
 import type { UnifiedMedia, ChapterSelection, TrackedMedia, Source } from '@/types/shared';
 import { statement, writeVersion, db } from './db';
 import { getSettings } from './settings';
 
-let flags: { version: number; values: Map<string, boolean> } | undefined;
+const flagsCache = tenantState(() => ({
+  value: undefined as { version: number; values: Map<string, boolean> } | undefined,
+}));
 function sourceFlags() {
+  const flags = flagsCache().value;
   const version = writeVersion();
   if (flags?.version === version) return flags.values;
   const values = new Map(
@@ -11,7 +15,7 @@ function sourceFlags() {
       (r) => [r.id, Boolean(r.nsfw)],
     ),
   );
-  if (!db().inTransaction) flags = { version, values };
+  if (!db().inTransaction) flagsCache().value = { version, values };
   return values;
 }
 export function recordSourceFlags(sources: Source[]) {
@@ -46,15 +50,18 @@ export function rememberAdultIdentities(media: Partial<UnifiedMedia>, aliases: s
       alias,
     );
 }
-let identities:
-  | {
-      version: number;
-      find: (id: string) => string;
-      groups: Map<string, string[]>;
-      overrides: Map<string, { adult: boolean; revision: number; automatic: boolean }>;
-    }
-  | undefined;
+const identitiesCache = tenantState(() => ({
+  value: undefined as
+    | {
+        version: number;
+        find: (id: string) => string;
+        groups: Map<string, string[]>;
+        overrides: Map<string, { adult: boolean; revision: number; automatic: boolean }>;
+      }
+    | undefined,
+}));
 function adultState() {
+  const identities = identitiesCache().value;
   const version = writeVersion();
   if (identities?.version === version && !db().inTransaction) return identities;
   const parents = new Map<string, string>();
@@ -119,7 +126,7 @@ function adultState() {
     groups.set(root, values);
   }
   const state = { version, find, groups, overrides };
-  if (!db().inTransaction) identities = state;
+  if (!db().inTransaction) identitiesCache().value = state;
   return state;
 }
 export function includeProviderAdults() {
