@@ -1,7 +1,8 @@
 import type { ChapterSelection, SourceCandidate, TrackedMedia } from '@/types/shared';
 import { statement, db, getTracked, saveSourceStatus } from './db';
 import { matchingSources, chaptersFor } from './suwayomi';
-import { matchOnSource, rankCandidates } from './matching';
+import { rankCandidates } from './matching';
+import { scanMatchingSources } from './matching-scan';
 import { suwayomiDetail } from './catalog';
 import { errorCode } from './errors';
 import { sourceMatchQueue } from './source-match-state';
@@ -68,21 +69,19 @@ export async function matchTrackedSources(
     const state = JSON.stringify({ id: t.id, title: t.title, owner: lease?.owner ?? null });
     statement("INSERT OR REPLACE INTO worker_state VALUES('source_matching',?)").run(state);
     try {
-      const results = await Promise.allSettled(
-        available.map(async (source) => {
-          return (await matchOnSource(source, t.media, signal)).find(
-            (c) =>
-              c.score >= 0.9 &&
-              !statement(
-                'SELECT 1 FROM source_dismissals WHERE tracked_id=? AND source_id=? AND manga_id=?',
-              ).get(t.id, c.sourceId, c.suwayomiMangaId),
-          );
-        }),
-      );
+      const results = await scanMatchingSources(available, t.media, signal);
+      const candidates = available.flatMap((source) => {
+        const candidate = results.find(
+          (c) =>
+            c.sourceId === source.id &&
+            c.score >= 0.9 &&
+            !statement(
+              'SELECT 1 FROM source_dismissals WHERE tracked_id=? AND source_id=? AND manga_id=?',
+            ).get(t.id, c.sourceId, c.suwayomiMangaId),
+        );
+        return candidate ? [candidate] : [];
+      });
       if (signal?.aborted || !ownsLease()) return false;
-      const candidates = results.flatMap((r) =>
-        r.status === 'fulfilled' && r.value ? [r.value] : [],
-      );
       let linked = false;
       db().transaction(() => {
         const current = getTracked(t.id);
@@ -128,6 +127,9 @@ export async function matchTrackedSources(
           await refreshSourceStatuses(current, result, signal, ownsLease);
       }
       return true;
+    } catch (error) {
+      if (signal?.aborted || !ownsLease()) return false;
+      throw error;
     } finally {
       statement("DELETE FROM worker_state WHERE key='source_matching' AND value=?").run(state);
     }

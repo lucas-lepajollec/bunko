@@ -63,7 +63,12 @@ const req = (url: string, method = 'GET', value?: unknown, cookie = admin, signa
   new Request(base + url, {
     method,
     signal,
-    headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' },
+    headers: {
+      Cookie: cookie,
+      Origin: base,
+      'Content-Type': 'application/json',
+      'Accept-Language': 'fr',
+    },
     ...(value === undefined ? {} : { body: JSON.stringify(value) }),
   });
 const media = (id = 1) => ({

@@ -36,7 +36,7 @@ const coversRoute = await import('@/app/api/tracked/covers/route');
 const { searchSource } = await import('@/lib/suwayomi');
 let server: Server;
 let base: string;
-let sources: Source[];
+let sources: (Source & { extension?: { pkgName: string } })[];
 let searchHits: Record<string, { id: number; title: string }[]>;
 let sourceChapters: Record<number, number[]>;
 let failManga: number | null;
@@ -49,6 +49,7 @@ let requireImageKey: boolean;
 let imageRequests: URL[];
 let requests: { query: string; variables: Record<string, unknown> }[];
 let sourceDelay: number;
+let sourceDelays: Record<string, number>;
 let active: number;
 let peak: number;
 let generation = 0;
@@ -154,7 +155,8 @@ beforeAll(async () => {
       if (query.includes('sources {')) return json({ data: { sources: { nodes: sources } } });
       active++;
       peak = Math.max(peak, active);
-      if (sourceDelay) await new Promise((resolve) => setTimeout(resolve, sourceDelay));
+      const delay = sourceDelays[variables.input?.source] ?? sourceDelay;
+      if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
       if (query.includes('fetchSourceManga') && blockedSearch) await blockedSearch();
       active--;
       if (query.includes('fetchSourceManga')) {
@@ -275,6 +277,7 @@ beforeEach(() => {
   requireImageKey = false;
   imageRequests = [];
   sourceDelay = 0;
+  sourceDelays = {};
   active = 0;
   peak = 0;
   blockedSearch = null;
@@ -1389,7 +1392,7 @@ it('keeps the reverse catalog-to-Kavita manual choice through HTTP and automatic
   expect(listTracked()[0].media.id).toBe(t.media.id);
 });
 
-it('scans every healthy installed source in stable preference order with six shared calls at most', async () => {
+it('scans healthy installed sources in selected languages beyond favourites with six shared calls at most', async () => {
   const { matchingSources, sources: globalSources } = await import('@/lib/suwayomi');
   const { GET } = await import('@/app/api/media/sources/route');
   sources = Array.from({ length: 33 }, (_, i) => ({
@@ -1404,7 +1407,10 @@ it('scans every healthy installed source in stable preference order with six sha
     '7',
     '3',
     '1',
-    ...sources.map((s) => s.id).filter((id) => !['7', '3', '1', '33'].includes(id)),
+    ...sources
+      .filter((s) => s.lang === 'fr')
+      .map((s) => s.id)
+      .filter((id) => !['7', '3', '1', '33'].includes(id)),
   ];
   expect((await matchingSources()).map((s) => s.id)).toEqual(expected);
   const t = track({ media: catalog() });
@@ -1417,8 +1423,8 @@ it('scans every healthy installed source in stable preference order with six sha
     }),
   );
   const stream = await response.text();
-  expect(stream.match(/event: match\n/g)).toHaveLength(32);
-  expect(stream).toContain('event: done\ndata: {"completed":32}');
+  expect(stream.match(/event: match\n/g)).toHaveLength(16);
+  expect(stream).toContain('event: done\ndata: {"completed":16}');
   expect(
     JSON.parse(stream.split('data: ')[1].split('\n')[0]).sources.map((s: Source) => s.id),
   ).toEqual(expected);
@@ -1430,10 +1436,167 @@ it('scans every healthy installed source in stable preference order with six sha
         .filter((r) => r.query.includes('fetchSourceManga'))
         .map((r) => (r.variables.input as { source: string }).source),
     ).size,
-  ).toBe(32);
+  ).toBe(16);
   expect(listTracked()[0].sources).toHaveLength(3);
   expect(peak).toBeLessThanOrEqual(6);
   expect(peak).toBeGreaterThan(1);
+});
+
+it.each([
+  ['es-ES,es;q=0.9,en;q=0.8', ['es', 'en']],
+  ['en-US,en;q=0.9', ['en']],
+  ['ja-JP,de-DE;q=0.8', ['de', 'en']],
+  ['', ['en']],
+])(
+  'initializes missing tenant languages from the interface browser fallback %s',
+  async (language, expected) => {
+    const { GET } = await import('@/app/api/sources/preferences/route');
+    const { getSourcePreferences } = await import('@/lib/source-preferences');
+    db().prepare("DELETE FROM settings WHERE key='sourcePreferences'").run();
+    updateSettings({ favoriteSourceIds: ['1'] });
+    const response = await GET(
+      new Request('http://localhost/api/sources/preferences', {
+        headers: {
+          Authorization: `Bearer ${persistentSecret('access.token', 32).toString('hex')}`,
+          'Accept-Language': language,
+        },
+      }),
+    );
+    expect(await response.json()).toEqual({ enabledSourceIds: ['1'], languages: expected });
+    expect(getSourcePreferences('it')).toEqual({ enabledSourceIds: ['1'], languages: expected });
+  },
+);
+
+it('keeps one lane per selected source in 33 multilingual extensions and deduplicates both matching paths', async () => {
+  const { matchingSources, sourceInfos } = await import('@/lib/suwayomi');
+  const { GET } = await import('@/app/api/media/sources/route');
+  sources = Array.from({ length: 33 }, (_, extension) =>
+    ['en', 'fr', 'es', 'de', 'it', 'pt', 'ja', 'zh', 'all'].map((lang, variant) => ({
+      id: String(extension * 10 + variant + 1),
+      name: `Extension ${extension}`,
+      lang,
+      extension: { pkgName: `fixture.extension${extension}` },
+    })),
+  ).flat();
+  sources.push(sources[8]); // Upstream duplicate must not create another lane or request.
+  setSourcePreferences({ enabledSourceIds: ['1'], languages: ['fr', 'en'] });
+  const kept = await matchingSources();
+  expect(kept).toHaveLength(99);
+  expect(new Set(kept.map((s) => s.id)).size).toBe(99);
+  expect(kept.slice(0, 33).every((s) => s.lang === 'fr')).toBe(true);
+  expect((await sourceInfos()).every((s) => ['fr', 'en', 'all'].includes(s.lang))).toBe(true);
+  for (const s of sources) {
+    searchHits[s.id] = [
+      { id: Number(s.id) * 10, title: 'Owned Work' },
+      { id: Number(s.id) * 10, title: 'Owned Work' },
+    ];
+    sourceChapters[Number(s.id) * 10] = s.lang === 'en' ? [1, 2, 3, 4] : [1];
+  }
+  sourceDelay = 2;
+  sourceDelays['2'] = 40; // Less-preferred English answers before French and has more chapters.
+  const t = track({ media: catalog() });
+  const response = await GET(request('GET', undefined, `/api/media/sources?id=${t.media.id}`));
+  const stream = await response.text();
+  const events = stream
+    .split('\n\n')
+    .filter((s) => s.startsWith('event: match\n'))
+    .map((s) => JSON.parse(s.split('data: ')[1]));
+  expect(events).toHaveLength(99);
+  expect(new Set(events.map((e) => e.source.id)).size).toBe(99);
+  expect(stream).toContain('event: done\ndata: {"completed":99}');
+  const candidates = events.flatMap((e) => e.candidates);
+  expect(candidates).toHaveLength(33);
+  expect(candidates.every((c) => c.lang === 'fr')).toBe(true);
+  expect(requests.filter((r) => r.query.includes('fetchSourceManga'))).toHaveLength(99);
+  requests = [];
+  await matchTrackedSources();
+  expect(requests.filter((r) => r.query.includes('fetchSourceManga'))).toHaveLength(99);
+  expect(listTracked()[0].sources).toHaveLength(3);
+  expect(
+    listTracked()[0].sources.every((s) => kept.find((k) => k.id === s.sourceId)?.lang === 'fr'),
+  ).toBe(true);
+  expect(peak).toBeLessThanOrEqual(6);
+  expect(peak).toBeGreaterThan(1);
+});
+
+it('keeps a lower-preference variant when the preferred language fails and completes every SSE lane', async () => {
+  const { GET } = await import('@/app/api/media/sources/route');
+  sources = [
+    { id: '1', name: 'Dex', lang: 'fr', extension: { pkgName: 'dex' } },
+    { id: '2', name: 'Dex', lang: 'en', extension: { pkgName: 'dex' } },
+  ];
+  setSourcePreferences({ enabledSourceIds: [], languages: ['fr', 'en'] });
+  const fixtureFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
+    const body = init?.body ? JSON.parse(String(init.body)) : {};
+    if (body.query?.includes('fetchSourceManga') && body.variables.input.source === '1')
+      return Response.json({ errors: [{ message: 'HTTP error 503' }] });
+    return fixtureFetch(input, init);
+  });
+  const t = track({ media: catalog() });
+  const stream = await (
+    await GET(request('GET', undefined, `/api/media/sources?id=${t.media.id}`))
+  ).text();
+  expect(stream.match(/event: source_error\n/g)).toHaveLength(1);
+  expect(stream.match(/event: match\n/g)).toHaveLength(1);
+  const result = JSON.parse(stream.split('event: match\ndata: ')[1].split('\n')[0]);
+  expect(result.candidates).toMatchObject([{ sourceId: '2', lang: 'en' }]);
+  expect(stream).toContain('event: done\ndata: {"completed":2}');
+  await matchTrackedSources(); // Recent failing French source is cooled down.
+  expect(listTracked()[0].sources.map((s) => s.sourceId)).toEqual(['2']);
+});
+
+it('deduplicates only matching titles across sibling languages, preserving distinct titles and extensions', async () => {
+  const { deduplicateCandidates } = await import('@/lib/matching-scan');
+  const variants = [
+    { id: '1', name: 'Dex', lang: 'fr', extensionId: 'dex' },
+    { id: '2', name: 'Dex', lang: 'en', extensionId: 'dex' },
+    { id: '3', name: 'Fire', lang: 'en', extensionId: 'fire' },
+  ];
+  const hit = (index: number, manga: number, title: string) => ({
+    sourceId: variants[index].id,
+    sourceName: variants[index].name,
+    lang: variants[index].lang,
+    suwayomiMangaId: manga,
+    mangaUrl: `/manga/${manga}`,
+    thumbnailUrl: null,
+    title,
+    score: 1,
+  });
+  const candidates = [
+    hit(1, 20, 'Owned Work'),
+    hit(0, 10, 'Owned Work'),
+    hit(0, 10, 'Owned Work'),
+    hit(1, 21, 'Owned Work Sequel'),
+    hit(2, 30, 'Owned Work'),
+  ];
+  expect(deduplicateCandidates(candidates, variants).map((c) => c.suwayomiMangaId)).toEqual([
+    10, 21, 30,
+  ]);
+  expect(
+    deduplicateCandidates(candidates, [variants[1], variants[0], variants[2]]).map(
+      (c) => c.suwayomiMangaId,
+    ),
+  ).toEqual([20, 21, 30]);
+});
+
+it('keeps selected matching languages and health isolated between tenants', async () => {
+  const { inTenant } = await import('@/lib/tenant-context');
+  const { matchingSources } = await import('@/lib/suwayomi');
+  sources = [
+    { id: '1', name: 'French', lang: 'fr' },
+    { id: '2', name: 'English', lang: 'en' },
+    { id: '3', name: 'Multi', lang: 'all' },
+  ];
+  const first = await matchingSources();
+  expect(first.map((s) => s.id)).toEqual(['1', '3']);
+  await inTenant(2, async () => {
+    updateSettings({ suwayomiUrl: base });
+    setSourcePreferences({ enabledSourceIds: [], languages: ['en'] });
+    recordSourceHealth('3', 1, 'HTTP_ERROR');
+    expect((await matchingSources()).map((s) => s.id)).toEqual(['2']);
+  });
+  expect((await matchingSources()).map((s) => s.id)).toEqual(['1', '3']);
 });
 
 it('persists displayTitle over HTTP and propagates it to detail, home, releases/planning and new batches while retaining the existing folder', async () => {

@@ -326,12 +326,14 @@ describe('v2 protocol fixtures', () => {
     chapterFailure = false;
     browseFailure = false;
     calls.length = 0;
+    getSourcePreferences('fr');
   });
   it('migrates favorites exactly once and applies language, enabled and priority preferences', async () => {
+    db().prepare("DELETE FROM settings WHERE key='sourcePreferences'").run();
     updateSettings({ favoriteSourceIds: [sourceB.id, sourceA.id] });
-    expect(getSourcePreferences()).toEqual({
+    expect(getSourcePreferences('fr-FR,fr;q=0.9,en;q=0.8')).toEqual({
       enabledSourceIds: [sourceB.id, sourceA.id],
-      languages: ['fr'],
+      languages: ['fr', 'en'],
     });
     updateSettings({ favoriteSourceIds: [sourceA.id] });
     expect(getSourcePreferences().enabledSourceIds).toEqual([sourceB.id, sourceA.id]);

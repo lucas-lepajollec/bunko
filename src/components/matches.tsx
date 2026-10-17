@@ -616,7 +616,9 @@ function SourcesTab({
               <span className="truncate">{c.title}</span>
               <span className="text-muted flex items-center gap-1.5 truncate text-xs">
                 <Dot tone={c.score >= 0.9 ? 'ok' : 'warn'} />
-                {c.sourceName} · {c.score >= 0.9 ? t('sources.exact') : t('sources.doubtful')}
+                {c.sourceName}
+                {c.lang && c.lang !== 'all' ? ` (${c.lang.toUpperCase()})` : ''} ·{' '}
+                {c.score >= 0.9 ? t('sources.exact') : t('sources.doubtful')}
               </span>
             </span>
             <span className={smallButton}>{t('match.add')}</span>

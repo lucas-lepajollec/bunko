@@ -306,6 +306,8 @@ describe('catalog, search and SSE', () => {
     const result = await searchSource(source, 'Series');
     expect(result.results[0].sourceId).toBe(source.id);
     expect(searchCatalog('Series')[0].suwayomiMangaId).toBe(1);
+    const { setSourcePreferences } = await import('@/lib/source-preferences');
+    setSourcePreferences({ enabledSourceIds: [], languages: ['fr'] });
     expect(await sources()).toEqual([source]);
     expect(await resolveManga(source.id, '/series/1')).toBe(1);
   });

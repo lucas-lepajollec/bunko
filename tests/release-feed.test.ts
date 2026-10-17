@@ -116,6 +116,8 @@ describe('public provider fixtures', () => {
     expect(r.media.format).toBe('MANHWA');
   });
   it('loads MangaDex chapter timestamps, language filters, group and artwork', async () => {
+    const { setSourcePreferences } = await import('@/lib/source-preferences');
+    setSourcePreferences({ enabledSourceIds: [], languages: ['fr'] });
     const calls: string[] = [];
     vi.stubGlobal('fetch', async (input: string | URL) => {
       calls.push(String(input));

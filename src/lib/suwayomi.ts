@@ -77,10 +77,7 @@ export async function graphql<T>(
     throw new AppError('SUWAYOMI_GRAPHQL_ERROR', 'Suwayomi rejected the operation', 502);
   return response.data;
 }
-export async function sourceInfos(
-  signal?: AbortSignal,
-  allLanguages = false,
-): Promise<SourceInfo[]> {
+export async function sourceInfos(signal?: AbortSignal): Promise<SourceInfo[]> {
   const response = await graphql<{
     sources: {
       nodes: (Source & {
@@ -98,7 +95,7 @@ export async function sourceInfos(
   recordSourceFlags(response.sources.nodes.map((s) => ({ ...s, nsfw: Boolean(s.isNsfw) })));
   const preferences = getSourcePreferences();
   const installed = response.sources.nodes.filter(
-    (s) => allLanguages || preferences.languages.includes(s.lang),
+    (s) => s.lang === 'all' || preferences.languages.includes(s.lang),
   );
   const order = preferences.enabledSourceIds.length
     ? preferences.enabledSourceIds
@@ -125,9 +122,12 @@ export async function sources(signal?: AbortSignal, all = false): Promise<Source
     .filter((s) => all || s.enabled)
     .map(({ id, name, lang, nsfw }) => ({ id, name, lang, nsfw }));
 }
-/** Matching deliberately ignores global-search favourites and language selection. */
-export async function matchingSources(signal?: AbortSignal): Promise<Source[]> {
-  return (await sourceInfos(signal, true))
+export type MatchingSource = Source & { extensionId: string | null };
+/** Installed sources in selected languages, independent of global-search favourites. */
+export async function matchingSources(signal?: AbortSignal): Promise<MatchingSource[]> {
+  const languages = getSourcePreferences().languages;
+  const seen = new Set<string>();
+  return (await sourceInfos(signal))
     .filter(
       (s) =>
         !(
@@ -136,7 +136,17 @@ export async function matchingSources(signal?: AbortSignal): Promise<Source[]> {
           Date.now() - Date.parse(s.health.checkedAt) < 6 * 3600_000
         ),
     )
-    .map(({ id, name, lang, nsfw }) => ({ id, name, lang, nsfw }));
+    .filter((s) => {
+      if (seen.has(s.id)) return false;
+      seen.add(s.id);
+      return true;
+    })
+    .sort((a, b) => {
+      const priority = (lang: string) =>
+        lang === 'all' ? languages.length : languages.indexOf(lang);
+      return priority(a.lang) - priority(b.lang);
+    })
+    .map(({ id, name, lang, nsfw, extensionId }) => ({ id, name, lang, nsfw, extensionId }));
 }
 export async function sourceInfo(id: string, signal?: AbortSignal) {
   const source = (await sourceInfos(signal)).find((s) => s.id === id);

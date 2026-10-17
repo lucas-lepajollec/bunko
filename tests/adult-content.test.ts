@@ -16,6 +16,7 @@ const { getSettings, updateSettings, persistentSecret } = await import('@/lib/se
 const { settingsPatch } = await import('@/lib/validation');
 const { discover, mediaDetail } = await import('@/lib/catalog');
 const { search } = await import('@/lib/search-engine');
+const { setSourcePreferences } = await import('@/lib/source-preferences');
 const { sources, sourceInfos, searchSource, browseSource } = await import('@/lib/suwayomi');
 const { matchOnSource } = await import('@/lib/matching');
 const { updatesFeed } = await import('@/lib/updates');
@@ -89,6 +90,7 @@ beforeEach(() => {
   );
   db().prepare("INSERT INTO worker_state VALUES('release_refresh',?)").run(String(Date.now()));
   updateSettings({ suwayomiUrl: 'http://source.invalid', autoImportKavita: false });
+  setSourcePreferences({ enabledSourceIds: [], languages: ['fr'] });
   requests = [];
   vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
     const url = String(input);

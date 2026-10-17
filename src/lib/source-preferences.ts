@@ -2,14 +2,35 @@ import type { SourceHealth, SourcePreferences } from '@/types/shared';
 import { db } from './db';
 import { getSettings } from './settings';
 import { sourcePreferences } from './validation';
-export function getSourcePreferences(): SourcePreferences {
+import { AsyncLocalStorage } from 'node:async_hooks';
+const runtime = globalThis as typeof globalThis & {
+  __bunkoSourceLanguageContext?: AsyncLocalStorage<string>;
+};
+const sourceLanguageContext = (runtime.__bunkoSourceLanguageContext ??=
+  new AsyncLocalStorage<string>());
+export function withSourceLanguage<T>(language: string, run: () => T): T {
+  return sourceLanguageContext.run(language, run);
+}
+/** Match the interface's supported browser-language fallback; English is always available. */
+export function defaultSourceLanguages(acceptLanguage = ''): string[] {
+  const language =
+    acceptLanguage
+      .split(',')
+      .filter((tag) => !/;\s*q=0(?:\.0*)?\s*$/.test(tag))
+      .map((tag) => tag.trim().split(/[;-]/)[0].toLowerCase())
+      .find((tag) => ['en', 'fr', 'es', 'de', 'it'].includes(tag)) ?? 'en';
+  return [...new Set([language, 'en'])];
+}
+export function getSourcePreferences(
+  acceptLanguage = sourceLanguageContext.getStore(),
+): SourcePreferences {
   const stored = db().prepare("SELECT value FROM settings WHERE key='sourcePreferences'").get() as
     { value: string } | undefined;
   if (stored) return sourcePreferences.parse(JSON.parse(stored.value));
   // Presence of the new key is the one-time migration marker, even for an empty legacy list.
   return setSourcePreferences({
     enabledSourceIds: getSettings().favoriteSourceIds,
-    languages: ['fr'],
+    languages: defaultSourceLanguages(acceptLanguage),
   });
 }
 export function setSourcePreferences(value: SourcePreferences): SourcePreferences {
