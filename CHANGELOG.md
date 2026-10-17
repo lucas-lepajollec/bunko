@@ -2,13 +2,13 @@
 
 ## Unreleased
 
-- Mark any work 18+ yourself (or unmark a false positive) from its sheet; the choice applies everywhere.
+- Per-work content filter override from the title sheet, applied everywhere.
 - Library: "All" and "Updates" tabs; reading statuses moved to a dropdown next to the sort.
 - Settings show one section at a time on desktop too.
 - Home hero uses the portrait cover on phones; opening a dropdown no longer hides the page scrollbar.
-- API: mark individual works as 18+, clear false positives, or reset to provider classification with `PATCH /api/media/adult`; decisions follow known provider identities across all catalog/library surfaces. Adult detail sheets remain accessible for editing.
+- API: per-work content filter overrides, matched across provider identities on every catalog and library surface.
 
-- Fixed: followed series disappeared from the library when their sources were flagged NSFW. Titles are now 18+ only from explicit content ratings; NSFW flags only hide sources from source search. The library says how many titles the 18+ setting hides, and toggling it refreshes every page.
+- Fixed: followed series could disappear from the library because of source metadata. The content filter now relies on explicit ratings only, the library says how many titles it hides, and changing it refreshes every page.
 - Fixed: a source's whole back catalogue showed up as "latest releases". Source releases use the chapter's real upload date; first sightings are never "new".
 - Home: the weekly top 10 keeps its last good list instead of going blank, and the hero resolves catalog banners.
 - Custom dropdowns everywhere (no white popups, no focus rectangles), no zoom on phone inputs, catalog no longer stuck empty on phones, settings open section by section on phones; "Language & display" section name.
@@ -17,7 +17,7 @@
 - New Planning page: the week Monday–Sunday with release times, actual releases for past days and the usual release day (estimated) for the coming ones; format filters and "My library only".
 - Home: resume, weekly top 10 (all formats), latest chapters per format. Catalog keeps its default view and adds "Latest chapters" and "New series" switches; genres fit on one line and expand; filters on one line.
 - Library updates moved into the Library page ("Updates" tab); the Updates page now redirects there. Planning replaces it in the navigation.
-- 18+ mode, off by default: adult titles and NSFW sources are hidden everywhere, library included, until enabled in Settings → Display.
+- Content filter in Settings → Language & display.
 - Kavita scans work (the scan API needs the key in its body, from an admin account); Settings warn when the key is not an admin key, and title sheets say whether the cover reached Kavita.
 - Downloads page lists every chapter with its own state, progress and error; one failing chapter no longer fails the series, failed chapters can be retried alone, and finished batches can be removed.
 - Title sheets: cover and details on the left with the Matches button at the bottom, title and chapters on the right; the latest 15 chapters with "See more" and an inner scroll; "Select all" covers every chapter of the filter; 3-line synopsis.
@@ -52,7 +52,7 @@
 - `docker-compose.yml` now runs Bunko alone against an existing Suwayomi and Kavita (with `.env.example`); the bundled Suwayomi + FlareSolverr stack moved to `docker-compose.full.yml`. README rewritten around a first launch.
 - New interface ("Cinéma × Librairie"), rebuilt from scratch: home with featured hero, Top 10 and shelves; Catalog with type/genre/status/sort; two-level search with off-catalog source hits; source browsing with extension filters; title sheets with automatic French-source matching, source priorities, reading status, chapter table (missing/unread/ranges/versions) and bulk download; library shelves with read/owned/released progress; new-chapter feed; downloads with pipeline steps and engine controls; sources, extensions and repositories; settings with modules. Desktop and mobile.
 - Interface in English, French, Spanish, German and Italian, with a key/placeholder parity test.
-- Backend: discovery and title sheets (AniList, MangaDex→AniList, MangaUpdates, Suwayomi), reading formats and origins, doujinshi/adult filtering and relevance ranking, automatic source matching stream, service status, library v2 (statuses, Kavita reading progress, imported-chapter ledger), source preferences and health, source filters and browsing, durable update feed with scheduling, downloader controls.
+- Backend: discovery and title sheets (AniList, MangaDex→AniList, MangaUpdates, Suwayomi), reading formats and origins, doujinshi and content filtering and relevance ranking, automatic source matching stream, service status, library v2 (statuses, Kavita reading progress, imported-chapter ledger), source preferences and health, source filters and browsing, durable update feed with scheduling, downloader controls.
 - Docker browser login fixed: Origin is compared with the incoming Host; cross-site requests stay rejected.
 
 - French responsive interface: metadata poster search and quick search, tracked media, installed-source SSE search, merged chapter variants/ranges, live downloads, extension actions and editable integration settings.
