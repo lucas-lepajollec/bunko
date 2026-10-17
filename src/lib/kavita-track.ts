@@ -1,4 +1,4 @@
-import { isTextKind } from './library-kinds';
+import { isTextKind, kavitaLibraryClassification } from './library-kinds';
 import { indexedSeries, indexedSeriesById, matchKavita, type IndexedSeries } from './kavita-index';
 import { search, deduplicate } from './search-engine';
 import { titleScore } from './matching';
@@ -25,23 +25,19 @@ export function kavitaMedia(seriesId: number): UnifiedMedia {
     synopsis: series.summary ?? null,
     genres: series.genres ?? [],
     coverUrl: `/api/kavita/image?seriesId=${seriesId}`,
-    format: kind,
+    ...kavitaLibraryClassification(getSettings().libraryTargets)(
+      { format: kind, type: isTextKind({ format: kind, type: 'MANGA' }) ? 'NOVEL' : 'MANGA' },
+      series,
+    ),
     kavitaSeriesId: seriesId,
   };
 }
 async function catalogMatch(series: IndexedSeries, signal?: AbortSignal) {
-  if (series.kind === 'COMIC') return null;
+  const classified = kavitaMedia(series.seriesId);
+  if (classified.format === 'COMIC') return null;
   const results: UnifiedMedia[] = [];
   for (const name of series.names.slice(0, 4))
-    results.push(
-      ...(
-        await search(
-          name,
-          isTextKind({ format: series.kind ?? null, type: 'MANGA' }) ? 'NOVEL' : 'MANGA',
-          signal,
-        )
-      ).results,
-    );
+    results.push(...(await search(name, classified.type, signal)).results);
   const candidates = deduplicate(results)
     .filter((m) => /^(anilist|mangadex|mangaupdates|openlibrary):/.test(m.id))
     .map((media) => ({
@@ -72,7 +68,7 @@ export async function trackKavitaSeries(seriesId: number, signal?: AbortSignal, 
     return linked;
   }
   const match = await catalogMatch(series, signal);
-  if (!match && !automatic && series.kind !== 'COMIC')
+  if (!match && !automatic && kavitaMedia(seriesId).format !== 'COMIC')
     throw new AppError('NO_MATCH', 'No unambiguous catalog match for this Kavita series', 409);
   let media = match ?? kavitaMedia(seriesId);
   return db().transaction(() => {

@@ -10,6 +10,7 @@ import { matchKavita, kavitaPresence, kavitaMatcher } from './kavita-index';
 import { existsSync, mkdirSync, lstatSync } from 'node:fs';
 import path from 'node:path';
 import { getSettings } from './settings';
+import { kavitaLibraryClassification } from './library-kinds';
 import { tenantId, tenantPath, tenantState } from './tenant-context';
 import { accountsDb, tenantExists } from './accounts-store';
 import type {
@@ -544,8 +545,10 @@ function snapshotTracked(id?: number) {
   if (!db().inTransaction && trackedSnapshot?.version === version) return trackedSnapshot;
   const outerTransaction = db().inTransaction;
   const resolveAdult = adultResolver();
-  const linkedProgress = Boolean(getSettings().kavitaApiKey);
-  const kavitaUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
+  const settings = getSettings();
+  const linkedProgress = Boolean(settings.kavitaApiKey);
+  const kavitaUrl = settings.kavitaUrl.replace(/\/+$/, '');
+  const classify = kavitaLibraryClassification(settings.libraryTargets);
   // A read transaction gives one consistent snapshot when another process commits concurrently.
   const result = db().transaction(() => {
     const select = (sql: string, column: string, suffix = '') =>
@@ -650,6 +653,7 @@ function snapshotTracked(id?: number) {
             : (r.cover_url as string | null);
       const media = {
         ...rawMedia,
+        ...classify(rawMedia, kavita),
         title: (r.display_title as string | null) ?? String(r.title),
         altTitles: r.display_title
           ? [...new Set([rawMedia.title, ...rawMedia.altTitles])]
@@ -696,7 +700,7 @@ function snapshotTracked(id?: number) {
             (name, i, names) =>
               name && names.findIndex((n) => n.toLowerCase() === name.toLowerCase()) === i,
           ),
-        type: r.type as TrackedMedia['type'],
+        type: media.type,
         coverUrl,
         coverChoice,
         kavitaCover:

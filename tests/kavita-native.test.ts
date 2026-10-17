@@ -641,11 +641,11 @@ describe('Kavita catalog linkage and endpoints', () => {
       expect(listTracked()).toEqual([]);
     },
   );
-  it('requests a durable, nonblocking sync and refreshes on an update cycle', async () => {
+  it('waits for the manual index refresh to complete', async () => {
     const { POST } = await import('@/app/api/kavita/sync/route');
     const response = await POST(request('/api/kavita/sync', 'POST'));
-    expect(response.status).toBe(202);
-    await waitUntil(() => index.kavitaIndexStatus().syncedAt !== null);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, syncedAt: expect.any(String) });
     expect(index.kavitaIndexStatus().series).toBe(2);
     // Wait for the cycle to finish before the next test removes its isolated storage.
     await waitUntil(() => workerValue('checking') !== '1');

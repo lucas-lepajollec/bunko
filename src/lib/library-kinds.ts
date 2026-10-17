@@ -1,7 +1,26 @@
-import type { LibraryKind, UnifiedMedia } from '@/types/shared';
+import type { LibraryKind, LibraryTargets, UnifiedMedia } from '@/types/shared';
 export const textKinds = ['LIGHT_NOVEL', 'WEB_NOVEL', 'NOVEL', 'BOOK'] as const;
 export function isTextKind(media: Pick<UnifiedMedia, 'format' | 'type'>) {
   return media.type === 'NOVEL' || textKinds.some((kind) => kind === media.format);
+}
+/** Build once per tracked snapshot; library IDs, rather than names/folders, decide ownership. */
+export function kavitaLibraryClassification(targets: LibraryTargets) {
+  const kinds = new Map<number, LibraryKind | null>();
+  for (const [kind, target] of Object.entries(targets)) {
+    if (target)
+      kinds.set(target.libraryId, kinds.has(target.libraryId) ? null : (kind as LibraryKind));
+  }
+  return (
+    media: Pick<UnifiedMedia, 'format' | 'type'>,
+    series: { libraryId: number; kind?: LibraryKind } | null,
+  ): Pick<UnifiedMedia, 'format' | 'type'> => {
+    if (!series) return { format: media.format, type: media.type };
+    // Shared targets cannot distinguish formats. Unconfigured libraries use the import mapping.
+    const kind = kinds.has(series.libraryId) ? kinds.get(series.libraryId) : series.kind;
+    return kind
+      ? { format: kind, type: textKinds.some((text) => text === kind) ? 'NOVEL' : 'MANGA' }
+      : { format: media.format, type: media.type };
+  };
 }
 /** Names are more specific than Kavita's generic Book/Manga library type. */
 export function suggestedLibraryKind(name: string, type: string): LibraryKind | null {

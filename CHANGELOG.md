@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Library formats follow your Kavita libraries: a series in the Kavita library chosen for novels (or books, LN, manga…) is classified as such, recomputed on every reindex and whenever library targets change; "Reindex now" always runs.
 - Each account picks its media folder in Settings → Kavita libraries: `/library` or any subfolder, with any name; renaming an account never changes paths again. Existing setups are kept (the first account gets `/library` back when another account's old folder was blocking it).
 - Fixed a home page crash after updating: cached responses are versioned, the home feed always has every row, an unavailable books catalog no longer breaks the page, the browser cache is tied to the build, and a recovery screen clears cached data instead of a blank error.
 - Light novels, web novels, novels and books are now separate formats: novels and books come from Open Library (catalog, search, title sheets), LN/WN releases keep their own home rows; Kavita targets per format.

@@ -67,6 +67,7 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
         ...m,
         title: t?.title ?? m.title,
         format: t?.media.format ?? m.format,
+        type: t?.media.type ?? m.type,
         adult: Boolean(m.adult || t?.media.adult),
         coverUrl: t ? t.coverUrl : m.coverUrl,
         trackedId: own?.id ?? null,
@@ -378,18 +379,19 @@ export async function mediaDetail(id: string, signal?: AbortSignal): Promise<Med
     return detail;
   };
   if (followed) {
+    const providerMedia = JSON.parse(
+      (
+        db().prepare('SELECT media_json FROM tracked_media WHERE id=?').get(followed.id) as {
+          media_json: string;
+        }
+      ).media_json,
+    ) as UnifiedMedia;
     const detail = storedMetadata<MediaDetail>(key)?.value;
     if (!detail)
       saveMetadata(
         key,
         {
-          ...JSON.parse(
-            (
-              db().prepare('SELECT media_json FROM tracked_media WHERE id=?').get(followed.id) as {
-                media_json: string;
-              }
-            ).media_json,
-          ),
+          ...providerMedia,
           tags: [],
           relations: [],
           recommendations: [],
@@ -402,6 +404,9 @@ export async function mediaDetail(id: string, signal?: AbortSignal): Promise<Med
     return enrichDetail({
       ...detail,
       ...followed.media,
+      // Library classification is a projection; the catalog sheet retains provider metadata.
+      format: providerMedia.format,
+      type: providerMedia.type,
       tags: detail?.tags ?? [],
       relations: detail?.relations ?? [],
       recommendations: detail?.recommendations ?? [],
