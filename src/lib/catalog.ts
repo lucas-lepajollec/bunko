@@ -1,3 +1,7 @@
+import { deduplicate } from './search-engine';
+import { rakutenDetail } from './rakuten';
+import { discoverComics, metronDetail } from './metron';
+import { discoverHardcover, hardcoverConfigured, hardcoverDetail } from './hardcover';
 import { discoverBooks, openLibraryDetail } from './openlibrary';
 import { discoverWebNovels } from './novels';
 import { sourceFormat } from './library-kinds';
@@ -97,7 +101,18 @@ export async function discover(
   const page = q.page ?? 1;
   const perPage = q.perPage ?? 24;
   if (kind === 'novel' || kind === 'book') {
-    const result = await discoverBooks(q);
+    const outcomes = await Promise.allSettled([
+      discoverBooks(q),
+      ...(hardcoverConfigured() ? [discoverHardcover(q)] : []),
+    ]);
+    const pages = outcomes.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+    if (!pages.length) throw (outcomes[0] as PromiseRejectedResult).reason;
+    const result = {
+      ...pages[0],
+      items: deduplicate(pages.flatMap((p) => p.items)),
+      page,
+      hasNextPage: pages.some((p) => p.hasNextPage),
+    };
     return {
       ...result,
       items: raw ? result.items : withTracking(result.items).filter(visibleMedia),
@@ -110,7 +125,13 @@ export async function discover(
       items: raw ? result.items : withTracking(result.items).filter(visibleMedia),
     };
   }
-  if (kind === 'comic') return { items: [], page, hasNextPage: false };
+  if (kind === 'comic') {
+    const result = await discoverComics(q);
+    return {
+      ...result,
+      items: raw ? result.items : withTracking(result.items).filter(visibleMedia),
+    };
+  }
   const variables: Record<string, unknown> = {
     page,
     perPage,
@@ -305,7 +326,11 @@ async function loadSuwayomiDetail(id: number, signal?: AbortSignal): Promise<Med
 async function loadDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
   const [provider, key] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
   let detail: MediaDetail;
-  if (['googlebooks', 'bnf'].includes(provider))
+  if (provider === 'metron' && /^[1-9]\d{0,9}$/.test(key)) detail = await metronDetail(Number(key));
+  else if (provider === 'hardcover' && /^[1-9]\d{0,9}$/.test(key))
+    detail = await hardcoverDetail(Number(key));
+  else if (provider === 'rakuten' && /^\d{13}$/.test(key)) detail = rakutenDetail(id);
+  else if (['googlebooks', 'bnf'].includes(provider))
     detail = await (await import('./edition-feeds')).editionDetail(id);
   else if (provider === 'openlibrary' && /^OL[1-9]\d*W$/.test(key))
     detail = await openLibraryDetail(key);

@@ -1,0 +1,161 @@
+{
+  "metronSeries": {
+    "id": 15,
+    "series": "Asgardians of the Galaxy (2018)",
+    "name": "Asgardians of the Galaxy",
+    "year_began": 2018,
+    "year_end": 2019,
+    "volume": 1,
+    "issue_count": 10,
+    "publisher": {
+      "id": 1,
+      "name": "Marvel"
+    },
+    "series_type": {
+      "id": 1,
+      "name": "Single Issue"
+    },
+    "status": "completed",
+    "desc": "<p>Cosmic adventures.</p>",
+    "genres": [
+      {
+        "id": 1,
+        "name": "Science Fiction"
+      }
+    ],
+    "alt_names": [
+      "Asgardians"
+    ]
+  },
+  "metronIssue": {
+    "id": 50,
+    "series": {
+      "id": 15,
+      "name": "Asgardians of the Galaxy",
+      "volume": 1,
+      "year_began": 2018
+    },
+    "number": "1",
+    "issue": "Asgardians of the Galaxy (2018) #1",
+    "cover_date": "2026-11-01",
+    "store_date": "2026-10-15",
+    "image": "https://static.metron.cloud/media/issue/cover.jpg"
+  },
+  "rakuten": {
+    "Items": [
+      {
+        "Item": {
+          "title": "物語（14）",
+          "author": "作家",
+          "publisherName": "KADOKAWA",
+          "isbn": "9780140328721",
+          "salesDate": "2026年10月15日",
+          "booksGenreId": "001017001",
+          "largeImageUrl": "https://thumbnail.image.rakuten.co.jp/example.jpg",
+          "itemUrl": "https://books.rakuten.co.jp/rb/123/",
+          "itemCaption": "新刊"
+        }
+      }
+    ],
+    "count": 1,
+    "page": 1,
+    "pageCount": 1
+  },
+  "hardcoverBook": {
+    "id": 123,
+    "title": "The Example Book",
+    "slug": "the-example-book",
+    "description": "<p>A voyage.</p>",
+    "image": {
+      "url": "https://assets.hardcover.app/example.jpg"
+    },
+    "release_date": "2026-10-15",
+    "release_year": 2026,
+    "author_names": [
+      "Example Author"
+    ],
+    "genres": [
+      "Fantasy"
+    ],
+    "rating": 4.2,
+    "users_count": 1000,
+    "book_series": [
+      {
+        "position": 2,
+        "series": {
+          "id": 7,
+          "name": "Example Saga"
+        }
+      }
+    ],
+    "editions": [
+      {
+        "id": 456,
+        "title": "The Example Book",
+        "release_date": "2026-11-01",
+        "isbn_13": "9780140328721"
+      }
+    ]
+  },
+  "google": {
+    "kind": "books#volumes",
+    "items": [
+      {
+        "id": "optionalBook",
+        "volumeInfo": {
+          "title": "Novel Vol. 2",
+          "publishedDate": "2026-10-15",
+          "language": "en",
+          "categories": [
+            "Fiction"
+          ]
+        }
+      }
+    ]
+  },
+  "hardcoverRecord": {
+    "id": 123,
+    "title": "The Example Book",
+    "slug": "the-example-book",
+    "description": "<p>A voyage.</p>",
+    "image": {
+      "url": "https://assets.hardcover.app/example.jpg"
+    },
+    "release_date": "2026-10-15",
+    "release_year": 2026,
+    "rating": 4.2,
+    "users_count": 1000,
+    "book_series": [
+      {
+        "position": 2,
+        "series": {
+          "id": 7,
+          "name": "Example Saga"
+        }
+      }
+    ],
+    "editions": [
+      {
+        "id": 456,
+        "title": "The Example Book",
+        "release_date": "2026-11-01",
+        "isbn_13": "9780140328721"
+      }
+    ],
+    "contributions": [
+      {
+        "author": {
+          "name": "Example Author"
+        }
+      }
+    ],
+    "literary_type_id": 1,
+    "cached_tags": {
+      "Genre": [
+        {
+          "tag": "Fantasy"
+        }
+      ]
+    }
+  }
+}

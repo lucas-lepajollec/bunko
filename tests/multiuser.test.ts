@@ -277,7 +277,7 @@ it('partitions every memo: settings, content flags/identities, index/linkage, re
   for (let turn = 0; turn < 4; turn++)
     for (const id of [1, 2])
       inTenant(id, () => {
-        expect(sourceAllowed({ id: '123', name: 'Fixture', lang: 'fr' })).toBe(id === 2);
+        expect(sourceAllowed({ id: '123', name: 'Fixture', lang: 'fr' })).toBe(true);
         expect(sourceHealth('123').state).toBe(id === 1 ? 'ok' : 'slow');
         expect(adultResolver()(media(55)).adult).toBe(id === 1);
         expect(indexedSeries()[0].libraryName).toBe(`Shelf ${id}`);

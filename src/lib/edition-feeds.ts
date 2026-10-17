@@ -4,6 +4,8 @@ import { bookFormat } from './openlibrary';
 import { publicFeed } from './public-feed-http';
 import { content, nodes, parseXml, values } from './feed-xml';
 import { saveMetadata, storedMetadata } from './metadata-cache';
+import { getSettings } from './settings';
+import { providerJson, credentialScope } from './catalog-provider-http';
 import { AppError } from './errors';
 const DAY = 86400_000;
 export type EditionRelease = ChapterRelease & { isbns?: string[] };
@@ -117,6 +119,20 @@ export function googleEdition(row: GoogleVolume): EditionRelease | null {
     'googlebooks',
   );
 }
+export function googleBooksJson<T>(url: string, ttl: number): Promise<T> {
+  const key = getSettings().googleBooksApiKey;
+  if (!key) return publicFeed('googlebooks', url, ttl, JSON.parse);
+  const request = new URL(url);
+  request.searchParams.set('key', key);
+  return providerJson(
+    'googlebooks',
+    credentialScope(key, url),
+    request,
+    {},
+    Math.min(ttl, 3600_000),
+    250,
+  );
+}
 export async function fetchGoogleEditions(
   onBatch?: (items: EditionRelease[]) => void,
 ): Promise<EditionRelease[]> {
@@ -126,13 +142,8 @@ export async function fetchGoogleEditions(
   for (const language of ['fr', 'en'])
     for (const subject of ['fiction', 'nonfiction', 'comics']) {
       try {
-        const url = `https://www.googleapis.com/books/v1/volumes?${new URLSearchParams({ q: `subject:${subject}`, orderBy: 'newest', langRestrict: language, printType: 'books', maxResults: '20' })}`;
-        const data = await publicFeed<{ items?: GoogleVolume[] }>(
-          'googlebooks',
-          url,
-          6 * 3600_000,
-          JSON.parse,
-        );
+        const url = `https://www.googleapis.com/books/v1/volumes?${new URLSearchParams({ q: `subject:${subject}`, orderBy: 'newest', langRestrict: language, printType: 'books', maxResults: getSettings().googleBooksApiKey ? '40' : '20' })}`;
+        const data = await googleBooksJson<{ items?: GoogleVolume[] }>(url, 6 * 3600_000);
         for (const row of data.items ?? []) {
           const r = googleEdition(row);
           if (r) {
@@ -232,11 +243,9 @@ export async function fetchBnfEditions(now = new Date()): Promise<EditionRelease
 export async function editionDetail(id: string): Promise<MediaDetail> {
   let media = storedMetadata<UnifiedMedia>(`edition:${id}`)?.value;
   if (!media && /^googlebooks:[\w-]+$/.test(id)) {
-    const row = await publicFeed<GoogleVolume>(
-      'googlebooks',
+    const row = await googleBooksJson<GoogleVolume>(
       `https://www.googleapis.com/books/v1/volumes/${encodeURIComponent(id.slice(12))}`,
       7 * DAY,
-      JSON.parse,
     );
     media = googleEdition(row)?.media;
   }

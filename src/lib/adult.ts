@@ -3,21 +3,6 @@ import type { UnifiedMedia, ChapterSelection, TrackedMedia, Source } from '@/typ
 import { statement, writeVersion, db } from './db';
 import { getSettings } from './settings';
 
-const flagsCache = tenantState(() => ({
-  value: undefined as { version: number; values: Map<string, boolean> } | undefined,
-}));
-function sourceFlags() {
-  const flags = flagsCache().value;
-  const version = writeVersion();
-  if (flags?.version === version) return flags.values;
-  const values = new Map(
-    (statement('SELECT id,nsfw FROM source_flags').all() as { id: string; nsfw: number }[]).map(
-      (r) => [r.id, Boolean(r.nsfw)],
-    ),
-  );
-  if (!db().inTransaction) flagsCache().value = { version, values };
-  return values;
-}
 export function recordSourceFlags(sources: Source[]) {
   db().transaction(() => {
     for (const s of sources)
@@ -219,6 +204,10 @@ export function visibleTracked(entries: TrackedMedia[]) {
         return entries.filter((t) => !classify(t.media));
       })();
 }
-export function sourceAllowed(source: Source) {
-  return getSettings().adultContent || !(source.nsfw ?? sourceFlags().get(source.id));
+/** Extension flags are informational; access depends only on the work. */
+export function sourceAllowed(_source: Source) {
+  void _source;
+  // Retain the tenant guard for callers of this compatibility helper.
+  getSettings();
+  return true;
 }

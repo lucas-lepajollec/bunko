@@ -30,6 +30,7 @@ for route in releases planning home discover genres reader/chapter reader/page m
   check 401 "route /api/$route exists" "$base/api/$route"
 done
 check 401 "reader progress route exists" -X PUT "$base/api/reader/progress"
+check 401 "provider test route exists" -X POST "$base/api/settings/test-provider"
 check 401 "content filter override route exists" -X PATCH "$base/api/media/adult"
 credentials='{"username":"SmokeAdmin","password":"synthetic-smoke-password"}'
 check 403 "cross-site setup rejected" -X POST "$base/api/auth/setup" -H 'Content-Type: application/json' -H 'Origin: https://evil.invalid' -d "$credentials"
@@ -45,6 +46,8 @@ check 200 "home feed responds" -H "Authorization: Bearer $token" "$base/api/home
 check 200 "weekly planning responds" -H "Authorization: Bearer $token" "$base/api/planning"
 check 400 "planning date validated" -H "Authorization: Bearer $token" "$base/api/planning?week=2026-02-30"
 check 200 "bearer API access" -H "Authorization: Bearer $token" "$base/api/settings"
+check 409 "optional provider unconfigured" -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"provider":"metron"}' "$base/api/settings/test-provider"
+check 400 "optional provider input validated" -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"provider":"other"}' "$base/api/settings/test-provider"
 check 400 "Kavita image input validated" -H "Authorization: Bearer $token" "$base/api/kavita/image?seriesId=-1"
 check 400 "Suwayomi image input validated" -H "Authorization: Bearer $token" "$base/api/suwayomi/image?path=/api/graphql"
 check 400 "content filter override input validated" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":"anilist:nope","adult":true}' "$base/api/media/adult"

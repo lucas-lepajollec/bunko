@@ -129,7 +129,7 @@ export const mediaId = z
   .string()
   .max(80)
   .regex(
-    /^(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary|googlebooks|bnf):[0-9a-zA-Z_-]+$/,
+    /^(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary|googlebooks|bnf|metron|hardcover|rakuten):[0-9a-zA-Z_-]+$/,
     'Unknown media identifier',
   );
 export const adultOverrideBody = z.object({
@@ -139,6 +139,8 @@ export const adultOverrideBody = z.object({
     .refine((value) => {
       const [provider, key, extra] = value.split(':');
       if (!key || extra !== undefined) return false;
+      if (['metron', 'hardcover'].includes(provider)) return /^[1-9]\d{0,9}$/.test(key);
+      if (provider === 'rakuten') return /^\d{13}$/.test(key);
       if (provider === 'googlebooks') return /^[\w-]{1,60}$/.test(key);
       if (provider === 'bnf') return /^cb\d+[a-z0-9]$/i.test(key);
       if (provider === 'openlibrary') return /^OL[1-9]\d*W$/.test(key);
@@ -196,6 +198,36 @@ export const settingsPatch = z
     sonarrApiKey: z.string().max(2000).optional(),
     prowlarrUrl: z.union([httpUrl, z.literal('')]).optional(),
     prowlarrApiKey: z.string().max(2000).optional(),
+    googleBooksApiKey: z
+      .string()
+      .trim()
+      .max(2000)
+      .regex(/^[^\s\x00-\x1f]*$/)
+      .optional(),
+    metronUsername: z
+      .string()
+      .trim()
+      .max(300)
+      .regex(/^[^:\x00-\x1f\x7f]*$/)
+      .optional(),
+    metronPassword: z
+      .string()
+      .max(2000)
+      .regex(/^[^\x00-\x1f\x7f]*$/)
+      .optional(),
+    rakutenApplicationId: z
+      .string()
+      .trim()
+      .max(2000)
+      .regex(/^[^\s\x00-\x1f]*$/)
+      .optional(),
+    rakutenAccessKey: z.string().trim().max(4000).regex(/^[^\s\x00-\x1f\x7f]*$/).optional(),
+    hardcoverToken: z
+      .string()
+      .trim()
+      .max(4000)
+      .regex(/^[^\x00-\x1f\x7f]*$/)
+      .optional(),
     kavitaLibraryPath: z
       .string()
       .min(1)

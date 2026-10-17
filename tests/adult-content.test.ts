@@ -264,7 +264,7 @@ describe('adult visibility on catalog surfaces', () => {
     ]);
     const off = await search('Explicit', 'MANGA');
     expect(off.results.every((m) => !m.adult)).toBe(true);
-    expect(off.results.some((m) => m.id.startsWith('suwayomi:'))).toBe(false);
+    expect(off.results.some((m) => m.id.startsWith('suwayomi:'))).toBe(true);
     updateSettings({ adultContent: true });
     const on = await search('Explicit', 'MANGA');
     expect(on.results.some((m) => m.adult && m.id.startsWith('anilist:'))).toBe(true);
@@ -328,24 +328,34 @@ describe('adult visibility on catalog surfaces', () => {
     ]);
     expect(releasesPage({}).items.every((r) => r.media.id !== adult.id)).toBe(true);
   });
-  it('skips NSFW source search/matching, browse and popular sync while preserving source metadata', async () => {
-    const infos = await sourceInfos();
-    expect(infos.find((s) => s.id === nsfw.id)?.nsfw).toBe(true);
-    expect((await sources()).map((s) => s.id)).toEqual([safe.id]);
-    await expect(searchSource(nsfw, 'x')).rejects.toMatchObject({ code: 'NOT_FOUND' });
-    await expect(matchOnSource(nsfw, normal)).rejects.toMatchObject({ code: 'NOT_FOUND' });
-    await expect(browseSource(nsfw.id, { mode: 'POPULAR', page: 1 })).rejects.toMatchObject({
-      code: 'NOT_FOUND',
+  for (const enabled of [false, true]) {
+    it(`keeps flagged sources browsable, searchable and matchable (filter preference ${enabled})`, async () => {
+      updateSettings({ adultContent: enabled });
+      expect((await sourceInfos()).find((s) => s.id === nsfw.id)?.nsfw).toBe(true);
+      expect((await sources()).map((s) => s.id)).toEqual([safe.id, nsfw.id]);
+      expect((await searchSource(nsfw, 'Fixture')).results).toHaveLength(1);
+      expect(await matchOnSource(nsfw, { title: 'Fixture', altTitles: [] })).toHaveLength(1);
+      expect((await browseSource(nsfw.id, { mode: 'POPULAR', page: 1 })).items).toHaveLength(1);
+      const stream = await (await streamRoute.GET(request('/api/search/stream?q=Fixture'))).text();
+      expect(stream).toContain(nsfw.id);
+      const sync = await (
+        await syncRoute.POST(request('/api/catalog/sync', { pages: 1 }, 'POST'))
+      ).text();
+      expect(sync).toContain(nsfw.id);
     });
-    const stream = await (await streamRoute.GET(request('/api/search/stream?q=Fixture'))).text();
-    expect(stream).not.toContain(nsfw.id);
-    const sync = await (
-      await syncRoute.POST(request('/api/catalog/sync', { pages: 1 }, 'POST'))
-    ).text();
-    expect(sync).not.toContain(nsfw.id);
+  }
+  it('filters locally classified source works and overrides, retaining unknown titles without lookup calls', async () => {
+    const { setAdultOverride } = await import('@/lib/adult');
+    saveMetadata('detail:local-mapping', { ...adult, title: 'Fixture' });
+    expect((await searchSource(nsfw, 'Fixture')).results).toHaveLength(0);
+    setAdultOverride({ ...adult, title: 'Fixture' }, adult.id, false);
+    expect((await searchSource(nsfw, 'Fixture')).results).toHaveLength(1);
+    setAdultOverride(emptyMedia('suwayomi:10', 'Fixture', 'MANGA'), 'suwayomi:10', true);
+    expect(
+      (await browseSource(nsfw.id, { mode: 'SEARCH', query: 'Fixture', page: 1 })).items,
+    ).toHaveLength(0);
     updateSettings({ adultContent: true });
-    expect(await sources()).toHaveLength(2);
-    expect((await searchSource(nsfw, 'x')).source.nsfw).toBe(true);
+    expect((await searchSource(nsfw, 'Fixture')).results).toHaveLength(1);
   });
   it('reads Kavita X18Plus=14, propagates indexed adult status and hides local series', async () => {
     updateSettings({ kavitaUrl: 'http://kavita.invalid', kavitaApiKey: 'synthetic-key' });

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: many sources showed "not found" and were skipped by search and matching because their extension carries a mature-content flag; sources are never hidden by the content filter anymore (it applies to works only).
+- Settings → Catalogs: optional free keys for Google Books (new novels, books, comics, LN volumes), Metron (comics catalog and weekly issues), Rakuten Books (new Japanese LN volumes) and Hardcover (novel catalog), each with a Test button. Nothing changes without keys.
 - Count a work in volumes (tomes) or chapters from its title sheet: progress, new releases, the chapter table and automatic downloads follow the choice (chapters of an owned volume are never downloaded again).
 - New volumes and editions in the release feed from Google Books and the BnF catalog (novels, books, comics, light novels), shown as "Vol." cards on the home page, the feed and the planning.
 - Web novels you follow on Royal Road get their new chapters from its RSS feed.

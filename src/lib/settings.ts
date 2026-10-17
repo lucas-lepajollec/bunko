@@ -13,6 +13,11 @@ export const secretKeys: SecretSetting[] = [
   'kavitaApiKey',
   'sonarrApiKey',
   'prowlarrApiKey',
+  'googleBooksApiKey',
+  'metronPassword',
+  'rakutenApplicationId',
+  'rakutenAccessKey',
+  'hardcoverToken',
 ];
 export function persistentSecret(name: string, bytes: number): Buffer {
   if (!['access.token', 'settings.key'].includes(name))
@@ -75,6 +80,12 @@ function serverSettings(): Settings {
     sonarrApiKey: '',
     prowlarrUrl: '',
     prowlarrApiKey: '',
+    googleBooksApiKey: '',
+    metronUsername: '',
+    metronPassword: '',
+    rakutenApplicationId: '',
+    rakutenAccessKey: '',
+    hardcoverToken: '',
     kavitaLibraryPath: '/library',
     libraryTargets: {},
     autoImportKavita: true,
@@ -103,16 +114,13 @@ export function getSettings(): Settings {
 }
 export function publicSettings(): PublicSettings {
   const settings = getSettings();
-  const { suwayomiPassword, kavitaApiKey, sonarrApiKey, prowlarrApiKey, ...safe } = settings;
-  return {
-    ...safe,
-    secretsConfigured: {
-      suwayomiPassword: Boolean(suwayomiPassword),
-      kavitaApiKey: Boolean(kavitaApiKey),
-      sonarrApiKey: Boolean(sonarrApiKey),
-      prowlarrApiKey: Boolean(prowlarrApiKey),
-    },
-  };
+  const safe = { ...settings } as Record<string, unknown>;
+  const secretsConfigured = {} as Record<SecretSetting, boolean>;
+  for (const key of secretKeys) {
+    secretsConfigured[key] = Boolean(settings[key]);
+    delete safe[key];
+  }
+  return { ...safe, secretsConfigured } as PublicSettings;
 }
 export function updateSettings(patch: SettingsPatch) {
   const current = getSettings();

@@ -32,6 +32,10 @@ export function allowedCoverUrl(value: string) {
         'uploads.mangadex.org',
         'cdn.mangaupdates.com',
         'www.mangaupdates.com',
+        'books.google.com',
+        'static.metron.cloud',
+        'assets.hardcover.app',
+        'thumbnail.image.rakuten.co.jp',
       ].includes(url.hostname)
     );
   } catch {

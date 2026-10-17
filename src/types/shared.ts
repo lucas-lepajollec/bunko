@@ -86,15 +86,7 @@ export interface MediaDetail extends UnifiedMedia {
 }
 /** `novel` = romans (fiction books), `book` = livres (non-fiction); LN and WN are separate. */
 export type DiscoverKind =
-  | 'all'
-  | 'manga'
-  | 'manhwa'
-  | 'manhua'
-  | 'comic'
-  | 'lightnovel'
-  | 'webnovel'
-  | 'novel'
-  | 'book';
+  'all' | 'manga' | 'manhwa' | 'manhua' | 'comic' | 'lightnovel' | 'webnovel' | 'novel' | 'book';
 /** "new" = most recent publication start first, never future or undated titles. */
 export type DiscoverSort = 'trending' | 'popular' | 'score' | 'new';
 /** Quarter-based seasons, AniList convention: WINTER Jan–Mar, SPRING Apr–Jun, SUMMER Jul–Sep, FALL Oct–Dec. */
@@ -127,7 +119,15 @@ export interface ChapterRelease {
   /** When the release was published; `hasTime` false when only the day is known. */
   releasedAt: string;
   hasTime: boolean;
-  provider: 'mangaupdates' | 'mangadex' | 'source' | 'googlebooks' | 'bnf' | 'royalroad';
+  provider:
+    | 'mangaupdates'
+    | 'mangadex'
+    | 'source'
+    | 'googlebooks'
+    | 'bnf'
+    | 'royalroad'
+    | 'metron'
+    | 'rakuten';
   /** `volume` = a new tome/edition (books, LN volumes, BD albums); otherwise a chapter. */
   unit?: 'chapter' | 'volume';
   /** Followed title in the library, if any. */
@@ -380,6 +380,13 @@ export interface Settings {
   libraryTargets: LibraryTargets;
   /** Follow every Kavita series automatically (matched to the catalog when possible). Default true. */
   autoImportKavita: boolean;
+  /** Optional catalog providers (each user's own keys; empty = provider unused or keyless mode). */
+  googleBooksApiKey: string;
+  metronUsername: string;
+  metronPassword: string;
+  rakutenApplicationId: string;
+  rakutenAccessKey: string;
+  hardcoverToken: string;
   /**
    * This account's media folder: `/library` or one of its direct subfolders (any name). Exclusive
    * per account; never nested in another account's folder. Null = not chosen.
@@ -395,7 +402,16 @@ export interface Settings {
   /** Worker update-check interval in minutes (5–1440), default 15. */
   updateIntervalMinutes: number;
 }
-export type SecretSetting = 'suwayomiPassword' | 'kavitaApiKey' | 'sonarrApiKey' | 'prowlarrApiKey';
+export type SecretSetting =
+  | 'suwayomiPassword'
+  | 'kavitaApiKey'
+  | 'sonarrApiKey'
+  | 'prowlarrApiKey'
+  | 'googleBooksApiKey'
+  | 'metronPassword'
+  | 'rakutenApplicationId'
+  | 'rakutenAccessKey'
+  | 'hardcoverToken';
 export type PublicSettings = Omit<Settings, SecretSetting> & {
   secretsConfigured: Record<SecretSetting, boolean>;
 };
@@ -431,7 +447,12 @@ export interface TrackedMedia {
    */
   unit?: 'chapter' | 'volume';
   /** Last position in the built-in reader, for "Resume". */
-  readerPosition?: { chapterId: number; number: number | null; page: number; updatedAt: string } | null;
+  readerPosition?: {
+    chapterId: number;
+    number: number | null;
+    page: number;
+    updatedAt: string;
+  } | null;
   /** Where the displayed cover comes from; `auto` = best available (catalog, then sources, then Kavita). */
   coverChoice: CoverChoice;
   /** Identity of the entry: a catalog work, or off-catalog (known only from Kavita or a source). */
@@ -653,14 +674,7 @@ export type DownloadControl =
  * single `NOVEL` target (migrated to all text kinds).
  */
 export type LibraryKind =
-  | 'MANGA'
-  | 'MANHWA'
-  | 'MANHUA'
-  | 'COMIC'
-  | 'LIGHT_NOVEL'
-  | 'WEB_NOVEL'
-  | 'NOVEL'
-  | 'BOOK';
+  'MANGA' | 'MANHWA' | 'MANHUA' | 'COMIC' | 'LIGHT_NOVEL' | 'WEB_NOVEL' | 'NOVEL' | 'BOOK';
 export interface KavitaFolder {
   /** Folder path as Kavita sees it. */
   path: string;

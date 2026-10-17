@@ -44,6 +44,7 @@ const SECTIONS = [
   'kavita',
   'downloads',
   'sources',
+  'catalogs',
   'modules',
 ] as const;
 /** Every user configures their own instance; only admins also manage accounts. */
@@ -173,6 +174,12 @@ export default function SettingsPage() {
                 <Link href="/sources" className={cx(smallButton, 'self-start')}>
                   {t('settings.manageSources')} →
                 </Link>
+              </Section>
+              <Section open={open} visible={visible} id="catalogs">
+                <Catalogs
+                  settings={settings.data}
+                  onSaved={(s) => settings.mutate(s, { revalidate: false })}
+                />
               </Section>
               <Section open={open} visible={visible} id="modules">
                 <Modules />
@@ -1039,6 +1046,155 @@ function Users() {
           {t('users.create')}
         </button>
       </form>
+    </div>
+  );
+}
+
+type CatalogProvider = 'googlebooks' | 'metron' | 'rakuten' | 'hardcover';
+const CATALOGS: {
+  id: CatalogProvider;
+  url: string;
+  fields: { key: string; secret: boolean }[];
+}[] = [
+  {
+    id: 'googlebooks',
+    url: 'https://developers.google.com/books/docs/v1/using#APIKey',
+    fields: [{ key: 'googleBooksApiKey', secret: true }],
+  },
+  {
+    id: 'metron',
+    url: 'https://metron.cloud/accounts/signup/',
+    fields: [
+      { key: 'metronUsername', secret: false },
+      { key: 'metronPassword', secret: true },
+    ],
+  },
+  {
+    id: 'rakuten',
+    url: 'https://webservice.rakuten.co.jp/',
+    fields: [
+      { key: 'rakutenApplicationId', secret: true },
+      { key: 'rakutenAccessKey', secret: true },
+    ],
+  },
+  {
+    id: 'hardcover',
+    url: 'https://hardcover.app/account/api',
+    fields: [{ key: 'hardcoverToken', secret: true }],
+  },
+];
+
+/** Optional catalog providers: each one adds content when its free key is set; nothing changes without. */
+function Catalogs({ settings, onSaved }: { settings: Settings; onSaved: (s: Settings) => void }) {
+  const { t } = useI18n();
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const configured = (k: string) =>
+    (settings.secretsConfigured as Record<string, boolean>)[k] ??
+    Boolean((settings as unknown as Record<string, unknown>)[k]);
+  async function save(p: (typeof CATALOGS)[number], clear = false) {
+    setBusy(p.id);
+    try {
+      const patch = Object.fromEntries(
+        p.fields
+          .map((f) => [f.key, clear ? '' : (draft[f.key] ?? '').trim()] as const)
+          .filter(([, v]) => clear || v),
+      );
+      onSaved(await send<Settings>('/api/settings', 'PATCH', patch));
+      setDraft((d) =>
+        Object.fromEntries(Object.entries(d).filter(([k]) => !p.fields.some((f) => f.key === k))),
+      );
+      toast({ tone: 'ok', text: clear ? t('catalogs.removed') : t('catalogs.saved') });
+    } catch (e) {
+      toast({ tone: 'bad', text: errorText(t, e) });
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function test(id: CatalogProvider) {
+    setBusy(id);
+    try {
+      await send('/api/settings/test-provider', 'POST', { provider: id });
+      toast({ tone: 'ok', text: t('catalogs.testOk') });
+    } catch (e) {
+      toast({ tone: 'bad', text: errorText(t, e) });
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <div className="flex flex-col gap-5 text-sm">
+      <p className="text-mid leading-relaxed">{t('catalogs.intro')}</p>
+      {CATALOGS.map((p) => {
+        const on = p.fields.every((f) => configured(f.key));
+        return (
+          <div
+            key={p.id}
+            className="flex flex-col gap-3 rounded-[18px] bg-white/[0.045] p-4 md:p-[22px]"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold">{t(`catalogs.${p.id}.name`)}</span>
+              <Dot tone={on ? 'ok' : 'idle'} />
+              <span className="text-muted">{on ? t('catalogs.on') : t('catalogs.off')}</span>
+              <a
+                href={p.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-mid ml-auto underline hover:text-white"
+              >
+                {t('catalogs.getKey')} ↗
+              </a>
+            </div>
+            <p className="text-mid">{t(`catalogs.${p.id}.what`)}</p>
+            <div className="grid gap-2 md:grid-cols-2">
+              {p.fields.map((f) => (
+                <input
+                  key={f.key}
+                  type={f.secret ? 'password' : 'text'}
+                  autoComplete="off"
+                  value={draft[f.key] ?? ''}
+                  onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                  placeholder={
+                    configured(f.key) && f.secret ? '••••••••' : t(`catalogs.field.${f.key}`)
+                  }
+                  aria-label={t(`catalogs.field.${f.key}`)}
+                  className={field}
+                />
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busy === p.id || !p.fields.some((f) => (draft[f.key] ?? '').trim())}
+                onClick={() => save(p)}
+                className="bg-fg text-bg h-10 rounded-full px-5 font-semibold disabled:opacity-50"
+              >
+                {t('common.save')}
+              </button>
+              {on && (
+                <>
+                  <button
+                    type="button"
+                    disabled={busy === p.id}
+                    onClick={() => test(p.id)}
+                    className={smallButton}
+                  >
+                    {busy === p.id ? t('common.working') : t('catalogs.test')}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy === p.id}
+                    onClick={() => save(p, true)}
+                    className="text-bad h-9 rounded-full px-3 hover:bg-white/[0.06]"
+                  >
+                    {t('catalogs.remove')}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

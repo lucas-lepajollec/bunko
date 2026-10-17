@@ -1,3 +1,5 @@
+import { fetchRakutenReleases } from './rakuten';
+import { fetchMetronReleases } from './metron';
 import { fetchGoogleEditions, fetchBnfEditions, type EditionRelease } from './edition-feeds';
 import { refreshRoyalRoad } from './royalroad';
 import { tenantState } from './tenant-context';
@@ -191,7 +193,8 @@ export function saveReleases(input: ChapterRelease[], now = Date.now()) {
       if (
         !Number.isFinite(Date.parse(r.releasedAt)) ||
         Date.parse(r.releasedAt) < now - 42 * DAY ||
-        Date.parse(r.releasedAt) > now + (r.unit === 'volume' ? 730 * DAY : DAY)
+        Date.parse(r.releasedAt) >
+          now + (r.unit === 'volume' || r.provider === 'metron' ? 730 * DAY : DAY)
       )
         continue;
       const media = resolved.get(r.media.id) ?? resolve(originalMedia);
@@ -254,6 +257,8 @@ export function refreshReleases(): Promise<void> {
       fetchGoogleEditions(saveReleases),
       fetchBnfEditions().then((items) => saveReleases(items)),
       refreshRoyalRoad(saveReleases),
+      fetchMetronReleases(new Date(), saveReleases),
+      fetchRakutenReleases().then((items) => saveReleases(items)),
     ]);
     const failures = outcomes.flatMap((outcome, i) => {
       if (outcome.status !== 'rejected') return [];
@@ -279,7 +284,7 @@ export function refreshReleases(): Promise<void> {
         ),
       ];
       return [
-        `${['mangaupdates', 'mangadex', 'googlebooks', 'bnf', 'royalroad'][i]}=${codes.join(',')} (${reasons.length})`,
+        `${['mangaupdates', 'mangadex', 'googlebooks', 'bnf', 'royalroad', 'metron', 'rakuten'][i]}=${codes.join(',')} (${reasons.length})`,
       ];
     });
     statement(

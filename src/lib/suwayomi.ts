@@ -1,7 +1,8 @@
 import { sourceServerKey } from './source-server';
 import { chapterVolume } from './chapter-volume';
 import { sourceUploadDate } from './source-chapters';
-import { recordSourceFlags, sourceAllowed } from './adult';
+import { recordSourceFlags } from './adult';
+import { sourceResultVisibility } from './source-visibility';
 import type {
   ChapterSelection,
   ChapterVariant,
@@ -121,13 +122,12 @@ export async function sourceInfos(
 }
 export async function sources(signal?: AbortSignal, all = false): Promise<Source[]> {
   return (await sourceInfos(signal))
-    .filter((s) => (all || s.enabled) && sourceAllowed(s))
+    .filter((s) => all || s.enabled)
     .map(({ id, name, lang, nsfw }) => ({ id, name, lang, nsfw }));
 }
 /** Matching deliberately ignores global-search favourites and language selection. */
 export async function matchingSources(signal?: AbortSignal): Promise<Source[]> {
   return (await sourceInfos(signal, true))
-    .filter(sourceAllowed)
     .filter(
       (s) =>
         !(
@@ -140,7 +140,7 @@ export async function matchingSources(signal?: AbortSignal): Promise<Source[]> {
 }
 export async function sourceInfo(id: string, signal?: AbortSignal) {
   const source = (await sourceInfos(signal)).find((s) => s.id === id);
-  if (!source || !sourceAllowed(source))
+  if (!source)
     throw new AppError('NOT_FOUND', 'Source not installed in the selected languages', 404);
   return source;
 }
@@ -153,7 +153,6 @@ export async function searchSource(
   timeoutMs = 20_000,
   filters?: BrowseRequest['filters'],
 ): Promise<SourceResult> {
-  if (!sourceAllowed(source)) throw new AppError('NOT_FOUND', 'Source is hidden', 404);
   const start = Date.now();
   try {
     const r = await sourceCall(
@@ -183,15 +182,18 @@ export async function searchSource(
         ),
       signal,
     );
-    const rows = r.fetchSourceManga.mangas.map((m) => ({
-      sourceId: source.id,
-      sourceName: source.name,
-      suwayomiMangaId: m.id,
-      mangaUrl: m.url,
-      thumbnailUrl: proxyImage(m.thumbnailUrl),
-      lang: source.lang,
-      title: m.title,
-    }));
+    const visible = sourceResultVisibility();
+    const rows = r.fetchSourceManga.mangas
+      .filter((m) => visible(m.id, m.title))
+      .map((m) => ({
+        sourceId: source.id,
+        sourceName: source.name,
+        suwayomiMangaId: m.id,
+        mangaUrl: m.url,
+        thumbnailUrl: proxyImage(m.thumbnailUrl),
+        lang: source.lang,
+        title: m.title,
+      }));
     indexCatalog(rows);
     recordSourceHealth(source.id, Date.now() - start);
     return {

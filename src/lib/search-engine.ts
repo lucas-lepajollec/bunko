@@ -1,13 +1,13 @@
+import { searchComics, metronConfigured } from './metron';
+import { searchHardcover, hardcoverConfigured } from './hardcover';
+import { credentialScope } from './catalog-provider-http';
+import { getSettings } from './settings';
+import { sourceResultVisibility } from './source-visibility';
 import { novelRecord } from './novels';
 import { searchBooks } from './openlibrary';
 import { isTextKind } from './library-kinds';
 import { sourceFormat } from './library-kinds';
-import {
-  visibleMedia,
-  sourceAllowed,
-  includeProviderAdults,
-  rememberAdultIdentities,
-} from './adult';
+import { visibleMedia, includeProviderAdults, rememberAdultIdentities } from './adult';
 import { mangaUpdates } from './mangaupdates';
 import type { MediaType, Provider, SearchResponse, UnifiedMedia } from '@/types/shared';
 import { db, searchCatalog, listTracked } from './db';
@@ -194,6 +194,19 @@ export async function search(
     jobs.push({ provider: 'mangaupdates', run: () => mangaupdates(query, type) });
   if (!type || type === 'NOVEL')
     jobs.push({ provider: 'local', cacheProvider: 'openlibrary', run: () => searchBooks(query) });
+  if ((!type || type === 'MANGA') && metronConfigured())
+    jobs.push({
+      provider: 'local',
+      cacheProvider: `metron:${credentialScope(getSettings().metronUsername, getSettings().metronPassword)}`,
+      run: () => searchComics(query),
+    });
+  if ((!type || type === 'NOVEL') && hardcoverConfigured())
+    jobs.push({
+      provider: 'local',
+      cacheProvider: `hardcover:${credentialScope(getSettings().hardcoverToken)}`,
+      run: () => searchHardcover(query),
+    });
+  const sourceVisible = sourceResultVisibility();
   if (type !== 'ANIME')
     jobs.push({
       provider: 'local',
@@ -209,7 +222,7 @@ export async function search(
           ),
         ...searchCatalog(query)
           .filter(() => type !== 'NOVEL')
-          .filter((r) => sourceAllowed({ id: r.sourceId, name: r.sourceName, lang: r.lang }))
+          .filter((r) => sourceVisible(r.suwayomiMangaId, r.title))
           .map((r) => ({
             ...emptyMedia(`suwayomi:${r.suwayomiMangaId}`, r.title, 'MANGA'),
             format: sourceFormat(r.sourceName),
