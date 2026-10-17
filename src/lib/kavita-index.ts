@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { setImmediate as yieldIO } from 'node:timers/promises';
+import { tenantSignal } from './tenant-lifecycle';
 import { tenantState } from './tenant-context';
 import { mediaVisibility } from './adult';
 import { wakeWorker } from './worker-events';
@@ -27,8 +30,18 @@ const seriesSchema = z.object({
   sortName: z.string().nullable().optional(),
   folderPath: z.string().nullable().optional(),
   lowestFolderPath: z.string().nullable().optional(),
+  lastModified: z.string().nullable().optional(),
+  lastModifiedUtc: z.string().nullable().optional(),
+  lastChapterAdded: z.string().nullable().optional(),
+  lastChapterAddedUtc: z.string().nullable().optional(),
+  lastFolderScanned: z.string().nullable().optional(),
+  updatedAt: z.string().nullable().optional(),
+  pages: z.number().optional(),
+  pagesRead: z.number().optional(),
+  latestReadDate: z.string().nullable().optional(),
 });
 export interface IndexedSeries {
+  revision?: string | null;
   adult?: boolean;
   seriesId: number;
   libraryId: number;
@@ -337,7 +350,9 @@ export function requestKavitaSync() {
 }
 export function kavitaSyncRequested() {
   return (
-    stateValue('kavita_sync_requested') === '1' &&
+    (stateValue('kavita_sync_requested') === '1' ||
+      Date.now() - Date.parse(stateValue('kavita_synced_at') ?? '') >= 15 * 60_000 ||
+      (!stateValue('kavita_synced_at') && !!getSettings().kavitaApiKey)) &&
     Date.now() >= Number(stateValue('kavita_retry_at') ?? 0)
   );
 }
@@ -349,7 +364,17 @@ export async function syncKavitaIndex() {
     const settings = getSettings();
     if (!settings.kavitaUrl || !settings.kavitaApiKey) return;
     try {
-      const libraries = await kavitaLibraries();
+      const signal = tenantSignal();
+      const context = createHash('sha256')
+        .update(
+          JSON.stringify([settings.kavitaUrl, settings.kavitaApiKey, settings.kavitaAuthMode]),
+        )
+        .digest('hex');
+      const full =
+        stateValue('kavita_index_context') !== context ||
+        Date.now() - Number(stateValue('kavita_full_sync') ?? 0) >= 86400_000;
+      const previous = new Map(indexedSeries().map((s) => [s.seriesId, s]));
+      const libraries = await kavitaLibraries(signal);
       const result: IndexedSeries[] = [];
       for (const library of libraries) {
         for (let page = 1; ; page++) {
@@ -362,13 +387,31 @@ export async function syncKavitaIndex() {
           const rows = z.array(seriesSchema).parse(
             await kavitaJson(`/api/Series/all-v2?PageNumber=${page}&PageSize=200`, {
               method: 'POST',
+              signal,
               body: JSON.stringify({
                 statements: [{ field: 19, comparison: 0, value: String(library.id) }],
                 combination: 1,
               }),
             }),
           );
-          await eachConcurrent(rows, 4, async (row) => {
+          await eachConcurrent(rows, 2, async (row) => {
+            signal.throwIfAborted();
+            const changed = [
+              row.lastModifiedUtc,
+              row.lastModified,
+              row.updatedAt,
+              row.lastChapterAddedUtc,
+              row.lastChapterAdded,
+              row.lastFolderScanned,
+            ];
+            const revision = changed.some((v) => v && !v.startsWith('0001-'))
+              ? JSON.stringify([row, library.name, library.type])
+              : null;
+            const old = previous.get(row.id);
+            if (!full && revision && old?.revision === revision) {
+              result.push(old);
+              return;
+            }
             if (row.libraryId !== library.id)
               throw new AppError(
                 'KAVITA_INDEX_INVALID',
@@ -379,9 +422,10 @@ export async function syncKavitaIndex() {
               ageRating?: number | string;
               summary?: string | null;
               genres?: { title: string }[] | null;
-            }>(`/api/Series/metadata?seriesId=${row.id}`);
-            const volumes = await kavitaJson(`/api/Series/volumes?seriesId=${row.id}`);
+            }>(`/api/Series/metadata?seriesId=${row.id}`, { signal });
+            const volumes = await kavitaJson(`/api/Series/volumes?seriesId=${row.id}`, { signal });
             result.push({
+              revision,
               seriesId: row.id,
               libraryId: library.id,
               libraryName: library.name,
@@ -405,13 +449,26 @@ export async function syncKavitaIndex() {
               completed: allKavitaRead(volumes),
             });
           });
+          await yieldIO();
           if (rows.length < 200) break;
         }
       }
       db().transaction(() => {
-        db().prepare('DELETE FROM kavita_series').run();
-        const insert = db().prepare('INSERT INTO kavita_series(series_id,payload) VALUES(?,?)');
+        signal.throwIfAborted();
+        if (
+          getSettings().kavitaUrl !== settings.kavitaUrl ||
+          getSettings().kavitaApiKey !== settings.kavitaApiKey
+        )
+          throw new Error('Connection changed');
+        const found = new Set(result.map((s) => s.seriesId));
+        for (const id of previous.keys())
+          if (!found.has(id)) db().prepare('DELETE FROM kavita_series WHERE series_id=?').run(id);
+        const insert = db().prepare(
+          'INSERT INTO kavita_series(series_id,payload) VALUES(?,?) ON CONFLICT(series_id) DO UPDATE SET payload=excluded.payload WHERE payload<>excluded.payload',
+        );
         for (const series of result) insert.run(series.seriesId, JSON.stringify(series));
+        if (full) stateSet('kavita_full_sync', String(Date.now()));
+        stateSet('kavita_index_context', context);
         stateSet('kavita_synced_at', new Date().toISOString());
         stateSet('kavita_error', '0');
         stateSet('kavita_retry_at', '0');

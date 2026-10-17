@@ -519,7 +519,7 @@ function Modules() {
   );
 }
 
-const KINDS: LibraryKind[] = ['MANGA', 'MANHWA', 'MANHUA', 'NOVEL'];
+const KINDS: LibraryKind[] = ['MANGA', 'MANHWA', 'MANHUA', 'COMIC', 'NOVEL'];
 
 function KavitaTargets({
   admin,

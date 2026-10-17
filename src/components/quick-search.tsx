@@ -1,8 +1,7 @@
 'use client';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import type { SearchResponse } from '@/types/shared';
-import { mediaHref, useApi } from '@/lib/client/api';
+import { mediaHref, useProgressiveSearch } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Cover, Skeleton, cx, useMediaMeta } from './ui';
 
@@ -32,12 +31,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const q = useDebounced(text.trim(), 250);
-  const results = useApi<SearchResponse>(
-    q.length >= 2 ? `/api/search?q=${encodeURIComponent(q)}` : null,
-    {
-      keepPreviousData: true,
-    },
-  );
+  const results = useProgressiveSearch(q);
   const items = (results.data?.results ?? []).slice(0, 6);
   const actions = [
     {

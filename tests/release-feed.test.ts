@@ -198,6 +198,7 @@ describe('release store and cursor API', () => {
         name: 'Chapter 8',
         number: 8,
         scanlator: null,
+        volume: null,
         isDownloaded: false,
       },
     ]);

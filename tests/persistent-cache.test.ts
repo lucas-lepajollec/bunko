@@ -238,8 +238,10 @@ describe.each(proxies)('%s persistent images', (_label, get, url, bytes) => {
     imageBytes = 'new-kavita';
     expect(await (await get(request(url))).text()).toBe(bytes);
     await flush();
-    expect(await (await get(request(url))).text()).toBe(
-      url.includes('kavita') ? 'new-kavita' : 'new-source',
+    await vi.waitFor(async () =>
+      expect(await (await get(request(url))).text()).toBe(
+        url.includes('kavita') ? 'new-kavita' : 'new-source',
+      ),
     );
     expect(calls).toHaveLength(3);
   });
@@ -270,7 +272,7 @@ it('evicts the least recently accessed complete image and leaves no temporary fi
   await imageCache.cachedImage('c', load);
   const files = readdirSync(path.join(directory, 'users', '1', 'cache', 'images'));
   const size = readFileSync(path.join(directory, 'users', '1', 'cache', 'images', files[0])).length;
-  imageCache.pruneImages(size * 2);
+  await imageCache.pruneImages(size * 2);
   expect(db().prepare('SELECT * FROM image_cache').all()).toHaveLength(2);
   await imageCache.cachedImage('a', load);
   await imageCache.cachedImage('c', load);

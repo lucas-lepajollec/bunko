@@ -12,13 +12,14 @@ import { AppError, errorCode } from './errors';
 
 const DAY = 86400_000;
 export const feedQuery = z.object({
-  kind: z.enum(['all', 'manga', 'manhwa', 'manhua', 'novel']).optional(),
+  kind: z.enum(['all', 'manga', 'manhwa', 'manhua', 'comic', 'novel']).optional(),
   genre: z.string().max(60).optional(),
   library: z.literal('1').optional(),
   cursor: z.string().max(1500).optional(),
 });
 export type FeedQuery = z.infer<typeof feedQuery>;
 export function mediaKind(media: UnifiedMedia): Exclude<DiscoverKind, 'all'> {
+  if (media.format === 'COMIC') return 'comic';
   if (media.type === 'NOVEL') return 'novel';
   if (media.format === 'MANHWA' || media.origin === 'KR') return 'manhwa';
   if (media.format === 'MANHUA' || ['CN', 'HK', 'TW'].includes(media.origin ?? '')) return 'manhua';

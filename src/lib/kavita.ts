@@ -1,3 +1,5 @@
+import { registerReaderArchive } from './reader-archives';
+import { chapterVolume } from './chapter-volume';
 import { open, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -41,7 +43,7 @@ export function comicInfo(media: UnifiedMedia, number: number | null, title: str
     Genre: media.genres.join(', '),
     Web: media.webUrl ?? '',
     LanguageISO: 'fr',
-    Manga: 'Yes',
+    Manga: media.format === 'COMIC' ? 'No' : 'Yes',
   };
   return `<?xml version="1.0" encoding="utf-8"?>\n<ComicInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">\n${Object.entries(
     fields,
@@ -90,8 +92,7 @@ export function chapterFilename(
   const title = seriesName(media);
   const number = chapterNumber(chapter.name, chapter.chapterNumber);
   if (number === null) return `${title} SP - ${safeName(chapter.name, 80)}.cbz`;
-  const namedVolume = chapter.name.match(/(?:vol(?:ume)?\.?|tome)\s*(\d+(?:\.\d+)?)/i);
-  const volume = chapter.volume ?? (namedVolume ? Number(namedVolume[1]) : null);
+  const volume = chapterVolume(chapter.name, chapter.volume);
   return `${title}${volume !== null && volume >= 0 ? ` Vol. ${padded(volume, 2)}` : ''} Ch. ${padded(number, 4)}.cbz`;
 }
 async function atomicWrite(folder: string, name: string, contents: string | Buffer) {
@@ -147,9 +148,8 @@ export async function importChapter(
       pages[index].bytes,
     );
   let xml = comicInfo(media, number, chapter.name);
-  const volume =
-    chapter.volume ?? Number(chapter.name.match(/(?:vol(?:ume)?\.?|tome)\s*(\d+)/i)?.[1] ?? NaN);
-  if (Number.isFinite(volume))
+  const volume = chapterVolume(chapter.name, chapter.volume);
+  if (volume !== null)
     xml = xml.replace('</ComicInfo>', `  <Volume>${volume}</Volume>\n</ComicInfo>`);
   zip.addFile('ComicInfo.xml', Buffer.from(xml));
   // Recheck the directory immediately before writing, including cached/existing folders.
@@ -168,6 +168,7 @@ export async function importChapter(
     }
     signal?.throwIfAborted();
     await rename(tmp, target);
+    registerReaderArchive(target, chapter);
     recordImport(media, { ...chapter, chapterNumber: number ?? -1 });
   } finally {
     await unlink(tmp).catch((e) => {
@@ -282,7 +283,7 @@ export async function refreshTrackedProgress(tracked: TrackedMedia, signal?: Abo
   if (getSettings().kavitaApiKey !== key || getSettings().kavitaUrl !== s.kavitaUrl) return;
   db()
     .prepare(
-      'UPDATE tracked_media SET last_read=?,last_read_at=?,progress_checked=1 WHERE id=? AND kavita_series_id IS ?',
+      `UPDATE tracked_media SET last_read=MAX(COALESCE(last_read,0),?),last_read_at=MAX(COALESCE(last_read_at,''),COALESCE(?,'')),progress_checked=1 WHERE id=? AND kavita_series_id IS ?`,
     )
     .run(progress.read, progress.lastReadAt, tracked.id, id);
 }

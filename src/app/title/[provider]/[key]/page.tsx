@@ -197,6 +197,27 @@ function Title({ media }: { media: MediaDetail }) {
     readSource: 'none' as const,
   };
   const progress = { ...baseProgress, released };
+  // Built-in reader: resume where the reader stopped, else the first unread chapter.
+  const readTarget = (() => {
+    const list = chapters.data?.chapters ?? [];
+    const mediaId = encodeURIComponent(entry?.media.id ?? media.id);
+    const pos = entry?.readerPosition;
+    if (pos)
+      return {
+        href: `/read/${pos.chapterId}?media=${mediaId}`,
+        label: pos.number !== null ? t('title.resumeAt', { n: n(pos.number) }) : t('title.resume'),
+      };
+    const firstUnread = [...list]
+      .filter((c) => c.number !== null && (progress.read === null || c.number > progress.read))
+      .sort((a, b) => (a.number ?? 0) - (b.number ?? 0))[0];
+    const v = firstUnread && preferredVariant(firstUnread, priority, choice[firstUnread.key]);
+    return v
+      ? {
+          href: `/read/${v.id}?media=${mediaId}`,
+          label: t('title.readFrom', { n: n(firstUnread.number ?? 0) }),
+        }
+      : null;
+  })();
 
   async function updateSources(next: ChapterSelection[]) {
     setOverride(next);
@@ -347,6 +368,7 @@ function Title({ media }: { media: MediaDetail }) {
           <Cover
             src={entry?.coverUrl ?? media.coverUrl}
             fallbacks={entry?.coverFallbacks}
+            priority
             alt={media.title}
             className="mx-auto w-full max-w-[300px]"
           />
@@ -397,6 +419,11 @@ function Title({ media }: { media: MediaDetail }) {
               size="lg"
               className="h-12 bg-white/[0.14] px-5"
             />
+            {readTarget && (
+              <Link href={readTarget.href} className={cx(ghostButton, 'gap-2')}>
+                {readTarget.label}
+              </Link>
+            )}
             {media.kavita?.url && (
               <a
                 href={media.kavita.url}
@@ -503,6 +530,7 @@ function Title({ media }: { media: MediaDetail }) {
                   </div>
                 ) : (
                   <ChapterTable
+                    mediaId={entry?.media.id ?? media.id}
                     chapters={chapters.data.chapters}
                     priority={priority}
                     read={progress.read}

@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import type { ChapterVariant, MergedChapter } from '@/types/shared';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -35,7 +36,10 @@ export function ChapterTable({
   setChoice,
   queued,
   owned,
+  mediaId,
 }: {
+  /** Opens chapters in the built-in reader with this work's progress. */
+  mediaId: string;
   chapters: MergedChapter[];
   priority: string[];
   read: number | null;
@@ -52,6 +56,10 @@ export function ChapterTable({
   const [limit, setLimit] = useState(FIRST);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  // Volume view only when sources give volumes; chapters remain the unit underneath.
+  const hasVolumes = chapters.some((c) => c.volume !== null);
+  const [byVolume, setByVolume] = useState(false);
+  const [open, setOpen] = useState<Set<string>>(new Set());
   const ordered = useMemo(
     () => [...chapters].sort((a, b) => (b.number ?? -1) - (a.number ?? -1)),
     [chapters],
@@ -70,6 +78,23 @@ export function ChapterTable({
     setSelected(next);
   };
   const allVisibleSelected = visible.length > 0 && visible.every((c) => selected.has(c.key));
+  const row = (c: MergedChapter) => {
+    const variant = preferredVariant(c, priority, choice[c.key]);
+    return (
+      <ChapterRow
+        key={c.key}
+        owned={owned}
+        chapter={c}
+        variant={variant}
+        read={read}
+        mediaId={mediaId}
+        checked={selected.has(c.key)}
+        onToggle={() => toggle(c.key)}
+        onChoose={(id) => setChoice(c.key, id)}
+        queued={variant ? queued.has(variant.id) : false}
+      />
+    );
+  };
   const pill = (id: ChapterFilter, label: string) => (
     <button
       key={id}
@@ -94,6 +119,28 @@ export function ChapterTable({
           {pill('missing', t('chapters.missing', { count: missing.length }))}
           {pill('unread', t('chapters.unread', { count: unread.length }))}
           {pill('all', t('chapters.all', { count: ordered.length }))}
+          {hasVolumes && (
+            <div
+              className="ml-auto flex shrink-0 rounded-full bg-white/[0.08] p-0.5"
+              role="group"
+              aria-label={t('chapters.view')}
+            >
+              {([false, true] as const).map((v) => (
+                <button
+                  key={String(v)}
+                  type="button"
+                  aria-pressed={byVolume === v}
+                  onClick={() => setByVolume(v)}
+                  className={cx(
+                    'h-8 rounded-full px-3.5 text-sm',
+                    byVolume === v ? 'bg-white text-bg font-semibold' : 'text-mid',
+                  )}
+                >
+                  {v ? t('chapters.byVolume') : t('chapters.byChapter')}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="text-mid flex flex-wrap items-center gap-2 text-sm">
           <label className="flex items-center gap-2">
@@ -155,23 +202,69 @@ export function ChapterTable({
       )}
       {/* Desktop: the list scrolls inside the column so details stay in view. */}
       <ul className="md:max-h-[68vh] md:overflow-y-auto md:pr-2">
-        {visible.slice(0, limit).map((c) => {
-          const variant = preferredVariant(c, priority, choice[c.key]);
-          return (
-            <ChapterRow
-              key={c.key}
-              owned={owned}
-              chapter={c}
-              variant={variant}
-              read={read}
-              checked={selected.has(c.key)}
-              onToggle={() => toggle(c.key)}
-              onChoose={(id) => setChoice(c.key, id)}
-              queued={variant ? queued.has(variant.id) : false}
-            />
-          );
-        })}
-        {visible.length > limit && (
+        {byVolume
+          ? volumes(visible).map(([vol, list]) => {
+              const key = vol === null ? 'none' : String(vol);
+              const expanded = open.has(key);
+              const all = list.every((c) => selected.has(c.key));
+              const nums = list.map((c) => c.number).filter((x): x is number => x !== null);
+              return (
+                <li key={key} className="border-line border-b">
+                  <div className="flex items-center gap-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={all}
+                      aria-label={t('chapters.selectVolume', {
+                        v: vol === null ? t('chapters.noVolume') : n(vol),
+                      })}
+                      onChange={() => {
+                        const next = new Set(selected);
+                        for (const c of list) {
+                          if (all) next.delete(c.key);
+                          else next.add(c.key);
+                        }
+                        setSelected(next);
+                      }}
+                      className="size-5 shrink-0 accent-[var(--accent)] md:size-[17px]"
+                    />
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      onClick={() =>
+                        setOpen((o) => {
+                          const next = new Set(o);
+                          if (next.has(key)) next.delete(key);
+                          else next.add(key);
+                          return next;
+                        })
+                      }
+                      className="flex min-w-0 flex-1 items-baseline gap-3 text-left"
+                    >
+                      <span className="font-serif text-[22px] md:text-[24px]">
+                        {vol === null
+                          ? t('chapters.noVolume')
+                          : t('chapters.volume', { v: n(vol) })}
+                      </span>
+                      <span className="text-muted truncate text-xs md:text-[13px]">
+                        {nums.length
+                          ? t('chapters.volumeRange', {
+                              from: n(Math.min(...nums)),
+                              to: n(Math.max(...nums)),
+                              count: list.length,
+                            })
+                          : t('chapters.count', { count: list.length })}
+                      </span>
+                      <span aria-hidden className="text-muted ml-auto">
+                        {expanded ? '−' : '+'}
+                      </span>
+                    </button>
+                  </div>
+                  {expanded && <ul className="pb-2 pl-4 md:pl-8">{list.map((c) => row(c))}</ul>}
+                </li>
+              );
+            })
+          : visible.slice(0, limit).map((c) => row(c))}
+        {!byVolume && visible.length > limit && (
           <li className="flex justify-center py-4">
             <button
               type="button"
@@ -191,6 +284,7 @@ function ChapterRow({
   chapter,
   variant,
   read,
+  mediaId,
   checked,
   onToggle,
   onChoose,
@@ -200,6 +294,7 @@ function ChapterRow({
   chapter: MergedChapter;
   variant: ChapterVariant | undefined;
   read: number | null;
+  mediaId: string;
   checked: boolean;
   onToggle: () => void;
   onChoose: (variantId: number) => void;
@@ -270,6 +365,35 @@ function ChapterRow({
       >
         {state}
       </span>
+      {variant && (
+        <Link
+          href={`/read/${variant.id}?media=${encodeURIComponent(mediaId)}`}
+          aria-label={t('chapters.readLabel', { label })}
+          title={t('chapters.read')}
+          className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden
+          >
+            <path d="M3 6.5C5.5 5 8.5 5 12 7c3.5-2 6.5-2 9-.5V19c-2.5-1.5-5.5-1.5-9 .5-3.5-2-6.5-2-9-.5Z" />
+            <path d="M12 7v12.5" />
+          </svg>
+        </Link>
+      )}
     </li>
   );
+}
+
+/** Chapters grouped by volume, newest volume first; chapters without a volume last. */
+function volumes(list: MergedChapter[]): [number | null, MergedChapter[]][] {
+  const groups = new Map<number | null, MergedChapter[]>();
+  for (const c of list) groups.set(c.volume, [...(groups.get(c.volume) ?? []), c]);
+  return [...groups.entries()].sort(([a], [b]) => (a === null ? 1 : b === null ? -1 : b - a));
 }

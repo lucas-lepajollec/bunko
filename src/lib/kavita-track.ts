@@ -25,6 +25,7 @@ export function kavitaMedia(seriesId: number): UnifiedMedia {
   };
 }
 async function catalogMatch(series: IndexedSeries, signal?: AbortSignal) {
+  if (series.kind === 'COMIC') return null;
   const results: UnifiedMedia[] = [];
   for (const name of series.names.slice(0, 4))
     results.push(
@@ -60,7 +61,7 @@ export async function trackKavitaSeries(seriesId: number, signal?: AbortSignal, 
     return linked;
   }
   const match = await catalogMatch(series, signal);
-  if (!match && !automatic)
+  if (!match && !automatic && series.kind !== 'COMIC')
     throw new AppError('NO_MATCH', 'No unambiguous catalog match for this Kavita series', 409);
   let media = match ?? kavitaMedia(seriesId);
   return db().transaction(() => {
@@ -108,7 +109,7 @@ export async function autoImportKavita() {
       continue;
     try {
       const tracked = await trackKavitaSeries(series.seriesId, undefined, true);
-      if (tracked && !tracked.media.providers.includes('kavita'))
+      if (tracked && !tracked.media.id.startsWith('kavita:'))
         await ensureKavitaCover(series, tracked.media);
     } catch {
       /* Individual metadata/cover failures must not discard a successful index. Retry next sync. */

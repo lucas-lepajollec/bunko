@@ -8,7 +8,7 @@ import { PRODUCT_NAME } from '@/lib/client/brand';
 import { I18nProvider, useI18n } from '@/i18n/I18nProvider';
 import { UI_LANGUAGES, type UiLanguage } from '@/i18n/messages';
 import { UNAUTHORIZED_EVENT, send, useApi, batchesInterval } from '@/lib/client/api';
-import { cx, errorText, field, primaryButton } from './ui';
+import { cx, errorText, field, primaryButton, Skeleton } from './ui';
 import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
 import { ActivityPill } from './activity';
 import { Toaster } from './notify';
@@ -33,7 +33,26 @@ function AuthGate({ children }: { children: ReactNode }) {
     window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
   }, [mutate]);
-  if (isLoading) return <div className="min-h-dvh" />;
+  // A neutral frame while the session is checked: no private data, but no blank page either.
+  if (isLoading)
+    return (
+      <div className="min-h-dvh" aria-busy="true">
+        <div className="flex h-14 items-center gap-2.5 px-4 text-white md:h-20 md:px-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))]">
+          <Logo />
+          <span className="font-display text-[19px] font-extrabold tracking-[-0.03em] md:text-[21px]">
+            {PRODUCT_NAME}
+          </span>
+        </div>
+        <div className="mx-auto flex max-w-[1760px] flex-col gap-6 px-4 pt-10 md:px-10 md:pt-20">
+          <Skeleton className="h-12 w-64 rounded-xl" />
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 md:gap-6 xl:grid-cols-8">
+            {Array.from({ length: 8 }, (_, i) => (
+              <Skeleton key={i} className="aspect-[2/3] rounded" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   if (error || !data?.authenticated)
     return (
       <AuthScreen

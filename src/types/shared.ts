@@ -3,7 +3,15 @@ export type MediaType = 'MANGA' | 'NOVEL' | 'ANIME';
 /** `kavita` = a series known only from Kavita (no catalog match). */
 export type Provider = 'anilist' | 'mangadex' | 'mangaupdates' | 'local' | 'kavita';
 /** Reading format derived from provider format and country of origin. */
-export type MediaFormat = 'MANGA' | 'MANHWA' | 'MANHUA' | 'ONE_SHOT' | 'LIGHT_NOVEL' | 'WEB_NOVEL';
+export type MediaFormat =
+  | 'MANGA'
+  | 'MANHWA'
+  | 'MANHUA'
+  | 'ONE_SHOT'
+  | 'LIGHT_NOVEL'
+  | 'WEB_NOVEL'
+  /** Western comics / BD (sources and Kavita only; no public discovery catalog). */
+  | 'COMIC';
 export interface SourceMatch {
   sourceId: string;
   sourceName: string;
@@ -72,7 +80,7 @@ export interface MediaDetail extends UnifiedMedia {
   relations: RelatedMedia[];
   recommendations: UnifiedMedia[];
 }
-export type DiscoverKind = 'all' | 'manga' | 'manhwa' | 'manhua' | 'novel';
+export type DiscoverKind = 'all' | 'manga' | 'manhwa' | 'manhua' | 'comic' | 'novel';
 /** "new" = most recent publication start first, never future or undated titles. */
 export type DiscoverSort = 'trending' | 'popular' | 'score' | 'new';
 /** Quarter-based seasons, AniList convention: WINTER Jan–Mar, SPRING Apr–Jun, SUMMER Jul–Sep, FALL Oct–Dec. */
@@ -171,6 +179,11 @@ export interface SearchResponse {
   results: UnifiedMedia[];
   providers: ProviderOutcome[];
   durationMs: number;
+  /**
+   * `GET /api/search?q=&fast=1` answers within ~300 ms from the local catalog and cached
+   * provider results with `partial: true`; the UI then asks for the full answer.
+   */
+  partial?: boolean;
 }
 export interface Source {
   id: string;
@@ -208,11 +221,44 @@ export interface ChapterVariant {
   number: number | null;
   scanlator: string | null;
   isDownloaded: boolean;
+  /** Volume (tome) from the source or parsed from the chapter name, when known. */
+  volume: number | null;
 }
 export interface MergedChapter {
   key: string;
   number: number | null;
+  /** Volume shared by the variants when known (first variant with one wins). */
+  volume: number | null;
   variants: ChapterVariant[];
+}
+
+/* ---- Built-in reader (contract for /api/reader/*) ---- */
+/** GET /api/reader/chapter?id=<suwayomi chapter id>&media=<media id, optional> */
+export interface ReaderChapter {
+  chapterId: number;
+  mangaId: number;
+  sourceName: string;
+  /** "Chapter 12", "Vol. 3 Ch. 12" or the source's name. */
+  label: string;
+  number: number | null;
+  volume: number | null;
+  /** Page image URLs in order (`/api/reader/page?chapter=&index=`), cached by Bunko. */
+  pages: string[];
+  /** Neighbouring chapters on the same source, by number. */
+  prevId: number | null;
+  nextId: number | null;
+  /** Suggested layout from the work's format (manhwa/manhua → vertical, manga → rtl, comic → ltr). */
+  direction: 'rtl' | 'ltr' | 'vertical';
+  /** Saved position for this chapter (0-based page), if any. */
+  resumePage: number | null;
+}
+/** PUT /api/reader/progress — saved while reading; finishing a chapter raises `progress.read`. */
+export interface ReaderProgressUpdate {
+  mediaId: string;
+  chapterId: number;
+  number: number | null;
+  page: number;
+  pageCount: number;
 }
 export interface ChaptersResponse {
   chapters: MergedChapter[];
@@ -353,6 +399,8 @@ export interface TrackedMedia {
   lastReadAt: string | null;
   /** One entry per linked source, same order as `sources`, refreshed in the background. */
   sourceStatus: SourceLinkStatus[];
+  /** Last position in the built-in reader, for "Resume". */
+  readerPosition?: { chapterId: number; number: number | null; page: number; updatedAt: string } | null;
   /** Where the displayed cover comes from; `auto` = best available (catalog, then sources, then Kavita). */
   coverChoice: CoverChoice;
   /** Identity of the entry: a catalog work, or off-catalog (known only from Kavita or a source). */
@@ -565,7 +613,7 @@ export type DownloadControl =
 
 /* ---- Kavita libraries, targets and existing content ---- */
 /** Formats routed to a Kavita library. ONE_SHOT follows MANGA; both novel formats follow NOVEL. */
-export type LibraryKind = 'MANGA' | 'MANHWA' | 'MANHUA' | 'NOVEL';
+export type LibraryKind = 'MANGA' | 'MANHWA' | 'MANHUA' | 'COMIC' | 'NOVEL';
 export interface KavitaFolder {
   /** Folder path as Kavita sees it. */
   path: string;

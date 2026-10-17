@@ -1,6 +1,6 @@
 'use client';
 import useSWR, { type SWRConfiguration } from 'swr';
-import type { ApiError } from '@/types/shared';
+import type { ApiError, SearchResponse } from '@/types/shared';
 
 /** A failed API call; `code` is the backend's stable error code, translated by the UI. */
 export class ApiFailure extends Error {
@@ -85,6 +85,24 @@ export function openStream(
   return () => {
     finished = true;
     source.close();
+  };
+}
+
+/**
+ * Catalog search in two steps: the fast answer (local catalog + cached providers) shows at once,
+ * the complete one replaces it when every provider has answered.
+ */
+export function useProgressiveSearch(q: string) {
+  const path = q.length >= 2 ? `/api/search?q=${encodeURIComponent(q)}` : null;
+  const fast = useApi<SearchResponse>(path && `${path}&fast=1`, { keepPreviousData: true });
+  const full = useApi<SearchResponse>(path, { keepPreviousData: true });
+  const data = full.data ?? fast.data;
+  return {
+    data,
+    error: full.error && !data ? full.error : undefined,
+    isLoading: Boolean(path) && !data,
+    /** Fast results are shown and the complete answer is still coming. */
+    refining: Boolean(path) && full.isLoading && Boolean(fast.data),
   };
 }
 

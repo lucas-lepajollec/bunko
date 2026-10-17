@@ -212,6 +212,7 @@ describe('adult metadata and settings', () => {
         name: 'c.1',
         number: 1,
         scanlator: null,
+        volume: null,
         isDownloaded: false,
       },
     ]);

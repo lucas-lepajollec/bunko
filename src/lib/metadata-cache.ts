@@ -62,6 +62,10 @@ export function saveMetadata(key: string, value: unknown, updatedAt = Date.now()
       ON CONFLICT(key) DO UPDATE SET payload=excluded.payload,bytes=excluded.bytes,
       updated_at=excluded.updated_at,attempted_at=excluded.attempted_at`,
     ).run(key, payload, size, updatedAt, updatedAt);
+    const usage = statement(
+      "SELECT bytes,entries FROM cache_usage WHERE name='metadata_cache'",
+    ).get() as { bytes: number; entries: number };
+    if (usage.bytes <= MAX_BYTES && usage.entries <= MAX_ENTRIES) return;
     const rows = statement(
       'SELECT key,bytes FROM metadata_cache ORDER BY updated_at DESC,key DESC',
     ).all() as { key: string; bytes: number }[];

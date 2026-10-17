@@ -35,7 +35,7 @@ const {
 const { emptyMedia } = await import('@/lib/media');
 const { updateSettings, getSettings, persistentSecret } = await import('@/lib/settings');
 const { saveMetadata, storedMetadata, cached } = await import('@/lib/metadata-cache');
-const { cachedImage, cachedImageResponse } = await import('@/lib/image-cache');
+const { cachedImage, cachedImageResponse, suwayomiImageKey } = await import('@/lib/image-cache');
 const { saveReleases, releaseStore } = await import('@/lib/releases');
 const { planning } = await import('@/lib/planning');
 const { adultResolver, recordSourceFlags, sourceAllowed, setAdultOverride } =
@@ -405,9 +405,15 @@ it('serves same-ID retained covers and chapter pages from private files, rejects
   const pages = await Promise.all([1, 2].map((id) => inTenant(id, () => chapterPages(7))));
   expect(pages.map((p) => p[0].bytes.toString())).toEqual(['page-1', 'page-2']);
   for (const id of [1, 2])
-    expect(readFileSync(path.join(tenantPath(id), 'page-cache', '7', '0.page')).toString()).toBe(
-      `page-${id}`,
-    );
+    await inTenant(id, async () => {
+      const stored = await cachedImage(
+        suwayomiImageKey('page:/api/v1/manga/1/chapter/0/page/0'),
+        async () => {
+          throw new Error('Page must survive in the private disk cache');
+        },
+      );
+      expect(stored.bytes.toString()).toBe(`page-${id}`);
+    });
   const alias = path.join(directory, 'library', '2', 'Peer');
   symlinkSync(path.join(directory, 'library', '1', 'Manga'), alias);
   expect(inTenant(2, () => mapKavitaPath('/library/Peer'))).toBeNull();

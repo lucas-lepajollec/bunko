@@ -96,7 +96,7 @@ export const media = z.object({
   trackedId: id.nullable(),
   kavitaSeriesId: id.nullable(),
   format: z
-    .enum(['MANGA', 'MANHWA', 'MANHUA', 'ONE_SHOT', 'LIGHT_NOVEL', 'WEB_NOVEL'])
+    .enum(['MANGA', 'MANHWA', 'MANHUA', 'COMIC', 'ONE_SHOT', 'LIGHT_NOVEL', 'WEB_NOVEL'])
     .nullable()
     .default(null),
   origin: z.string().max(8).nullable().default(null),
@@ -139,7 +139,7 @@ export const adultOverrideBody = z.object({
 });
 export const discoverQuery = z
   .object({
-    kind: z.enum(['all', 'manga', 'manhwa', 'manhua', 'novel']).optional(),
+    kind: z.enum(['all', 'manga', 'manhwa', 'manhua', 'comic', 'novel']).optional(),
     sort: z.enum(['trending', 'popular', 'score', 'new']).optional(),
     genre: z.string().max(60).optional(),
     status: z.enum(['RELEASING', 'FINISHED']).optional(),
@@ -155,6 +155,7 @@ export const discoverQuery = z
 export const searchParams = z.object({
   q: z.string().trim().min(1).max(200),
   type: mediaType.optional(),
+  fast: z.literal('1').optional(),
 });
 export const settingsPatch = z
   .object({
@@ -186,7 +187,7 @@ export const settingsPatch = z
     libraryTargets: z
       .object(
         Object.fromEntries(
-          ['MANGA', 'MANHWA', 'MANHUA', 'NOVEL'].map((kind) => [
+          ['MANGA', 'MANHWA', 'MANHUA', 'COMIC', 'NOVEL'].map((kind) => [
             kind,
             z
               .object({

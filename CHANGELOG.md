@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Built-in reader: read any chapter straight from your sources (or from your library files when already downloaded) in manga (right-to-left), left-to-right or webtoon mode, with next pages preloaded, resume where you stopped, and chapters marked read when finished. "Read" / "Resume" on every title and a read button on each chapter.
+- Volumes: chapters carry their volume when sources give it; title sheets can show chapters grouped by volume and select a whole volume; downloads are named with the volume for Kavita.
+- Comics & BD as a format: library filter, Kavita target, source search, reader. There is no public comics catalog, so the catalog points to your extensions.
+- Faster: instant first search results (local and cached) refined when every provider answers, image cache housekeeping off the request path, incremental Kavita sync, a page frame instead of a blank screen while signing in, and priority loading for the first covers.
 - Accounts can be renamed (by an administrator in Settings → Users, or by yourself in My account); you stay signed in. A `/library/<username>` mount must be renamed in the compose file too.
 - Multi-user: every account is a separate Bunko instance with its own settings, Suwayomi and Kavita connections, library, downloads and content filter (administrators also manage accounts in Settings → Users). The existing installation becomes the first account unchanged — same session, same `/library` mount; additional accounts mount their Kavita folders under `/library/<username>`.
 - Per-work content filter override from the title sheet, applied everywhere.

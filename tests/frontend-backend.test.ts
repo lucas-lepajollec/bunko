@@ -106,6 +106,7 @@ function chapter(id: number, number: number) {
     name: `Chapter ${number}`,
     chapterNumber: number,
     scanlator: null,
+    volume: null,
     isDownloaded: downloaded,
     uploadDate: String(Date.now() - 60000),
   };
@@ -468,6 +469,7 @@ describe('v2 protocol fixtures', () => {
         name: 'Chapter 8',
         number: 8,
         scanlator: null,
+        volume: null,
         isDownloaded: false,
       },
     ]);

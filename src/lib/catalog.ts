@@ -1,3 +1,4 @@
+import { sourceFormat } from './library-kinds';
 import {
   adultResolver,
   rememberAdultIdentities,
@@ -58,6 +59,7 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
     const enriched = withKavita(
       {
         ...m,
+        format: t?.media.format ?? m.format,
         adult: Boolean(m.adult || t?.media.adult),
         coverUrl: t ? t.coverUrl : m.coverUrl,
         trackedId: own?.id ?? null,
@@ -86,6 +88,7 @@ export async function discover(
   const sort = q.sort ?? 'trending';
   const page = q.page ?? 1;
   const perPage = q.perPage ?? 24;
+  if (kind === 'comic') return { items: [], page, hasNextPage: false };
   const variables: Record<string, unknown> = {
     page,
     perPage,
@@ -254,6 +257,7 @@ async function loadSuwayomiDetail(id: number, signal?: AbortSignal): Promise<Med
   return {
     ...emptyMedia(`suwayomi:${manga.id}`, manga.title, 'MANGA'),
     adult: false,
+    format: sourceFormat(manga.source?.name ?? '', manga.genre ?? []),
     coverUrl: proxyImage(manga.thumbnailUrl),
     synopsis: cleanSynopsis(manga.description),
     genres: manga.genre ?? [],

@@ -41,6 +41,7 @@ export function db(): Database.Database {
   const connection = new Database(existsSync(legacy) ? legacy : path.join(folder, 'bunko.db'));
   try {
     connection.pragma('journal_mode = WAL');
+    connection.pragma('recursive_triggers = ON');
     connection.pragma('synchronous = NORMAL');
     connection.pragma('cache_size = -16384');
     connection.pragma('temp_store = MEMORY');
@@ -108,6 +109,33 @@ export function db(): Database.Database {
       identity TEXT PRIMARY KEY, adult INTEGER NOT NULL CHECK(adult IN (0,1)), revision INTEGER NOT NULL, automatic INTEGER NOT NULL CHECK(automatic IN (0,1)));
     CREATE TABLE IF NOT EXISTS write_versions (domain TEXT PRIMARY KEY, version INTEGER NOT NULL);
     INSERT OR IGNORE INTO write_versions VALUES('library',0),('series',0),('settings',0),('linkage',0),('batches',0),('releases',0);`);
+    connection.exec(`CREATE INDEX IF NOT EXISTS image_cache_lru ON image_cache(accessed_at,key);
+    CREATE TABLE IF NOT EXISTS cache_usage (name TEXT PRIMARY KEY, bytes INTEGER NOT NULL, entries INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS reader_progress (
+      media_id TEXT NOT NULL, chapter_id INTEGER NOT NULL, number REAL, page INTEGER NOT NULL,
+      page_count INTEGER NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(media_id,chapter_id));
+    CREATE INDEX IF NOT EXISTS reader_progress_latest ON reader_progress(media_id,updated_at DESC);
+    CREATE TABLE IF NOT EXISTS reader_chapters (
+      namespace TEXT NOT NULL, chapter_id INTEGER NOT NULL, payload TEXT NOT NULL, at INTEGER NOT NULL,
+      PRIMARY KEY(namespace,chapter_id));
+    CREATE INDEX IF NOT EXISTS reader_chapters_age ON reader_chapters(at);
+    CREATE TABLE IF NOT EXISTS reader_archives (
+      chapter_id INTEGER PRIMARY KEY, namespace TEXT NOT NULL, filename TEXT NOT NULL, payload TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS reader_archives_manga ON reader_archives(namespace,json_extract(payload,'$.manga.id'));
+    CREATE INDEX IF NOT EXISTS reader_chapters_manga ON reader_chapters(namespace,json_extract(payload,'$.mangaId'));`);
+    for (const table of ['image_cache', 'metadata_cache']) {
+      connection
+        .prepare(
+          `INSERT OR IGNORE INTO cache_usage SELECT ?,COALESCE(SUM(bytes),0),COUNT(*) FROM ${table}`,
+        )
+        .run(table);
+      connection.exec(`CREATE TRIGGER IF NOT EXISTS usage_${table}_INSERT AFTER INSERT ON ${table} BEGIN
+        UPDATE cache_usage SET bytes=bytes+NEW.bytes,entries=entries+1 WHERE name='${table}'; END;
+      CREATE TRIGGER IF NOT EXISTS usage_${table}_UPDATE AFTER UPDATE OF bytes ON ${table} BEGIN
+        UPDATE cache_usage SET bytes=bytes+NEW.bytes-OLD.bytes WHERE name='${table}'; END;
+      CREATE TRIGGER IF NOT EXISTS usage_${table}_DELETE AFTER DELETE ON ${table} BEGIN
+        UPDATE cache_usage SET bytes=bytes-OLD.bytes,entries=entries-1 WHERE name='${table}'; END;`);
+    }
     migrateV8(connection);
     migrateV9(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
@@ -115,6 +143,7 @@ export function db(): Database.Database {
     connection.transaction(() => {
       for (const table of [
         'tracked_media',
+        'reader_progress',
         'source_flags',
         'adult_identity_edges',
         'adult_overrides',
@@ -522,10 +551,11 @@ function snapshotTracked(id?: number) {
       statement(sql + (id === undefined ? '' : ` WHERE ${column}=?`) + suffix).all(
         ...(id === undefined ? [] : [id]),
       );
-    const rows = select('SELECT * FROM tracked_media', 'id', ' ORDER BY id DESC') as Record<
-      string,
-      unknown
-    >[];
+    const rows = select(
+      `SELECT *, (SELECT json_object('chapterId',chapter_id,'number',number,'page',page,'updatedAt',updated_at) FROM reader_progress WHERE media_id=tracked_media.media_json ->> '$.id' ORDER BY updated_at DESC,rowid DESC LIMIT 1) AS reader_position_json FROM tracked_media`,
+      'id',
+      ' ORDER BY id DESC',
+    ) as Record<string, unknown>[];
     const links = new Map<number, SourceLinkStatus[]>();
     for (const r of select('SELECT tracked_id,payload FROM source_links', 'tracked_id') as {
       tracked_id: number;
@@ -673,6 +703,7 @@ function snapshotTracked(id?: number) {
         media,
         sources,
         status: r.status as TrackedMedia['status'],
+        readerPosition: r.reader_position_json ? JSON.parse(String(r.reader_position_json)) : null,
         lastReadAt: r.last_read_at as string | null,
         progress: {
           read,

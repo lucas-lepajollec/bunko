@@ -1,3 +1,5 @@
+import { sourceServerKey } from './source-server';
+import { chapterVolume } from './chapter-volume';
 import { sourceUploadDate } from './source-chapters';
 import { recordSourceFlags, sourceAllowed } from './adult';
 import type {
@@ -251,8 +253,14 @@ export function mergeChapters(chapters: ChapterVariant[]): MergedChapter[] {
       chapter.number === null
         ? `special:${chapter.sourceId}:${chapter.id}`
         : String(chapter.number);
-    const group = groups.get(key) ?? { key, number: chapter.number, variants: [] };
+    const group = groups.get(key) ?? {
+      key,
+      number: chapter.number,
+      volume: chapter.volume ?? null,
+      variants: [],
+    };
     if (!group.variants.some((c) => c.id === chapter.id)) group.variants.push(chapter);
+    group.volume ??= chapter.volume ?? null;
     groups.set(key, group);
   }
   return [...groups.values()].sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity));
@@ -274,6 +282,7 @@ export async function chaptersFor(
               chapterNumber: number;
               scanlator: string | null;
               isDownloaded: boolean;
+              volume?: number | null;
               uploadDate?: string | number | null;
             }[];
           };
@@ -290,6 +299,7 @@ export async function chaptersFor(
           sourceName: s.sourceName,
           name: c.name,
           number: chapterNumber(c.name, c.chapterNumber),
+          volume: chapterVolume(c.name, c.volume),
           scanlator: c.scanlator,
           isDownloaded: c.isDownloaded,
           uploadDate: sourceUploadDate(c.uploadDate),
@@ -298,7 +308,21 @@ export async function chaptersFor(
     ),
   );
   const chapters = mergeChapters(settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])));
-  if (!signal?.aborted && canWrite()) saveChapterLabels(chapters.flatMap((c) => c.variants));
+  if (!signal?.aborted && canWrite()) {
+    saveChapterLabels(chapters.flatMap((c) => c.variants));
+    db().transaction(() => {
+      const save = db().prepare(
+        'INSERT INTO reader_chapters(namespace,chapter_id,payload,at) VALUES(?,?,?,?) ON CONFLICT(namespace,chapter_id) DO UPDATE SET payload=excluded.payload,at=excluded.at',
+      );
+      for (const c of chapters.flatMap((c) => c.variants))
+        save.run(`${sourceServerKey()}:reader`, c.id, JSON.stringify(c), Date.now());
+      db()
+        .prepare(
+          'DELETE FROM reader_chapters WHERE rowid IN (SELECT rowid FROM reader_chapters ORDER BY at DESC,rowid DESC LIMIT -1 OFFSET 20000)',
+        )
+        .run();
+    })();
+  }
   const numbers = chapters.flatMap((c) => (c.number === null ? [] : [c.number]));
   if (numbers.length && !signal?.aborted && canWrite())
     for (const tracked of listTracked().filter((t) =>

@@ -10,11 +10,10 @@ import type {
   DiscoverSort,
   MediaFormat,
   ReleasesPage,
-  SearchResponse,
   Season,
 } from '@/types/shared';
 import { SEASONS, formatStartDate, seasonOf } from '@/lib/client/season';
-import { api, useApi } from '@/lib/client/api';
+import { api, useApi, useProgressiveSearch } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { PosterCard } from '@/components/media';
@@ -29,12 +28,13 @@ import {
   smallButton,
 } from '@/components/ui';
 
-const KINDS: DiscoverKind[] = ['all', 'manga', 'manhwa', 'manhua', 'novel'];
+const KINDS: DiscoverKind[] = ['all', 'manga', 'manhwa', 'manhua', 'comic', 'novel'];
 const SORTS: DiscoverSort[] = ['trending', 'popular', 'score', 'new'];
 const KIND_FORMATS: Record<Exclude<DiscoverKind, 'all'>, MediaFormat[]> = {
   manga: ['MANGA', 'ONE_SHOT'],
   manhwa: ['MANHWA'],
   manhua: ['MANHUA'],
+  comic: ['COMIC'],
   novel: ['LIGHT_NOVEL', 'WEB_NOVEL'],
 };
 
@@ -68,9 +68,7 @@ function Catalog() {
   const year = /^\d{4}$/.test(params.get('year') ?? '') ? Number(params.get('year')) : null;
   const { locale } = useI18n();
   const thisYear = seasonOf().year;
-  const searched = useApi<SearchResponse>(
-    q.length >= 2 ? `/api/search?q=${encodeURIComponent(q)}` : null,
-  );
+  const searched = useProgressiveSearch(q);
   const [allGenres, setAllGenres] = useState(false);
   const genres = useApi<string[]>('/api/genres');
   const set = (key: string, value: string, extra?: Record<string, string>) => {
@@ -324,9 +322,24 @@ function Catalog() {
             ))}
             {(q ? searched.isLoading : loadingMore) && <PosterSkeletons count={16} />}
           </div>
-          {!q && !loadingMore && !pages.error && items.length === 0 && (
-            <Empty title={t('catalog.empty')} />
-          )}
+          {!q &&
+            !loadingMore &&
+            !pages.error &&
+            items.length === 0 &&
+            (kind === 'comic' ? (
+              <Empty
+                title={t('catalog.comicsTitle')}
+                action={
+                  <Link href="/search" className={smallButton}>
+                    {t('quick.inExtensions')} →
+                  </Link>
+                }
+              >
+                {t('catalog.comicsBody')}
+              </Empty>
+            ) : (
+              <Empty title={t('catalog.empty')} />
+            ))}
           {q && searched.data && searchItems.length === 0 && (
             <Empty title={t('search.noCatalog')}>{t('search.noCatalogBody')}</Empty>
           )}

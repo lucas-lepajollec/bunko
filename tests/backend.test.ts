@@ -85,7 +85,11 @@ beforeAll(async () => {
           },
         };
       } else if (query.includes('fetchChapterPages'))
-        data = { fetchChapterPages: { pages: ['/api/v1/manga/1/chapter/0/page/0'] } };
+        data = {
+          fetchChapterPages: {
+            pages: [`/api/v1/manga/1/chapter/${body.variables.input.chapterId}/page/0`],
+          },
+        };
       else if (query.includes('fetchChapters'))
         data = {
           fetchChapters: {
@@ -138,7 +142,7 @@ beforeAll(async () => {
       res.end(JSON.stringify({ data }));
       return;
     }
-    if (req.url === '/api/v1/manga/1/chapter/0/page/0') {
+    if (/^\/api\/v1\/manga\/1\/chapter\/\d+\/page\/0$/.test(req.url ?? '')) {
       if (queueError) {
         res.statusCode = 503;
         res.end('{}');
@@ -343,6 +347,7 @@ describe('chapters, metadata and releases', () => {
       name: 'Ch 112',
       number: 112,
       scanlator: null,
+      volume: null,
       isDownloaded: false,
     };
     expect(mergeChapters([variant, { ...variant, id: 2, sourceId: '2' }])[0].variants).toHaveLength(

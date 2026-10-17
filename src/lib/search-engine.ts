@@ -1,3 +1,4 @@
+import { sourceFormat } from './library-kinds';
 import {
   visibleMedia,
   sourceAllowed,
@@ -6,7 +7,7 @@ import {
 } from './adult';
 import { mangaUpdates } from './mangaupdates';
 import type { MediaType, Provider, SearchResponse, UnifiedMedia } from '@/types/shared';
-import { db, searchCatalog } from './db';
+import { db, searchCatalog, listTracked } from './db';
 import { withTracking } from './catalog';
 import { requestJson } from './http';
 import {
@@ -23,7 +24,9 @@ import {
   type DexManga,
   type UpdatesRecord,
 } from './media';
-import { cached } from './metadata-cache';
+import { indexedSeries } from './kavita-index';
+import { kavitaMedia } from './kavita-track';
+import { cached, storedMetadata } from './metadata-cache';
 export { emptyMedia, normalizeTitle };
 function identities(m: UnifiedMedia) {
   return [m.title, ...m.altTitles].map(normalizeTitle).filter(Boolean);
@@ -164,6 +167,7 @@ export async function search(
   query: string,
   type?: MediaType,
   signal?: AbortSignal,
+  fast = false,
 ): Promise<SearchResponse> {
   const start = Date.now();
   const key = `${includeProviderAdults()}:${type}:${query.toLowerCase()}`;
@@ -173,17 +177,37 @@ export async function search(
   if (!type || type === 'MANGA') jobs.push({ provider: 'mangadex', run: () => mangadex(query) });
   if (type !== 'ANIME')
     jobs.push({ provider: 'mangaupdates', run: () => mangaupdates(query, type) });
-  if (!type || type === 'MANGA')
+  if (type !== 'ANIME')
     jobs.push({
       provider: 'local',
-      run: async () =>
-        searchCatalog(query)
+      run: async () => [
+        ...listTracked()
+          .map((t) => t.media)
+          .filter(
+            (m) =>
+              (!type || m.type === type) &&
+              [m.title, ...m.altTitles].some((n) =>
+                normalizeTitle(n).includes(normalizeTitle(query)),
+              ),
+          ),
+        ...searchCatalog(query)
+          .filter(() => type !== 'NOVEL')
           .filter((r) => sourceAllowed({ id: r.sourceId, name: r.sourceName, lang: r.lang }))
           .map((r) => ({
             ...emptyMedia(`suwayomi:${r.suwayomiMangaId}`, r.title, 'MANGA'),
+            format: sourceFormat(r.sourceName),
             sources: [r],
-            providers: ['local'],
+            providers: ['local' as const],
           })),
+        ...indexedSeries()
+          .filter(
+            (s) =>
+              (!type || (s.kind === 'NOVEL' ? 'NOVEL' : 'MANGA') === type) &&
+              s.names.some((n) => normalizeTitle(n).includes(normalizeTitle(query))),
+          )
+          .slice(0, 100)
+          .map((s) => kavitaMedia(s.seriesId)),
+      ],
     });
   const timings: number[] = [];
   const settled = await Promise.allSettled(
@@ -191,6 +215,8 @@ export async function search(
       const at = Date.now();
       try {
         signal?.throwIfAborted();
+        if (fast && j.provider !== 'local')
+          return storedMetadata<UnifiedMedia[]>(`search:${j.provider}:${key}`)?.value ?? [];
         return j.provider === 'local'
           ? await j.run()
           : await cached(`search:${j.provider}:${key}`, 30_000, j.run);
@@ -214,6 +240,7 @@ export async function search(
       durationMs: timings[i],
     })),
     durationMs: Date.now() - start,
+    ...(fast ? { partial: true } : {}),
   };
   return value;
 }

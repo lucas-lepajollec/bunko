@@ -256,7 +256,7 @@ describe('automatic mapping and target selection', () => {
     expect(
       index.suggestLibraries([{ id: 1, name: 'Comics', type: 'Comic', folders: [] }])[0]
         .suggestedFor,
-    ).toEqual([]);
+    ).toEqual(['COMIC']);
   });
   it('refuses enqueue with 409 before persisting jobs when no target or ambiguous targets exist', async () => {
     const { POST } = await import('@/app/api/downloads/enqueue/route');
@@ -456,6 +456,7 @@ describe('relinking and released maxima', () => {
         mangaId: 9,
         name: '18',
         scanlator: null,
+        volume: null,
         isDownloaded: false,
       },
     ]);

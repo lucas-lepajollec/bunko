@@ -26,9 +26,10 @@ check 401 "API requires authentication" "$base/api/settings"
 # Every API route must be present in the image (an ignored folder once dropped one silently).
 check 200 "public auth state" "$base/api/auth"
 check 401 "password route exists" -X POST "$base/api/auth/password"
-for route in releases planning home discover genres media media/sources search search/stream manga/chapters users me tracked tracked/covers library/activity updates sources downloads extensions settings status kavita/status kavita/libraries kavita/series kavita/image suwayomi/image covers/1; do
+for route in releases planning home discover genres reader/chapter reader/page media media/sources search search/stream manga/chapters users me tracked tracked/covers library/activity updates sources downloads extensions settings status kavita/status kavita/libraries kavita/series kavita/image suwayomi/image covers/1; do
   check 401 "route /api/$route exists" "$base/api/$route"
 done
+check 401 "reader progress route exists" -X PUT "$base/api/reader/progress"
 check 401 "content filter override route exists" -X PATCH "$base/api/media/adult"
 credentials='{"username":"SmokeAdmin","password":"synthetic-smoke-password"}'
 check 403 "cross-site setup rejected" -X POST "$base/api/auth/setup" -H 'Content-Type: application/json' -H 'Origin: https://evil.invalid' -d "$credentials"

@@ -7,7 +7,7 @@ import { mediaVisibility, includeProviderAdults } from './adult';
 
 export function composeHome(releases: ChapterRelease[], top: HomeFeed['top']): HomeFeed {
   const visibleMedia = mediaVisibility();
-  const latest: HomeFeed['latest'] = { manga: [], manhwa: [], manhua: [], novel: [] };
+  const latest: HomeFeed['latest'] = { manga: [], manhwa: [], manhua: [], comic: [], novel: [] };
   const banners: ChapterRelease[] = [];
   const covers: ChapterRelease[] = [];
   const seen = new Set<string>();

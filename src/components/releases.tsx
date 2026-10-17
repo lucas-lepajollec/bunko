@@ -22,7 +22,9 @@ export function useChapterLabel() {
 export function ReleaseCard({
   release,
   className,
+  priority,
 }: {
+  priority?: boolean;
   release: ChapterRelease;
   className?: string;
 }) {
@@ -37,6 +39,7 @@ export function ReleaseCard({
       <span className="relative block">
         <Cover
           src={release.media.coverUrl}
+          priority={priority}
           alt={release.media.title}
           className="transition-transform duration-300 group-hover:-translate-y-1"
         />
@@ -88,7 +91,9 @@ export function ReleaseRow({
       {!items ? (
         <PosterSkeletons count={8} className={CARD} />
       ) : (
-        items.map((r) => <ReleaseCard key={r.id} release={r} className={CARD} />)
+        items.map((r, i) => (
+          <ReleaseCard key={r.id} release={r} className={CARD} priority={i < 6} />
+        ))
       )}
     </ScrollRow>
   );

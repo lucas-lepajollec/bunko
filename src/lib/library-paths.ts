@@ -151,7 +151,9 @@ export async function writableFolder(folder: string) {
 export function libraryKind(media: Pick<UnifiedMedia, 'format' | 'type'>): LibraryKind {
   if (media.type === 'NOVEL' || media.format === 'LIGHT_NOVEL' || media.format === 'WEB_NOVEL')
     return 'NOVEL';
-  return media.format === 'MANHWA' || media.format === 'MANHUA' ? media.format : 'MANGA';
+  return media.format === 'MANHWA' || media.format === 'MANHUA' || media.format === 'COMIC'
+    ? media.format
+    : 'MANGA';
 }
 function belongsToLibrary(target: import('@/types/shared').LibraryTarget) {
   const libraries = storedLibraries();

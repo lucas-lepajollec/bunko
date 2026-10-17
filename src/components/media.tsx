@@ -12,7 +12,9 @@ export function PosterCard({
   badge,
   className,
   subtitle,
+  priority,
 }: {
+  priority?: boolean;
   media: UnifiedMedia;
   badge?: ReactNode;
   className?: string;
@@ -29,6 +31,7 @@ export function PosterCard({
       <span className="relative block">
         <Cover
           src={media.coverUrl}
+          priority={priority}
           className="transition-transform duration-300 group-hover:-translate-y-1"
         />
         {badge ??
@@ -137,10 +140,11 @@ export function Row({
       {!items ? (
         <PosterSkeletons count={8} className={CARD} />
       ) : (
-        items.map((m) => (
+        items.map((m, i) => (
           <PosterCard
             key={m.id}
             media={m}
+            priority={i < 6}
             className={CARD}
             subtitle={dated ? formatStartDate(m.startDate, locale) : undefined}
           />
@@ -168,6 +172,7 @@ export function TopRow({ items }: { items: UnifiedMedia[] | undefined }) {
             </span>
             <Cover
               src={m.coverUrl}
+              priority={i < 5}
               alt={m.title}
               className="relative w-[92px] transition-transform duration-300 group-hover:-translate-y-1 md:w-[128px]"
             />

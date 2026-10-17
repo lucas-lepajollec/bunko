@@ -1,20 +1,18 @@
+import { sourceServerKey } from './source-server';
 import { tenantState } from './tenant-context';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   createReadStream,
   readSync,
-  existsSync,
-  mkdirSync,
   openSync,
-  writeFileSync,
-  fsyncSync,
   closeSync,
-  renameSync,
   readFileSync,
-  readdirSync,
   unlinkSync,
   statSync,
 } from 'node:fs';
+import { mkdir, open, rename, unlink, readdir, stat } from 'node:fs/promises';
+import { setImmediate as yieldIO } from 'node:timers/promises';
+import { tenantSignal } from './tenant-lifecycle';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { statement, dataDir } from './db';
@@ -39,8 +37,7 @@ export function kavitaImageKey(seriesId: string | number) {
   return `kavita:${hash(JSON.stringify([s.kavitaUrl, s.kavitaApiKey, s.kavitaAuthMode]))}:${seriesId}`;
 }
 export function suwayomiImageKey(relative: string) {
-  const s = getSettings();
-  return `suwayomi:${hash(JSON.stringify([s.suwayomiUrl, s.suwayomiUsername, s.suwayomiPassword]))}:${relative}`;
+  return `${sourceServerKey()}:${relative}`;
 }
 const filename = (key: string) => path.join(/* turbopackIgnore: true */ directory(), key);
 function remove(key: string) {
@@ -65,31 +62,76 @@ export function invalidateImage(key: string) {
 export function invalidateKavitaImage(seriesId: number) {
   invalidateImage(kavitaImageKey(seriesId));
 }
-/** Includes orphaned files left by a crash between atomic publication and SQLite update. */
-export function pruneImages(maxBytes = 500 * 1024 * 1024) {
-  if (!existsSync(directory())) return;
-  const rows = statement('SELECT key,accessed_at FROM image_cache').all() as {
-    key: string;
-    accessed_at: number;
-  }[];
-  const access = new Map(rows.map((r) => [r.key, r.accessed_at]));
-  for (const file of readdirSync(directory())) {
-    if (
-      /^\.[a-f0-9-]+\.partial$/.test(file) &&
-      Date.now() - statSync(path.join(directory(), file)).mtimeMs > 3_600_000
+const MAX_BYTES = 500 * 1024 * 1024;
+const maintenance = tenantState(() => ({ pending: false, reconciled: 0 }));
+export function imageCacheBytes() {
+  return (
+    statement("SELECT bytes FROM cache_usage WHERE name='image_cache'").get() as { bytes: number }
+  ).bytes;
+}
+/** Explicit maintenance is async. Normal publication only schedules it after the byte threshold. */
+export async function pruneImages(maxBytes = MAX_BYTES, reconcile = true) {
+  const signal = tenantSignal();
+  while (!signal.aborted && imageCacheBytes() > maxBytes) {
+    const rows = statement(
+      'SELECT key,bytes,accessed_at FROM image_cache ORDER BY accessed_at,key LIMIT 32',
+    ).all() as { key: string; bytes: number; accessed_at: number }[];
+    let removed = 0;
+    for (const row of rows) {
+      if (imageCacheBytes() <= maxBytes || signal.aborted) break;
+      if (loads.has(`${dataDir()}:${row.key}`)) continue;
+      await unlink(filename(row.key)).catch((e) => {
+        if (e.code !== 'ENOENT') throw e;
+      });
+      statement('DELETE FROM image_cache WHERE key=? AND accessed_at=? AND bytes=?').run(
+        row.key,
+        row.accessed_at,
+        row.bytes,
+      );
+      diskHeaders().delete(row.key);
+      removed++;
+    }
+    if (!removed) break;
+    await yieldIO();
+  }
+  if (!reconcile || signal.aborted) return;
+  // Crash leftovers are reconciled at most daily, using async IO in small batches.
+  const files = await readdir(directory()).catch((e) => {
+    if (e.code === 'ENOENT') return [];
+    throw e;
+  });
+  for (let i = 0; i < files.length && !signal.aborted; i++) {
+    const key = files[i];
+    if (loads.has(`${dataDir()}:${key}`)) continue;
+    if (/^[a-f0-9]{64}$/.test(key) && !statement('SELECT 1 FROM image_cache WHERE key=?').get(key))
+      await unlink(filename(key)).catch(() => {});
+    else if (
+      /^\.[a-f0-9-]+\.partial$/.test(key) &&
+      Date.now() - (await stat(filename(key))).mtimeMs > 3_600_000
     )
-      unlinkSync(path.join(directory(), file));
+      await unlink(filename(key)).catch(() => {});
+    if (i % 32 === 31) await yieldIO();
   }
-  const files = readdirSync(directory())
-    .filter((key) => /^[a-f0-9]{64}$/.test(key))
-    .map((key) => ({ key, bytes: statSync(filename(key)).size, at: access.get(key) ?? 0 }));
-  let total = files.reduce((sum, f) => sum + f.bytes, 0);
-  files.sort((a, b) => a.at - b.at || a.key.localeCompare(b.key));
-  for (const file of files) {
-    if (total <= maxBytes && access.has(file.key)) continue;
-    remove(file.key);
-    total -= file.bytes;
-  }
+}
+function schedulePrune() {
+  const state = maintenance();
+  const reconcile = Date.now() - state.reconciled >= DAY;
+  if (state.pending || (!reconcile && imageCacheBytes() <= MAX_BYTES)) return;
+  state.pending = true;
+  state.reconciled = Date.now();
+  const timer = setTimeout(() => {
+    void pruneImages(Math.floor(MAX_BYTES * 0.9), reconcile)
+      .catch(() => {})
+      .finally(() => {
+        state.pending = false;
+        try {
+          if (!tenantSignal().aborted && imageCacheBytes() > MAX_BYTES) schedulePrune();
+        } catch {
+          /* Tenant removed during maintenance. */
+        }
+      });
+  }, 25);
+  timer.unref();
 }
 function read(key: string): (CachedImage & { at: number }) | null {
   try {
@@ -117,8 +159,9 @@ function read(key: string): (CachedImage & { at: number }) | null {
     return null;
   }
 }
-function write(key: string, image: CachedImage) {
-  mkdirSync(directory(), { recursive: true, mode: 0o700 });
+async function write(key: string, image: CachedImage, valid: () => boolean) {
+  const signal = tenantSignal();
+  await mkdir(directory(), { recursive: true, mode: 0o700 });
   const temporary = path.join(/* turbopackIgnore: true */ directory(), `.${randomUUID()}.partial`);
   const packed = Buffer.concat([
     Buffer.from(
@@ -127,25 +170,32 @@ function write(key: string, image: CachedImage) {
     image.bytes,
   ]);
   try {
-    const file = openSync(temporary, 'wx', 0o600);
+    const file = await open(temporary, 'wx', 0o600);
     try {
-      writeFileSync(file, packed);
-      fsyncSync(file);
+      await file.writeFile(packed);
+      await file.sync();
     } finally {
-      closeSync(file);
+      await file.close();
     }
-    renameSync(temporary, filename(key));
+    if (!valid() || signal.aborted) return;
+    await rename(temporary, filename(key));
+    if (!valid() || signal.aborted) {
+      await unlink(filename(key)).catch(() => {});
+      return;
+    }
     diskHeaders().delete(key);
-    statement(
-      'INSERT OR REPLACE INTO image_cache(key,bytes,accessed_at,attempted_at) VALUES(?,?,?,?)',
-    ).run(key, packed.length, Date.now(), Date.now());
-    pruneImages();
+    statement(`INSERT INTO image_cache(key,bytes,accessed_at,attempted_at) VALUES(?,?,?,?)
+      ON CONFLICT(key) DO UPDATE SET bytes=excluded.bytes,accessed_at=excluded.accessed_at,attempted_at=excluded.attempted_at`).run(
+      key,
+      packed.length,
+      Date.now(),
+      Date.now(),
+    );
+    schedulePrune();
   } finally {
-    try {
-      unlinkSync(temporary);
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
-    }
+    await unlink(temporary).catch((e) => {
+      if (e.code !== 'ENOENT') throw e;
+    });
   }
 }
 export async function cachedImage(
@@ -162,8 +212,8 @@ export async function cachedImage(
         invalidated: false,
         promise: Promise.resolve()
           .then(load)
-          .then((image) => {
-            if (!pending!.invalidated) write(digest, image);
+          .then(async (image) => {
+            if (!pending!.invalidated) await write(digest, image, () => !pending!.invalidated);
             return image;
           })
           .finally(() => {

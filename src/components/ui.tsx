@@ -35,6 +35,7 @@ export function Cover({
   src,
   fallbacks,
   onUnavailable,
+  priority,
   alt = '',
   className,
   style,
@@ -43,6 +44,8 @@ export function Cover({
   fallbacks?: string[];
   /** Called once every candidate failed (lets pickers hide dead options). */
   onUnavailable?: () => void;
+  /** Above-the-fold artwork: load immediately with high priority instead of lazily. */
+  priority?: boolean;
   alt?: string;
   className?: string;
   style?: CSSProperties;
@@ -75,7 +78,8 @@ export function Cover({
       key={current}
       src={current}
       alt={alt}
-      loading="lazy"
+      loading={priority ? 'eager' : 'lazy'}
+      fetchPriority={priority ? 'high' : 'auto'}
       decoding="async"
       referrerPolicy="no-referrer"
       onError={() => {

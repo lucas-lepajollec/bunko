@@ -125,6 +125,7 @@ it('replaces unknown dates on later refresh, invalidates a warmed feed, and neve
     name: 'Chapter 1',
     number: 1,
     scanlator: null,
+    volume: null,
     isDownloaded: false,
   };
   observeChapters(t.id, [c]);
