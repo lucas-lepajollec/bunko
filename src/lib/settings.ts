@@ -126,11 +126,15 @@ export function updateSettings(patch: SettingsPatch) {
       'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
     );
     db().transaction(() => {
-      if (patch.kavitaApiKey !== undefined && patch.kavitaApiKey !== current.kavitaApiKey) {
+      if (
+        (patch.kavitaApiKey !== undefined && patch.kavitaApiKey !== current.kavitaApiKey) ||
+        (patch.kavitaUrl !== undefined && patch.kavitaUrl !== current.kavitaUrl)
+      ) {
         statement(
-          'UPDATE tracked_media SET last_read=NULL,last_read_at=NULL,progress_checked=0',
+          'UPDATE tracked_media SET last_read=NULL,volume_read=NULL,last_read_at=NULL,progress_checked=0',
         ).run();
         statement("DELETE FROM worker_state WHERE key LIKE 'progress_refresh_attempt:%'").run();
+        statement("UPDATE kavita_series SET payload=json_remove(payload,'$.volumeRead')").run();
       }
       for (const [key, value] of Object.entries(patch)) {
         if (key === 'mediaRoot') continue;

@@ -295,11 +295,17 @@ function Library() {
                 <span className="text-muted -mt-1 hidden truncate text-xs md:block">
                   {[
                     e.progress?.read !== null && e.progress?.read !== undefined
-                      ? t('library.readN', { n: n(e.progress.read) })
+                      ? t(e.unit === 'volume' ? 'library.readNVol' : 'library.readN', {
+                          n: n(e.progress.read),
+                        })
                       : null,
-                    t('library.ownedN', { n: n(e.progress?.owned ?? 0) }),
+                    t(e.unit === 'volume' ? 'library.ownedNVol' : 'library.ownedN', {
+                      n: n(e.progress?.owned ?? 0),
+                    }),
                     e.progress?.released
-                      ? t('library.releasedN', { n: n(e.progress.released) })
+                      ? t(e.unit === 'volume' ? 'library.releasedNVol' : 'library.releasedN', {
+                          n: n(e.progress.released),
+                        })
                       : null,
                   ]
                     .filter(Boolean)

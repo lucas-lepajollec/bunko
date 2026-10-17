@@ -85,7 +85,7 @@ async function fixture(name: string, v9: boolean, legacyName = false) {
         )
         .run(id, id, JSON.stringify(media), id, '2026-01-01');
       old
-        .prepare('INSERT INTO observed_chapters VALUES(?,?,?,?,?)')
+        .prepare('INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name) VALUES(?,?,?,?,?)')
         .run(id, id, id + 1, '123', 'Fixture');
     }
     old
@@ -205,7 +205,7 @@ for (const v9 of [false, true])
       'encrypted-fixture-key',
     );
     expect(state.tenant.inTenant(1, () => state.lib.listTracked())).toHaveLength(1200);
-    expect(state.first.pragma('user_version', { simple: true })).toBe(11);
+    expect(state.first.pragma('user_version', { simple: true })).toBe(12);
     expect(
       state.first
         .prepare(

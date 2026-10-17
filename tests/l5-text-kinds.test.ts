@@ -262,7 +262,7 @@ it('rejects all text downloads over HTTP before target resolution or batch creat
   }
   expect(db().prepare('SELECT COUNT(*) AS n FROM download_batches').get()).toEqual({ n: 0 });
 });
-it('keeps LN/WN releases separate and all home keys, while books/novels never enter home releases', () => {
+it('keeps LN/WN and book/novel releases separate in all home keys', () => {
   const media = [
     fromAniList(ani),
     fromMangaUpdates(wn),
@@ -292,8 +292,8 @@ it('keeps LN/WN releases separate and all home keys, while books/novels never en
   expect(home.latest.lightnovel).toHaveLength(1);
   expect(home.latest.webnovel).toHaveLength(1);
   expect(home.top.some((m) => ['novel', 'book'].includes(mediaKind(m)))).toBe(false);
-  expect(home.latest.novel).toEqual([]);
-  expect(home.latest.book).toEqual([]);
+  expect(home.latest.novel).toHaveLength(1);
+  expect(home.latest.book).toHaveLength(1);
   expect(home.hero.some((r) => ['novel', 'book'].includes(mediaKind(r.media)))).toBe(false);
 });
 

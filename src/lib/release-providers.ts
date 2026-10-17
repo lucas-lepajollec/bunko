@@ -59,6 +59,7 @@ export function updatesRelease(
     releasedAt: hasTime ? new Date(added!).toISOString() : r.release_date,
     hasTime,
     provider: 'mangaupdates',
+    unit: !r.chapter && r.volume ? 'volume' : 'chapter',
     trackedId: null,
   };
 }
@@ -158,6 +159,7 @@ export function dexRelease(chapter: DexChapter, media: UnifiedMedia): ChapterRel
     releasedAt: new Date(chapter.attributes.readableAt).toISOString(),
     hasTime: true,
     provider: 'mangadex',
+    unit: !chapter.attributes.chapter && chapter.attributes.volume ? 'volume' : 'chapter',
     trackedId: null,
   };
 }

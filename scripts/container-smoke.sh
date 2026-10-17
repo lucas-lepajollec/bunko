@@ -111,8 +111,13 @@ docker exec "$name" test -f /data/accounts.db
 docker exec "$name" test -f /data/users/1/bunko.db
 docker exec "$name" test -f /data/users/2/bunko.db
 echo "ok   private library mutations and tenant volume layout"
+check 400 "invalid work unit rejected" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":1,"unit":"page"}' "$base/api/tracked"
+check 200 "work counted in volumes" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":1,"unit":"volume"}' "$base/api/tracked"
+curl -fsS -H "Authorization: Bearer $token" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b)[0];if(v.unit!=="volume"||v.progress.owned!==0||v.progress.unread!==0)process.exit(1)})'
+check 200 "work unit restored to chapters" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":1,"unit":"chapter"}' "$base/api/tracked"
+
 # L5 contract checks use only synthetic data in this container's disposable tmpfs.
-curl -fsS -H "Authorization: Bearer $token" "$base/api/home" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b).latest;for(const k of ["manga","manhwa","manhua","comic","lightnovel","webnovel","novel","book"])if(!Array.isArray(v[k]))process.exit(1);if(v.novel.length||v.book.length)process.exit(1)})'
+curl -fsS -H "Authorization: Bearer $token" "$base/api/home" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b).latest;for(const k of ["manga","manhwa","manhua","comic","lightnovel","webnovel","novel","book"])if(!Array.isArray(v[k]))process.exit(1)})'
 check 200 "display title stored" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":1,"displayTitle":"  Smoke chosen title  "}' "$base/api/tracked"
 curl -fsS -H "Authorization: Bearer $token" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b)[0];if(v.title!=="Smoke chosen title"||v.media.title!==v.title||!v.customTitle||!v.titleOptions.includes("Smoke work"))process.exit(1)})'
 check 400 "empty display title rejected" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":1,"displayTitle":" "}' "$base/api/tracked"

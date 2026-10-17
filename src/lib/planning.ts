@@ -83,10 +83,10 @@ export function buildPlanning(
     series.set(r.media.id, list);
     const date = releaseDay(r);
     const day = byDay.get(date);
-    if (day && date <= today) {
+    if (day) {
       day.items.push({
         media: r.media,
-        kind: 'released',
+        kind: date <= today ? 'released' : 'expected',
         chapter: r.chapter,
         time: releaseTime(r),
         trackedId: r.trackedId,
@@ -95,6 +95,7 @@ export function buildPlanning(
     }
   }
   for (const [id, history] of series) {
+    if (history.some((r) => r.unit === 'volume')) continue;
     const schedule = estimateSchedule(history, now);
     if (!schedule) continue;
     const latest = history.reduce((a, b) => (a.releasedAt > b.releasedAt ? a : b));
@@ -127,7 +128,7 @@ const snapshots = new Map<
 >();
 export function planning(q: z.infer<typeof planningQuery>): PlanningWeek {
   void refreshReleases().catch(() => {});
-  const items = releaseStore();
+  const items = releaseStore(new Date(), true);
   const day = localDate(new Date());
   const userId = tenantId();
   let snapshot = snapshots.get(userId);

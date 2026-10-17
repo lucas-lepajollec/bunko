@@ -127,7 +127,9 @@ export interface ChapterRelease {
   /** When the release was published; `hasTime` false when only the day is known. */
   releasedAt: string;
   hasTime: boolean;
-  provider: 'mangaupdates' | 'mangadex' | 'source';
+  provider: 'mangaupdates' | 'mangadex' | 'source' | 'googlebooks' | 'bnf' | 'royalroad';
+  /** `volume` = a new tome/edition (books, LN volumes, BD albums); otherwise a chapter. */
+  unit?: 'chapter' | 'volume';
   /** Followed title in the library, if any. */
   trackedId: number | null;
 }
@@ -422,6 +424,12 @@ export interface TrackedMedia {
   titleOptions?: string[];
   /** True when `title` comes from the user's choice. */
   customTitle?: boolean;
+  /**
+   * How this work is counted (user choice, default `chapter`). With `volume`, `progress`
+   * (read/owned/released/unread) and `newChapters` are in volumes (from Kavita volumes, catalog
+   * volume counts and source volume numbers).
+   */
+  unit?: 'chapter' | 'volume';
   /** Last position in the built-in reader, for "Resume". */
   readerPosition?: { chapterId: number; number: number | null; page: number; updatedAt: string } | null;
   /** Where the displayed cover comes from; `auto` = best available (catalog, then sources, then Kavita). */
@@ -498,6 +506,8 @@ export interface TrackPatch {
   media?: UnifiedMedia;
   /** Title shown in Bunko for this work (any string; `null` = the catalog/Kavita title). */
   displayTitle?: string | null;
+  /** Count this work in volumes (tomes) or chapters. */
+  unit?: 'chapter' | 'volume';
   /** Show the catalog banner behind the title (`auto`) or hide it (`hidden`). */
   backdrop?: 'auto' | 'hidden';
   /** Detach from the catalog (wrong match, title not catalogued): identity becomes the Kavita series or the first source. */

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<srw:searchRetrieveResponse xmlns:srw="http://www.loc.gov/zing/srw/"><srw:numberOfRecords>1</srw:numberOfRecords><srw:records><srw:record><srw:recordData>
+<record xmlns="info:lc/xmlns/marcxchange-v2" format="UNIMARC" type="Bibliographic" id="ark:/12148/cb123456781"><leader>00000nam0 2200000 i 450 </leader>
+<controlfield tag="001">FRBNF12345678</controlfield><datafield tag="010" ind1=" " ind2=" "><subfield code="a">9782070360024</subfield></datafield>
+<datafield tag="101" ind1="0" ind2=" "><subfield code="a">fre</subfield></datafield>
+<datafield tag="200" ind1="1" ind2=" "><subfield code="a">Fixture BD</subfield><subfield code="h">Tome 14</subfield></datafield>
+<datafield tag="214" ind1=" " ind2="0"><subfield code="c">Fixture Press</subfield><subfield code="d">2026-10-16</subfield></datafield>
+<datafield tag="225" ind1="2" ind2=" "><subfield code="a">Fixture Cycle</subfield><subfield code="v">14</subfield></datafield>
+<datafield tag="608" ind1=" " ind2=" "><subfield code="a">Bandes dessinées</subfield></datafield>
+<datafield tag="700" ind1=" " ind2="1"><subfield code="a">Author</subfield><subfield code="b">Fixture</subfield></datafield>
+</record></srw:recordData></srw:record></srw:records></srw:searchRetrieveResponse>

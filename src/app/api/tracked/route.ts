@@ -134,7 +134,7 @@ export const PATCH = route(async (r) => {
       progress_checked=CASE WHEN ? THEN 0 ELSE progress_checked END,
       off_catalog=CASE WHEN ? THEN ? ELSE off_catalog END,
       display_title=CASE WHEN ? THEN ? ELSE display_title END,
-      cover_choice_json=?,backdrop=? WHERE id=?`,
+      cover_choice_json=?,backdrop=?,unit=?,volume_read=CASE WHEN ? THEN NULL ELSE volume_read END WHERE id=?`,
         )
         .run(
           input.status ?? current.status,
@@ -161,6 +161,10 @@ export const PATCH = route(async (r) => {
             input.cover ?? (input.media || input.offCatalog ? 'auto' : current.coverChoice),
           ),
           input.media || input.offCatalog ? 'auto' : (input.backdrop ?? current.backdrop),
+          input.unit ?? current.unit ?? 'chapter',
+          Number(
+            input.kavitaSeriesId !== undefined && input.kavitaSeriesId !== current.kavitaSeriesId,
+          ),
           input.id,
         );
     })();

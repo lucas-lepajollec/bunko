@@ -84,6 +84,7 @@ export interface AniMedia {
   episodes?: number | null;
   siteUrl: string;
   startDate?: { year: number | null; month?: number | null; day?: number | null } | null;
+  externalLinks?: { url: string; site?: string }[];
   staff?: { edges: { role: string; node: { name: { full: string } } }[] };
 }
 export const aniFields =
@@ -92,7 +93,11 @@ export function fromAniList(m: AniMedia): UnifiedMedia {
   const novel = m.format === 'NOVEL';
   const type: MediaType = m.type === 'ANIME' ? 'ANIME' : novel ? 'NOVEL' : 'MANGA';
   const origin = m.countryOfOrigin ?? null;
+  const royalRoadUrl = m.externalLinks?.find((l) =>
+    /^https:\/\/(?:www\.)?royalroad\.com\/fiction\/\d+/.test(l.url),
+  )?.url;
   return {
+    ...(royalRoadUrl ? { royalRoadUrl } : {}),
     ...emptyMedia(
       `anilist:${m.id}`,
       m.title.english ?? m.title.romaji ?? m.title.native ?? String(m.id),

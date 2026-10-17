@@ -34,7 +34,7 @@ function seed(n: number) {
     const entry = database.prepare(
       'INSERT INTO tracked_media(id,title,type,created_at,media_json,sources_json,kavita_series_id) VALUES(?,?,?, ?,?,?,?)',
     );
-    const observed = database.prepare('INSERT INTO observed_chapters VALUES(?,?,?,?,?)');
+    const observed = database.prepare('INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name) VALUES(?,?,?,?,?)');
     const series = database.prepare('INSERT INTO kavita_series VALUES(?,?)');
     for (let id = 1; id <= n; id++) {
       const media = emptyMedia(`anilist:${id}`, `Fixture ${id}`, 'MANGA');

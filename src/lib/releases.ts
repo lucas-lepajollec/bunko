@@ -1,3 +1,5 @@
+import { fetchGoogleEditions, fetchBnfEditions, type EditionRelease } from './edition-feeds';
+import { refreshRoyalRoad } from './royalroad';
 import { tenantState } from './tenant-context';
 import { tenantId } from './tenant-context';
 import { mediaVisibility, rememberAdultIdentities, automaticMedia, adultResolver } from './adult';
@@ -131,6 +133,7 @@ function distinctMedia(input: UnifiedMedia[]) {
 }
 export function deduplicateReleases(input: ChapterRelease[]): ChapterRelease[] {
   const groups = new Map<string, ChapterRelease>();
+  const isbnGroups = new Map<string, string>();
   // Resolve cross-provider aliases first. The richest catalog identity wins.
   const distinct = distinctMedia(input.map((r) => r.media));
   const resolve = mediaResolver(
@@ -151,7 +154,12 @@ export function deduplicateReleases(input: ChapterRelease[]): ChapterRelease[] {
           ? `mangaupdates:${m.mangaUpdatesId}`
           : m.id;
     // Ranges and specials retain their published label, so unrelated specials never collapse.
-    const key = `${series}:${r.chapter ?? r.label.toLowerCase().replace(/\s/g, '')}`;
+    const isVolume = r.unit === 'volume';
+    const identifiers = isVolume ? ((raw as EditionRelease).isbns ?? []) : [];
+    const isbnKey = identifiers.find((n) => isbnGroups.has(n));
+    const workKey = `${series}:${isVolume ? 'volume' : 'chapter'}:${isVolume ? (r.volume ?? `${r.releasedAt.slice(0, 10)}:${r.label.toLowerCase()}`) : (r.chapter ?? r.label.toLowerCase().replace(/\s/g, ''))}`;
+    const key = isbnKey ? isbnGroups.get(isbnKey)! : workKey;
+    for (const n of identifiers) isbnGroups.set(n, key);
     const old = groups.get(key);
     if (!old) {
       groups.set(key, r);
@@ -183,7 +191,7 @@ export function saveReleases(input: ChapterRelease[], now = Date.now()) {
       if (
         !Number.isFinite(Date.parse(r.releasedAt)) ||
         Date.parse(r.releasedAt) < now - 42 * DAY ||
-        Date.parse(r.releasedAt) > now + DAY
+        Date.parse(r.releasedAt) > now + (r.unit === 'volume' ? 730 * DAY : DAY)
       )
         continue;
       const media = resolved.get(r.media.id) ?? resolve(originalMedia);
@@ -243,6 +251,9 @@ export function refreshReleases(): Promise<void> {
         if (failures.length) throw new AggregateError(failures, 'MangaUpdates refresh failed');
       })(),
       fetchDexReleases().then((items) => saveReleases(items)),
+      fetchGoogleEditions(saveReleases),
+      fetchBnfEditions().then((items) => saveReleases(items)),
+      refreshRoyalRoad(saveReleases),
     ]);
     const failures = outcomes.flatMap((outcome, i) => {
       if (outcome.status !== 'rejected') return [];
@@ -267,7 +278,9 @@ export function refreshReleases(): Promise<void> {
           }),
         ),
       ];
-      return [`${i === 0 ? 'mangaupdates' : 'mangadex'}=${codes.join(',')} (${reasons.length})`];
+      return [
+        `${['mangaupdates', 'mangadex', 'googlebooks', 'bnf', 'royalroad'][i]}=${codes.join(',')} (${reasons.length})`,
+      ];
     });
     statement(
       "INSERT INTO worker_state(key,value) VALUES('release_refresh_result',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -281,11 +294,11 @@ const rawSnapshotCache = tenantState(() => ({
   value: undefined as { version: number; items: ChapterRelease[] } | undefined,
 }));
 const snapshots = new Map<number, { key: string; at: number; items: ChapterRelease[] }>();
-export function releaseStore(now = new Date()): ChapterRelease[] {
+export function releaseStore(now = new Date(), includeExpected = false): ChapterRelease[] {
   const rawSnapshot = rawSnapshotCache().value;
   const userId = tenantId();
   const snapshot = snapshots.get(userId);
-  const key = `${writeVersion('releases')}:${writeVersion()}:${writeVersion('settings')}:${userId}`;
+  const key = `${includeExpected}:${writeVersion('releases')}:${writeVersion()}:${writeVersion('settings')}:${userId}`;
   if (snapshot?.key === key && now.getTime() - snapshot.at < 60_000 && now.getTime() >= snapshot.at)
     return snapshot.items;
   const tracked = listTracked();
@@ -316,6 +329,7 @@ export function releaseStore(now = new Date()): ChapterRelease[] {
     tracked_id: number;
     chapter_id: number;
     number: number | null;
+    volume: number | null;
     source_name: string;
     at: string;
   }[];
@@ -326,8 +340,14 @@ export function releaseStore(now = new Date()): ChapterRelease[] {
         id: `source:${t.id}:${o.chapter_id}`,
         media: t.media,
         chapter: o.number,
-        volume: null,
-        label: o.number === null ? `Special ${o.chapter_id}` : `c.${o.number}`,
+        volume: o.volume,
+        unit: o.number === null && o.volume !== null ? 'volume' : 'chapter',
+        label:
+          o.number === null
+            ? o.volume !== null
+              ? `Vol. ${o.volume}`
+              : `Special ${o.chapter_id}`
+            : `c.${o.number}`,
         group: o.source_name,
         releasedAt: o.at,
         hasTime: true,
@@ -355,10 +375,7 @@ export function releaseStore(now = new Date()): ChapterRelease[] {
   )
     .map((r) => ({ ...r, media: { ...r.media, ...resolveAdult(r.media) } }))
     .filter(
-      (r) =>
-        !['novel', 'book'].includes(mediaKind(r.media)) &&
-        visible(r.media) &&
-        Date.parse(r.releasedAt) <= now.getTime(),
+      (r) => visible(r.media) && (includeExpected || Date.parse(r.releasedAt) <= now.getTime()),
     );
   if (!db().inTransaction) snapshots.set(userId, { key, at: now.getTime(), items });
   return items;

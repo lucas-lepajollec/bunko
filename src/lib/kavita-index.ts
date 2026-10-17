@@ -52,6 +52,8 @@ export interface IndexedSeries {
   names: string[];
   folder: string | null;
   numbers: number[];
+  volumes?: number[];
+  volumeRead?: number | null;
   summary?: string | null;
   genres?: string[];
   kind?: import('@/types/shared').LibraryKind;
@@ -444,6 +446,7 @@ export async function syncKavitaIndex() {
               ],
               folder: row.folderPath || row.lowestFolderPath || null,
               numbers: kavitaChapterNumbers(volumes),
+              ...kavitaVolumeProgress(volumes),
               adult:
                 typeof metadata.ageRating === 'number'
                   ? metadata.ageRating >= 14
@@ -524,4 +527,43 @@ export function allKavitaRead(input: unknown): boolean {
     chapters.length > 0 &&
     chapters.every((c) => (c.pages ?? 0) > 0 && (c.pagesRead ?? 0) >= c.pages!)
   );
+}
+
+/** Numeric volumes only; specials and Kavita's unassigned sentinel never become owned tomes. */
+export function kavitaVolumeProgress(input: unknown): {
+  volumes: number[];
+  volumeRead: number | null;
+} {
+  const rows = z
+    .array(
+      z.object({
+        minNumber: z.number().optional(),
+        maxNumber: z.number().optional(),
+        number: z.union([z.string(), z.number()]).nullable().optional(),
+        name: z.string().optional(),
+        chapters: z
+          .array(z.object({ pages: z.number().optional(), pagesRead: z.number().optional() }))
+          .nullable(),
+      }),
+    )
+    .parse(input);
+  const owned = new Set<number>();
+  const read = new Set<number>();
+  for (const v of rows) {
+    const raw = v.number ?? v.name;
+    const number =
+      raw != null && /^\d+(?:\.\d+)?$/.test(String(raw))
+        ? Number(raw)
+        : v.minNumber === v.maxNumber
+          ? v.minNumber
+          : undefined;
+    if (number == null || !Number.isFinite(number) || number <= 0 || !v.chapters?.length) continue;
+    owned.add(number);
+    if (v.chapters.every((c) => (c.pages ?? 0) > 0 && (c.pagesRead ?? 0) >= c.pages!))
+      read.add(number);
+  }
+  return {
+    volumes: [...owned].sort((a, b) => a - b),
+    volumeRead: owned.size ? Math.max(0, ...read) : null,
+  };
 }

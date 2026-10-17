@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<srw:searchRetrieveResponse xmlns:srw="http://www.loc.gov/zing/srw/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/">
+<srw:version>1.2</srw:version><srw:numberOfRecords>2</srw:numberOfRecords><srw:records>
+<srw:record><srw:recordSchema>info:srw/schema/1/dc-v1.1</srw:recordSchema><srw:recordPacking>xml</srw:recordPacking><srw:recordData><oai_dc:dc>
+<dc:title>The Fixture Cycle. Tome 14 / Fixture Author</dc:title><dc:creator>Fixture Author</dc:creator><dc:date>2026-10-16</dc:date><dc:subject>Romans</dc:subject><dc:type>Texte imprimé</dc:type><dc:language>fre</dc:language><dc:identifier>https://catalogue.bnf.fr/ark:/12148/cb123456789</dc:identifier><dc:identifier>ISBN 978-2-07-036002-4</dc:identifier></oai_dc:dc></srw:recordData><srw:recordPosition>1</srw:recordPosition></srw:record>
+<srw:record><srw:recordData><oai_dc:dc><dc:title>Year precision only</dc:title><dc:date>2026</dc:date><dc:identifier>https://catalogue.bnf.fr/ark:/12148/cb123456780</dc:identifier></oai_dc:dc></srw:recordData></srw:record>
+</srw:records></srw:searchRetrieveResponse>

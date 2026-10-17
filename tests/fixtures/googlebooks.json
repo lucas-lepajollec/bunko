@@ -1,0 +1,9 @@
+{
+  "kind":"books#volumes","totalItems":4,
+  "items":[
+    {"kind":"books#volume","id":"fixture-novel","volumeInfo":{"title":"The Fixture Cycle","subtitle":"Tome 14","authors":["Fixture Author"],"publisher":"Fixture Press","publishedDate":"2026-10-16","categories":["Fiction / Fantasy / General"],"language":"fr","industryIdentifiers":[{"type":"ISBN_13","identifier":"9782070360024"}],"imageLinks":{"thumbnail":"http://books.google.com/books/content?id=fixture-novel&printsec=frontcover&img=1"}}},
+    {"id":"fixture-book","volumeInfo":{"title":"A History of Fixtures","authors":["Fixture Historian"],"publishedDate":"2026-10-15","categories":["History / Europe"],"language":"en"}},
+    {"id":"fixture-comic","volumeInfo":{"title":"Fixture Comics Vol. 3","publishedDate":"2026-10-14","categories":["Comics & Graphic Novels"],"language":"fr"}},
+    {"id":"fixture-ln","volumeInfo":{"title":"Fixture Light Novel","publisher":"J-Novel Club","publishedDate":"2026-10-20","categories":["Fiction / Fantasy"],"language":"en","seriesInfo":{"kind":"books#volume_series_info","volumeSeries":[{"seriesId":"fixture-series","orderNumber":8}]}}}
+  ]
+}

@@ -810,6 +810,20 @@ const en: Dictionary = {
   'kavita.mediaRootNone': 'Choose a folder',
   'kavita.mediaRootUsedBy': 'used by {name}',
   'error.MEDIA_ROOT_TAKEN': 'This folder is already used by another account (or overlaps it).',
+  'unit.label': 'Count in',
+  'unit.info':
+    'Choose volumes when you own this series as volumes (tomes) in Kavita: progress, new releases and the chapter table then count volumes.',
+  'unit.chapter': 'Chapters',
+  'unit.volume': 'Volumes',
+  'title.readVol': '{n} volumes read',
+  'title.ownedVol': '{n} volumes in Kavita',
+  'title.releasedVol': '{n} volumes out',
+  'library.readNVol': 'read vol. {n}',
+  'library.ownedNVol': 'owned {n} vol.',
+  'library.releasedNVol': 'out {n} vol.',
+  'library.readUpToVol': 'Read up to vol. {n}',
+  'home.newVolumes': '{count} new volumes',
+  'release.volume': 'Vol. {v}',
 };
 
 const fr: Dictionary = {
@@ -1598,6 +1612,20 @@ const fr: Dictionary = {
   'kavita.mediaRootNone': 'Choisis un dossier',
   'kavita.mediaRootUsedBy': 'utilisé par {name}',
   'error.MEDIA_ROOT_TAKEN': 'Ce dossier est déjà utilisé par un autre compte (ou le chevauche).',
+  'unit.label': 'Compter en',
+  'unit.info':
+    'Choisis tomes si tu as cette série en tomes dans Kavita : la progression, les nouveautés et la table comptent alors en tomes.',
+  'unit.chapter': 'Chapitres',
+  'unit.volume': 'Tomes',
+  'title.readVol': '{n} tomes lus',
+  'title.ownedVol': '{n} tomes dans Kavita',
+  'title.releasedVol': '{n} tomes parus',
+  'library.readNVol': 'lu t. {n}',
+  'library.ownedNVol': 'possédé {n} t.',
+  'library.releasedNVol': 'paru {n} t.',
+  'library.readUpToVol': 'Lu jusqu’au tome {n}',
+  'home.newVolumes': '{count} nouveaux tomes',
+  'release.volume': 'T. {v}',
 };
 
 const es: Dictionary = {
@@ -2381,6 +2409,20 @@ const es: Dictionary = {
   'kavita.mediaRootNone': 'Elige una carpeta',
   'kavita.mediaRootUsedBy': 'usada por {name}',
   'error.MEDIA_ROOT_TAKEN': 'Esta carpeta ya la usa otra cuenta (o se solapa).',
+  'unit.label': 'Contar en',
+  'unit.info':
+    'Elige tomos si tienes esta serie en tomos en Kavita: el progreso, las novedades y la tabla cuentan entonces en tomos.',
+  'unit.chapter': 'Capítulos',
+  'unit.volume': 'Tomos',
+  'title.readVol': '{n} tomos leídos',
+  'title.ownedVol': '{n} tomos en Kavita',
+  'title.releasedVol': '{n} tomos publicados',
+  'library.readNVol': 'leído t. {n}',
+  'library.ownedNVol': 'tengo {n} t.',
+  'library.releasedNVol': 'publicado {n} t.',
+  'library.readUpToVol': 'Leído hasta el tomo {n}',
+  'home.newVolumes': '{count} tomos nuevos',
+  'release.volume': 'T. {v}',
 };
 
 const de: Dictionary = {
@@ -3169,6 +3211,20 @@ const de: Dictionary = {
   'kavita.mediaRootUsedBy': 'genutzt von {name}',
   'error.MEDIA_ROOT_TAKEN':
     'Dieser Ordner wird schon von einem anderen Konto genutzt (oder überschneidet sich).',
+  'unit.label': 'Zählen in',
+  'unit.info':
+    'Wähle Bände, wenn du die Serie in Kavita als Bände hast: Fortschritt, Neuheiten und Tabelle zählen dann in Bänden.',
+  'unit.chapter': 'Kapitel',
+  'unit.volume': 'Bände',
+  'title.readVol': '{n} Bände gelesen',
+  'title.ownedVol': '{n} Bände in Kavita',
+  'title.releasedVol': '{n} Bände erschienen',
+  'library.readNVol': 'gelesen Bd. {n}',
+  'library.ownedNVol': 'besitze {n} Bd.',
+  'library.releasedNVol': 'erschienen {n} Bd.',
+  'library.readUpToVol': 'Gelesen bis Band {n}',
+  'home.newVolumes': '{count} neue Bände',
+  'release.volume': 'Bd. {v}',
 };
 
 const it: Dictionary = {
@@ -3951,6 +4007,20 @@ const it: Dictionary = {
   'kavita.mediaRootNone': 'Scegli una cartella',
   'kavita.mediaRootUsedBy': 'usata da {name}',
   'error.MEDIA_ROOT_TAKEN': 'Questa cartella è già usata da un altro account (o si sovrappone).',
+  'unit.label': 'Conta in',
+  'unit.info':
+    'Scegli volumi se hai questa serie in volumi su Kavita: progressi, novità e tabella contano allora in volumi.',
+  'unit.chapter': 'Capitoli',
+  'unit.volume': 'Volumi',
+  'title.readVol': '{n} volumi letti',
+  'title.ownedVol': '{n} volumi in Kavita',
+  'title.releasedVol': '{n} volumi usciti',
+  'library.readNVol': 'letto vol. {n}',
+  'library.ownedNVol': 'posseduti {n} vol.',
+  'library.releasedNVol': 'usciti {n} vol.',
+  'library.readUpToVol': 'Letto fino al volume {n}',
+  'home.newVolumes': '{count} nuovi volumi',
+  'release.volume': 'Vol. {v}',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

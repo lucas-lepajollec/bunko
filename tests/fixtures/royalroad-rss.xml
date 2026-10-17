@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Fixture Serial</title><link>https://www.royalroad.com/fiction/12345/fixture-serial</link><description>Fixture serial RSS</description><language>en-us</language><atom:link href="https://www.royalroad.com/fiction/syndication/12345" rel="self" type="application/rss+xml"/>
+<item><title>Chapter 14: A &amp; B</title><link>https://www.royalroad.com/fiction/12345/fixture-serial/chapter/100014/a-b</link><description><![CDATA[<p>Fixture chapter description</p>]]></description><pubDate>Fri, 16 Oct 2026 12:30:00 GMT</pubDate><guid isPermaLink="true">https://www.royalroad.com/fiction/chapter/100014</guid></item>
+<item><title><![CDATA[15 - Next fixture]]></title><link>https://www.royalroad.com/fiction/chapter/100015</link><pubDate>Sat, 17 Oct 2026 10:00:00 +0000</pubDate><guid>https://www.royalroad.com/fiction/chapter/100015</guid></item>
+<item><title>Interlude</title><link>https://www.royalroad.com/fiction/chapter/100016</link><pubDate>Sat, 17 Oct 2026 11:00:00 GMT</pubDate></item>
+</channel></rss>

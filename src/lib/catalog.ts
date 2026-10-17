@@ -190,6 +190,7 @@ async function anilistDetail(id: number, signal?: AbortSignal): Promise<MediaDet
   signal?.throwIfAborted();
   const { Media: m } = await anilist<{ Media: AniDetail | null }>(
     `query($id: Int) { Media(id: $id) { ${aniFields}
+        externalLinks { url site }
         staff(perPage: 10) { edges { role node { name { full } } } }
         tags { name rank isMediaSpoiler }
         relations { edges { relationType node { ${aniFields} } } }
@@ -304,7 +305,9 @@ async function loadSuwayomiDetail(id: number, signal?: AbortSignal): Promise<Med
 async function loadDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
   const [provider, key] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
   let detail: MediaDetail;
-  if (provider === 'openlibrary' && /^OL[1-9]\d*W$/.test(key))
+  if (['googlebooks', 'bnf'].includes(provider))
+    detail = await (await import('./edition-feeds')).editionDetail(id);
+  else if (provider === 'openlibrary' && /^OL[1-9]\d*W$/.test(key))
     detail = await openLibraryDetail(key);
   else if (provider === 'kavita' && /^[1-9]\d{0,9}$/.test(key))
     detail = { ...kavitaMedia(Number(key)), tags: [], relations: [], recommendations: [] };

@@ -69,7 +69,7 @@ db.transaction(() => {
   const tracked = db.prepare(
     'INSERT INTO tracked_media(id,anilist_id,title,type,created_at,media_json,sources_json) VALUES(?,?,?,?,?,?,?)',
   );
-  const observed = db.prepare('INSERT INTO observed_chapters VALUES(?,?,?,?,?)');
+  const observed = db.prepare('INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name) VALUES(?,?,?,?,?)');
   const release = db.prepare('INSERT INTO chapter_releases VALUES(?,?,?)');
   for (const [i, media] of works.entries()) {
     tracked.run(

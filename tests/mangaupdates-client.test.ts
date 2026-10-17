@@ -4,6 +4,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import fixture from './fixtures/release-providers.json';
 import real from './fixtures/mangaupdates-real.json';
+// This suite isolates MU/Dex ingestion; the new edition lanes have their own fixture suite.
+vi.mock('@/lib/edition-feeds', () => ({
+  fetchGoogleEditions: async () => [],
+  fetchBnfEditions: async () => [],
+}));
 // Node's timers/promises is not virtualized by Vitest; keep abort semantics while driving the clock.
 vi.mock('node:timers/promises', () => ({
   setTimeout: (ms: number, value: unknown, options?: { signal?: AbortSignal }) =>

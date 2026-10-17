@@ -2,7 +2,16 @@ import { recentSourceChapter } from './source-chapters';
 import { visibleTracked } from './adult';
 import { randomUUID } from 'node:crypto';
 import type { DownloadBatch, EnqueueRequest, UpdateState, UpdatesFeed } from '@/types/shared';
-import { statement, db, listBatches, listTracked, observeChapters, sameMedia } from './db';
+import {
+  statement,
+  db,
+  listBatches,
+  listTracked,
+  observeChapters,
+  sameMedia,
+  ownedVolumeNumbers,
+  trackedForMedia,
+} from './db';
 import { chaptersFor } from './suwayomi';
 import { getSettings } from './settings';
 import { refreshLibraryProgress } from './kavita';
@@ -55,8 +64,13 @@ export function updatesFeed(): UpdatesFeed {
     const t = byId.get(row.tracked_id);
     if (!t) return [];
     const chapters = statement(
-      'SELECT chapter_id,number,batch_id FROM update_chapters WHERE entry_id=? ORDER BY number',
-    ).all(row.id) as { chapter_id: number; number: number | null; batch_id: string | null }[];
+      'SELECT c.chapter_id,c.number,c.batch_id,o.volume FROM update_chapters c LEFT JOIN observed_chapters o ON o.chapter_id=c.chapter_id AND o.tracked_id=? WHERE c.entry_id=? ORDER BY c.number',
+    ).all(t.id, row.id) as {
+      chapter_id: number;
+      number: number | null;
+      batch_id: string | null;
+      volume: number | null;
+    }[];
     const states = chapters.map((c) => {
       const batch = c.batch_id ? batches.get(c.batch_id) : undefined;
       const map = c.batch_id ? chapterMaps.get(c.batch_id) : undefined;
@@ -79,13 +93,41 @@ export function updatesFeed(): UpdatesFeed {
         title: t.title,
         coverUrl: t.coverUrl,
         color: t.media.color,
-        chapters: [...new Set(chapters.flatMap((c) => (c.number === null ? [] : [c.number])))],
+        chapters: [
+          ...new Set(chapters.flatMap((c) => (t.unit === 'volume' ? c.volume : c.number) ?? [])),
+        ],
         sourceName: row.source_name,
         detectedAt: row.detected_at,
         state,
       },
     ];
   });
+  const rss = (
+    statement(
+      "SELECT payload FROM chapter_releases WHERE json_extract(payload,'$.provider')='royalroad' AND released_at>=? AND released_at<=? ORDER BY released_at DESC LIMIT 200",
+    ).all(new Date(Date.now() - 30 * 86400_000).toISOString(), new Date().toISOString()) as {
+      payload: string;
+    }[]
+  ).map((r) => JSON.parse(r.payload) as import('@/types/shared').ChapterRelease);
+  for (const r of rss) {
+    const t = trackedForMedia(r.media, tracked);
+    if (!t || (r.chapter !== null && r.chapter <= (t.progress.read ?? -1))) continue;
+    // RSS chapters have no Suwayomi IDs and remain informational, never downloadable batches.
+    let hash = 0;
+    for (const c of r.id) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
+    entries.push({
+      id: -1 - hash,
+      trackedId: t.id,
+      title: t.title,
+      coverUrl: t.coverUrl,
+      color: t.media.color,
+      chapters: r.chapter === null ? [] : [r.chapter],
+      sourceName: 'Royal Road',
+      detectedAt: r.releasedAt,
+      state: 'pending',
+    });
+  }
+  entries.sort((a, b) => b.detectedAt.localeCompare(a.detectedAt));
   const lastCheckAt = workerValue('last_check_at');
   return {
     entries,
@@ -127,6 +169,12 @@ export async function runUpdateCheck(
   setWorkerValue('refresh_total', '0');
   try {
     await syncKavitaIndex();
+    const { saveReleases } = await import('./releases');
+    const { refreshRoyalRoad } = await import('./royalroad');
+    if (!parentSignal?.aborted && ownsLease())
+      await refreshRoyalRoad((items) => {
+        if (!parentSignal?.aborted && ownsLease()) saveReleases(items);
+      });
     const signal = AbortSignal.any([
       ...(parentSignal ? [parentSignal] : []),
       AbortSignal.timeout(120_000),
@@ -160,6 +208,7 @@ export async function runUpdateCheck(
                 .filter((b) => sameMedia(b.media, t.media))
                 .flatMap((b) => b.chapterIds),
             );
+            const ownedVolumes = ownedVolumeNumbers(t);
             const kavitaNumbers = matchKavita(t.media, t.kavitaSeriesId)?.numbers ?? [];
             const baselines = new Set(
               (
@@ -169,6 +218,7 @@ export async function runUpdateCheck(
               ).map((s) => `${s.source_id}:${s.manga_id}`),
             );
             const fresh = result.chapters
+              .filter((c) => c.volume == null || !ownedVolumes.has(c.volume))
               .filter((c) => c.number === null || !kavitaNumbers.includes(c.number))
               .filter(
                 (c) =>
@@ -188,6 +238,7 @@ export async function runUpdateCheck(
                   (v) =>
                     baselines.has(`${v.sourceId}:${v.mangaId}`) &&
                     recentSourceChapter(v) &&
+                    (v.volume == null || !ownedVolumes.has(v.volume)) &&
                     !known.has(v.id),
                 );
                 return v ? [v] : [];

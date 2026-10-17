@@ -201,7 +201,7 @@ if (!process.env.L3_BEFORE) {
   const dates = [null, '2019-01-01T00:00:00.000Z', new Date(Date.now() - 3600000).toISOString()];
   for (const [i, uploaded] of dates.entries()) {
     const chapterId = 601 + i;
-    db.prepare('INSERT INTO observed_chapters VALUES(?,?,?,?,?)').run(
+    db.prepare('INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name) VALUES(?,?,?,?,?)').run(
       1,
       chapterId,
       chapterId,

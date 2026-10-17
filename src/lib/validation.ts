@@ -129,7 +129,7 @@ export const mediaId = z
   .string()
   .max(80)
   .regex(
-    /^(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary):[0-9a-zA-Z-]+$/,
+    /^(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary|googlebooks|bnf):[0-9a-zA-Z_-]+$/,
     'Unknown media identifier',
   );
 export const adultOverrideBody = z.object({
@@ -139,6 +139,8 @@ export const adultOverrideBody = z.object({
     .refine((value) => {
       const [provider, key, extra] = value.split(':');
       if (!key || extra !== undefined) return false;
+      if (provider === 'googlebooks') return /^[\w-]{1,60}$/.test(key);
+      if (provider === 'bnf') return /^cb\d+[a-z0-9]$/i.test(key);
       if (provider === 'openlibrary') return /^OL[1-9]\d*W$/.test(key);
       if (provider === 'mangadex') return z.uuid().safeParse(key).success;
       if (provider === 'mangaupdates') return /^[1-9]\d{0,19}$/.test(key);
@@ -282,6 +284,7 @@ export const trackPatch = z
   .object({
     id,
     media: media.optional(),
+    unit: z.enum(['chapter', 'volume']).optional(),
     displayTitle: z.string().trim().min(1).max(300).nullable().optional(),
     offCatalog: z.literal(true).optional(),
     backdrop: z.enum(['auto', 'hidden']).optional(),

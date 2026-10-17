@@ -14,7 +14,14 @@ import type {
   SourceCandidate,
   TrackedMedia,
 } from '@/types/shared';
-import { batchesInterval, mediaHref, openStream, send, useApi } from '@/lib/client/api';
+import {
+  batchesInterval,
+  libraryKeys,
+  mediaHref,
+  openStream,
+  send,
+  useApi,
+} from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Backdrop } from '@/components/backdrop';
 import { ChapterTable, isMissing, preferredVariant } from '@/components/chapters';
@@ -197,6 +204,8 @@ function Title({ media }: { media: MediaDetail }) {
     readSource: 'none' as const,
   };
   const progress = { ...baseProgress, released };
+  // Works counted in volumes use "tome" wording for their progress.
+  const vol = (key: string) => (entry?.unit === 'volume' ? `${key}Vol` : key);
   // Built-in reader: resume where the reader stopped, else the first unread chapter.
   const readTarget = (() => {
     const list = chapters.data?.chapters ?? [];
@@ -348,6 +357,7 @@ function Title({ media }: { media: MediaDetail }) {
           <Automation entry={entry} disabled={!sources.length} onAuto={setAuto} />
         </div>
       )}
+      {entry && <UnitToggle entry={entry} />}
       <AdultMark media={media} />
     </>
   );
@@ -440,11 +450,11 @@ function Title({ media }: { media: MediaDetail }) {
               <ProgressBar progress={progress} className="h-1.5" />
               <span className="text-mid flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]">
                 <span>
-                  {t('title.read', { n: progress.read !== null ? n(progress.read) : '—' })}
+                  {t(vol('title.read'), { n: progress.read !== null ? n(progress.read) : '—' })}
                 </span>
-                <span>{t('title.owned', { n: n(progress.owned) })}</span>
+                <span>{t(vol('title.owned'), { n: n(progress.owned) })}</span>
                 <span>
-                  {t('title.released', {
+                  {t(vol('title.released'), {
                     n: progress.released !== null ? n(progress.released) : '—',
                   })}
                 </span>
@@ -531,6 +541,7 @@ function Title({ media }: { media: MediaDetail }) {
                 ) : (
                   <ChapterTable
                     mediaId={entry?.media.id ?? media.id}
+                    defaultByVolume={entry?.unit === 'volume'}
                     chapters={chapters.data.chapters}
                     priority={priority}
                     read={progress.read}
@@ -812,6 +823,47 @@ function AdultMark({ media }: { media: MediaDetail }) {
           />
         </button>
       </span>
+    </div>
+  );
+}
+
+/** Count this work in chapters or in volumes (tomes), e.g. when Kavita holds volumes. */
+function UnitToggle({ entry }: { entry: TrackedMedia }) {
+  const { t } = useI18n();
+  const { mutate } = useSWRConfig();
+  const unit = entry.unit ?? 'chapter';
+  return (
+    <div className="border-line flex flex-wrap items-center gap-3 border-t pt-5 text-sm">
+      <span className="text-muted">{t('unit.label')}</span>
+      <InfoBubble label={t('unit.label')}>{t('unit.info')}</InfoBubble>
+      <div
+        className="ml-auto flex rounded-full bg-white/[0.06] p-0.5"
+        role="group"
+        aria-label={t('unit.label')}
+      >
+        {(['chapter', 'volume'] as const).map((u) => (
+          <button
+            key={u}
+            type="button"
+            aria-pressed={unit === u}
+            onClick={async () => {
+              if (u === unit) return;
+              try {
+                await send('/api/tracked', 'PATCH', { id: entry.id, unit: u });
+                await mutate(libraryKeys);
+              } catch (e) {
+                toast({ tone: 'bad', text: errorText(t, e) });
+              }
+            }}
+            className={cx(
+              'h-8 rounded-full px-3.5',
+              unit === u ? 'bg-fg text-bg font-semibold' : 'text-mid hover:text-white',
+            )}
+          >
+            {t(`unit.${u}`)}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

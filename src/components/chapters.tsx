@@ -37,7 +37,10 @@ export function ChapterTable({
   queued,
   owned,
   mediaId,
+  defaultByVolume,
 }: {
+  /** Start in the volume view (works counted in volumes). */
+  defaultByVolume?: boolean;
   /** Opens chapters in the built-in reader with this work's progress. */
   mediaId: string;
   chapters: MergedChapter[];
@@ -58,7 +61,7 @@ export function ChapterTable({
   const [to, setTo] = useState('');
   // Volume view only when sources give volumes; chapters remain the unit underneath.
   const hasVolumes = chapters.some((c) => c.volume !== null);
-  const [byVolume, setByVolume] = useState(false);
+  const [byVolume, setByVolume] = useState(defaultByVolume ?? false);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const ordered = useMemo(
     () => [...chapters].sort((a, b) => (b.number ?? -1) - (a.number ?? -1)),

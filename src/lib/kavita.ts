@@ -13,7 +13,7 @@ import { chapterNumber } from './suwayomi';
 import { AppError } from './errors';
 import { kavitaHeaders, scanKavitaFolder } from './kavita-client';
 import { selectedCover, hasCoverImage, writeCoverFile } from './kavita-cover';
-import { matchKavita } from './kavita-index';
+import { matchKavita, kavitaVolumeProgress } from './kavita-index';
 import {
   libraryRoot,
   inside,
@@ -292,13 +292,15 @@ export async function refreshTrackedProgress(tracked: TrackedMedia, signal?: Abo
       'UPDATE tracked_media SET kavita_series_id=? WHERE id=? AND kavita_series_id IS ? AND kavita_manual=0 AND kavita_series_id IS NOT ?',
     )
     .run(id, tracked.id, tracked.kavitaSeriesId, id);
-  const progress = kavitaProgress(await get(`/api/Series/volumes?seriesId=${id}`));
+  const volumes = await get(`/api/Series/volumes?seriesId=${id}`);
+  const progress = kavitaProgress(volumes);
+  const volumeRead = kavitaVolumeProgress(volumes).volumeRead;
   if (getSettings().kavitaApiKey !== key || getSettings().kavitaUrl !== s.kavitaUrl) return;
   db()
     .prepare(
-      `UPDATE tracked_media SET last_read=MAX(COALESCE(last_read,0),?),last_read_at=MAX(COALESCE(last_read_at,''),COALESCE(?,'')),progress_checked=1 WHERE id=? AND kavita_series_id IS ?`,
+      `UPDATE tracked_media SET last_read=MAX(COALESCE(last_read,0),?),last_read_at=MAX(COALESCE(last_read_at,''),COALESCE(?,'')),progress_checked=1,volume_read=? WHERE id=? AND kavita_series_id IS ?`,
     )
-    .run(progress.read, progress.lastReadAt, tracked.id, id);
+    .run(progress.read, progress.lastReadAt, volumeRead, tracked.id, id);
 }
 export async function refreshLibraryProgress(signal?: AbortSignal) {
   if (!getSettings().kavitaApiKey) return;

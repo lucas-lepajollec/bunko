@@ -241,12 +241,14 @@ function ResumeCard({ entry }: { entry: TrackedMedia }) {
         <span className="line-clamp-2 text-[15px] leading-tight font-semibold">{entry.title}</span>
         <span className="text-soft font-serif text-[17px] italic">
           {entry.newChapters > 0
-            ? t('home.newChapters', { count: entry.newChapters })
+            ? t(entry.unit === 'volume' ? 'home.newVolumes' : 'home.newChapters', {
+                count: entry.newChapters,
+              })
             : t('home.unreadChapters', { count: p.unread })}
         </span>
         <span className="text-muted mt-auto text-xs">
           {p.read !== null
-            ? t('library.readUpTo', { n: p.read })
+            ? t(entry.unit === 'volume' ? 'library.readUpToVol' : 'library.readUpTo', { n: p.read })
             : t('library.owned', { n: p.owned })}
         </span>
         <ProgressBar progress={p} color={entry.media.color} />
