@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed: followed series disappeared from the library when their sources were flagged NSFW. Titles are now 18+ only from explicit content ratings; NSFW flags only hide sources from source search. The library says how many titles the 18+ setting hides, and toggling it refreshes every page.
+- Fixed: a source's whole back catalogue showed up as "latest releases". Source releases use the chapter's real upload date; first sightings are never "new".
+- Home: the weekly top 10 keeps its last good list instead of going blank, and the hero resolves catalog banners.
+- Custom dropdowns everywhere (no white popups, no focus rectangles), no zoom on phone inputs, catalog no longer stuck empty on phones, settings open section by section on phones; "Language & display" section name.
+- Faster warm responses for home, releases and planning.
 - Chapter-by-chapter release feed (MangaUpdates + MangaDex + your sources) with release times: home hero, latest chapters per format on the home page, and a "Latest chapters" view in the catalog (50 at a time).
 - New Planning page: the week Monday–Sunday with release times, actual releases for past days and the usual release day (estimated) for the coming ones; format filters and "My library only".
 - Home: resume, weekly top 10 (all formats), latest chapters per format. Catalog keeps its default view and adds "Latest chapters" and "New series" switches; genres fit on one line and expand; filters on one line.

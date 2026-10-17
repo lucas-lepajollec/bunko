@@ -1,4 +1,5 @@
 'use client';
+import { Select } from '@/components/select';
 import { Suspense, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import useSWRInfinite from 'swr/infinite';
@@ -232,70 +233,56 @@ function Catalog() {
           </div>
           {view !== 'chapters' && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <label className="text-muted flex items-center gap-2">
+              <div className="text-muted flex items-center gap-2">
                 {t('catalog.season')}
-                <select
+                <Select
+                  label={t('catalog.season')}
                   value={season}
-                  onChange={(e) =>
-                    set(
-                      'season',
-                      e.target.value,
-                      e.target.value && !year ? { year: String(thisYear) } : undefined,
-                    )
+                  onChange={(v) =>
+                    set('season', v, v && !year ? { year: String(thisYear) } : undefined)
                   }
-                  className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
-                >
-                  <option value="">{t('catalog.anySeason')}</option>
-                  {SEASONS.map((x) => (
-                    <option key={x} value={x}>
-                      {t(`season.${x}`)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-muted flex items-center gap-2">
+                  options={[
+                    { value: '', label: t('catalog.anySeason') },
+                    ...SEASONS.map((x) => ({ value: x, label: t(`season.${x}`) })),
+                  ]}
+                />
+              </div>
+              <div className="text-muted flex items-center gap-2">
                 {t('catalog.year')}
-                <select
-                  value={year ?? ''}
-                  onChange={(e) =>
-                    set('year', e.target.value, e.target.value ? undefined : { season: '' })
-                  }
-                  className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
-                >
-                  <option value="">{t('catalog.anyYear')}</option>
-                  {Array.from({ length: thisYear - 1979 }, (_, i) => thisYear - i).map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-muted flex items-center gap-2">
+                <Select
+                  label={t('catalog.year')}
+                  value={year ? String(year) : ''}
+                  onChange={(v) => set('year', v, v ? undefined : { season: '' })}
+                  options={[
+                    { value: '', label: t('catalog.anyYear') },
+                    ...Array.from({ length: thisYear - 1979 }, (_, i) => String(thisYear - i)).map(
+                      (y) => ({ value: y, label: y }),
+                    ),
+                  ]}
+                />
+              </div>
+              <div className="text-muted flex items-center gap-2">
                 {t('catalog.status')}
-                <select
+                <Select
+                  label={t('catalog.status')}
                   value={status}
-                  onChange={(e) => set('status', e.target.value)}
-                  className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
-                >
-                  <option value="">{t('catalog.statusAll')}</option>
-                  <option value="RELEASING">{t('status.releasing')}</option>
-                  <option value="FINISHED">{t('status.finished')}</option>
-                </select>
-              </label>
-              <label className="text-muted flex items-center gap-2">
+                  onChange={(v) => set('status', v)}
+                  options={[
+                    { value: '', label: t('catalog.statusAll') },
+                    { value: 'RELEASING', label: t('status.releasing') },
+                    { value: 'FINISHED', label: t('status.finished') },
+                  ]}
+                />
+              </div>
+              <div className="text-muted flex items-center gap-2">
                 {t('catalog.sort')}
-                <select
+                <Select
+                  label={t('catalog.sort')}
                   value={sort}
-                  onChange={(e) => set('sort', e.target.value)}
-                  className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5"
-                >
-                  {SORTS.map((s) => (
-                    <option key={s} value={s}>
-                      {t(`sort.${s}`)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  onChange={(v) => set('sort', v)}
+                  options={SORTS.map((x) => ({ value: x, label: t(`sort.${x}`) }))}
+                />
+              </div>
             </div>
           )}
         </div>

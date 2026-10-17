@@ -120,7 +120,19 @@ export function buildPlanning(
     );
   return { start: days[0].date, days };
 }
+let snapshot:
+  { items: ChapterRelease[]; day: string; values: Map<string, PlanningWeek> } | undefined;
 export function planning(q: z.infer<typeof planningQuery>): PlanningWeek {
   void refreshReleases().catch(() => {});
-  return buildPlanning(filterReleases(releaseStore(), q), q.week);
+  const items = releaseStore();
+  const day = localDate(new Date());
+  if (snapshot?.items !== items || snapshot.day !== day)
+    snapshot = { items, day, values: new Map() };
+  const key = JSON.stringify(q);
+  const old = snapshot.values.get(key);
+  if (old) return old;
+  const result = buildPlanning(filterReleases(items, q), q.week);
+  if (snapshot.values.size >= 16) snapshot.values.clear();
+  snapshot.values.set(key, result);
+  return result;
 }

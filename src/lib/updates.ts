@@ -1,3 +1,4 @@
+import { recentSourceChapter } from './source-chapters';
 import { visibleTracked } from './adult';
 import { randomUUID } from 'node:crypto';
 import type { DownloadBatch, EnqueueRequest, UpdateState, UpdatesFeed } from '@/types/shared';
@@ -151,6 +152,13 @@ export async function runUpdateCheck(
                 .flatMap((b) => b.chapterIds),
             );
             const kavitaNumbers = matchKavita(t.media, t.kavitaSeriesId)?.numbers ?? [];
+            const baselines = new Set(
+              (
+                statement('SELECT source_id,manga_id FROM source_baselines WHERE tracked_id=?').all(
+                  t.id,
+                ) as { source_id: string; manga_id: number }[]
+              ).map((s) => `${s.source_id}:${s.manga_id}`),
+            );
             const fresh = result.chapters
               .filter((c) => c.number === null || !kavitaNumbers.includes(c.number))
               .filter(
@@ -167,14 +175,26 @@ export async function runUpdateCheck(
                   ),
               )
               .flatMap((c) => {
-                const v = c.variants[0];
-                return v && !known.has(v.id) ? [v] : [];
+                const v = c.variants.find(
+                  (v) =>
+                    baselines.has(`${v.sourceId}:${v.mangaId}`) &&
+                    recentSourceChapter(v) &&
+                    !known.has(v.id),
+                );
+                return v ? [v] : [];
               });
             db().transaction(() => {
               observeChapters(
                 t.id,
                 result.chapters.flatMap((c) => c.variants),
               );
+              for (const source of t.sources)
+                if (!result.errors.some((e) => e.mangaId === source.suwayomiMangaId))
+                  statement('INSERT OR IGNORE INTO source_baselines VALUES(?,?,?)').run(
+                    t.id,
+                    source.sourceId,
+                    source.suwayomiMangaId,
+                  );
               // A detection group remains whole; its durable batches are capped at 500 chapters.
               const sourceOrder = [
                 ...new Map(t.sources.map((source) => [source.sourceId, source])).values(),

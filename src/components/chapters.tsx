@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import type { ChapterVariant, MergedChapter } from '@/types/shared';
 import { useI18n } from '@/i18n/I18nProvider';
 import { cx } from './ui';
+import { Select } from './select';
 
 export type ChapterFilter = 'missing' | 'unread' | 'all';
 /** Latest chapters first; older ones load on demand. Selection always covers the whole filter. */
@@ -243,19 +244,17 @@ function ChapterRow({
           className="border-line-strong hidden flex-1 -translate-y-[5px] border-b border-dotted md:block"
         />
         {variant && chapter.variants.length > 1 ? (
-          <select
-            aria-label={t('chapters.version', { label })}
-            value={variant.id}
-            onChange={(e) => onChoose(Number(e.target.value))}
-            className="text-muted max-w-[260px] truncate rounded-full bg-transparent bg-[position:right_0.25rem_center] pr-6 text-xs md:text-right md:text-[13px]"
-          >
-            {chapter.variants.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.sourceName}
-                {v.scanlator ? ` · ${v.scanlator}` : ''}
-              </option>
-            ))}
-          </select>
+          <Select
+            label={t('chapters.version', { label })}
+            value={String(variant.id)}
+            onChange={(v) => onChoose(Number(v))}
+            options={chapter.variants.map((v) => ({
+              value: String(v.id),
+              label: `${v.sourceName}${v.scanlator ? ` · ${v.scanlator}` : ''}`,
+            }))}
+            size="sm"
+            className="text-muted max-w-[260px] bg-transparent"
+          />
         ) : (
           <span className="text-muted truncate text-xs md:text-[13px]">
             {variant?.sourceName}

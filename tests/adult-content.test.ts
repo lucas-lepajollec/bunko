@@ -62,7 +62,7 @@ function request(url: string, body?: unknown, method = 'GET') {
 function seedReleases() {
   saveReleases(
     [normal, adult].map((media, i) => ({
-      id: `source:${i}`,
+      id: `mangadex:${i}`,
       media,
       chapter: 1,
       volume: null,
@@ -70,7 +70,7 @@ function seedReleases() {
       group: null,
       releasedAt: '2026-10-15T12:00:00Z',
       hasTime: true,
-      provider: 'source',
+      provider: 'mangadex',
       trackedId: null,
     })),
   );
@@ -171,7 +171,7 @@ describe('adult metadata and settings', () => {
       true,
     );
   });
-  it('computes all provider flags, distinguishes Mature from Adult, and requires every linked source to be NSFW', () => {
+  it('computes all provider flags, distinguishes Mature from Adult, and never infers title content from a source flag', () => {
     expect(fromAniList(ani(2, true)).adult).toBe(true);
     for (const contentRating of ['erotica', 'pornographic'])
       expect(
@@ -186,7 +186,7 @@ describe('adult metadata and settings', () => {
       false,
     );
     recordSourceFlags([safe, nsfw]);
-    expect(mediaAdult(normal, [{ sourceId: nsfw.id }])).toBe(true);
+    expect(mediaAdult(normal, [{ sourceId: nsfw.id }])).toBe(false);
     expect(mediaAdult(normal, [{ sourceId: nsfw.id }, { sourceId: safe.id }])).toBe(false);
     expect(mediaAdult(normal, [])).toBe(false);
   });
@@ -225,15 +225,15 @@ describe('adult metadata and settings', () => {
     expect(await (await trackedRoute.GET(request('/api/tracked'))).json()).toHaveLength(2);
     expect(updatesFeed()).toMatchObject({ trackedCount: 1, autoCount: 1 });
   });
-  it('classifies a followed work only available on NSFW sources, even when catalog metadata says safe', async () => {
+  it('keeps a safe followed work visible when all its sources are NSFW', async () => {
     recordSourceFlags([nsfw]);
     track({
       media: normal,
       sources: [{ sourceId: nsfw.id, sourceName: nsfw.name, suwayomiMangaId: 10 }],
     });
-    expect(listTracked()[0].media.adult).toBe(true);
-    expect(await (await trackedRoute.GET(request('/api/tracked'))).json()).toEqual([]);
-    expect((await discover({})).items.some((m) => m.id === normal.id)).toBe(false);
+    expect(listTracked()[0].media.adult).toBe(false);
+    expect(await (await trackedRoute.GET(request('/api/tracked'))).json()).toHaveLength(1);
+    expect((await discover({})).items.some((m) => m.id === normal.id)).toBe(true);
   });
 });
 describe('adult visibility on catalog surfaces', () => {
@@ -296,6 +296,13 @@ describe('adult visibility on catalog surfaces', () => {
     expect(home.hero).toHaveLength(2);
     expect(home.top).toHaveLength(2);
     expect(home.latest.manga).toHaveLength(2);
+    updateSettings({ adultContent: false });
+    expect(releasesPage({}).items).toHaveLength(1);
+    expect(planning({ week: '2026-10-15' }).days.flatMap((d) => d.items)).toHaveLength(1);
+    home = await homeFeed();
+    expect(home.hero).toHaveLength(1);
+    expect(home.top).toHaveLength(1);
+    expect(home.latest.manga).toHaveLength(1);
   });
   it('retains adult evidence across older safe metadata for the same series', () => {
     seedReleases();

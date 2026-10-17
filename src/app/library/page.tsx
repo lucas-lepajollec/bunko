@@ -1,8 +1,15 @@
 'use client';
+import { Select } from '@/components/select';
 import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import type { KavitaSeriesSummary, MediaFormat, TrackedMedia, UpdatesFeed } from '@/types/shared';
+import type {
+  KavitaSeriesSummary,
+  LibraryActivity,
+  MediaFormat,
+  TrackedMedia,
+  UpdatesFeed,
+} from '@/types/shared';
 import { KavitaUnmatched } from '@/components/kavita';
 import { ActivityLine } from '@/components/activity';
 import { LibraryUpdates } from '@/components/updates';
@@ -72,6 +79,8 @@ function Library() {
   const [sort, setSort] = useState<Sort>('news');
   const [review, setReview] = useState(false);
   const updates = useApi<UpdatesFeed>('/api/updates');
+  // Never hide titles silently: say how many the 18+ setting keeps out of view.
+  const activity = useApi<LibraryActivity>('/api/library/activity');
   const pendingUpdates = (updates.data?.entries ?? []).filter((e) => e.state === 'pending').length;
   const entries = useMemo(() => library.data ?? [], [library.data]);
   const counts = useMemo(() => {
@@ -117,6 +126,14 @@ function Library() {
         }
       />
       <ActivityLine className="-mt-4" />
+      {(activity.data?.hiddenAdult ?? 0) > 0 && (
+        <p className="text-mid -mt-2 flex flex-wrap items-center gap-x-2 text-sm">
+          {t('library.hiddenAdult', { count: activity.data!.hiddenAdult })}
+          <Link href="/settings#display" className="underline hover:text-white">
+            {t('library.hiddenAdultShow')}
+          </Link>
+        </p>
+      )}
       <Tabs
         value={review ? ('' as View) : shelf}
         onChange={(v) => {
@@ -178,17 +195,15 @@ function Library() {
             )}
             <label className="text-muted ml-auto flex items-center gap-2">
               {t('catalog.sort')}
-              <select
+              <Select
+                label={t('catalog.sort')}
                 value={sort}
-                onChange={(e) => setSort(e.target.value as Sort)}
-                className="text-fg h-[34px] rounded-full bg-white/[0.08] pr-9 pl-3.5"
-              >
-                {(['news', 'recent', 'title', 'added'] as Sort[]).map((s) => (
-                  <option key={s} value={s}>
-                    {t(`library.sort.${s}`)}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setSort(v as Sort)}
+                options={(['news', 'recent', 'title', 'added'] as Sort[]).map((x) => ({
+                  value: x,
+                  label: t(`library.sort.${x}`),
+                }))}
+              />
             </label>
           </div>
           {library.error && <ErrorNote error={library.error} />}

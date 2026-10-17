@@ -1,10 +1,13 @@
 'use client';
 import type { Cache, State } from 'swr';
 
-const STORAGE_KEY = 'bunko.cache.v1';
+// v2 drops v1 snapshots, which could hold an empty catalog page that was never refetched.
+const STORAGE_KEY = 'bunko.cache.v2';
+const OLD_KEYS = ['bunko.cache.v1'];
 const MAX_BYTES = 3_000_000;
 /** Data worth showing instantly on the next visit; it is revalidated in the background anyway. */
-const PERSISTED = /^\/api\/(tracked$|media\?|catalog|discover|kavita\/libraries|settings$)/;
+// Paged lists (catalog, discover, releases) are never persisted: a stale or empty page would stick.
+const PERSISTED = /^\/api\/(tracked$|media\?|home$|kavita\/libraries|settings$)/;
 
 /**
  * SWR cache kept in localStorage between visits, so pages render what was last loaded instead of
@@ -14,6 +17,7 @@ export function persistentCache(): Cache {
   const map = new Map<string, State>();
   if (typeof window === 'undefined') return map as unknown as Cache;
   try {
+    for (const old of OLD_KEYS) localStorage.removeItem(old);
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') as [string, unknown][];
     for (const [key, data] of saved) map.set(key, { data });
   } catch {

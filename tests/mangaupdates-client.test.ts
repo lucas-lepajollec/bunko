@@ -354,7 +354,7 @@ describe('MangaUpdates courtesy and persistent metadata', () => {
     });
     saveReleases([
       {
-        id: 'source:1',
+        id: 'mangaupdates:1',
         media: emptyMedia('anilist:1', 'Fixture', 'MANGA'),
         chapter: 1,
         volume: null,
@@ -362,7 +362,7 @@ describe('MangaUpdates courtesy and persistent metadata', () => {
         group: null,
         releasedAt: '2026-10-15',
         hasTime: false,
-        provider: 'source',
+        provider: 'mangaupdates',
         trackedId: null,
       },
     ]);

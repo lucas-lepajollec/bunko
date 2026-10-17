@@ -189,6 +189,7 @@ describe('release store and cursor API', () => {
     observeChapters(followed.id, [
       {
         id: 600,
+        uploadDate: '2026-10-15T12:00:00Z',
         mangaId: 10,
         sourceId: '123',
         sourceName: 'Source Team',
@@ -335,20 +336,23 @@ describe('home composition and caching', () => {
     expect(home.latest.novel).toHaveLength(1);
     expect(composeHome([release(1, { ...work(), coverUrl: null })], []).hero).toHaveLength(0);
   });
-  it('answers cold immediately, then reuses weekly trending cache for five minutes', async () => {
+  it('answers cold immediately and never persists an empty top or default discovery success', async () => {
     let calls = 0;
     vi.stubGlobal('fetch', async () => {
       calls++;
       return Response.json({ data: { Page: { pageInfo: { hasNextPage: false }, media: [] } } });
     });
-    await homeFeed();
+    expect((await homeFeed()).top).toEqual([]);
     await new Promise<void>((r) => setImmediate(r));
     await homeFeed();
-    expect(calls).toBe(1);
-    vi.setSystemTime(new Date(now.getTime() + 6 * 60_000));
-    await homeFeed();
     await new Promise<void>((r) => setImmediate(r));
-    // discover has its own ten minute persistent SWR cache.
-    expect(calls).toBe(1);
+    expect(calls).toBe(2);
+    expect(
+      db()
+        .prepare(
+          "SELECT key FROM metadata_cache WHERE key LIKE 'home:top:%' OR key LIKE 'discover:%'",
+        )
+        .all(),
+    ).toEqual([]);
   });
 });

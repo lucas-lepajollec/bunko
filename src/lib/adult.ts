@@ -23,22 +23,19 @@ export function recordSourceFlags(sources: Source[]) {
   })();
 }
 export function adultClassifier() {
-  const flags = sourceFlags();
-  return (
-    media: UnifiedMedia,
-    sources: Pick<ChapterSelection, 'sourceId'>[] = media.sources,
-  ): boolean => {
+  return (media: UnifiedMedia): boolean => {
     if (media.adult || (media.genres ?? []).some((g) => /^(adult|hentai|smut)$/i.test(g)))
       return true;
-    const ids = (sources ?? []).map((s) => s.sourceId);
-    return ids.length > 0 && ids.every((id) => flags.get(id) === true);
+    return false;
   };
 }
 export function mediaAdult(
   media: UnifiedMedia,
   sources: Pick<ChapterSelection, 'sourceId'>[] = media.sources,
 ) {
-  return adultClassifier()(media, sources);
+  // Source warnings describe an extension, never the content of its titles.
+  void sources;
+  return adultClassifier()(media);
 }
 export function mediaVisibility() {
   const enabled = getSettings().adultContent;
@@ -53,7 +50,7 @@ export function visibleTracked(entries: TrackedMedia[]) {
     ? entries
     : (() => {
         const classify = adultClassifier();
-        return entries.filter((t) => !classify(t.media, t.sources));
+        return entries.filter((t) => !classify(t.media));
       })();
 }
 export function sourceAllowed(source: Source) {

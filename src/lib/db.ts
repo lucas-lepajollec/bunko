@@ -1,3 +1,4 @@
+import { sourceUploadDate, type SourceChapter } from './source-chapters';
 import { adultClassifier } from './adult';
 import { storedCover, deleteStoredCoverFile } from './stored-covers';
 import { wakeWorker } from './worker-events';
@@ -15,7 +16,6 @@ import type {
   TrackedMedia,
   TrackRequest,
   UnifiedMedia,
-  ChapterVariant,
   SourceLinkStatus,
   CoverChoice,
 } from '@/types/shared';
@@ -95,41 +95,46 @@ export function db(): Database.Database {
     origin_url TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS write_versions (domain TEXT PRIMARY KEY, version INTEGER NOT NULL);
     INSERT OR IGNORE INTO write_versions VALUES('library',0),('series',0),('settings',0),('linkage',0),('batches',0),('releases',0);`);
-  // Database triggers cover every writer, including other Next bundles/connections and rollbacks.
-  for (const table of [
-    'tracked_media',
-    'source_flags',
-    'chapter_releases',
-    'source_links',
-    'imported_chapters',
-    'observed_chapters',
-    'resolved_covers',
-    'stored_covers',
-    'kavita_cover_status',
-    'kavita_series',
-    'settings',
-    'download_batches',
-  ]) {
-    for (const operation of ['INSERT', 'UPDATE', 'DELETE']) {
-      const domain =
-        table === 'chapter_releases'
-          ? 'releases'
-          : table === 'download_batches'
-            ? 'batches'
-            : table === 'kavita_series'
-              ? 'series'
-              : table === 'settings'
-                ? 'settings'
-                : table === 'tracked_media'
-                  ? 'linkage'
-                  : null;
-      connection.exec(`CREATE TRIGGER IF NOT EXISTS version_${table}_${operation}
+  migrateV8(connection);
+  // Replace older trigger definitions atomically: every route bundle observes settings writes.
+  const versionConnection = connection;
+  connection.transaction(() => {
+    for (const table of [
+      'tracked_media',
+      'source_flags',
+      'chapter_releases',
+      'source_links',
+      'imported_chapters',
+      'observed_chapters',
+      'observation_dates',
+      'resolved_covers',
+      'stored_covers',
+      'kavita_cover_status',
+      'kavita_series',
+      'settings',
+      'download_batches',
+    ]) {
+      for (const operation of ['INSERT', 'UPDATE', 'DELETE']) {
+        const domain =
+          table === 'chapter_releases'
+            ? 'releases'
+            : table === 'download_batches'
+              ? 'batches'
+              : table === 'kavita_series'
+                ? 'series'
+                : table === 'settings'
+                  ? 'settings'
+                  : table === 'tracked_media'
+                    ? 'linkage'
+                    : null;
+        versionConnection.exec(`DROP TRIGGER IF EXISTS version_${table}_${operation}; CREATE TRIGGER version_${table}_${operation}
         AFTER ${operation} ON ${table} BEGIN
         ${['download_batches', 'chapter_releases'].includes(table) ? '' : "UPDATE write_versions SET version=version+1 WHERE domain='library';"}
         ${domain ? `UPDATE write_versions SET version=version+1 WHERE domain='${domain}' ${table === 'tracked_media' && operation === 'UPDATE' ? "AND (OLD.anilist_id IS NOT NEW.anilist_id OR OLD.mangadex_id IS NOT NEW.mangadex_id OR OLD.kavita_series_id IS NOT NEW.kavita_series_id OR OLD.kavita_manual IS NOT NEW.kavita_manual OR json_extract(OLD.media_json,'$.id') IS NOT json_extract(NEW.media_json,'$.id'))" : ''};` : ''}
         END;`);
+      }
     }
-  }
+  })();
   resetAccountAtStartup(connection);
   return connection;
 }
@@ -406,7 +411,7 @@ export function recordImport(
     new Date().toISOString(),
   );
 }
-export function observeChapters(trackedId: number, chapters: ChapterVariant[]) {
+export function observeChapters(trackedId: number, chapters: SourceChapter[]) {
   const insert =
     statement(`INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name)
     VALUES(?,?,?,?,?) ON CONFLICT(tracked_id,chapter_id) DO UPDATE SET number=excluded.number`);
@@ -414,8 +419,10 @@ export function observeChapters(trackedId: number, chapters: ChapterVariant[]) {
     for (const c of chapters) {
       insert.run(trackedId, c.id, c.number, c.sourceId, c.sourceName);
       statement(
-        'INSERT OR IGNORE INTO observation_dates(tracked_id,chapter_id,at) VALUES(?,?,?)',
-      ).run(trackedId, c.id, new Date().toISOString());
+        `INSERT INTO observation_dates(tracked_id,chapter_id,at,uploaded_at) VALUES(?,?,?,?)
+        ON CONFLICT(tracked_id,chapter_id) DO UPDATE SET uploaded_at=excluded.uploaded_at
+        WHERE uploaded_at IS NOT excluded.uploaded_at`,
+      ).run(trackedId, c.id, new Date().toISOString(), sourceUploadDate(c.uploadDate));
     }
     const numbers = chapters.flatMap((c) => (c.number === null ? [] : [c.number]));
     if (numbers.length)
@@ -591,7 +598,7 @@ function snapshotTracked(id?: number) {
             : (r.cover_url as string | null);
       const media = {
         ...rawMedia,
-        adult: mediaAdult(rawMedia, sources) || Boolean(kavita?.adult),
+        adult: mediaAdult(rawMedia) || Boolean(kavita?.adult),
         kavita: kavitaPresence(kavita, kavitaUrl),
         kavitaSeriesId: kavita?.seriesId ?? (r.kavita_series_id as number | null),
         coverUrl,
@@ -808,4 +815,24 @@ export function acquireWorker(owner: string): boolean {
       'INSERT INTO worker_lock(id,owner,expires_at) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET owner=excluded.owner,expires_at=excluded.expires_at WHERE worker_lock.expires_at < ? OR worker_lock.owner = ?',
     ).run(owner, now + 90_000, now, owner).changes === 1
   );
+}
+
+/** Old source dates were observation timestamps, with no recoverable upload provenance. */
+export function migrateV8(database: Database.Database) {
+  database.transaction(() => {
+    if (Number(database.pragma('user_version', { simple: true })) >= 8) return;
+    database.exec(`ALTER TABLE observation_dates ADD COLUMN uploaded_at TEXT;
+      CREATE INDEX observation_upload ON observation_dates(uploaded_at,tracked_id,chapter_id);
+      CREATE TABLE source_baselines (
+        tracked_id INTEGER NOT NULL REFERENCES tracked_media(id) ON DELETE CASCADE,
+        source_id TEXT NOT NULL, manga_id INTEGER NOT NULL,
+        PRIMARY KEY(tracked_id,source_id,manga_id));
+      DELETE FROM chapter_releases WHERE json_extract(payload,'$.provider')='source';
+      DELETE FROM update_chapters;
+      DELETE FROM update_entries;
+      DELETE FROM metadata_cache WHERE key LIKE 'detail:%suwayomi:%';
+      UPDATE tracked_media SET media_json=json_set(media_json,'$.adult',json('false'))
+        WHERE json_extract(media_json,'$.id') LIKE 'suwayomi:%';
+      PRAGMA user_version=8;`);
+  })();
 }

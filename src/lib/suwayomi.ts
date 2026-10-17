@@ -1,3 +1,4 @@
+import { sourceUploadDate } from './source-chapters';
 import { recordSourceFlags, sourceAllowed } from './adult';
 import type {
   ChapterSelection,
@@ -273,10 +274,11 @@ export async function chaptersFor(
               chapterNumber: number;
               scanlator: string | null;
               isDownloaded: boolean;
+              uploadDate?: string | number | null;
             }[];
           };
         }>(
-          'mutation($input: FetchChaptersInput!) { fetchChapters(input: $input) { chapters { id name chapterNumber scanlator isDownloaded } } }',
+          'mutation($input: FetchChaptersInput!) { fetchChapters(input: $input) { chapters { id name chapterNumber scanlator isDownloaded uploadDate } } }',
           { input: { mangaId: s.suwayomiMangaId } },
           30_000,
           signal,
@@ -290,6 +292,7 @@ export async function chaptersFor(
           number: chapterNumber(c.name, c.chapterNumber),
           scanlator: c.scanlator,
           isDownloaded: c.isDownloaded,
+          uploadDate: sourceUploadDate(c.uploadDate),
         }));
       }, signal),
     ),

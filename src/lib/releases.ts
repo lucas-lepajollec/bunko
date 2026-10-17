@@ -1,9 +1,9 @@
+import { mediaVisibility } from './adult';
 import { z } from 'zod';
 import type { ChapterRelease, DiscoverKind, UnifiedMedia, ReleasesPage } from '@/types/shared';
 import { db, statement, listTracked, trackedForMedia, writeVersion, dataDir } from './db';
 import { withTracking } from './catalog';
 import { deduplicate } from './search-engine';
-import { getSettings } from './settings';
 import { fromAniList, normalizeTitle } from './media';
 import { fetchUpdatesReleases, fetchDexReleases } from './release-providers';
 import { AppError, errorCode } from './errors';
@@ -159,7 +159,11 @@ export function saveReleases(input: ChapterRelease[], now = Date.now()) {
       'INSERT INTO chapter_releases(id,released_at,payload) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET released_at=excluded.released_at,payload=excluded.payload WHERE payload<>excluded.payload',
     );
     for (const r of input) {
-      if (Date.parse(r.releasedAt) < now - 42 * DAY || Date.parse(r.releasedAt) > now + DAY)
+      if (
+        !Number.isFinite(Date.parse(r.releasedAt)) ||
+        Date.parse(r.releasedAt) < now - 42 * DAY ||
+        Date.parse(r.releasedAt) > now + DAY
+      )
         continue;
       const media = resolved.get(r.media.id) ?? resolve(r.media);
       resolved.set(r.media.id, media);
@@ -250,6 +254,7 @@ export function refreshReleases(): Promise<void> {
   pending.set(dataDir, job);
   return job;
 }
+let rawSnapshot: { version: number; items: ChapterRelease[] } | undefined;
 let snapshot: { key: string; at: number; items: ChapterRelease[] } | undefined;
 export function releaseStore(now = new Date()): ChapterRelease[] {
   const key = `${writeVersion('releases')}:${writeVersion()}:${writeVersion('settings')}`;
@@ -258,25 +263,34 @@ export function releaseStore(now = new Date()): ChapterRelease[] {
   const tracked = listTracked();
   const byId = new Map(tracked.map((t) => [t.id, t]));
   const resolve = mediaResolver(tracked.map((t) => t.media));
-  const releases = (
-    statement(
-      'SELECT payload FROM chapter_releases WHERE released_at>=? ORDER BY released_at DESC,id DESC LIMIT 30000',
-    ).all(new Date(now.getTime() - 42 * DAY).toISOString().slice(0, 10)) as { payload: string }[]
-  ).map((r) => JSON.parse(r.payload) as ChapterRelease);
-  const observations =
-    statement(`SELECT o.*,COALESCE(d.at,MIN(u.detected_at)) AS at FROM observed_chapters o
-    LEFT JOIN observation_dates d ON d.tracked_id=o.tracked_id AND d.chapter_id=o.chapter_id
-    LEFT JOIN update_chapters c ON c.chapter_id=o.chapter_id
-    LEFT JOIN update_entries u ON u.id=c.entry_id AND u.tracked_id=o.tracked_id
-    GROUP BY o.tracked_id,o.chapter_id HAVING at>=? ORDER BY at DESC LIMIT 30000`).all(
-      new Date(now.getTime() - 42 * DAY).toISOString(),
-    ) as {
-      tracked_id: number;
-      chapter_id: number;
-      number: number | null;
-      source_name: string;
-      at: string;
-    }[];
+  const version = writeVersion('releases');
+  const raw =
+    rawSnapshot?.version === version
+      ? rawSnapshot
+      : {
+          version,
+          items: (
+            statement(
+              'SELECT payload FROM chapter_releases ORDER BY released_at DESC,id DESC LIMIT 30000',
+            ).all() as { payload: string }[]
+          ).map((r) => JSON.parse(r.payload) as ChapterRelease),
+        };
+  if (!db().inTransaction) rawSnapshot = raw;
+  const releases = raw.items.filter(
+    (r) => Date.parse(r.releasedAt) >= now.getTime() - 42 * DAY && r.provider !== 'source',
+  );
+  const observations = statement(`SELECT o.*,d.uploaded_at AS at FROM observation_dates d
+    JOIN observed_chapters o ON o.tracked_id=d.tracked_id AND o.chapter_id=d.chapter_id
+    WHERE d.uploaded_at>=? AND d.uploaded_at<=? ORDER BY d.uploaded_at DESC LIMIT 30000`).all(
+    new Date(now.getTime() - 30 * DAY).toISOString(),
+    now.toISOString(),
+  ) as {
+    tracked_id: number;
+    chapter_id: number;
+    number: number | null;
+    source_name: string;
+    at: string;
+  }[];
   for (const o of observations) {
     const t = byId.get(o.tracked_id);
     if (t)
@@ -293,18 +307,24 @@ export function releaseStore(now = new Date()): ChapterRelease[] {
         trackedId: t.id,
       });
   }
-  const mapped = releases.map((r) => ({ ...r, media: resolve(r.media) }));
+  const resolvedMedia = new Map(
+    [...distinctMedia(releases.map((r) => r.media))].map(([id, m]) => [id, resolve(m)]),
+  );
+  const mapped = releases.map((r) => ({ ...r, media: resolvedMedia.get(r.media.id)! }));
   const unique = distinctMedia(mapped.map((r) => r.media));
   const enriched = new Map(withTracking([...unique.values()]).map((m) => [m.id, m]));
-  const adultContent = getSettings().adultContent;
+  const visible = mediaVisibility();
+  const trackedIds = new Map(
+    [...enriched].map(([id, m]) => [id, trackedForMedia(m, tracked)?.id ?? null]),
+  );
   const items = deduplicateReleases(
     mapped.map((r) => ({
       ...r,
       media: enriched.get(r.media.id)!,
-      trackedId: trackedForMedia(enriched.get(r.media.id)!, tracked)?.id ?? null,
+      trackedId: trackedIds.get(r.media.id) ?? null,
     })),
-  ).filter((r) => (adultContent || !r.media.adult) && Date.parse(r.releasedAt) <= now.getTime());
-  snapshot = { key, at: now.getTime(), items };
+  ).filter((r) => visible(r.media) && Date.parse(r.releasedAt) <= now.getTime());
+  if (!db().inTransaction) snapshot = { key, at: now.getTime(), items };
   return items;
 }
 export function filterReleases(items: ChapterRelease[], q: FeedQuery) {

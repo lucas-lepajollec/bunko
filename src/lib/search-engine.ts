@@ -1,4 +1,4 @@
-import { adultClassifier, visibleMedia } from './adult';
+import { adultClassifier, visibleMedia, sourceAllowed } from './adult';
 import { mangaUpdates } from './mangaupdates';
 import { getSettings } from './settings';
 import type { MediaType, Provider, SearchResponse, UnifiedMedia } from '@/types/shared';
@@ -194,11 +194,13 @@ export async function search(
     jobs.push({
       provider: 'local',
       run: async () =>
-        searchCatalog(query).map((r) => ({
-          ...emptyMedia(`suwayomi:${r.suwayomiMangaId}`, r.title, 'MANGA'),
-          sources: [r],
-          providers: ['local'],
-        })),
+        searchCatalog(query)
+          .filter((r) => sourceAllowed({ id: r.sourceId, name: r.sourceName, lang: r.lang }))
+          .map((r) => ({
+            ...emptyMedia(`suwayomi:${r.suwayomiMangaId}`, r.title, 'MANGA'),
+            sources: [r],
+            providers: ['local'],
+          })),
     });
   const timings: number[] = [];
   const settled = await Promise.allSettled(

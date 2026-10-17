@@ -2,11 +2,14 @@ import type { LibraryActivity } from '@/types/shared';
 import { activeSourceMatch, sourceMatchQueue } from './source-match-state';
 import { workerValue, refreshRunning } from './updates';
 import { getSettings } from './settings';
+import { listTracked } from './db';
+import { visibleTracked } from './adult';
 
 export function libraryActivity(): LibraryActivity {
   const current = activeSourceMatch();
   const lastAt = workerValue('last_check_at');
   return {
+    hiddenAdult: listTracked().length - visibleTracked(listTracked()).length,
     matching: {
       queued: sourceMatchQueue().filter((t) => t.id !== current?.id).length,
       current: current?.title ?? null,

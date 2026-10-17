@@ -363,6 +363,8 @@ export interface TrackedMedia {
 }
 /** GET /api/library/activity — what Bunko is doing in the background, for progress indicators. */
 export interface LibraryActivity {
+  /** Followed titles currently hidden because 18+ content is off (never hidden silently). */
+  hiddenAdult: number;
   /** Followed comics waiting for automatic source matching, and the one being searched now. */
   matching: { queued: number; current: string | null };
   /** Release refresh across linked sources (latest chapters, thumbnails). */

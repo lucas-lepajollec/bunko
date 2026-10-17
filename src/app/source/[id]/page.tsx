@@ -1,4 +1,5 @@
 'use client';
+import { Select } from '@/components/select';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
@@ -249,20 +250,15 @@ function FilterList({
             );
           case 'select':
             return (
-              <label key={k} className="flex flex-col gap-2">
+              <div key={k} className="flex flex-col gap-2">
                 {label}
-                <select
-                  value={(values[k] as number | undefined) ?? f.default}
-                  onChange={(e) => setValue(k, Number(e.target.value))}
-                  className="text-fg h-9 rounded-full bg-white/[0.08] pr-9 pl-3.5 text-sm"
-                >
-                  {f.values.map((v, i) => (
-                    <option key={i} value={i}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <Select
+                  label={f.name}
+                  value={String((values[k] as number | undefined) ?? f.default)}
+                  onChange={(v) => setValue(k, Number(v))}
+                  options={f.values.map((v, i) => ({ value: String(i), label: v }))}
+                />
+              </div>
             );
           case 'text':
             return (
@@ -322,18 +318,13 @@ function FilterList({
               <div key={k} className="flex flex-col gap-2">
                 {label}
                 <div className="flex gap-2">
-                  <select
-                    aria-label={f.name}
-                    value={s.index}
-                    onChange={(e) => setValue(k, { ...s, index: Number(e.target.value) })}
-                    className="text-fg h-9 flex-1 rounded-full bg-white/[0.08] pr-9 pl-3.5 text-sm"
-                  >
-                    {f.values.map((v, i) => (
-                      <option key={i} value={i}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
+                  <Select
+                    label={f.name}
+                    value={String(s.index)}
+                    onChange={(v) => setValue(k, { ...s, index: Number(v) })}
+                    options={f.values.map((v, i) => ({ value: String(i), label: v }))}
+                    className="flex-1"
+                  />
                   <button
                     type="button"
                     onClick={() => setValue(k, { ...s, ascending: !s.ascending })}

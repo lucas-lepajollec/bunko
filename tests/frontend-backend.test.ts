@@ -105,6 +105,7 @@ function chapter(id: number, number: number) {
     chapterNumber: number,
     scanlator: null,
     isDownloaded: downloaded,
+    uploadDate: String(Date.now() - 60000),
   };
 }
 function request(url: string, method = 'GET', value?: unknown) {
@@ -282,7 +283,7 @@ afterAll(async () => {
 });
 // First assertion deliberately runs before destructive fixture resets, on an actual v1 database.
 it('migrates an existing v1 database transactionally and idempotently without losing tracked data', () => {
-  expect(db().pragma('user_version', { simple: true })).toBe(7);
+  expect(db().pragma('user_version', { simple: true })).toBe(8);
   expect(listTracked()[0]).toMatchObject({
     id: 1,
     title: 'Legacy',
@@ -508,7 +509,7 @@ describe('v2 protocol fixtures', () => {
     });
   });
   it('groups new chapters by preferred source for manual titles and does not duplicate repeated or failed checks', async () => {
-    track({ media, sources: [selectionA, selectionB] });
+    establishedTrack({ media, sources: [selectionA, selectionB] });
     await runUpdateCheck(createBatch);
     expect(updatesFeed()).toMatchObject({ trackedCount: 1, autoCount: 0, checking: false });
     expect(updatesFeed().entries.map((e) => e.chapters)).toEqual([[3], [1, 2, 2.5]]);
@@ -526,7 +527,7 @@ describe('v2 protocol fixtures', () => {
     expect(updatesFeed().nextCheckAt).not.toBeNull();
   });
   it('follows automatic and manual batches through queued, downloading, error, retry and downloaded', async () => {
-    const t = track({ media, sources: [selectionA, selectionB] });
+    const t = establishedTrack({ media, sources: [selectionA, selectionB] });
     await runUpdateCheck(createBatch);
     createBatch({ media, chapterIds: [23] });
     expect(updatesFeed().entries[0].state).toBe('queued');
@@ -552,7 +553,7 @@ describe('v2 protocol fixtures', () => {
   });
   it('keeps a large detection group whole while bounding each automatic batch to 500 chapters', async () => {
     bulk = true;
-    track({ media, sources: [selectionA], autoDownload: true });
+    establishedTrack({ media, sources: [selectionA], autoDownload: true });
     await runUpdateCheck(createBatch);
     expect(updatesFeed().entries).toHaveLength(1);
     expect(updatesFeed().entries[0].chapters).toHaveLength(600);
@@ -566,7 +567,7 @@ describe('v2 protocol fixtures', () => {
     expect(updatesFeed().entries).toHaveLength(1);
   });
   it('links a manual fallback variant by its observed chapter number and resolves an unambiguous Kavita title', async () => {
-    track({ media, sources: [selectionA, selectionB] });
+    establishedTrack({ media, sources: [selectionA, selectionB] });
     await runUpdateCheck(createBatch);
     const entry = updatesFeed().entries.find((e) => e.sourceName === sourceA.name)!;
     createBatch({ media, chapterIds: [21] });
@@ -595,7 +596,7 @@ describe('v2 protocol fixtures', () => {
     });
   });
   it('returns 202 for a nonblocking idempotent manual check and persists scheduling', async () => {
-    track({ media, sources: [selectionA] });
+    establishedTrack({ media, sources: [selectionA] });
     requestUpdateCheck();
     requestUpdateCheck();
     // workerTick awaits an already running tick rather than starting another; wait for completion via feed.
@@ -691,3 +692,12 @@ describe('v2 protocol fixtures', () => {
     expect((await trackedRoute.GET(request('/api/tracked?refresh=invalid'))).status).toBe(400);
   });
 });
+
+function establishedTrack(input: Parameters<typeof track>[0]) {
+  const t = track(input);
+  for (const source of t.sources)
+    db()
+      .prepare('INSERT OR IGNORE INTO source_baselines VALUES(?,?,?)')
+      .run(t.id, source.sourceId, source.suwayomiMangaId);
+  return t;
+}

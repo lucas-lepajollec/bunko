@@ -1,8 +1,9 @@
 'use client';
+import { Select } from '@/components/select';
 import { clearPersistentCache } from '@/lib/client/cache';
 import Link from 'next/link';
 import { Notice, toast } from '@/components/notify';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
 import { useSWRConfig } from 'swr';
 import type {
   AuthState,
@@ -41,61 +42,108 @@ const SECTIONS = [
 ] as const;
 type Settings = PublicSettings & { updateIntervalMinutes?: number };
 
+type SectionId = (typeof SECTIONS)[number];
+const subscribeHash = (l: () => void) => {
+  window.addEventListener('hashchange', l);
+  return () => window.removeEventListener('hashchange', l);
+};
+
 export default function SettingsPage() {
   const { t } = useI18n();
+  // Phones show the list of sections first, then one section with a back button; a link such as
+  // /settings#display opens that section directly. Desktop keeps everything on one page.
+  const hash = useSyncExternalStore(
+    subscribeHash,
+    () => window.location.hash.slice(1),
+    () => '',
+  );
+  const [picked, setPicked] = useState<SectionId | null | undefined>(undefined);
+  const open: SectionId | null =
+    picked !== undefined
+      ? picked
+      : (SECTIONS as readonly string[]).includes(hash)
+        ? (hash as SectionId)
+        : null;
   const settings = useApi<Settings>('/api/settings');
   const status = useApi<ServicesStatus>('/api/status');
   return (
     <Page className="pb-20 md:grid md:grid-cols-[260px_minmax(0,1fr)] md:gap-20">
       <nav
         aria-label={t('settings.sections')}
-        className="flex flex-col md:sticky md:top-28 md:self-start"
+        className={cx(
+          'flex-col md:sticky md:top-28 md:flex md:self-start',
+          open ? 'hidden' : 'flex',
+        )}
       >
         <h1 className="font-display mb-4 text-[40px] leading-none font-extrabold tracking-[-0.04em] md:mb-6 md:text-[52px]">
           {t('nav.settings')}
         </h1>
-        <div className="no-scrollbar -mx-4 flex gap-5 overflow-x-auto px-4 md:mx-0 md:flex-col md:gap-0 md:px-0">
+        <div className="flex flex-col">
           {SECTIONS.map((s, i) => (
             <a
               key={s}
               href={`#${s}`}
-              className="md:border-line text-mid flex shrink-0 items-baseline gap-3.5 py-2 hover:text-white md:border-b md:py-2.5"
+              onClick={(e) => {
+                if (window.matchMedia('(min-width: 768px)').matches) return;
+                e.preventDefault();
+                setPicked(s);
+                window.scrollTo(0, 0);
+              }}
+              className="border-line text-mid flex min-h-14 items-center gap-3.5 border-b hover:text-white md:min-h-0 md:items-baseline md:py-2.5"
             >
-              <span className="text-muted hidden w-[30px] font-serif text-lg md:inline">
-                {roman(i + 1)}
+              <span className="text-muted w-[30px] font-serif text-lg">{roman(i + 1)}</span>
+              <span className="flex-1 text-[17px] md:text-[15px]">
+                {t(`settings.section.${s}`)}
               </span>
-              <span className="text-[15px]">{t(`settings.section.${s}`)}</span>
+              <span aria-hidden className="text-muted md:hidden">
+                ›
+              </span>
             </a>
           ))}
         </div>
       </nav>
-      <div className="mt-6 flex max-w-[860px] min-w-0 flex-col gap-14 md:mt-0">
+      <div
+        className={cx(
+          'max-w-[860px] min-w-0 flex-col gap-14 md:mt-0 md:flex',
+          open ? 'flex' : 'hidden',
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            setPicked(null);
+            if (window.location.hash) history.replaceState(null, '', window.location.pathname);
+          }}
+          className="text-mid -mb-8 flex items-center gap-2 self-start text-[15px] hover:text-white md:hidden"
+        >
+          <span aria-hidden>‹</span> {t('nav.settings')}
+        </button>
         {settings.error && <ErrorNote error={settings.error} />}
         {!settings.data ? (
           <Skeleton className="h-96 rounded-2xl" />
         ) : (
           <>
-            <Section id="connections" index={1}>
+            <Section open={open} id="connections" index={1}>
               <Connections
                 settings={settings.data}
                 status={status.data}
                 onSaved={() => Promise.all([settings.mutate(), status.mutate()])}
               />
             </Section>
-            <Section id="kavita" index={2}>
+            <Section open={open} id="kavita" index={2}>
               <KavitaTargets
                 admin={status.data?.kavita.admin ?? null}
                 settings={settings.data}
                 onSaved={(s) => settings.mutate(s, { revalidate: false })}
               />
             </Section>
-            <Section id="downloads" index={3}>
+            <Section open={open} id="downloads" index={3}>
               <Downloads
                 settings={settings.data}
                 onSaved={(s) => settings.mutate(s, { revalidate: false })}
               />
             </Section>
-            <Section id="display" index={4}>
+            <Section open={open} id="display" index={4}>
               <Row label={t('settings.language')} tip={t('settings.languageTip')}>
                 <LanguageSelect className="h-11 pr-9 pl-4" />
               </Row>
@@ -104,16 +152,16 @@ export default function SettingsPage() {
                 onSaved={(s) => settings.mutate(s, { revalidate: false })}
               />
             </Section>
-            <Section id="sources" index={5}>
+            <Section open={open} id="sources" index={5}>
               <p className="text-mid text-sm leading-relaxed">{t('settings.sourcesBody')}</p>
               <Link href="/sources" className={cx(smallButton, 'self-start')}>
                 {t('settings.manageSources')} →
               </Link>
             </Section>
-            <Section id="modules" index={6}>
+            <Section open={open} id="modules" index={6}>
               <Modules />
             </Section>
-            <Section id="access" index={7}>
+            <Section open={open} id="access" index={7}>
               <Access />
             </Section>
           </>
@@ -124,10 +172,12 @@ export default function SettingsPage() {
 }
 
 function Section({
+  open,
   id,
   index,
   children,
 }: {
+  open: SectionId | null;
   id: (typeof SECTIONS)[number];
   index: number;
   children: ReactNode;
@@ -137,7 +187,7 @@ function Section({
     <section
       id={id}
       aria-labelledby={`${id}-title`}
-      className="flex scroll-mt-28 flex-col gap-[18px]"
+      className={cx('scroll-mt-28 flex-col gap-[18px] md:flex', open === id ? 'flex' : 'hidden')}
     >
       <div className="flex items-baseline gap-4">
         <span className="text-muted font-serif text-xl">{roman(index)}</span>
@@ -320,17 +370,14 @@ function ServiceCard({
           <label key={f.name} className="text-muted flex flex-col gap-1.5 text-[13px]">
             {f.label}
             {f.options ? (
-              <select
+              <Select
+                label={f.label}
                 value={value(f)}
-                onChange={(e) => setDraft((d) => ({ ...d, [f.name]: e.target.value }))}
-                className={field}
-              >
-                {f.options.map((o) => (
-                  <option key={o} value={o}>
-                    {t(`settings.authMode.${o}`)}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setDraft((d) => ({ ...d, [f.name]: v }))}
+                options={f.options.map((o) => ({ value: o, label: t(`settings.authMode.${o}`) }))}
+                size="lg"
+                className="w-full rounded-xl"
+              />
             ) : (
               <input
                 type={f.type ?? 'text'}
@@ -646,39 +693,38 @@ function KavitaTargets({
         );
         return (
           <Row key={kind} label={t(`kavita.kind.${kind}`)}>
-            <select
-              aria-label={t(`kavita.kind.${kind}`)}
+            <Select
+              label={t(`kavita.kind.${kind}`)}
               value={
                 current === null ? 'none' : current ? `${current.libraryId}|${current.folder}` : ''
               }
-              onChange={(e) => save(kind, e.target.value)}
-              className={cx(field, 'md:w-[420px]')}
-            >
-              <option value="">
-                {suggested
-                  ? t('kavita.suggested', { name: suggested.name })
-                  : t('kavita.chooseTarget')}
-              </option>
-              <option value="none">{t('kavita.noLibrary')}</option>
-              {(libraries.data ?? []).map((lib) => (
-                <optgroup key={lib.id} label={`${lib.name} · ${lib.type}`}>
-                  {lib.folders.map((f) => (
-                    <option
-                      key={f.path}
-                      value={`${lib.id}|${f.path}`}
-                      disabled={!f.localPath || !f.writable}
-                    >
-                      {f.path}
-                      {!f.localPath
+              onChange={(v) => save(kind, v)}
+              size="lg"
+              className="w-full rounded-xl md:w-[420px]"
+              options={[
+                {
+                  value: '',
+                  label: suggested
+                    ? t('kavita.suggested', { name: suggested.name })
+                    : t('kavita.chooseTarget'),
+                },
+                { value: 'none', label: t('kavita.noLibrary') },
+                ...(libraries.data ?? []).flatMap((lib) =>
+                  lib.folders.map((f) => ({
+                    value: `${lib.id}|${f.path}`,
+                    group: `${lib.name} · ${lib.type}`,
+                    disabled: !f.localPath || !f.writable,
+                    label: `${f.path}${
+                      !f.localPath
                         ? ` — ${t('kavita.notMounted')}`
                         : !f.writable
                           ? ` — ${t('kavita.readOnly')}`
-                          : ''}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+                          : ''
+                    }`,
+                  })),
+                ),
+              ]}
+            />
           </Row>
         );
       })}
@@ -707,7 +753,11 @@ function AdultToggle({
             onSaved(
               await send<Settings>('/api/settings', 'PATCH', { adultContent: e.target.checked }),
             );
-            await mutate((key) => typeof key === 'string' && key !== '/api/settings');
+            // Drop every cached list (not only mounted ones) so no page shows pre-toggle data.
+            clearPersistentCache();
+            await mutate((key) => typeof key === 'string' && key !== '/api/settings', undefined, {
+              revalidate: true,
+            });
           } catch (err) {
             toast({ tone: 'bad', text: errorText(t, err) });
           }

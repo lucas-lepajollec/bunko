@@ -19,6 +19,13 @@ export function sameSource(
 /** Replacing the ordered list makes every retained link manual; removals are sticky. */
 export function replaceSources(t: TrackedMedia, sources: ChapterSelection[]) {
   for (const old of t.sources)
+    if (
+      !sources.some((s) => s.sourceId === old.sourceId && s.suwayomiMangaId === old.suwayomiMangaId)
+    )
+      statement(
+        'DELETE FROM source_baselines WHERE tracked_id=? AND source_id=? AND manga_id=?',
+      ).run(t.id, old.sourceId, old.suwayomiMangaId);
+  for (const old of t.sources)
     if (!sources.some((s) => sameSource(s, old)))
       statement('INSERT OR IGNORE INTO source_dismissals VALUES(?,?,?)').run(
         t.id,

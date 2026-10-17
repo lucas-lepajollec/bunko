@@ -1,4 +1,5 @@
 'use client';
+import { Select } from '@/components/select';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -383,22 +384,17 @@ function Title({ media }: { media: MediaDetail }) {
                       : t('title.noSource')}
               </button>
             )}
-            <label className={cx(ghostButton, 'pr-1 pl-5')}>
-              <Dot tone={entry ? 'accent' : 'idle'} />
-              <select
-                aria-label={t('title.readingStatus')}
-                value={entry?.status ?? 'NONE'}
-                onChange={(e) => setStatus(e.target.value as ReadingStatus | 'NONE')}
-                className="h-10 flex-1 rounded-full bg-transparent pr-9 text-[15px] text-white"
-              >
-                <option value="NONE">{t('title.notInLibrary')}</option>
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {t(`status.${s}`)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Select
+              label={t('title.readingStatus')}
+              value={entry?.status ?? 'NONE'}
+              onChange={(v) => setStatus(v as ReadingStatus | 'NONE')}
+              options={[
+                { value: 'NONE', label: t('title.notInLibrary') },
+                ...STATUSES.map((x) => ({ value: x, label: t(`status.${x}`) })),
+              ]}
+              size="lg"
+              className="h-12 bg-white/[0.14] px-5"
+            />
             {media.kavita?.url && (
               <a
                 href={media.kavita.url}

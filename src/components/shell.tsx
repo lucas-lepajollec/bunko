@@ -12,6 +12,7 @@ import { cx, errorText, field, primaryButton } from './ui';
 import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
 import { ActivityPill } from './activity';
 import { Toaster } from './notify';
+import { Select } from './select';
 import { persistentCache } from '@/lib/client/cache';
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -67,21 +68,13 @@ function Logo({ size = 24 }: { size?: number }) {
 export function LanguageSelect({ className }: { className?: string }) {
   const { language, setLanguage, t } = useI18n();
   return (
-    <select
-      aria-label={t('settings.language')}
+    <Select
+      label={t('settings.language')}
       value={language}
-      onChange={(e) => setLanguage(e.target.value as UiLanguage)}
-      className={cx(
-        'h-9 rounded-full border-0 bg-white/[0.08] pr-9 pl-3.5 text-sm text-fg',
-        className,
-      )}
-    >
-      {UI_LANGUAGES.map((l) => (
-        <option key={l.id} value={l.id}>
-          {l.label}
-        </option>
-      ))}
-    </select>
+      onChange={(v) => setLanguage(v as UiLanguage)}
+      options={UI_LANGUAGES.map((l) => ({ value: l.id, label: l.label }))}
+      className={className}
+    />
   );
 }
 

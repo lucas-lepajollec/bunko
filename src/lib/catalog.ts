@@ -105,17 +105,27 @@ export async function discover(q: DiscoverQuery, signal?: AbortSignal): Promise<
     // 300 retains newly launched series; 2000 hid the entire recent live sample.
     variables.popularity = 300;
   }
-  const data = await cached(`discover:${JSON.stringify(variables)}`, 10 * 60_000, () =>
-    anilist<{ Page: { pageInfo: { hasNextPage: boolean }; media: AniMedia[] } }>(
-      `query($adult: Boolean, $page: Int, $perPage: Int, $sort: [MediaSort], $format: MediaFormat, $formatNot: MediaFormat, $country: CountryCode, $genre: String, $status: MediaStatus, $popularity: Int, $startDateGreater: FuzzyDateInt, $startDateLesser: FuzzyDateInt) {
+  const data = await cached(
+    `discover:${JSON.stringify(variables)}`,
+    10 * 60_000,
+    async () => {
+      const result = await anilist<{
+        Page: { pageInfo: { hasNextPage: boolean }; media: AniMedia[] };
+      }>(
+        `query($adult: Boolean, $page: Int, $perPage: Int, $sort: [MediaSort], $format: MediaFormat, $formatNot: MediaFormat, $country: CountryCode, $genre: String, $status: MediaStatus, $popularity: Int, $startDateGreater: FuzzyDateInt, $startDateLesser: FuzzyDateInt) {
         Page(page: $page, perPage: $perPage) {
           pageInfo { hasNextPage }
           media(type: MANGA, isAdult: $adult, sort: $sort, format: $format, format_not: $formatNot, countryOfOrigin: $country, genre: $genre, status: $status, popularity_greater: $popularity, startDate_greater: $startDateGreater, startDate_lesser: $startDateLesser) { ${aniFields} }
         }
       }`,
-      variables,
-      undefined,
-    ),
+        variables,
+        undefined,
+      );
+      if (!result.Page.media.length && page === 1 && !q.genre && !q.status && !q.year)
+        throw new AppError('METADATA_UNAVAILABLE', 'Catalog is temporarily unavailable', 502);
+      return result;
+    },
+    { accept: (value) => value.Page.media.length > 0 },
   );
   return {
     items: withTracking(data.Page.media.map(fromAniList)).filter(visibleMedia),
@@ -227,7 +237,7 @@ async function loadSuwayomiDetail(id: number, signal?: AbortSignal): Promise<Med
     ]);
   return {
     ...emptyMedia(`suwayomi:${manga.id}`, manga.title, 'MANGA'),
-    adult: Boolean(manga.source?.isNsfw),
+    adult: false,
     coverUrl: proxyImage(manga.thumbnailUrl),
     synopsis: cleanSynopsis(manga.description),
     genres: manga.genre ?? [],

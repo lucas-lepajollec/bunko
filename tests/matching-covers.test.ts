@@ -912,6 +912,7 @@ it('exposes authenticated local activity, searching and refresh progress; stale 
   const response = await route.GET(request('GET', undefined, '/api/library/activity'));
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
+    hiddenAdult: 0,
     matching: { queued: 1, current: 'Owned Work' },
     refresh: {
       running: true,

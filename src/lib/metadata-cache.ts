@@ -48,6 +48,8 @@ export function saveMetadata(key: string, value: unknown, updatedAt = Date.now()
     ).all() as { key: string; bytes: number }[];
     let bytes = 0;
     rows.forEach((row, i) => {
+      // Two bounded last-good shelves must survive generic provider-cache churn.
+      if (/^home:top:(true|false)$/.test(row.key)) return;
       bytes += row.bytes;
       if (i >= MAX_ENTRIES || bytes > MAX_BYTES)
         statement('DELETE FROM metadata_cache WHERE key=?').run(row.key);
@@ -59,9 +61,10 @@ export async function cached<T>(
   key: string,
   ttl: number,
   load: () => Promise<T>,
-  options: { waitForRefresh?: boolean } = {},
+  options: { waitForRefresh?: boolean; accept?: (value: T) => boolean } = {},
 ): Promise<T> {
-  const hit = storedMetadata<T>(key);
+  const stored = storedMetadata<T>(key);
+  const hit = stored && (!options.accept || options.accept(stored.value)) ? stored : null;
   const pendingKey = `${dataDir}:${key}`;
   const refresh = () => {
     let pending = loads.get(pendingKey) as Promise<T> | undefined;
@@ -71,8 +74,8 @@ export async function cached<T>(
       pending = Promise.resolve()
         .then(load)
         .then((value) => {
-          saveMetadata(key, value);
-          return value;
+          if (!options.accept || options.accept(value)) saveMetadata(key, value);
+          return options.accept && !options.accept(value) && hit ? hit.value : value;
         })
         .finally(() => loads.delete(pendingKey));
       loads.set(pendingKey, pending);
