@@ -131,6 +131,22 @@ beforeAll(async () => {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(value));
     };
+    if (url.pathname === '/api/tracked') {
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(req.headers))
+        if (value) headers.set(key, String(value));
+      const method = req.method as 'GET' | 'POST' | 'PATCH' | 'DELETE';
+      const response = await trackedRoute[method](
+        new Request(`${base}${req.url}`, {
+          method,
+          headers,
+          ...(method === 'GET' ? {} : { body: JSON.stringify(body) }),
+        }),
+      );
+      res.statusCode = response.status;
+      response.headers.forEach((value, key) => res.setHeader(key, value));
+      return res.end(await response.text());
+    }
     if (url.pathname === '/api/graphql') {
       const query = String(body.query);
       const variables = body.variables;
@@ -381,20 +397,21 @@ it('processes one queued comic at a time with confident best hits and at most th
   await matchTrackedSources();
   expect(requests).toHaveLength(count);
 });
-it('retains uncertain entries for a long retry interval and respects enabled sources and health', async () => {
+it('retains uncertain entries for a long retry interval and searches outside favourites while respecting health', async () => {
   const t = track({ media: catalog() });
   setSourcePreferences({ enabledSourceIds: ['1', '2', '3'], languages: ['fr'] });
   recordSourceHealth('1', 1, 'CLOUDFLARE');
   searchHits = {
     '2': [{ id: 20, title: 'Owned Work extra' }],
     '3': [{ id: 30, title: 'Unrelated' }],
+    '4': [{ id: 40, title: 'Unrelated' }],
   };
   await matchTrackedSources();
   expect(listTracked()[0].sources).toEqual([]);
   const searched = requests
     .filter((r) => r.query.includes('fetchSourceManga'))
     .map((r) => (r.variables.input as { source: string }).source);
-  expect(searched).toEqual(['2', '3']);
+  expect(searched).toEqual(['2', '3', '4']);
   const count = requests.length;
   await matchTrackedSources();
   expect(requests).toHaveLength(count);
@@ -1279,4 +1296,247 @@ it('reports a replacement cover as pending during the upload and synced only aft
   expect((await changing).status).toBe(200);
   expect(listTracked()[0].kavitaCover).toEqual({ state: 'synced', error: null });
   expect(scans).toHaveLength(2);
+});
+
+it('links a Kavita import to catalog over HTTP, clears sticky detachment and preserves the manual choice after index sync/import/matching', async () => {
+  const { kavitaMedia, autoImportKavita } = await import('@/lib/kavita-track');
+  const { syncKavitaIndex } = await import('@/lib/kavita-index');
+  indexSeries();
+  const call = (method: string, input?: unknown) =>
+    realFetch(base + '/api/tracked', {
+      method,
+      headers: {
+        Authorization: `Bearer ${persistentSecret('access.token', 32).toString('hex')}`,
+        'Content-Type': 'application/json',
+        Origin: base,
+      },
+      ...(input ? { body: JSON.stringify(input) } : {}),
+    });
+  const created = await call('POST', {
+    media: kavitaMedia(77),
+    kavitaSeriesId: 77,
+    sources: [source()],
+  });
+  expect(created.status).toBe(201);
+  const original = await created.json();
+  await call('PATCH', { id: original.id, offCatalog: true });
+  // A scan hit carries the existing source association: it used to keep the old artwork.
+  const chosen = withTracking([
+    {
+      ...catalog(),
+      sources: [{ ...source(), mangaUrl: '/manga/10', thumbnailUrl: null, lang: 'fr' }],
+    },
+  ])[0];
+  expect(chosen.title).toBe('Owned Work');
+  expect(chosen.coverUrl).toBe(catalog().coverUrl);
+  const attached = await call('PATCH', { id: original.id, media: chosen });
+  expect(attached.status).toBe(200);
+  expect(await attached.json()).toMatchObject({
+    identity: 'catalog',
+    kavitaSeriesId: 77,
+    title: 'Owned Work',
+    media: { id: chosen.id, title: 'Owned Work', synopsis: chosen.synopsis },
+  });
+  expect(
+    db()
+      .prepare('SELECT off_catalog,kavita_manual,media_json FROM tracked_media WHERE id=?')
+      .get(original.id),
+  ).toMatchObject({
+    off_catalog: 0,
+    kavita_manual: 1,
+    media_json: expect.stringContaining(chosen.coverUrl!),
+  });
+  updateSettings({ autoImportKavita: true, kavitaApiKey: 'synthetic-sync-key' });
+  await syncKavitaIndex();
+  await autoImportKavita();
+  await matchTrackedSources();
+  const items = await (await call('GET')).json();
+  expect(items).toHaveLength(1);
+  expect(items[0]).toMatchObject({
+    id: original.id,
+    identity: 'catalog',
+    kavitaSeriesId: 77,
+    media: { id: chosen.id },
+  });
+});
+
+it('keeps the reverse catalog-to-Kavita manual choice through HTTP and automatic sync', async () => {
+  indexSeries();
+  const t = track({ media: catalog() });
+  const response = await realFetch(base + '/api/tracked', {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${persistentSecret('access.token', 32).toString('hex')}`,
+      'Content-Type': 'application/json',
+      Origin: base,
+    },
+    body: JSON.stringify({ id: t.id, kavitaSeriesId: 77 }),
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    identity: 'catalog',
+    kavitaSeriesId: 77,
+    media: { id: t.media.id },
+  });
+  await trackKavitaSeries(77, undefined, true);
+  expect(listTracked()).toHaveLength(1);
+  expect(listTracked()[0].media.id).toBe(t.media.id);
+});
+
+it('scans every healthy installed source in stable preference order with six shared calls at most', async () => {
+  const { matchingSources, sources: globalSources } = await import('@/lib/suwayomi');
+  const { GET } = await import('@/app/api/media/sources/route');
+  sources = Array.from({ length: 33 }, (_, i) => ({
+    id: String(i + 1),
+    name: `Source ${i + 1}`,
+    lang: i % 2 ? 'en' : 'fr',
+  }));
+  setSourcePreferences({ enabledSourceIds: ['7', '3', '1'], languages: ['fr'] });
+  recordSourceHealth('33', 1, 'CLOUDFLARE');
+  expect((await globalSources()).map((s) => s.id)).toEqual(['7', '3', '1']);
+  const expected = [
+    '7',
+    '3',
+    '1',
+    ...sources.map((s) => s.id).filter((id) => !['7', '3', '1', '33'].includes(id)),
+  ];
+  expect((await matchingSources()).map((s) => s.id)).toEqual(expected);
+  const t = track({ media: catalog() });
+  sourceDelay = 3;
+  const response = await GET(
+    new Request(`http://localhost/api/media/sources?id=${t.media.id}`, {
+      headers: {
+        Authorization: `Bearer ${persistentSecret('access.token', 32).toString('hex')}`,
+      },
+    }),
+  );
+  const stream = await response.text();
+  expect(stream.match(/event: match\n/g)).toHaveLength(32);
+  expect(stream).toContain('event: done\ndata: {"completed":32}');
+  expect(
+    JSON.parse(stream.split('data: ')[1].split('\n')[0]).sources.map((s: Source) => s.id),
+  ).toEqual(expected);
+  requests = [];
+  await matchTrackedSources();
+  expect(
+    new Set(
+      requests
+        .filter((r) => r.query.includes('fetchSourceManga'))
+        .map((r) => (r.variables.input as { source: string }).source),
+    ).size,
+  ).toBe(32);
+  expect(listTracked()[0].sources).toHaveLength(3);
+  expect(peak).toBeLessThanOrEqual(6);
+  expect(peak).toBeGreaterThan(1);
+});
+
+it('persists displayTitle over HTTP and propagates it to detail, home, releases/planning and new batches while retaining the existing folder', async () => {
+  const { saveReleases, releaseStore } = await import('@/lib/releases');
+  const { composeHome } = await import('@/lib/home');
+  const { buildPlanning } = await import('@/lib/planning');
+  const { seriesDirectory } = await import('@/lib/kavita');
+  indexSeries();
+  db()
+    .prepare(
+      "UPDATE kavita_series SET payload=json_set(payload,'$.name','Owned Work (odd name) (EN)','$.names',json(?)) WHERE series_id=77",
+    )
+    .run(JSON.stringify(['Owned Work (odd name) (EN)', 'Nom localisé']));
+  const media = { ...catalog(), altTitles: ['Catalog alias', 'Catalog alias'] };
+  const t = track({ media, kavitaSeriesId: 77, sources: [source()] });
+  const response = await realFetch(base + '/api/tracked', {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${persistentSecret('access.token', 32).toString('hex')}`,
+      'Content-Type': 'application/json',
+      Origin: base,
+    },
+    body: JSON.stringify({ id: t.id, displayTitle: '  Mon titre  ' }),
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    title: 'Mon titre',
+    customTitle: true,
+    media: { title: 'Mon titre' },
+    titleOptions: ['Owned Work', 'Catalog alias', 'Owned Work (odd name) (EN)', 'Nom localisé'],
+  });
+  expect(await seriesDirectory(listTracked()[0].media)).toBe(
+    path.join(tenantLibraryRoot, 'Mangas', 'Owned Work'),
+  );
+  const day = new Date().toISOString().slice(0, 10);
+  saveReleases([
+    {
+      id: 'mangaupdates:7777',
+      media,
+      chapter: 2,
+      volume: null,
+      label: 'c.2',
+      group: null,
+      releasedAt: day,
+      hasTime: false,
+      provider: 'mangaupdates',
+      trackedId: null,
+    },
+  ]);
+  const releases = releaseStore();
+  expect(releases.find((r) => r.trackedId === t.id)?.media.title).toBe('Mon titre');
+  expect(composeHome(releases, [media]).latest.manga[0].media.title).toBe('Mon titre');
+  expect(composeHome(releases, [media]).top[0].title).toBe('Mon titre');
+  expect(
+    buildPlanning(releases, day)
+      .days.flatMap((d) => d.items)
+      .find((i) => i.trackedId === t.id)?.media.title,
+  ).toBe('Mon titre');
+  expect((await mediaDetail(media.id)).title).toBe('Mon titre');
+  const batch = createBatch({ media, chapterIds: [101] });
+  expect(batch.media.title).toBe('Mon titre');
+  await patch({ id: t.id, status: 'PAUSED' });
+  expect(listTracked()[0].customTitle).toBe(true);
+  expect(listTracked()[0].title).toBe('Mon titre');
+  expect(
+    JSON.parse(
+      (
+        db().prepare('SELECT media_json FROM tracked_media WHERE id=?').get(t.id) as {
+          media_json: string;
+        }
+      ).media_json,
+    ).title,
+  ).toBe('Owned Work');
+  const reset = await patch({ id: t.id, displayTitle: null });
+  expect(await reset.json()).toMatchObject({
+    title: 'Owned Work',
+    customTitle: false,
+    media: { title: 'Owned Work' },
+  });
+});
+
+it.each(['', '   ', 'x'.repeat(301), 42, false])(
+  'rejects invalid display title %j without changing the work',
+  async (displayTitle) => {
+    const t = track({ media: catalog() });
+    const response = await patch({ id: t.id, displayTitle });
+    expect(response.status).toBe(400);
+    expect(listTracked()[0]).toMatchObject({ title: 'Owned Work', customTitle: false });
+  },
+);
+
+it('repairs a sticky off-catalog flag even when the underlying catalog ID is already the selected ID', async () => {
+  const chosen = catalog();
+  const t = track({ media: { ...chosen, title: 'Old odd title', coverUrl: null } });
+  db().prepare('UPDATE tracked_media SET off_catalog=1 WHERE id=?').run(t.id);
+  const response = await patch({ id: t.id, media: chosen });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    title: chosen.title,
+    identity: 'catalog',
+    media: { id: chosen.id },
+  });
+  const raw = JSON.parse(
+    (
+      db().prepare('SELECT media_json FROM tracked_media WHERE id=?').get(t.id) as {
+        media_json: string;
+      }
+    ).media_json,
+  );
+  expect(raw.coverUrl).toBe(chosen.coverUrl);
+  expect(raw.title).toBe(chosen.title);
 });

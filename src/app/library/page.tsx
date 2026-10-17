@@ -31,7 +31,8 @@ import {
 
 type Shelf = 'READING' | 'CAUGHT_UP' | 'PLANNING' | 'PAUSED' | 'COMPLETED' | 'DROPPED';
 type View = 'ALL' | 'KAVITA' | 'UPDATES';
-type Kind = 'all' | 'manga' | 'manhwa' | 'manhua' | 'comic' | 'novel';
+type Kind =
+  'all' | 'manga' | 'manhwa' | 'manhua' | 'comic' | 'lightnovel' | 'webnovel' | 'novel' | 'book';
 /** Needs a look: no source could be found automatically. */
 const needsReview = (e: TrackedMedia) => e.type === 'MANGA' && e.sourceMatch === 'not-found';
 type Sort = 'news' | 'recent' | 'title' | 'added';
@@ -47,7 +48,10 @@ const KIND_FORMATS: Record<Exclude<Kind, 'all'>, MediaFormat[]> = {
   manhwa: ['MANHWA'],
   manhua: ['MANHUA'],
   comic: ['COMIC'],
-  novel: ['LIGHT_NOVEL', 'WEB_NOVEL'],
+  lightnovel: ['LIGHT_NOVEL'],
+  webnovel: ['WEB_NOVEL'],
+  novel: ['NOVEL'],
+  book: ['BOOK'],
 };
 
 export default function LibraryPage() {
@@ -164,7 +168,19 @@ function Library() {
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            {(['all', 'manga', 'manhwa', 'manhua', 'comic', 'novel'] as Kind[]).map((k) => (
+            {(
+              [
+                'all',
+                'manga',
+                'manhwa',
+                'manhua',
+                'comic',
+                'lightnovel',
+                'webnovel',
+                'novel',
+                'book',
+              ] as Kind[]
+            ).map((k) => (
               <button
                 key={k}
                 type="button"

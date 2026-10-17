@@ -1,3 +1,4 @@
+import { isTextKind } from './library-kinds';
 import { tenantSignal } from './tenant-lifecycle';
 import { accountsDb, accountIdentities } from './accounts-store';
 import { accountsDir, inTenant, tenantState, tenantContext } from './tenant-context';
@@ -62,6 +63,13 @@ export function createBatch(input: EnqueueRequest): DownloadBatch {
   input = { ...input, media: authoritativeMedia(input.media) };
   if (input.media.type === 'ANIME')
     throw new AppError('VALIDATION_ERROR', 'Use Arr releases for anime downloads');
+  if (isTextKind(input.media))
+    throw new AppError(
+      'UNSUPPORTED_FORMAT',
+      'Downloads of text formats are not supported yet',
+      409,
+    );
+  input = { ...input, media: withTracking([input.media])[0] };
   targetFor(input.media);
   const ids = [...new Set(input.chapterIds)];
   if (!ids.length || ids.length > 500)
@@ -115,6 +123,12 @@ export function retryBatch(id: string, failedOnly = false, selectedIds?: number[
   requireBatch(id);
   const batch = listBatches().find((b) => b.id === id);
   if (!batch) throw new AppError('NOT_FOUND', 'Batch not found', 404);
+  if (isTextKind(batch.media))
+    throw new AppError(
+      'UNSUPPORTED_FORMAT',
+      'Downloads of text formats are not supported yet',
+      409,
+    );
   if (!['error', 'completed'].includes(batch.state))
     throw new AppError('INVALID_STATE', 'Only finished batches can be retried', 409);
   const failed = batch.chapters.filter(

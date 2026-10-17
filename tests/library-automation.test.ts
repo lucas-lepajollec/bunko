@@ -249,9 +249,9 @@ describe('automatic mapping and target selection', () => {
       ['MANGA'],
       ['MANHWA'],
       ['MANHUA'],
+      ['LIGHT_NOVEL'],
       ['NOVEL'],
-      ['NOVEL'],
-      ['NOVEL'],
+      ['LIGHT_NOVEL'],
     ]);
     expect(
       index.suggestLibraries([{ id: 1, name: 'Comics', type: 'Comic', folders: [] }])[0]

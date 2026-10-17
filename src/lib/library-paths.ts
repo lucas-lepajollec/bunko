@@ -149,8 +149,9 @@ export async function writableFolder(folder: string) {
   }
 }
 export function libraryKind(media: Pick<UnifiedMedia, 'format' | 'type'>): LibraryKind {
-  if (media.type === 'NOVEL' || media.format === 'LIGHT_NOVEL' || media.format === 'WEB_NOVEL')
-    return 'NOVEL';
+  if (media.format && ['LIGHT_NOVEL', 'WEB_NOVEL', 'NOVEL', 'BOOK'].includes(media.format))
+    return media.format as LibraryKind;
+  if (media.type === 'NOVEL') return 'NOVEL';
   return media.format === 'MANHWA' || media.format === 'MANHUA' || media.format === 'COMIC'
     ? media.format
     : 'MANGA';

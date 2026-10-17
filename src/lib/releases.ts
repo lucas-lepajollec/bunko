@@ -12,7 +12,9 @@ import { AppError, errorCode } from './errors';
 
 const DAY = 86400_000;
 export const feedQuery = z.object({
-  kind: z.enum(['all', 'manga', 'manhwa', 'manhua', 'comic', 'novel']).optional(),
+  kind: z
+    .enum(['all', 'manga', 'manhwa', 'manhua', 'comic', 'lightnovel', 'webnovel', 'novel', 'book'])
+    .optional(),
   genre: z.string().max(60).optional(),
   library: z.literal('1').optional(),
   cursor: z.string().max(1500).optional(),
@@ -20,7 +22,10 @@ export const feedQuery = z.object({
 export type FeedQuery = z.infer<typeof feedQuery>;
 export function mediaKind(media: UnifiedMedia): Exclude<DiscoverKind, 'all'> {
   if (media.format === 'COMIC') return 'comic';
-  if (media.type === 'NOVEL') return 'novel';
+  if (media.format === 'LIGHT_NOVEL') return 'lightnovel';
+  if (media.format === 'WEB_NOVEL') return 'webnovel';
+  if (media.format === 'BOOK') return 'book';
+  if (media.type === 'NOVEL' || media.format === 'NOVEL') return 'novel';
   if (media.format === 'MANHWA' || media.origin === 'KR') return 'manhwa';
   if (media.format === 'MANHUA' || ['CN', 'HK', 'TW'].includes(media.origin ?? '')) return 'manhua';
   return 'manga';
@@ -54,6 +59,7 @@ export function mediaResolver(catalog: UnifiedMedia[]) {
     const found = direct ?? titles.get(`${m.type}:${normalizeTitle(m.title)}`);
     if (
       !found ||
+      (!direct && m.type === 'NOVEL' && found.format !== m.format) ||
       (found.anilistId && m.anilistId && found.anilistId !== m.anilistId) ||
       (found.mangadexId && m.mangadexId && found.mangadexId !== m.mangadexId)
     )
@@ -340,7 +346,12 @@ export function releaseStore(now = new Date()): ChapterRelease[] {
     })),
   )
     .map((r) => ({ ...r, media: { ...r.media, ...resolveAdult(r.media) } }))
-    .filter((r) => visible(r.media) && Date.parse(r.releasedAt) <= now.getTime());
+    .filter(
+      (r) =>
+        !['novel', 'book'].includes(mediaKind(r.media)) &&
+        visible(r.media) &&
+        Date.parse(r.releasedAt) <= now.getTime(),
+    );
   if (!db().inTransaction) snapshots.set(userId, { key, at: now.getTime(), items });
   return items;
 }

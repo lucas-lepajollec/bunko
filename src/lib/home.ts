@@ -7,7 +7,16 @@ import { mediaVisibility, includeProviderAdults } from './adult';
 
 export function composeHome(releases: ChapterRelease[], top: HomeFeed['top']): HomeFeed {
   const visibleMedia = mediaVisibility();
-  const latest: HomeFeed['latest'] = { manga: [], manhwa: [], manhua: [], comic: [], novel: [] };
+  const latest: HomeFeed['latest'] = {
+    manga: [],
+    manhwa: [],
+    manhua: [],
+    comic: [],
+    lightnovel: [],
+    webnovel: [],
+    novel: [],
+    book: [],
+  };
   const banners: ChapterRelease[] = [];
   const covers: ChapterRelease[] = [];
   const seen = new Set<string>();
@@ -15,6 +24,7 @@ export function composeHome(releases: ChapterRelease[], top: HomeFeed['top']): H
   for (const r of releases) {
     if (r.releasedAt < since || !visibleMedia(r.media)) continue;
     const kind = mediaKind(r.media);
+    if (kind === 'novel' || kind === 'book') continue;
     if (latest[kind].length < 12) latest[kind].push(r);
     if ((r.media.bannerUrl || r.media.coverUrl) && !seen.has(r.media.id)) {
       const target = r.media.bannerUrl ? banners : covers;
@@ -24,7 +34,10 @@ export function composeHome(releases: ChapterRelease[], top: HomeFeed['top']): H
   }
   return {
     hero: banners.length ? banners : covers,
-    top: withTracking(top).filter(visibleMedia).slice(0, 10),
+    top: withTracking(top)
+      .filter(visibleMedia)
+      .filter((m) => !['novel', 'book'].includes(mediaKind(m)))
+      .slice(0, 10),
     latest,
   };
 }

@@ -1,3 +1,4 @@
+import type { TrackedMedia } from '@/types/shared';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 import { visibleTracked } from '@/lib/adult';
@@ -13,6 +14,7 @@ import {
   sameMedia,
   authoritativeMedia,
   requireFollowed,
+  manualKavitaLink,
 } from '@/lib/db';
 import { trackBody, trackPatch } from '@/lib/validation';
 import { refreshProgressOnDemand } from '@/lib/progress-refresh';
@@ -41,7 +43,7 @@ export const PATCH = route(async (r) => {
   let sources = input.sources ?? current.sources;
   if (auto && (!sources.length || (input.media ?? current.media).type === 'ANIME'))
     throw new AppError('VALIDATION_ERROR', 'Automatic downloads require manga/novel sources');
-  let media = input.media ? authoritativeMedia(input.media) : storedMedia(current.id);
+  let media = input.media ? authoritativeMedia(input.media, true) : storedMedia(current.id);
   if (input.offCatalog) {
     const seriesId =
       input.kavitaSeriesId === undefined ? current.kavitaSeriesId : input.kavitaSeriesId;
@@ -54,10 +56,18 @@ export const PATCH = route(async (r) => {
         409,
       );
   }
-  if (input.media && sameMedia(input.media, current.media)) {
+  if (input.media && current.identity === 'catalog' && sameMedia(input.media, current.media)) {
     const saved = storedMedia(current.id);
-    media = { ...media, coverUrl: saved.coverUrl, bannerUrl: saved.bannerUrl };
+    media = { ...media, title: saved.title, coverUrl: saved.coverUrl, bannerUrl: saved.bannerUrl };
   }
+  if (input.media || input.offCatalog)
+    media = {
+      ...media,
+      trackedId: null,
+      kavitaSeriesId:
+        input.kavitaSeriesId === undefined ? current.kavitaSeriesId : input.kavitaSeriesId,
+      kavita: null,
+    };
   let chosenUrl = input.media || input.offCatalog ? media.coverUrl : current.coverUrl;
   if (input.cover && input.cover !== 'auto') {
     if (input.media || input.offCatalog)
@@ -86,6 +96,10 @@ export const PATCH = route(async (r) => {
   const conflict = listTracked().some((t) => t.id !== input.id && sameMedia(t.media, media));
   if (conflict)
     throw new AppError('ALREADY_TRACKED', 'This catalog identity is already tracked', 409);
+  const retainedSeries = (entry: TrackedMedia) =>
+    input.kavitaSeriesId !== undefined
+      ? input.kavitaSeriesId
+      : (entry.kavitaSeriesId ?? (manualKavitaLink(entry.id) ? null : entry.media.kavitaSeriesId));
   const originalIdentity = current.media.id;
   const requestedCover = chosenUrl;
   try {
@@ -119,6 +133,7 @@ export const PATCH = route(async (r) => {
       last_read_at=CASE WHEN ? THEN NULL ELSE last_read_at END,
       progress_checked=CASE WHEN ? THEN 0 ELSE progress_checked END,
       off_catalog=CASE WHEN ? THEN ? ELSE off_catalog END,
+      display_title=CASE WHEN ? THEN ? ELSE display_title END,
       cover_choice_json=?,backdrop=? WHERE id=?`,
         )
         .run(
@@ -131,8 +146,8 @@ export const PATCH = route(async (r) => {
           media.type,
           chosenUrl,
           JSON.stringify(media),
-          input.kavitaSeriesId === undefined ? current.kavitaSeriesId : input.kavitaSeriesId,
-          Number(input.kavitaSeriesId !== undefined),
+          retainedSeries(current),
+          Number(input.kavitaSeriesId !== undefined || Boolean(input.media || input.offCatalog)),
           ...Array(3).fill(
             Number(
               input.kavitaSeriesId !== undefined && input.kavitaSeriesId !== current.kavitaSeriesId,
@@ -140,6 +155,8 @@ export const PATCH = route(async (r) => {
           ),
           Number(Boolean(input.media || input.offCatalog)),
           Number(Boolean(input.offCatalog)),
+          Number(input.displayTitle !== undefined),
+          input.displayTitle ?? null,
           JSON.stringify(
             input.cover ?? (input.media || input.offCatalog ? 'auto' : current.coverChoice),
           ),

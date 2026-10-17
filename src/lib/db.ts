@@ -181,6 +181,7 @@ export function db(): Database.Database {
       }
     })();
     migrateV10(connection);
+    migrateV11(connection);
     connections.set(folder, connection);
     return connection;
   } catch (error) {
@@ -611,6 +612,8 @@ function snapshotTracked(id?: number) {
     const entries = rows.map((r): TrackedMedia => {
       const id = Number(r.id);
       const rawMedia = JSON.parse(String(r.media_json)) as UnifiedMedia;
+      rawMedia.title ??= String(r.title);
+      rawMedia.altTitles ??= [];
       const sources = JSON.parse(String(r.sources_json)) as TrackedMedia['sources'];
       const sourceStatus = sourceStatuses(id, sources, rawMedia, links.get(id) ?? []);
       const coverChoice = JSON.parse(String(r.cover_choice_json)) as CoverChoice;
@@ -647,6 +650,10 @@ function snapshotTracked(id?: number) {
             : (r.cover_url as string | null);
       const media = {
         ...rawMedia,
+        title: (r.display_title as string | null) ?? String(r.title),
+        altTitles: r.display_title
+          ? [...new Set([rawMedia.title, ...rawMedia.altTitles])]
+          : rawMedia.altTitles,
         trackedId: id,
         ...resolveAdult({
           ...rawMedia,
@@ -676,7 +683,19 @@ function snapshotTracked(id?: number) {
         id,
         anilistId: r.anilist_id as number | null,
         mangadexId: r.mangadex_id as string | null,
-        title: String(r.title),
+        title: media.title,
+        customTitle: r.display_title !== null,
+        titleOptions: [
+          rawMedia.title,
+          ...rawMedia.altTitles,
+          ...(kavita?.names ?? []),
+          kavita?.name ?? '',
+        ]
+          .map((name) => name.trim())
+          .filter(
+            (name, i, names) =>
+              name && names.findIndex((n) => n.toLowerCase() === name.toLowerCase()) === i,
+          ),
         type: r.type as TrackedMedia['type'],
         coverUrl,
         coverChoice,
@@ -753,12 +772,16 @@ export function getTracked(id: number): TrackedMedia | undefined {
   return t ? matchingState(t, activeSourceMatch(), snapshot.retry) : undefined;
 }
 /** Client artwork cannot replace the authoritative artwork of an already followed work. */
-export function authoritativeMedia(media: UnifiedMedia): UnifiedMedia {
+export function authoritativeMedia(media: UnifiedMedia, identityEdit = false): UnifiedMedia {
   media = automaticMedia(media);
   const tracked = trackedForMedia(media, listTracked());
-  return tracked
+  return tracked &&
+    sameMedia(tracked.media, media) &&
+    (!identityEdit || tracked.identity === 'catalog')
     ? {
         ...media,
+        title: tracked.title,
+        kavitaSeriesId: tracked.kavitaSeriesId,
         adult: Boolean(
           media.adult ||
           JSON.parse(
@@ -977,6 +1000,42 @@ export function migrateV10(database: Database.Database) {
       database.exec(`DROP TABLE user_dismissals; DROP TABLE user_library; DROP TABLE users; DROP TABLE administrator;
       DELETE FROM write_versions WHERE domain='users' OR domain LIKE 'user:%';
       PRAGMA user_version=10;`);
+    })
+    .immediate();
+}
+
+/** Preserve catalog names separately from the user's presentation choice. */
+export function migrateV11(database: Database.Database) {
+  database
+    .transaction(() => {
+      if (Number(database.pragma('user_version', { simple: true })) >= 11) return;
+      const columns = database.pragma('table_info(tracked_media)') as { name: string }[];
+      if (!columns.some((column) => column.name === 'display_title'))
+        database.exec('ALTER TABLE tracked_media ADD COLUMN display_title TEXT');
+      const row = database
+        .prepare("SELECT value FROM settings WHERE key='libraryTargets'")
+        .get() as { value: string } | undefined;
+      if (row) {
+        const targets = JSON.parse(row.value);
+        if (Object.hasOwn(targets, 'NOVEL')) {
+          for (const kind of ['LIGHT_NOVEL', 'WEB_NOVEL'])
+            if (!Object.hasOwn(targets, kind)) targets[kind] = targets.NOVEL;
+          database
+            .prepare("UPDATE settings SET value=? WHERE key='libraryTargets'")
+            .run(JSON.stringify(targets));
+        }
+      }
+      if (
+        database
+          .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='worker_state'")
+          .get()
+      )
+        database
+          .prepare(
+            "DELETE FROM worker_state WHERE key IN ('kavita_full_sync','kavita_index_context')",
+          )
+          .run();
+      database.pragma('user_version=11');
     })
     .immediate();
 }

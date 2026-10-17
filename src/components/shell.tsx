@@ -1,4 +1,5 @@
 'use client';
+import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
@@ -305,11 +306,89 @@ function Header() {
             <span className="bg-warn absolute top-2.5 right-2.5 size-2 rounded-full" />
           )}
         </IconLink>
-        <IconLink href="/settings" label={t('nav.settings')}>
+        <IconLink href="/settings" label={t('nav.settings')} className="hidden md:flex">
           <SlidersIcon />
         </IconLink>
+        <MobileMenu />
       </div>
     </header>
+  );
+}
+
+/** Phones: one menu for everything that does not fit the tab bar (settings, downloads, sources…). */
+function MobileMenu() {
+  const { t } = useI18n();
+  const pathname = usePathname();
+  const auth = useApi<AuthState>('/api/auth');
+  const [open, setOpen] = useState(false);
+  // Navigating closes the menu.
+  const [lastPath, setLastPath] = useState(pathname);
+  if (lastPath !== pathname) {
+    setLastPath(pathname);
+    setOpen(false);
+  }
+  const links = [
+    { href: '/downloads', label: t('nav.downloads') },
+    { href: '/sources', label: t('nav.sources') },
+    { href: '/settings', label: t('nav.settings') },
+  ];
+  return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger
+        aria-label={t('nav.menu')}
+        className="flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08] md:hidden"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          aria-hidden
+        >
+          <path d="M4 7h16M4 12h16M4 17h16" />
+        </svg>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
+        <Dialog.Content className="bg-bg border-line fixed inset-y-0 right-0 z-50 flex w-[min(320px,85vw)] flex-col border-l p-5 pt-[max(env(safe-area-inset-top),20px)] outline-none">
+          <div className="flex items-center justify-between">
+            <Dialog.Title className="font-display text-2xl font-extrabold tracking-[-0.03em]">
+              {PRODUCT_NAME}
+            </Dialog.Title>
+            <Dialog.Close
+              aria-label={t('common.close')}
+              className="text-mid flex size-11 items-center justify-center rounded-full hover:bg-white/[0.08]"
+            >
+              ✕
+            </Dialog.Close>
+          </div>
+          <Dialog.Description className="text-muted mt-1 text-sm">
+            {auth.data?.username ?? ''}
+          </Dialog.Description>
+          <nav className="mt-6 flex flex-col" aria-label={t('nav.menu')}>
+            {links.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                aria-current={isActive(pathname, l.href) ? 'page' : undefined}
+                className={cx(
+                  'border-line flex min-h-14 items-center justify-between border-b text-[17px]',
+                  isActive(pathname, l.href) ? 'font-semibold text-white' : 'text-mid',
+                )}
+              >
+                {l.label}
+                <span aria-hidden className="text-muted">
+                  ›
+                </span>
+              </Link>
+            ))}
+          </nav>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

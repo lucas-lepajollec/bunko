@@ -8,7 +8,15 @@ import { Page } from '@/components/shell';
 import { InfoBubble } from '@/components/notify';
 import { Cover, ErrorNote, PageTitle, Pill, Skeleton, cx } from '@/components/ui';
 
-const KINDS: DiscoverKind[] = ['all', 'manga', 'manhwa', 'manhua', 'comic', 'novel'];
+const KINDS: DiscoverKind[] = [
+  'all',
+  'manga',
+  'manhwa',
+  'manhua',
+  'comic',
+  'lightnovel',
+  'webnovel',
+];
 
 /** ISO date (YYYY-MM-DD) in local time. */
 const isoDay = (d: Date) =>

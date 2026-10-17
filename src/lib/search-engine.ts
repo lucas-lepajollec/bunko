@@ -1,3 +1,6 @@
+import { novelRecord } from './novels';
+import { searchBooks } from './openlibrary';
+import { isTextKind } from './library-kinds';
 import { sourceFormat } from './library-kinds';
 import {
   visibleMedia,
@@ -49,10 +52,23 @@ export function deduplicate(input: UnifiedMedia[]): UnifiedMedia[] {
   for (const media of input) {
     const keys = identities(media);
     const candidates = new Set(keys.flatMap((k) => aliases.get(`${media.type}:${k}`) ?? []));
+    const compatible = (m: UnifiedMedia) =>
+      !(
+        m.format &&
+        media.format &&
+        m.format !== media.format &&
+        (isTextKind(m) || isTextKind(media))
+      ) &&
+      !(
+        m.id.startsWith('openlibrary:') &&
+        media.id.startsWith('openlibrary:') &&
+        m.id !== media.id
+      );
     const target =
       (media.anilistId ? exact.get(`${media.type}:al:${media.anilistId}`) : undefined) ??
       [...candidates].find(
         (m) =>
+          compatible(m) &&
           !(m.anilistId && media.anilistId && m.anilistId !== media.anilistId) &&
           !(m.mangadexId && media.mangadexId && m.mangadexId !== media.mangadexId),
       );
@@ -156,8 +172,8 @@ async function mangaupdates(
     },
     2500,
   );
-  return r.results
-    .map(({ record }) => record)
+  const records = await Promise.all(r.results.map(({ record }) => novelRecord(record)));
+  return records
     .filter((m) => !isUnwantedUpdatesType(m.type))
     .filter((m) => type !== 'NOVEL' || /novel/i.test(m.type ?? ''))
     .filter((m) => type !== 'MANGA' || !/novel/i.test(m.type ?? ''))
@@ -171,12 +187,13 @@ export async function search(
 ): Promise<SearchResponse> {
   const start = Date.now();
   const key = `${includeProviderAdults()}:${type}:${query.toLowerCase()}`;
-  const jobs: { provider: Provider; run: () => Promise<UnifiedMedia[]> }[] = [
-    { provider: 'anilist', run: () => anilist(query, type) },
-  ];
+  const jobs: { provider: Provider; cacheProvider?: string; run: () => Promise<UnifiedMedia[]> }[] =
+    [{ provider: 'anilist', run: () => anilist(query, type) }];
   if (!type || type === 'MANGA') jobs.push({ provider: 'mangadex', run: () => mangadex(query) });
   if (type !== 'ANIME')
     jobs.push({ provider: 'mangaupdates', run: () => mangaupdates(query, type) });
+  if (!type || type === 'NOVEL')
+    jobs.push({ provider: 'local', cacheProvider: 'openlibrary', run: () => searchBooks(query) });
   if (type !== 'ANIME')
     jobs.push({
       provider: 'local',
@@ -202,7 +219,9 @@ export async function search(
         ...indexedSeries()
           .filter(
             (s) =>
-              (!type || (s.kind === 'NOVEL' ? 'NOVEL' : 'MANGA') === type) &&
+              (!type ||
+                (isTextKind({ format: s.kind ?? null, type: 'MANGA' }) ? 'NOVEL' : 'MANGA') ===
+                  type) &&
               s.names.some((n) => normalizeTitle(n).includes(normalizeTitle(query))),
           )
           .slice(0, 100)
@@ -215,11 +234,14 @@ export async function search(
       const at = Date.now();
       try {
         signal?.throwIfAborted();
-        if (fast && j.provider !== 'local')
-          return storedMetadata<UnifiedMedia[]>(`search:${j.provider}:${key}`)?.value ?? [];
-        return j.provider === 'local'
+        if (fast && (j.provider !== 'local' || j.cacheProvider))
+          return (
+            storedMetadata<UnifiedMedia[]>(`search:${j.cacheProvider ?? j.provider}:${key}`)
+              ?.value ?? []
+          );
+        return j.provider === 'local' && !j.cacheProvider
           ? await j.run()
-          : await cached(`search:${j.provider}:${key}`, 30_000, j.run);
+          : await cached(`search:${j.cacheProvider ?? j.provider}:${key}`, 30_000, j.run);
       } finally {
         timings[i] = Date.now() - at;
       }
@@ -234,11 +256,16 @@ export async function search(
     .map(({ m }) => m);
   const value: SearchResponse = {
     results,
-    providers: settled.map((r, i) => ({
-      provider: jobs[i].provider,
-      status: r.status === 'fulfilled' ? 'ok' : 'error',
-      durationMs: timings[i],
-    })),
+    providers: [...new Set(jobs.map((job) => job.provider))].map((provider) => {
+      const indices = jobs.flatMap((job, i) => (job.provider === provider ? [i] : []));
+      return {
+        provider,
+        status: indices.some((i) => settled[i].status === 'rejected')
+          ? ('error' as const)
+          : ('ok' as const),
+        durationMs: Math.max(...indices.map((i) => timings[i])),
+      };
+    }),
     durationMs: Date.now() - start,
     ...(fast ? { partial: true } : {}),
   };

@@ -76,7 +76,10 @@ export async function graphql<T>(
     throw new AppError('SUWAYOMI_GRAPHQL_ERROR', 'Suwayomi rejected the operation', 502);
   return response.data;
 }
-export async function sourceInfos(signal?: AbortSignal): Promise<SourceInfo[]> {
+export async function sourceInfos(
+  signal?: AbortSignal,
+  allLanguages = false,
+): Promise<SourceInfo[]> {
   const response = await graphql<{
     sources: {
       nodes: (Source & {
@@ -93,7 +96,9 @@ export async function sourceInfos(signal?: AbortSignal): Promise<SourceInfo[]> {
   );
   recordSourceFlags(response.sources.nodes.map((s) => ({ ...s, nsfw: Boolean(s.isNsfw) })));
   const preferences = getSourcePreferences();
-  const installed = response.sources.nodes.filter((s) => preferences.languages.includes(s.lang));
+  const installed = response.sources.nodes.filter(
+    (s) => allLanguages || preferences.languages.includes(s.lang),
+  );
   const order = preferences.enabledSourceIds.length
     ? preferences.enabledSourceIds
     : installed.map((s) => s.id);
@@ -117,6 +122,20 @@ export async function sourceInfos(signal?: AbortSignal): Promise<SourceInfo[]> {
 export async function sources(signal?: AbortSignal, all = false): Promise<Source[]> {
   return (await sourceInfos(signal))
     .filter((s) => (all || s.enabled) && sourceAllowed(s))
+    .map(({ id, name, lang, nsfw }) => ({ id, name, lang, nsfw }));
+}
+/** Matching deliberately ignores global-search favourites and language selection. */
+export async function matchingSources(signal?: AbortSignal): Promise<Source[]> {
+  return (await sourceInfos(signal, true))
+    .filter(sourceAllowed)
+    .filter(
+      (s) =>
+        !(
+          s.health.state === 'error' &&
+          s.health.checkedAt &&
+          Date.now() - Date.parse(s.health.checkedAt) < 6 * 3600_000
+        ),
+    )
     .map(({ id, name, lang, nsfw }) => ({ id, name, lang, nsfw }));
 }
 export async function sourceInfo(id: string, signal?: AbortSignal) {

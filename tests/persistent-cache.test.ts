@@ -149,6 +149,7 @@ beforeEach(() => {
             : { Page: { pageInfo: { hasNextPage: false }, media: [ani] } },
       });
     }
+    if (url.startsWith('https://openlibrary.org/')) return json({ docs: [], numFound: 0 });
     if (url.startsWith('https://api.mangadex.org')) return json({ data: [] });
     if (url.startsWith('https://api.mangaupdates.com')) return json({ results: [] });
     if (

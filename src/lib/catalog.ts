@@ -1,3 +1,5 @@
+import { discoverBooks, openLibraryDetail } from './openlibrary';
+import { discoverWebNovels } from './novels';
 import { sourceFormat } from './library-kinds';
 import {
   adultResolver,
@@ -12,7 +14,7 @@ import { requestJson } from './http';
 import { createHash } from 'node:crypto';
 import { getSettings } from './settings';
 import { AppError } from './errors';
-import { db, listTracked, trackedForMedia } from './db';
+import { db, listTracked, trackedForMedia, sameMedia } from './db';
 import { cached, storedMetadata, saveMetadata } from './metadata-cache';
 import { kavitaMedia } from './kavita-track';
 import { withKavita, kavitaMatcher } from './kavita-index';
@@ -55,10 +57,15 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
   const resolveAdult = adultResolver();
   return items.map((m) => {
     const own = trackedForMedia(m, tracked);
-    const t = trackedForMedia(m, shared);
+    const associated = trackedForMedia(m, shared);
+    const t =
+      associated && (sameMedia(associated.media, m) || /^(kavita|suwayomi|local):/.test(m.id))
+        ? associated
+        : undefined;
     const enriched = withKavita(
       {
         ...m,
+        title: t?.title ?? m.title,
         format: t?.media.format ?? m.format,
         adult: Boolean(m.adult || t?.media.adult),
         coverUrl: t ? t.coverUrl : m.coverUrl,
@@ -88,6 +95,20 @@ export async function discover(
   const sort = q.sort ?? 'trending';
   const page = q.page ?? 1;
   const perPage = q.perPage ?? 24;
+  if (kind === 'novel' || kind === 'book') {
+    const result = await discoverBooks(q);
+    return {
+      ...result,
+      items: raw ? result.items : withTracking(result.items).filter(visibleMedia),
+    };
+  }
+  if (kind === 'webnovel') {
+    const result = await discoverWebNovels(q);
+    return {
+      ...result,
+      items: raw ? result.items : withTracking(result.items).filter(visibleMedia),
+    };
+  }
   if (kind === 'comic') return { items: [], page, hasNextPage: false };
   const variables: Record<string, unknown> = {
     page,
@@ -95,7 +116,7 @@ export async function discover(
     sort: sorts[sort],
     adult: includeProviderAdults() ? undefined : false,
   };
-  if (kind === 'novel') variables.format = 'NOVEL';
+  if (kind === 'lightnovel') variables.format = 'NOVEL';
   else if (kind !== 'all') variables.formatNot = 'NOVEL';
   if (kind === 'manga') variables.country = 'JP';
   if (kind === 'manhwa') variables.country = 'KR';
@@ -282,7 +303,9 @@ async function loadSuwayomiDetail(id: number, signal?: AbortSignal): Promise<Med
 async function loadDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
   const [provider, key] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
   let detail: MediaDetail;
-  if (provider === 'kavita' && /^[1-9]\d{0,9}$/.test(key))
+  if (provider === 'openlibrary' && /^OL[1-9]\d*W$/.test(key))
+    detail = await openLibraryDetail(key);
+  else if (provider === 'kavita' && /^[1-9]\d{0,9}$/.test(key))
     detail = { ...kavitaMedia(Number(key)), tags: [], relations: [], recommendations: [] };
   else if (provider === 'anilist' && /^[1-9]\d{0,9}$/.test(key))
     detail = await anilistDetail(Number(key), signal);
@@ -300,6 +323,7 @@ function enrichDetail(detail: MediaDetail): MediaDetail {
   const relations = withTracking(detail.relations.map((r) => r.media));
   return {
     ...detail,
+    title: tracked.title,
     adult: tracked.adult,
     adultOverride: tracked.adultOverride,
     coverUrl: tracked.coverUrl,

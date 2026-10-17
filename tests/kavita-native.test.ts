@@ -424,12 +424,12 @@ describe('Kavita index, paths and presence', () => {
     ).toBe(false);
     for (const [format, kind] of [
       ['ONE_SHOT', 'MANGA'],
-      ['LIGHT_NOVEL', 'NOVEL'],
-      ['WEB_NOVEL', 'NOVEL'],
+      ['LIGHT_NOVEL', 'LIGHT_NOVEL'],
+      ['WEB_NOVEL', 'WEB_NOVEL'],
       ['MANHWA', 'MANHWA'],
     ] as const)
       expect(libraryKind({ ...media, format })).toBe(kind);
-    updateSettings({ libraryTargets: { NOVEL: { libraryId: 2, folder: '/books/Novels' } } });
+    updateSettings({ libraryTargets: { LIGHT_NOVEL: { libraryId: 2, folder: '/books/Novels' } } });
     expect(targetFor({ ...media, format: 'LIGHT_NOVEL' }).local).toBe(
       path.join(tenantLibraryRoot, 'Novels'),
     );

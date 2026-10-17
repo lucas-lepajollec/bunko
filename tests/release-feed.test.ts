@@ -206,7 +206,7 @@ describe('release store and cursor API', () => {
     expect(
       feed.releasesPage({ library: '1' }).items.every((r) => r.trackedId === followed.id),
     ).toBe(true);
-    for (const kind of ['manhwa', 'manhua', 'novel'] as const)
+    for (const kind of ['manhwa', 'manhua', 'lightnovel'] as const)
       expect(feed.releasesPage({ kind }).items).toHaveLength(1);
     expect(feed.releasesPage({ kind: 'manga', genre: 'action' }).items).toHaveLength(2);
     expect(feed.releasesPage({ genre: 'Drama' }).items[0].media.type).toBe('NOVEL');
@@ -336,7 +336,7 @@ describe('home composition and caching', () => {
     expect(home.hero).toHaveLength(8);
     expect(home.top).toHaveLength(10);
     expect(home.latest.manga).toHaveLength(12);
-    expect(home.latest.novel).toHaveLength(1);
+    expect(home.latest.webnovel).toHaveLength(1);
     expect(composeHome([release(1, { ...work(), coverUrl: null })], []).hero).toHaveLength(0);
   });
   it('answers cold immediately and never persists an empty top or default discovery success', async () => {

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import AdmZip from 'adm-zip';
 import { z } from 'zod';
-import { db, listTracked, recordImport, manualKavitaLink } from './db';
+import { db, listTracked, recordImport, manualKavitaLink, trackedForMedia } from './db';
 import type { TrackedMedia, UnifiedMedia } from '@/types/shared';
 import { getSettings } from './settings';
 import { endpoint, requestJson } from './http';
@@ -70,12 +70,25 @@ export function seriesName(media: UnifiedMedia) {
 export async function seriesDirectory(media: UnifiedMedia) {
   const target = targetFor(media);
   const existing = matchKavita(media);
-  const local = existing?.folder ? mapKavitaPath(existing.folder) : null;
+  const tracked = trackedForMedia(media, listTracked());
+  const imported = tracked
+    ? (db()
+        .prepare(
+          `SELECT a.filename FROM reader_archives a
+    JOIN imported_chapters c ON c.chapter_id=a.chapter_id WHERE c.tracked_id=? ORDER BY c.imported_at DESC LIMIT 1`,
+        )
+        .get(tracked.id) as { filename: string } | undefined)
+    : undefined;
+  const local = existing?.folder
+    ? mapKavitaPath(existing.folder)
+    : imported
+      ? path.dirname(imported.filename)
+      : null;
   const reuse =
     local &&
     inside(target.local, local) &&
     local !== target.local &&
-    (target.libraryId === null || target.libraryId === existing?.libraryId);
+    (!existing || target.libraryId === null || target.libraryId === existing.libraryId);
   return safeLibraryDirectory(
     reuse ? local : path.join(/* turbopackIgnore: true */ target.local, seriesName(media)),
     true,

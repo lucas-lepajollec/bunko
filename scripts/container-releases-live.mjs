@@ -68,13 +68,19 @@ const rows = database
   .all()
   .map((r) => JSON.parse(r.payload));
 const kind = (m) =>
-  m.type === 'NOVEL'
-    ? 'novel'
-    : m.format === 'MANHWA' || m.origin === 'KR'
-      ? 'manhwa'
-      : m.format === 'MANHUA' || ['CN', 'HK', 'TW'].includes(m.origin)
-        ? 'manhua'
-        : 'manga';
+  m.format === 'LIGHT_NOVEL'
+    ? 'lightnovel'
+    : m.format === 'WEB_NOVEL'
+      ? 'webnovel'
+      : m.format === 'BOOK'
+        ? 'book'
+        : m.type === 'NOVEL'
+          ? 'novel'
+          : m.format === 'MANHWA' || m.origin === 'KR'
+            ? 'manhwa'
+            : m.format === 'MANHUA' || ['CN', 'HK', 'TW'].includes(m.origin)
+              ? 'manhua'
+              : 'manga';
 function counts(items) {
   const provider = {},
     kinds = {},
@@ -127,14 +133,22 @@ for (let i = 1; i < allFeed.length; i++)
     Date.parse(allFeed[i - 1].releasedAt) >= Date.parse(allFeed[i].releasedAt),
     'Providers sort by timestamp',
   );
-const novels = await api('/api/releases?kind=novel');
+const lightnovels = await api('/api/releases?kind=lightnovel');
+const webnovels = await api('/api/releases?kind=webnovel');
 const home = await api('/api/home');
 const planning = await api('/api/planning');
 assert.equal(planning.days.length, 7);
-if (allFeed.some((r) => kind(r.media) === 'novel')) {
-  assert.ok(novels.items.length > 0, 'Novel filter returns available novels');
-  assert.ok(home.latest.novel.length > 0, 'Home includes available novels');
+for (const [kindName, feed] of [
+  ['lightnovel', lightnovels],
+  ['webnovel', webnovels],
+]) {
+  if (allFeed.some((r) => kind(r.media) === kindName)) {
+    assert.ok(feed.items.length > 0, 'Text chapter filter returns available releases');
+    assert.ok(home.latest[kindName].length > 0, 'Home includes available text chapter releases');
+  }
 }
+assert.deepEqual(home.latest.novel, []);
+assert.deepEqual(home.latest.book, []);
 console.log(
   JSON.stringify(
     {
@@ -147,8 +161,10 @@ console.log(
       adultEnabledFeed: counts(allFeed),
       storedAdult: rows.filter((r) => r.media.adult).length,
       mangaUpdatesTimed: rows.filter((r) => r.provider === 'mangaupdates' && r.hasTime).length,
-      novelApi: novels.items.length,
-      homeLatestNovel: home.latest.novel.length,
+      lightnovelApi: lightnovels.items.length,
+      webnovelApi: webnovels.items.length,
+      homeLatestLightnovel: home.latest.lightnovel.length,
+      homeLatestWebnovel: home.latest.webnovel.length,
     },
     null,
     2,

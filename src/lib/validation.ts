@@ -96,12 +96,23 @@ export const media = z.object({
   trackedId: id.nullable(),
   kavitaSeriesId: id.nullable(),
   format: z
-    .enum(['MANGA', 'MANHWA', 'MANHUA', 'COMIC', 'ONE_SHOT', 'LIGHT_NOVEL', 'WEB_NOVEL'])
+    .enum([
+      'MANGA',
+      'MANHWA',
+      'MANHUA',
+      'COMIC',
+      'ONE_SHOT',
+      'LIGHT_NOVEL',
+      'WEB_NOVEL',
+      'NOVEL',
+      'BOOK',
+    ])
     .nullable()
     .default(null),
   origin: z.string().max(8).nullable().default(null),
   year: z.number().int().min(0).max(3000).nullable().default(null),
   volumes: z.number().nonnegative().nullable().default(null),
+  editionCount: z.number().int().nonnegative().nullable().optional(),
   color: z
     .string()
     .regex(/^#[0-9a-f]{6}$/i)
@@ -118,7 +129,7 @@ export const mediaId = z
   .string()
   .max(80)
   .regex(
-    /^(?:anilist|mangadex|mangaupdates|suwayomi|kavita):[0-9a-zA-Z-]+$/,
+    /^(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary):[0-9a-zA-Z-]+$/,
     'Unknown media identifier',
   );
 export const adultOverrideBody = z.object({
@@ -128,6 +139,7 @@ export const adultOverrideBody = z.object({
     .refine((value) => {
       const [provider, key, extra] = value.split(':');
       if (!key || extra !== undefined) return false;
+      if (provider === 'openlibrary') return /^OL[1-9]\d*W$/.test(key);
       if (provider === 'mangadex') return z.uuid().safeParse(key).success;
       if (provider === 'mangaupdates') return /^[1-9]\d{0,19}$/.test(key);
       if (['anilist', 'suwayomi', 'kavita'].includes(provider))
@@ -139,7 +151,19 @@ export const adultOverrideBody = z.object({
 });
 export const discoverQuery = z
   .object({
-    kind: z.enum(['all', 'manga', 'manhwa', 'manhua', 'comic', 'novel']).optional(),
+    kind: z
+      .enum([
+        'all',
+        'manga',
+        'manhwa',
+        'manhua',
+        'comic',
+        'lightnovel',
+        'webnovel',
+        'novel',
+        'book',
+      ])
+      .optional(),
     sort: z.enum(['trending', 'popular', 'score', 'new']).optional(),
     genre: z.string().max(60).optional(),
     status: z.enum(['RELEASING', 'FINISHED']).optional(),
@@ -187,28 +211,30 @@ export const settingsPatch = z
     libraryTargets: z
       .object(
         Object.fromEntries(
-          ['MANGA', 'MANHWA', 'MANHUA', 'COMIC', 'NOVEL'].map((kind) => [
-            kind,
-            z
-              .object({
-                libraryId: id,
-                folder: z
-                  .string()
-                  .min(1)
-                  .max(2048)
-                  .refine(
-                    (v) =>
-                      v.startsWith('/') &&
-                      !v.includes('\\') &&
-                      !v.includes('\0') &&
-                      !v.split('/').includes('..'),
-                    'Use an absolute Kavita folder',
-                  ),
-              })
-              .strict()
-              .nullable()
-              .optional(),
-          ]),
+          ['MANGA', 'MANHWA', 'MANHUA', 'COMIC', 'LIGHT_NOVEL', 'WEB_NOVEL', 'NOVEL', 'BOOK'].map(
+            (kind) => [
+              kind,
+              z
+                .object({
+                  libraryId: id,
+                  folder: z
+                    .string()
+                    .min(1)
+                    .max(2048)
+                    .refine(
+                      (v) =>
+                        v.startsWith('/') &&
+                        !v.includes('\\') &&
+                        !v.includes('\0') &&
+                        !v.split('/').includes('..'),
+                      'Use an absolute Kavita folder',
+                    ),
+                })
+                .strict()
+                .nullable()
+                .optional(),
+            ],
+          ),
         ),
       )
       .strict()
@@ -255,6 +281,7 @@ export const trackPatch = z
   .object({
     id,
     media: media.optional(),
+    displayTitle: z.string().trim().min(1).max(300).nullable().optional(),
     offCatalog: z.literal(true).optional(),
     backdrop: z.enum(['auto', 'hidden']).optional(),
     cover: z

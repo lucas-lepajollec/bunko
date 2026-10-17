@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Light novels, web novels, novels and books are now separate formats: novels and books come from Open Library (catalog, search, title sheets), LN/WN releases keep their own home rows; Kavita targets per format.
+- A Kavita series can be linked to the right catalog work for good, and you can choose the name shown for any title (catalog, alternative titles, Kavita name, or your own).
+- Source matching scans every installed source, not only the ones selected for global search.
+- Catalog toolbar: formats, then view (catalog / latest chapters / new series), a folded Filters panel and sort on one line, with removable filter chips.
+- Phones: a menu button for downloads, sources and settings; dropdowns close on a second tap. Home: the selected hero thumbnail is the largest; comics, LN and WN latest-release rows. Reader: arrow keys always go to the next/previous page.
 - Built-in reader: read any chapter straight from your sources (or from your library files when already downloaded) in manga (right-to-left), left-to-right or webtoon mode, with next pages preloaded, resume where you stopped, and chapters marked read when finished. "Read" / "Resume" on every title and a read button on each chapter.
 - Volumes: chapters carry their volume when sources give it; title sheets can show chapters grouped by volume and select a whole volume; downloads are named with the volume for Kavita.
 - Comics & BD as a format: library filter, Kavita target, source search, reader. There is no public comics catalog, so the catalog points to your extensions.

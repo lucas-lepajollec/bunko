@@ -1,11 +1,9 @@
-import { sourceAllowed } from './adult';
 import type { ChapterSelection, SourceCandidate, TrackedMedia } from '@/types/shared';
 import { statement, db, getTracked, saveSourceStatus } from './db';
-import { sourceInfos, chaptersFor } from './suwayomi';
+import { matchingSources, chaptersFor } from './suwayomi';
 import { matchOnSource, rankCandidates } from './matching';
 import { suwayomiDetail } from './catalog';
 import { errorCode } from './errors';
-import { sourceHealth } from './source-preferences';
 import { sourceMatchQueue } from './source-match-state';
 import { sharedConcurrencyGate } from './concurrency';
 import { setTimeout as pause } from 'node:timers/promises';
@@ -63,17 +61,7 @@ export async function matchTrackedSources(
     if (!next) return false;
     const t = getTracked(next.id);
     if (!t || t.sources.length) return false;
-    const available = (await sourceInfos(signal))
-      .filter(sourceAllowed)
-      .filter((s) => s.enabled)
-      .filter((s) => {
-        const health = sourceHealth(s.id);
-        return !(
-          health.state === 'error' &&
-          health.checkedAt &&
-          Date.now() - Date.parse(health.checkedAt) < 6 * 3600_000
-        );
-      });
+    const available = await matchingSources(signal);
     if (!available.length || signal?.aborted || !ownsLease()) return false;
     const lease = statement('SELECT owner FROM worker_lock WHERE id=1').get() as
       { owner: string } | undefined;

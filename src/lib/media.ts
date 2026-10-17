@@ -58,8 +58,7 @@ export function cleanSynopsis(value: string | null | undefined): string | null {
   return text || null;
 }
 export function formatFor(kind: 'comic' | 'novel' | 'oneshot', origin: string | null): MediaFormat {
-  if (kind === 'novel')
-    return origin === 'KR' || origin === 'CN' || origin === 'TW' ? 'WEB_NOVEL' : 'LIGHT_NOVEL';
+  if (kind === 'novel') return 'LIGHT_NOVEL';
   if (kind === 'oneshot') return 'ONE_SHOT';
   if (origin === 'KR') return 'MANHWA';
   if (origin === 'CN' || origin === 'TW' || origin === 'HK') return 'MANHUA';
@@ -169,12 +168,13 @@ const DEX_ONESHOT = '0234a31e-a729-4e28-9d6a-3f87c4966b9e';
 export function fromMangaDex(m: DexManga): UnifiedMedia {
   const a = m.attributes;
   const cover = m.relationships.find((r) => r.type === 'cover_art')?.attributes?.fileName;
+  const novel = a.tags.some((t) => /^(light[ -]?)?novel$/i.test(t.attributes.name.en ?? ''));
   const origin = a.originalLanguage ? (dexOrigin[a.originalLanguage] ?? null) : null;
   return {
     ...emptyMedia(
       `mangadex:${m.id}`,
       a.title.fr ?? a.title.en ?? Object.values(a.title)[0],
-      'MANGA',
+      novel ? 'NOVEL' : 'MANGA',
     ),
     adult: ['erotica', 'pornographic'].includes(a.contentRating ?? ''),
     mangadexId: m.id,
@@ -193,7 +193,10 @@ export function fromMangaDex(m: DexManga): UnifiedMedia {
     ],
     webUrl: `https://mangadex.org/title/${m.id}`,
     providers: ['mangadex'],
-    format: formatFor(a.tags.some((t) => t.id === DEX_ONESHOT) ? 'oneshot' : 'comic', origin),
+    format: formatFor(
+      novel ? 'novel' : a.tags.some((t) => t.id === DEX_ONESHOT) ? 'oneshot' : 'comic',
+      origin,
+    ),
     origin,
     year: a.year ?? null,
     startDate: a.year == null ? null : String(a.year).padStart(4, '0'),
@@ -212,6 +215,12 @@ export interface UpdatesRecord {
   genres?: { genre: string }[];
   authors?: { name: string; type: string }[];
   bayesian_rating?: number | null;
+  categories?: { category: string }[];
+  publications?: { publication_name?: string; publisher_name?: string }[];
+  publishers?: { publisher_name?: string; name?: string; type?: string }[];
+  original_publisher?: string;
+  serialized_in?: string;
+  publication_status?: string;
 }
 const updatesFormat: Record<string, ['comic' | 'novel' | 'oneshot', string | null]> = {
   manga: ['comic', 'JP'],
@@ -238,10 +247,11 @@ export function fromMangaUpdates(m: UpdatesRecord): UnifiedMedia {
     altTitles: m.associated?.map((t) => t.title) ?? [],
     genres: m.genres?.map((g) => g.genre) ?? [],
     authors: [...new Set((m.authors ?? []).map((a) => a.name))],
+    status: m.status ?? null,
     score: m.bayesian_rating ? Math.round(m.bayesian_rating * 10) : null,
     webUrl: m.url,
     providers: ['mangaupdates'],
-    format: formatFor(kind, origin),
+    format: kind === 'novel' ? updatesNovelFormat(m) : formatFor(kind, origin),
     origin,
     year: m.year && /^\d{4}$/.test(m.year) ? Number(m.year) : null,
     startDate: m.year && /^\d{4}$/.test(m.year) ? m.year : null,
@@ -260,4 +270,25 @@ export function relevance(media: UnifiedMedia, query: string) {
   if (media.coverUrl) score += 6;
   if (media.popularity) score += Math.min(15, Math.log10(media.popularity + 1) * 3);
   return score;
+}
+
+/** MU has one Novel type. Positive online serialization evidence wins; otherwise assume published LN. */
+export function updatesNovelFormat(m: UpdatesRecord): 'LIGHT_NOVEL' | 'WEB_NOVEL' {
+  const evidence = [
+    m.serialized_in,
+    m.original_publisher,
+    m.publication_status,
+    m.status,
+    ...(m.genres ?? []).map((g) => g.genre),
+    ...(m.categories ?? []).map((c) => c.category),
+    ...(m.publications ?? []).flatMap((p) => [p.publication_name, p.publisher_name]),
+    ...(m.publishers ?? []).flatMap((p) => [p.publisher_name, p.name]),
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return /web[ -]?novel|web[ -]?(serial|fiction)|online serial|syosetu|sh(?:ō|ou|o)setsuka ni nar(?:ō|ou|o)|kakuyomu|qidian|jjwxc|munpia|royal road|wattpad|naver (?:series|novel)|kakao(?:page)?|novel ?pia/i.test(
+    evidence,
+  )
+    ? 'WEB_NOVEL'
+    : 'LIGHT_NOVEL';
 }

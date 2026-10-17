@@ -79,10 +79,10 @@ describe('real MangaUpdates release ingestion', () => {
     const mu = stored().filter((r) => r.provider === 'mangaupdates');
     expect(mu).toHaveLength(4); // Null series metadata is skipped.
     expect(mu.map((r) => mediaKind(r.media)).sort()).toEqual([
+      'lightnovel',
       'manga',
       'manhua',
       'manhwa',
-      'novel',
     ]);
     const coral = mu.find((r) => r.media.mangaUpdatesId === '75449291507');
     expect(coral).toMatchObject({
@@ -95,7 +95,7 @@ describe('real MangaUpdates release ingestion', () => {
     updateSettings({ adultContent: true });
     const visible = releaseStore();
     expect(visible.some((r) => r.id === coral.id)).toBe(true);
-    expect(composeHome(visible, []).latest.novel).toHaveLength(1);
+    expect(composeHome(visible, []).latest.lightnovel).toHaveLength(1);
     const timestamps = visible.map((r) => Date.parse(r.releasedAt));
     expect(timestamps).toEqual([...timestamps].sort((a, b) => b - a));
     const dexIndex = visible.findIndex((r) => r.provider === 'mangadex');

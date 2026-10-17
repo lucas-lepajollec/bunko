@@ -1,3 +1,4 @@
+import { bookFormat } from './openlibrary';
 import { createHash } from 'node:crypto';
 import { setImmediate as yieldIO } from 'node:timers/promises';
 import { tenantSignal } from './tenant-lifecycle';
@@ -36,6 +37,7 @@ const seriesSchema = z.object({
   lastChapterAddedUtc: z.string().nullable().optional(),
   lastFolderScanned: z.string().nullable().optional(),
   updatedAt: z.string().nullable().optional(),
+  format: z.union([z.number(), z.string()]).optional(),
   pages: z.number().optional(),
   pagesRead: z.number().optional(),
   latestReadDate: z.string().nullable().optional(),
@@ -445,7 +447,21 @@ export async function syncKavitaIndex() {
                   : /^(x18\+?|x18plus|explicit)$/i.test(metadata.ageRating ?? ''),
               summary: metadata.summary ?? null,
               genres: metadata.genres?.map((g) => g.title) ?? [],
-              kind: guessLibraryKind(library.name, library.type),
+              kind: (() => {
+                let kind = guessLibraryKind(library.name, library.type);
+                // Kavita MangaFormat: EPUB=3, PDF=4. Book libraries are fiction by default.
+                if (
+                  kind === 'MANGA' &&
+                  (row.format === 3 || row.format === 4 || /epub|pdf/i.test(String(row.format)))
+                )
+                  kind = 'NOVEL';
+                if (
+                  kind === 'NOVEL' &&
+                  bookFormat(metadata.genres?.map((g) => g.title) ?? []) === 'BOOK'
+                )
+                  kind = 'BOOK';
+                return kind;
+              })(),
               completed: allKavitaRead(volumes),
             });
           });

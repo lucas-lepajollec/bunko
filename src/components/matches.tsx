@@ -242,6 +242,7 @@ export function MatchesDrawer({
                     window.location.assign(mediaHref(u.media.id));
                   })
                 }
+                onTitle={(displayTitle) => run(() => patch({ displayTitle }))}
               />
             ) : section === 'sources' ? (
               <SourcesTab
@@ -338,16 +339,71 @@ function CatalogTab({
   media,
   onPick,
   onDetach,
+  onTitle,
 }: {
   entry: TrackedMedia;
   media: MediaDetail;
   onPick: (m: Parameters<Parameters<typeof CatalogPicker>[0]['onPick']>[0]) => void;
   onDetach: () => void;
+  onTitle: (title: string | null) => Promise<void>;
 }) {
   const { t } = useI18n();
   const off = entry.identity === 'off-catalog';
+  const [custom, setCustom] = useState('');
+  const names = [...new Set([entry.title, ...(entry.titleOptions ?? [])])];
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <span className="text-muted text-xs tracking-[0.14em] uppercase">
+          {t('match.displayTitle')}
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {names.map((name) => (
+            <button
+              key={name}
+              type="button"
+              aria-pressed={entry.title === name}
+              onClick={() => onTitle(name)}
+              className={cx(
+                'max-w-full truncate rounded-full px-3 py-1.5 text-sm',
+                entry.title === name
+                  ? 'bg-fg text-bg font-semibold'
+                  : 'bg-white/[0.06] hover:bg-white/[0.1]',
+              )}
+            >
+              {name}
+            </button>
+          ))}
+          {entry.customTitle && (
+            <button
+              type="button"
+              onClick={() => onTitle(null)}
+              className="text-mid px-2 text-sm underline hover:text-white"
+            >
+              {t('match.titleAuto')}
+            </button>
+          )}
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (custom.trim()) void onTitle(custom.trim()).then(() => setCustom(''));
+          }}
+          className="flex gap-2"
+        >
+          <input
+            value={custom}
+            onChange={(e) => setCustom(e.target.value)}
+            placeholder={t('match.titleCustom')}
+            aria-label={t('match.titleCustom')}
+            maxLength={300}
+            className="border-line bg-raised h-10 min-w-0 flex-1 rounded-full border px-4 text-sm"
+          />
+          <button type="submit" disabled={!custom.trim()} className={smallButton}>
+            {t('common.save')}
+          </button>
+        </form>
+      </div>
       <Current
         cover={off ? null : (media.coverUrl ?? entry.coverUrl)}
         title={off ? undefined : media.title}

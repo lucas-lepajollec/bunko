@@ -1,0 +1,60 @@
+{
+  "provenance": "Representative Search API, Work JSON, Editions and Author response shapes documented at https://openlibrary.org/dev/docs/api/search and https://openlibrary.org/dev/docs/api/books. Synthetic subjects and identifiers isolate classification/content-filter cases; no live network in tests.",
+  "search": {
+    "numFound": 4,
+    "start": 0,
+    "docs": [
+      {
+        "key": "/works/OL27448W",
+        "title": "The Lord of the Rings",
+        "alternative_title": ["Le Seigneur des anneaux"],
+        "author_name": ["J. R. R. Tolkien"],
+        "first_publish_year": 1954,
+        "cover_i": 258027,
+        "edition_count": 120,
+        "subject": ["Fantasy fiction", "History, Fiction"],
+        "ratings_average": 4.5,
+        "readinglog_count": 200
+      },
+      {
+        "key": "OL1168083W",
+        "title": "A Brief History of Time",
+        "author_name": ["Stephen Hawking"],
+        "first_publish_year": 1988,
+        "cover_i": 12345,
+        "edition_count": 50,
+        "subject": ["Science", "Cosmology", "Nonfiction"]
+      },
+      {
+        "key": "/works/OL12345W",
+        "title": "Fixture filtered novel",
+        "first_publish_year": 2020,
+        "subject": ["Erotic fiction"]
+      },
+      {
+        "key": "/works/OL12346W",
+        "title": "Future fixture",
+        "first_publish_year": 2099,
+        "subject": ["Fiction"]
+      }
+    ]
+  },
+  "work": {
+    "key": "/works/OL27448W",
+    "title": "The Lord of the Rings",
+    "description": { "type": "/type/text", "value": "A fantasy story." },
+    "subjects": ["Fantasy fiction"],
+    "covers": [258027],
+    "authors": [
+      { "author": { "key": "/authors/OL26320A" }, "type": { "key": "/type/author_role" } }
+    ]
+  },
+  "editions": {
+    "size": 120,
+    "links": { "self": "/works/OL27448W/editions.json" },
+    "entries": [
+      { "key": "/books/OL10000M", "title": "The Fellowship of the Ring", "publish_date": "1954" }
+    ]
+  },
+  "author": { "key": "/authors/OL26320A", "name": "J. R. R. Tolkien" }
+}

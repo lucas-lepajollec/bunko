@@ -572,6 +572,30 @@ it('applies live role changes and password resets to only their account, without
   expect((await settings.GET(req('/api/settings', 'GET', undefined, member))).status).toBe(200);
   expect(inTenant(2, () => listTracked()[0].title)).toBe('Private tenant 2');
 });
+it('keeps display titles private when both tenants follow the same catalog work', async () => {
+  for (const [i, cookie] of cookies().entries()) {
+    const response = await tracked.POST(
+      req('/api/tracked', 'POST', { media: media(18888) }, cookie),
+    );
+    const t = await response.json();
+    expect(response.status).toBe(201);
+    const patched = await tracked.PATCH(
+      req('/api/tracked', 'PATCH', { id: t.id, displayTitle: `Instance title ${i}` }, cookie),
+    );
+    expect(await patched.json()).toMatchObject({
+      title: `Instance title ${i}`,
+      customTitle: true,
+      media: { title: `Instance title ${i}` },
+    });
+  }
+  for (const [i, cookie] of cookies().entries()) {
+    const entries = await (await tracked.GET(req('/api/tracked', 'GET', undefined, cookie))).json();
+    const own = entries.find((t: { anilistId: number }) => t.anilistId === 18888);
+    expect(own.title).toBe(`Instance title ${i}`);
+    expect(own.titleOptions).not.toContain(`Instance title ${1 - i}`);
+  }
+});
+
 it('requires deletion confirmation, preserves the last admin and revokes only the deleted tenant', async () => {
   expect((await users.DELETE(req('/api/users', 'DELETE', { id: 2 }))).status).toBe(400);
   expect(existsSync(tenantPath(2))).toBe(true);

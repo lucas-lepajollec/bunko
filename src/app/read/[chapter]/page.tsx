@@ -108,8 +108,9 @@ function Reader() {
   useEffect(() => {
     if (mode === 'vertical') return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') go(mode === 'rtl' ? -1 : 1);
-      else if (e.key === 'ArrowLeft') go(mode === 'rtl' ? 1 : -1);
+      // Keys always mean "next/previous page"; only tap zones follow the reading direction.
+      if (e.key === 'ArrowRight') go(1);
+      else if (e.key === 'ArrowLeft') go(-1);
       else if (e.key === ' ' || e.key === 'PageDown') go(1);
       else if (e.key === 'PageUp') go(-1);
       else return;

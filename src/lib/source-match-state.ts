@@ -3,7 +3,7 @@ import { statement } from './db';
 export const SOURCE_MATCH_RETRY_MS = 7 * 24 * 3600_000;
 export function sourceMatchQueue() {
   return statement(
-    `SELECT id,title FROM tracked_media
+    `SELECT id,COALESCE(display_title,title) AS title FROM tracked_media
     WHERE type='MANGA' AND json_array_length(sources_json)=0
     AND (source_match_at IS NULL OR source_match_at <= ?)
     ORDER BY COALESCE(source_match_at,''),id`,

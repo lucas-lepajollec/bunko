@@ -11,7 +11,11 @@ export type MediaFormat =
   | 'LIGHT_NOVEL'
   | 'WEB_NOVEL'
   /** Western comics / BD (sources and Kavita only; no public discovery catalog). */
-  | 'COMIC';
+  | 'COMIC'
+  /** Novel (fiction book: "roman"), distinct from LN/WN. */
+  | 'NOVEL'
+  /** Non-fiction book ("livre": essays, history, science, manuals…). */
+  | 'BOOK';
 export interface SourceMatch {
   sourceId: string;
   sourceName: string;
@@ -80,7 +84,17 @@ export interface MediaDetail extends UnifiedMedia {
   relations: RelatedMedia[];
   recommendations: UnifiedMedia[];
 }
-export type DiscoverKind = 'all' | 'manga' | 'manhwa' | 'manhua' | 'comic' | 'novel';
+/** `novel` = romans (fiction books), `book` = livres (non-fiction); LN and WN are separate. */
+export type DiscoverKind =
+  | 'all'
+  | 'manga'
+  | 'manhwa'
+  | 'manhua'
+  | 'comic'
+  | 'lightnovel'
+  | 'webnovel'
+  | 'novel'
+  | 'book';
 /** "new" = most recent publication start first, never future or undated titles. */
 export type DiscoverSort = 'trending' | 'popular' | 'score' | 'new';
 /** Quarter-based seasons, AniList convention: WINTER Jan–Mar, SPRING Apr–Jun, SUMMER Jul–Sep, FALL Oct–Dec. */
@@ -399,6 +413,10 @@ export interface TrackedMedia {
   lastReadAt: string | null;
   /** One entry per linked source, same order as `sources`, refreshed in the background. */
   sourceStatus: SourceLinkStatus[];
+  /** Names this work is known by (catalog title, alternative titles, Kavita series name), for picking `displayTitle`. */
+  titleOptions?: string[];
+  /** True when `title` comes from the user's choice. */
+  customTitle?: boolean;
   /** Last position in the built-in reader, for "Resume". */
   readerPosition?: { chapterId: number; number: number | null; page: number; updatedAt: string } | null;
   /** Where the displayed cover comes from; `auto` = best available (catalog, then sources, then Kavita). */
@@ -473,6 +491,8 @@ export interface TrackPatch {
   id: number;
   /** Replace a wrong catalog match; status, sources and history are kept. */
   media?: UnifiedMedia;
+  /** Title shown in Bunko for this work (any string; `null` = the catalog/Kavita title). */
+  displayTitle?: string | null;
   /** Show the catalog banner behind the title (`auto`) or hide it (`hidden`). */
   backdrop?: 'auto' | 'hidden';
   /** Detach from the catalog (wrong match, title not catalogued): identity becomes the Kavita series or the first source. */
@@ -613,7 +633,19 @@ export type DownloadControl =
 
 /* ---- Kavita libraries, targets and existing content ---- */
 /** Formats routed to a Kavita library. ONE_SHOT follows MANGA; both novel formats follow NOVEL. */
-export type LibraryKind = 'MANGA' | 'MANHWA' | 'MANHUA' | 'COMIC' | 'NOVEL';
+/**
+ * Formats a Kavita library can receive. `LIGHT_NOVEL`/`WEB_NOVEL`/`NOVEL`/`BOOK` replace the former
+ * single `NOVEL` target (migrated to all text kinds).
+ */
+export type LibraryKind =
+  | 'MANGA'
+  | 'MANHWA'
+  | 'MANHUA'
+  | 'COMIC'
+  | 'LIGHT_NOVEL'
+  | 'WEB_NOVEL'
+  | 'NOVEL'
+  | 'BOOK';
 export interface KavitaFolder {
   /** Folder path as Kavita sees it. */
   path: string;

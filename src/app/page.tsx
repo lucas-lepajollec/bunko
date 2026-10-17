@@ -21,7 +21,8 @@ import {
   useMediaMeta,
 } from '@/components/ui';
 
-const KINDS = ['manga', 'manhwa', 'manhua', 'novel'] as const;
+// Formats with chapter releases (romans and livres have none).
+const KINDS = ['manga', 'manhwa', 'manhua', 'comic', 'lightnovel', 'webnovel'] as const;
 
 export default function HomePage() {
   const { t } = useI18n();
@@ -192,24 +193,31 @@ function Hero({
         </div>
       </div>
       {items.length > 1 && (
-        <div className="absolute right-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))] bottom-[140px] hidden gap-3 md:flex">
-          {items.map((item, i) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-label={`${item.media.title} · ${label(item)}`}
-              aria-current={i === index % items.length}
-              onClick={() => setIndex(i)}
-              className={cx(
-                'w-[56px] overflow-hidden rounded outline-offset-[3px] transition-opacity',
-                i === index % items.length
-                  ? 'opacity-100 outline-2 outline-white'
-                  : 'opacity-50 hover:opacity-80',
-              )}
-            >
-              <Cover src={item.media.coverUrl} />
-            </button>
-          ))}
+        <div className="absolute right-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))] bottom-[140px] hidden items-center gap-3 md:flex">
+          {items.map((item, i) => {
+            // The selected cover is the largest; neighbours shrink and fade with distance.
+            const current = index % items.length;
+            const distance = Math.abs(i - current);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                aria-label={`${item.media.title} · ${label(item)}`}
+                aria-current={i === current}
+                onClick={() => setIndex(i)}
+                style={{
+                  width: Math.max(40, 84 - distance * 12),
+                  opacity: i === current ? 1 : Math.max(0.35, 0.8 - distance * 0.15),
+                }}
+                className={cx(
+                  'overflow-hidden rounded outline-offset-[3px] transition-[width,opacity] duration-300 hover:opacity-100',
+                  i === current && 'outline-2 outline-white',
+                )}
+              >
+                <Cover src={item.media.coverUrl} />
+              </button>
+            );
+          })}
         </div>
       )}
     </section>

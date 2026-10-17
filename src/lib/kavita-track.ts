@@ -1,3 +1,4 @@
+import { isTextKind } from './library-kinds';
 import { indexedSeries, indexedSeriesById, matchKavita, type IndexedSeries } from './kavita-index';
 import { search, deduplicate } from './search-engine';
 import { titleScore } from './matching';
@@ -13,14 +14,18 @@ export function kavitaMedia(seriesId: number): UnifiedMedia {
   if (!series) throw new AppError('NOT_FOUND', 'Kavita series is not indexed', 404);
   const kind = series.kind ?? 'MANGA';
   return {
-    ...emptyMedia(`kavita:${seriesId}`, series.name, kind === 'NOVEL' ? 'NOVEL' : 'MANGA'),
+    ...emptyMedia(
+      `kavita:${seriesId}`,
+      series.name,
+      isTextKind({ format: kind, type: 'MANGA' }) ? 'NOVEL' : 'MANGA',
+    ),
     adult: Boolean(series.adult),
     altTitles: series.names.filter((n) => n !== series.name),
     providers: ['kavita'],
     synopsis: series.summary ?? null,
     genres: series.genres ?? [],
     coverUrl: `/api/kavita/image?seriesId=${seriesId}`,
-    format: kind === 'NOVEL' ? 'LIGHT_NOVEL' : kind,
+    format: kind,
     kavitaSeriesId: seriesId,
   };
 }
@@ -29,10 +34,16 @@ async function catalogMatch(series: IndexedSeries, signal?: AbortSignal) {
   const results: UnifiedMedia[] = [];
   for (const name of series.names.slice(0, 4))
     results.push(
-      ...(await search(name, series.kind === 'NOVEL' ? 'NOVEL' : 'MANGA', signal)).results,
+      ...(
+        await search(
+          name,
+          isTextKind({ format: series.kind ?? null, type: 'MANGA' }) ? 'NOVEL' : 'MANGA',
+          signal,
+        )
+      ).results,
     );
   const candidates = deduplicate(results)
-    .filter((m) => m.providers.some((p) => ['anilist', 'mangadex', 'mangaupdates'].includes(p)))
+    .filter((m) => /^(anilist|mangadex|mangaupdates|openlibrary):/.test(m.id))
     .map((media) => ({
       media,
       score: Math.max(...[media.title, ...media.altTitles].map((n) => titleScore(n, series.names))),
