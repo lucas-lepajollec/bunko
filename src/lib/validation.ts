@@ -52,6 +52,7 @@ export const selection = z.object({
 });
 export const media = z.object({
   adult: z.boolean().optional(),
+  adultOverride: z.boolean().nullable().optional(),
   id: z.string().min(1).max(300),
   type: mediaType,
   title: z.string().min(1).max(500),
@@ -120,6 +121,22 @@ export const mediaId = z
     /^(?:anilist|mangadex|mangaupdates|suwayomi|kavita):[0-9a-zA-Z-]+$/,
     'Unknown media identifier',
   );
+export const adultOverrideBody = z.object({
+  id: z
+    .string()
+    .max(80)
+    .refine((value) => {
+      const [provider, key, extra] = value.split(':');
+      if (!key || extra !== undefined) return false;
+      if (provider === 'mangadex') return z.uuid().safeParse(key).success;
+      if (provider === 'mangaupdates') return /^[1-9]\d{0,19}$/.test(key);
+      if (['anilist', 'suwayomi', 'kavita'].includes(provider))
+        return /^[1-9]\d{0,9}$/.test(key) && Number(key) <= 2_147_483_647;
+      return false;
+    }, 'Unknown media identifier')
+    .transform((value) => (value.startsWith('mangadex:') ? value.toLowerCase() : value)),
+  adult: z.boolean().nullable(),
+});
 export const discoverQuery = z
   .object({
     kind: z.enum(['all', 'manga', 'manhwa', 'manhua', 'novel']).optional(),

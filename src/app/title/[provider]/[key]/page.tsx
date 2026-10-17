@@ -3,7 +3,7 @@ import { Select } from '@/components/select';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import type {
   ChapterSelection,
   ChaptersResponse,
@@ -20,6 +20,7 @@ import { Backdrop } from '@/components/backdrop';
 import { ChapterTable, isMissing, preferredVariant } from '@/components/chapters';
 import { PosterCard } from '@/components/media';
 import { InfoBubble, Notice, toast } from '@/components/notify';
+import { clearPersistentCache } from '@/lib/client/cache';
 import { MatchesDrawer, MatchesSummary, type Lane, type Section } from '@/components/matches';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import {
@@ -326,6 +327,7 @@ function Title({ media }: { media: MediaDetail }) {
           <Automation entry={entry} disabled={!sources.length} onAuto={setAuto} />
         </div>
       )}
+      <AdultMark media={media} />
     </>
   );
 
@@ -720,5 +722,68 @@ function LinkIcon() {
         strokeLinecap="round"
       />
     </svg>
+  );
+}
+
+/** Lets the reader mark a work 18+ (or unmark a false positive); hidden with 18+ content off. */
+function AdultMark({ media }: { media: MediaDetail }) {
+  const { t } = useI18n();
+  const { mutate } = useSWRConfig();
+  const [busy, setBusy] = useState(false);
+  const adult = Boolean(media.adult);
+  async function set(value: boolean | null) {
+    setBusy(true);
+    try {
+      await send('/api/media/adult', 'PATCH', { id: media.id, adult: value });
+      clearPersistentCache();
+      await mutate((key) => typeof key === 'string' && key !== '/api/settings', undefined, {
+        revalidate: true,
+      });
+      toast({
+        tone: 'ok',
+        text: value === null ? t('adult.reset') : value ? t('adult.marked') : t('adult.unmarked'),
+      });
+    } catch (e) {
+      toast({ tone: 'bad', text: errorText(t, e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="border-line flex flex-wrap items-center gap-3 border-t pt-5 text-sm">
+      <span className="text-muted">{t('adult.label')}</span>
+      <InfoBubble label={t('adult.label')}>{t('adult.info')}</InfoBubble>
+      <span className="ml-auto flex items-center gap-2">
+        {media.adultOverride != null && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => set(null)}
+            className="text-mid text-xs underline hover:text-white"
+          >
+            {t('adult.automatic')}
+          </button>
+        )}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={adult}
+          aria-label={t('adult.label')}
+          disabled={busy}
+          onClick={() => set(!adult)}
+          className={cx(
+            'relative h-6 w-11 rounded-full transition-colors disabled:opacity-50',
+            adult ? 'bg-fg' : 'bg-white/15',
+          )}
+        >
+          <span
+            className={cx(
+              'absolute top-1 size-4 rounded-full transition-[left]',
+              adult ? 'bg-bg left-6' : 'bg-fg left-1',
+            )}
+          />
+        </button>
+      </span>
+    </div>
   );
 }

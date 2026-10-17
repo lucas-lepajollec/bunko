@@ -1,5 +1,5 @@
 import { sourceUploadDate, type SourceChapter } from './source-chapters';
-import { adultClassifier } from './adult';
+import { adultResolver, automaticMedia } from './adult';
 import { storedCover, deleteStoredCoverFile } from './stored-covers';
 import { wakeWorker } from './worker-events';
 import Database from 'better-sqlite3';
@@ -93,6 +93,10 @@ export function db(): Database.Database {
     tracked_id INTEGER PRIMARY KEY REFERENCES tracked_media(id) ON DELETE CASCADE,
     context TEXT NOT NULL, hash TEXT NOT NULL, mime TEXT NOT NULL, filename TEXT NOT NULL,
     origin_url TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS adult_identity_edges (
+      identity TEXT NOT NULL, alias TEXT NOT NULL, PRIMARY KEY(identity,alias));
+    CREATE TABLE IF NOT EXISTS adult_overrides (
+      identity TEXT PRIMARY KEY, adult INTEGER NOT NULL CHECK(adult IN (0,1)), revision INTEGER NOT NULL, automatic INTEGER NOT NULL CHECK(automatic IN (0,1)));
     CREATE TABLE IF NOT EXISTS write_versions (domain TEXT PRIMARY KEY, version INTEGER NOT NULL);
     INSERT OR IGNORE INTO write_versions VALUES('library',0),('series',0),('settings',0),('linkage',0),('batches',0),('releases',0);`);
   migrateV8(connection);
@@ -102,6 +106,8 @@ export function db(): Database.Database {
     for (const table of [
       'tracked_media',
       'source_flags',
+      'adult_identity_edges',
+      'adult_overrides',
       'chapter_releases',
       'source_links',
       'imported_chapters',
@@ -495,6 +501,7 @@ function snapshotTracked(id?: number) {
   const version = writeVersion();
   if (trackedSnapshot?.version === version) return trackedSnapshot;
   const outerTransaction = db().inTransaction;
+  const resolveAdult = adultResolver();
   // A read transaction gives one consistent snapshot when another process commits concurrently.
   const result = db().transaction(() => {
     const select = (sql: string, column: string, suffix = '') =>
@@ -558,7 +565,6 @@ function snapshotTracked(id?: number) {
     const retry = new Map<number, number>();
     const match = kavitaMatcher();
     const kavitaUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
-    const mediaAdult = adultClassifier();
     const entries = rows.map((r): TrackedMedia => {
       const id = Number(r.id);
       const rawMedia = JSON.parse(String(r.media_json)) as UnifiedMedia;
@@ -598,7 +604,12 @@ function snapshotTracked(id?: number) {
             : (r.cover_url as string | null);
       const media = {
         ...rawMedia,
-        adult: mediaAdult(rawMedia) || Boolean(kavita?.adult),
+        ...resolveAdult({
+          ...rawMedia,
+          trackedId: id,
+          kavitaSeriesId: kavita?.seriesId ?? (r.kavita_series_id as number | null),
+          adult: Boolean(rawMedia.adult || kavita?.adult),
+        }),
         kavita: kavitaPresence(kavita, kavitaUrl),
         kavitaSeriesId: kavita?.seriesId ?? (r.kavita_series_id as number | null),
         coverUrl,
@@ -699,11 +710,21 @@ export function getTracked(id: number): TrackedMedia | undefined {
 }
 /** Client artwork cannot replace the authoritative artwork of an already followed work. */
 export function authoritativeMedia(media: UnifiedMedia): UnifiedMedia {
+  media = automaticMedia(media);
   const tracked = trackedForMedia(media, listTracked());
   return tracked
     ? {
         ...media,
-        adult: Boolean(media.adult || tracked.media.adult),
+        adult: Boolean(
+          media.adult ||
+          JSON.parse(
+            (
+              statement('SELECT media_json FROM tracked_media WHERE id=?').get(tracked.id) as {
+                media_json: string;
+              }
+            ).media_json,
+          ).adult,
+        ),
         coverUrl: tracked.media.coverUrl,
         bannerUrl: tracked.media.bannerUrl,
       }
@@ -723,7 +744,7 @@ function insertTracked(input: TrackRequest): TrackedMedia {
       t.media.id === input.media.id,
   );
   if (existing) return existing;
-  const m = input.media;
+  const m = automaticMedia(input.media);
   const id = Number(
     statement(
       'INSERT INTO tracked_media(anilist_id,mangadex_id,title,type,cover_url,kavita_series_id,auto_download,created_at,media_json,sources_json,status) VALUES(?,?,?,?,?,?,?,?,?,?,?)',

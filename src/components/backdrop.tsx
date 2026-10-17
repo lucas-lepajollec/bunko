@@ -13,8 +13,14 @@ export function Backdrop({
   fallback,
   color,
   className,
+  mobileImage,
 }: {
   image: string | null;
+  /**
+   * Portrait artwork for phones: a wide banner cropped into a tall screen shows only a sliver, so
+   * the cover is used there instead (sharp, behind the same shades).
+   */
+  mobileImage?: string | null;
   /** Cover art used blurred when there is no banner: one URL or candidates in order. */
   fallback?: string | null | (string | null | undefined)[];
   color?: string | null;
@@ -53,7 +59,18 @@ export function Backdrop({
             className={cx(
               'absolute inset-0 size-full object-cover object-[70%_center] md:object-[center_25%]',
               !sharp && 'scale-125 opacity-40 blur-2xl',
+              mobileImage && 'hidden md:block',
             )}
+          />
+        )}
+        {mobileImage && (
+          // eslint-disable-next-line @next/next/no-img-element -- remote artwork
+          <img
+            key={`m:${mobileImage}`}
+            src={mobileImage}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="absolute inset-0 size-full object-cover object-top opacity-70 md:hidden"
           />
         )}
         <div className="absolute inset-0 hidden bg-[linear-gradient(90deg,#0b0a09_0%,rgba(11,10,9,0.75)_34%,rgba(11,10,9,0)_70%)] md:block" />

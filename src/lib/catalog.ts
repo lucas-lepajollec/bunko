@@ -1,4 +1,10 @@
-import { adultClassifier, visibleMedia, recordSourceFlags } from './adult';
+import {
+  adultResolver,
+  rememberAdultIdentities,
+  includeProviderAdults,
+  visibleMedia,
+  recordSourceFlags,
+} from './adult';
 import { mangaUpdates } from './mangaupdates';
 import type { DiscoverPage, DiscoverQuery, MediaDetail, UnifiedMedia } from '@/types/shared';
 import { requestJson } from './http';
@@ -44,13 +50,13 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
   const tracked = listTracked();
   const resolve = kavitaMatcher();
   const baseUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
-  const mediaAdult = adultClassifier();
+  const resolveAdult = adultResolver();
   return items.map((m) => {
     const t = trackedForMedia(m, tracked);
-    return withKavita(
+    const enriched = withKavita(
       {
         ...m,
-        adult: mediaAdult(m) || Boolean(t?.media.adult),
+        adult: Boolean(m.adult || t?.media.adult),
         coverUrl: t ? t.coverUrl : m.coverUrl,
         trackedId: t?.id ?? null,
         kavitaSeriesId: t?.kavitaSeriesId ?? null,
@@ -59,6 +65,7 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
       resolve,
       baseUrl,
     );
+    return { ...enriched, ...resolveAdult(enriched) };
   });
 }
 const sorts = {
@@ -67,7 +74,11 @@ const sorts = {
   score: ['SCORE_DESC'],
   new: ['START_DATE_DESC', 'POPULARITY_DESC'],
 } as const;
-export async function discover(q: DiscoverQuery, signal?: AbortSignal): Promise<DiscoverPage> {
+export async function discover(
+  q: DiscoverQuery,
+  signal?: AbortSignal,
+  raw = false,
+): Promise<DiscoverPage> {
   signal?.throwIfAborted();
   const kind = q.kind ?? 'all';
   const sort = q.sort ?? 'trending';
@@ -77,7 +88,7 @@ export async function discover(q: DiscoverQuery, signal?: AbortSignal): Promise<
     page,
     perPage,
     sort: sorts[sort],
-    adult: getSettings().adultContent ? undefined : false,
+    adult: includeProviderAdults() ? undefined : false,
   };
   if (kind === 'novel') variables.format = 'NOVEL';
   else if (kind !== 'all') variables.formatNot = 'NOVEL';
@@ -128,7 +139,9 @@ export async function discover(q: DiscoverQuery, signal?: AbortSignal): Promise<
     { accept: (value) => value.Page.media.length > 0 },
   );
   return {
-    items: withTracking(data.Page.media.map(fromAniList)).filter(visibleMedia),
+    items: raw
+      ? data.Page.media.map(fromAniList)
+      : withTracking(data.Page.media.map(fromAniList)).filter(visibleMedia),
     page,
     hasNextPage: data.Page.pageInfo.hasNextPage,
   };
@@ -264,13 +277,13 @@ async function loadDetail(id: string, signal?: AbortSignal): Promise<MediaDetail
   let detail: MediaDetail;
   if (provider === 'kavita' && /^[1-9]\d{0,9}$/.test(key))
     detail = { ...kavitaMedia(Number(key)), tags: [], relations: [], recommendations: [] };
-  else if (provider === 'anilist' && /^\d{1,9}$/.test(key))
+  else if (provider === 'anilist' && /^[1-9]\d{0,9}$/.test(key))
     detail = await anilistDetail(Number(key), signal);
   else if (provider === 'mangadex' && /^[0-9a-f-]{36}$/i.test(key))
     detail = await mangadexDetail(key, signal);
   else if (provider === 'mangaupdates' && /^\d{1,20}$/.test(key))
     detail = await mangaupdatesDetail(key, signal);
-  else if (provider === 'suwayomi' && /^\d{1,9}$/.test(key))
+  else if (provider === 'suwayomi' && /^[1-9]\d{0,9}$/.test(key))
     detail = await loadSuwayomiDetail(Number(key), signal);
   else throw new AppError('VALIDATION_ERROR', 'Unknown media identifier');
   return detail;
@@ -278,10 +291,10 @@ async function loadDetail(id: string, signal?: AbortSignal): Promise<MediaDetail
 function enrichDetail(detail: MediaDetail): MediaDetail {
   const [tracked] = withTracking([detail]);
   const relations = withTracking(detail.relations.map((r) => r.media));
-  if (!visibleMedia(tracked)) throw new AppError('NOT_FOUND', 'Title not found', 404);
   return {
     ...detail,
     adult: tracked.adult,
+    adultOverride: tracked.adultOverride,
     coverUrl: tracked.coverUrl,
     trackedId: tracked.trackedId,
     kavitaSeriesId: tracked.kavitaSeriesId,
@@ -307,6 +320,8 @@ export async function mediaDetail(id: string, signal?: AbortSignal): Promise<Med
       t.media.id === id ||
       (id.startsWith('anilist:') && t.anilistId === Number(id.slice(8))) ||
       (id.startsWith('mangadex:') && t.mangadexId === id.slice(9)) ||
+      (id.startsWith('mangaupdates:') &&
+        t.media.mangaUpdatesId === id.slice('mangaupdates:'.length)) ||
       (id.startsWith('kavita:') && t.kavitaSeriesId === Number(id.slice(7))) ||
       (id.startsWith('suwayomi:') &&
         t.sources.some((s) => s.suwayomiMangaId === Number(id.slice(9)))),
@@ -318,6 +333,7 @@ export async function mediaDetail(id: string, signal?: AbortSignal): Promise<Med
           { media_json: string } | undefined)
       : undefined;
     const detail = await loadDetail(id);
+    rememberAdultIdentities(detail, [id]);
     if (followed && followed.media.id === id) {
       const row = snapshot;
       if (row && (JSON.parse(row.media_json) as UnifiedMedia).id === id) {
@@ -333,7 +349,22 @@ export async function mediaDetail(id: string, signal?: AbortSignal): Promise<Med
   if (followed) {
     const detail = storedMetadata<MediaDetail>(key)?.value;
     if (!detail)
-      saveMetadata(key, { ...followed.media, tags: [], relations: [], recommendations: [] }, 0);
+      saveMetadata(
+        key,
+        {
+          ...JSON.parse(
+            (
+              db().prepare('SELECT media_json FROM tracked_media WHERE id=?').get(followed.id) as {
+                media_json: string;
+              }
+            ).media_json,
+          ),
+          tags: [],
+          relations: [],
+          recommendations: [],
+        },
+        0,
+      );
     void cached(key, 30 * 60_000, load).catch(() => {
       /* Stored followed metadata remains authoritative offline. */
     });

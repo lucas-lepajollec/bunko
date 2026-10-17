@@ -1,8 +1,9 @@
+import { mediaVisibility } from './adult';
 import { wakeWorker } from './worker-events';
 import { z } from 'zod';
 import { db, statement, writeVersion } from './db';
 import { getSettings } from './settings';
-import { normalizeTitle } from './media';
+import { emptyMedia, normalizeTitle } from './media';
 import { kavitaJson } from './kavita-client';
 import { resolveLibraryFolder, writableFolder } from './library-paths';
 import { eachConcurrent } from './concurrency';
@@ -173,10 +174,15 @@ export function kavitaSummaries(unmatched = false, query = ''): KavitaSeriesSumm
     const match = matchKavita(JSON.parse(t.media_json), t.kavita_series_id);
     if (match) links.set(match.seriesId, t.id);
   }
+  const visible = mediaVisibility();
   return indexedSeries()
     .filter(
       (s) =>
-        (getSettings().adultContent || !s.adult) &&
+        visible({
+          ...emptyMedia(`kavita:${s.seriesId}`, s.name, 'MANGA'),
+          adult: s.adult,
+          trackedId: links.get(s.seriesId) ?? null,
+        }) &&
         (!unmatched || !links.has(s.seriesId)) &&
         (!query || s.names.some((n) => normalizeTitle(n).includes(normalizeTitle(query)))),
     )

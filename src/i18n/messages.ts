@@ -700,6 +700,15 @@ const en: Dictionary = {
     'Automatic download is on for {auto} of {total} followed series; sources are checked every {n} min.',
   'library.hiddenAdult': '{count} series hidden by the 18+ setting.',
   'library.hiddenAdultShow': 'Change',
+  'library.all': 'All',
+  'library.allStatuses': 'All statuses',
+  'adult.label': '18+ content',
+  'adult.info':
+    'Mark this work as 18+ if it is explicit; it is then hidden everywhere while 18+ content is off. Use it the other way to unmark a false positive.',
+  'adult.automatic': 'Automatic',
+  'adult.marked': 'Marked 18+',
+  'adult.unmarked': 'No longer 18+',
+  'adult.reset': 'Back to automatic classification',
 };
 
 const fr: Dictionary = {
@@ -1377,6 +1386,15 @@ const fr: Dictionary = {
     'Téléchargement automatique activé pour {auto} séries sur {total} ; les sources sont vérifiées toutes les {n} min.',
   'library.hiddenAdult': '{count} série(s) masquée(s) par le réglage 18+.',
   'library.hiddenAdultShow': 'Modifier',
+  'library.all': 'Tout',
+  'library.allStatuses': 'Tous les statuts',
+  'adult.label': 'Contenu 18+',
+  'adult.info':
+    'Marque cette œuvre 18+ si elle est explicite : elle sera masquée partout tant que le contenu 18+ est désactivé. Dans l’autre sens, ça retire un faux positif.',
+  'adult.automatic': 'Automatique',
+  'adult.marked': 'Marquée 18+',
+  'adult.unmarked': 'N’est plus 18+',
+  'adult.reset': 'Retour à la classification automatique',
 };
 
 const es: Dictionary = {
@@ -2049,6 +2067,15 @@ const es: Dictionary = {
     'Descarga automática activa en {auto} de {total} series; las fuentes se revisan cada {n} min.',
   'library.hiddenAdult': '{count} serie(s) ocultas por el ajuste +18.',
   'library.hiddenAdultShow': 'Cambiar',
+  'library.all': 'Todo',
+  'library.allStatuses': 'Todos los estados',
+  'adult.label': 'Contenido +18',
+  'adult.info':
+    'Marca esta obra como +18 si es explícita; se ocultará en todas partes mientras el contenido +18 esté desactivado. Al revés, quita un falso positivo.',
+  'adult.automatic': 'Automático',
+  'adult.marked': 'Marcada +18',
+  'adult.unmarked': 'Ya no es +18',
+  'adult.reset': 'Vuelta a la clasificación automática',
 };
 
 const de: Dictionary = {
@@ -2725,6 +2752,15 @@ const de: Dictionary = {
     'Automatischer Download für {auto} von {total} Serien aktiv; Quellen werden alle {n} Min. geprüft.',
   'library.hiddenAdult': '{count} Serie(n) durch die 18+-Einstellung ausgeblendet.',
   'library.hiddenAdultShow': 'Ändern',
+  'library.all': 'Alle',
+  'library.allStatuses': 'Alle Status',
+  'adult.label': '18+-Inhalt',
+  'adult.info':
+    'Markiere dieses Werk als 18+, wenn es explizit ist; es wird dann überall ausgeblendet, solange 18+-Inhalte aus sind. Umgekehrt entfernt es einen Fehlalarm.',
+  'adult.automatic': 'Automatisch',
+  'adult.marked': 'Als 18+ markiert',
+  'adult.unmarked': 'Nicht mehr 18+',
+  'adult.reset': 'Zurück zur automatischen Einstufung',
 };
 
 const it: Dictionary = {
@@ -3397,6 +3433,15 @@ const it: Dictionary = {
     'Download automatico attivo per {auto} serie su {total}; le fonti sono controllate ogni {n} min.',
   'library.hiddenAdult': '{count} serie nascoste dall’impostazione 18+.',
   'library.hiddenAdultShow': 'Modifica',
+  'library.all': 'Tutto',
+  'library.allStatuses': 'Tutti gli stati',
+  'adult.label': 'Contenuto 18+',
+  'adult.info':
+    'Segna quest’opera come 18+ se è esplicita: sarà nascosta ovunque finché i contenuti 18+ sono disattivati. Al contrario, rimuove un falso positivo.',
+  'adult.automatic': 'Automatico',
+  'adult.marked': 'Segnata 18+',
+  'adult.unmarked': 'Non più 18+',
+  'adult.reset': 'Ritorno alla classificazione automatica',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

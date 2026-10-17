@@ -3,8 +3,7 @@ import type { ChapterRelease, HomeFeed } from '@/types/shared';
 import { releaseStore, refreshReleases, mediaKind } from './releases';
 import { discover, withTracking } from './catalog';
 import { cached, storedMetadata } from './metadata-cache';
-import { getSettings } from './settings';
-import { mediaVisibility } from './adult';
+import { mediaVisibility, includeProviderAdults } from './adult';
 
 export function composeHome(releases: ChapterRelease[], top: HomeFeed['top']): HomeFeed {
   const visibleMedia = mediaVisibility();
@@ -31,13 +30,14 @@ export function composeHome(releases: ChapterRelease[], top: HomeFeed['top']): H
 }
 export async function homeFeed(): Promise<HomeFeed> {
   void refreshReleases().catch(() => {});
-  const key = `home:top:${getSettings().adultContent}`;
+  const key = `home:top:${includeProviderAdults()}`;
   const stored = storedMetadata<HomeFeed['top']>(key)?.value;
   const top = stored?.length ? stored : [];
   void cached<HomeFeed['top']>(
     key,
     5 * 60_000,
-    async () => (await discover({ sort: 'trending', kind: 'all', perPage: 20 })).items,
+    async () =>
+      (await discover({ sort: 'trending', kind: 'all', perPage: 20 }, undefined, true)).items,
     { accept: (items) => items.length > 0 },
   ).catch(() => {});
   return composeHome(heroArtwork(releaseStore()), top);

@@ -83,13 +83,18 @@ export default function SettingsPage() {
             <a
               key={s}
               href={`#${s}`}
+              aria-current={(open ?? SECTIONS[0]) === s ? 'page' : undefined}
               onClick={(e) => {
-                if (window.matchMedia('(min-width: 768px)').matches) return;
+                // One section at a time on every screen; the hash keeps it linkable.
                 e.preventDefault();
                 setPicked(s);
+                history.replaceState(null, '', `#${s}`);
                 window.scrollTo(0, 0);
               }}
-              className="border-line text-mid flex min-h-14 items-center gap-3.5 border-b hover:text-white md:min-h-0 md:items-baseline md:py-2.5"
+              className={cx(
+                'border-line flex min-h-14 items-center gap-3.5 border-b hover:text-white md:min-h-0 md:items-baseline md:py-2.5',
+                (open ?? SECTIONS[0]) === s ? 'md:font-semibold md:text-white' : 'text-mid',
+              )}
             >
               <span className="text-muted w-[30px] font-serif text-lg">{roman(i + 1)}</span>
               <span className="flex-1 text-[17px] md:text-[15px]">
@@ -187,7 +192,11 @@ function Section({
     <section
       id={id}
       aria-labelledby={`${id}-title`}
-      className={cx('scroll-mt-28 flex-col gap-[18px] md:flex', open === id ? 'flex' : 'hidden')}
+      className={cx(
+        'scroll-mt-28 flex-col gap-[18px]',
+        open === id ? 'flex' : 'hidden',
+        (open ?? SECTIONS[0]) === id ? 'md:flex' : 'md:hidden',
+      )}
     >
       <div className="flex items-baseline gap-4">
         <span className="text-muted font-serif text-xl">{roman(index)}</span>

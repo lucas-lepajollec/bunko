@@ -3,7 +3,7 @@ import { cached, storedMetadata } from './metadata-cache';
 import { dataDir } from './db';
 import { requestJson } from './http';
 import { aniFields, fromAniList, normalizeTitle, type AniMedia } from './media';
-import { mediaVisibility } from './adult';
+import { mediaVisibility, adultResolver } from './adult';
 const scope = globalThis as typeof globalThis & { __bunkoHeroLoads?: Set<string> };
 const active = (scope.__bunkoHeroLoads ??= new Set());
 const key = (m: UnifiedMedia) => `hero:artwork:v1:${m.id}`;
@@ -38,6 +38,7 @@ async function resolveBanner(m: UnifiedMedia): Promise<UnifiedMedia | null> {
 /** Warm reads never wait for network; bounded background resolution persists across restarts. */
 export function heroArtwork(items: ChapterRelease[]): ChapterRelease[] {
   const visible = mediaVisibility();
+  const resolveAdult = adultResolver();
   const candidates = [
     ...new Map(
       items
@@ -72,7 +73,7 @@ export function heroArtwork(items: ChapterRelease[]): ChapterRelease[] {
           media: {
             ...r.media,
             bannerUrl: rich.bannerUrl,
-            adult: Boolean(r.media.adult || rich.adult),
+            ...resolveAdult({ ...r.media, adult: Boolean(r.media.adult || rich.adult) }),
           },
         }
       : r;

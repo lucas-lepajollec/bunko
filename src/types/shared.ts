@@ -51,6 +51,8 @@ export interface UnifiedMedia {
    * Adult/Hentai/Smut genres, or only found on NSFW sources. Hidden everywhere unless enabled.
    */
   adult?: boolean;
+  /** The user's own 18+ decision for this work (`null` = follow the automatic classification). */
+  adultOverride?: boolean | null;
 }
 export interface KavitaPresence {
   seriesId: number;

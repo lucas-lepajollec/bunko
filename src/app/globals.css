@@ -76,6 +76,16 @@ body {
   }
 }
 
+/*
+ * Menus and drawers lock page scrolling (react-remove-scroll) by hiding the body's scrollbar and
+ * padding it; keep the scrollbar visible and the layout still while they are open.
+ */
+html body[data-scroll-locked] {
+  overflow: visible !important;
+  margin-right: 0 !important;
+  padding-right: 0 !important;
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;

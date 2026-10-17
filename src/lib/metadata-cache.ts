@@ -1,3 +1,4 @@
+import { rememberAdultIdentities } from './adult';
 import { statement, dataDir, db } from './db';
 
 const MAX_ENTRIES = 1000;
@@ -33,11 +34,24 @@ export function storedMetadata<T>(key: string): { value: T; at: number; attempte
     attempted: row.attempted_at,
   };
 }
+export function rememberIdentities(value: unknown) {
+  if (!value || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    value.forEach(rememberIdentities);
+    return;
+  }
+  const item = value as Record<string, unknown>;
+  if (typeof item.id === 'string' && Array.isArray(item.providers))
+    rememberAdultIdentities(item as unknown as import('@/types/shared').UnifiedMedia);
+  for (const child of Object.values(item))
+    if (child && typeof child === 'object') rememberIdentities(child);
+}
 export function saveMetadata(key: string, value: unknown, updatedAt = Date.now()) {
   const payload = JSON.stringify(value);
   const size = Buffer.byteLength(payload);
   if (size > 8 * 1024 * 1024) return;
   db().transaction(() => {
+    rememberIdentities(value);
     statement(
       `INSERT INTO metadata_cache(key,payload,bytes,updated_at,attempted_at) VALUES(?,?,?,?,?)
       ON CONFLICT(key) DO UPDATE SET payload=excluded.payload,bytes=excluded.bytes,

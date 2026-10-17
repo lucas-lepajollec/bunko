@@ -1,4 +1,4 @@
-import { mediaVisibility } from './adult';
+import { mediaVisibility, rememberAdultIdentities, automaticMedia, adultResolver } from './adult';
 import { z } from 'zod';
 import type { ChapterRelease, DiscoverKind, UnifiedMedia, ReleasesPage } from '@/types/shared';
 import { db, statement, listTracked, trackedForMedia, writeVersion, dataDir } from './db';
@@ -68,7 +68,9 @@ export function mediaResolver(catalog: UnifiedMedia[]) {
   };
 }
 function cachedCatalog(): UnifiedMedia[] {
-  const result = listTracked().map((t) => t.media);
+  const result = (
+    statement('SELECT media_json FROM tracked_media').all() as { media_json: string }[]
+  ).map((r) => JSON.parse(r.media_json) as UnifiedMedia);
   for (const row of statement(
     "SELECT payload FROM metadata_cache WHERE key LIKE 'discover:%' OR key LIKE 'detail:%' OR key LIKE 'search:%'",
   ).all() as { payload: string }[]) {
@@ -159,13 +161,16 @@ export function saveReleases(input: ChapterRelease[], now = Date.now()) {
       'INSERT INTO chapter_releases(id,released_at,payload) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET released_at=excluded.released_at,payload=excluded.payload WHERE payload<>excluded.payload',
     );
     for (const r of input) {
+      const originalMedia = automaticMedia(r.media);
+      rememberAdultIdentities(originalMedia);
       if (
         !Number.isFinite(Date.parse(r.releasedAt)) ||
         Date.parse(r.releasedAt) < now - 42 * DAY ||
         Date.parse(r.releasedAt) > now + DAY
       )
         continue;
-      const media = resolved.get(r.media.id) ?? resolve(r.media);
+      const media = resolved.get(r.media.id) ?? resolve(originalMedia);
+      rememberAdultIdentities(media, [r.media.id]);
       resolved.set(r.media.id, media);
       const value = { ...r, media };
       insert.run(r.id, r.releasedAt, JSON.stringify(value));
@@ -314,6 +319,7 @@ export function releaseStore(now = new Date()): ChapterRelease[] {
   const unique = distinctMedia(mapped.map((r) => r.media));
   const enriched = new Map(withTracking([...unique.values()]).map((m) => [m.id, m]));
   const visible = mediaVisibility();
+  const resolveAdult = adultResolver();
   const trackedIds = new Map(
     [...enriched].map(([id, m]) => [id, trackedForMedia(m, tracked)?.id ?? null]),
   );
@@ -323,7 +329,9 @@ export function releaseStore(now = new Date()): ChapterRelease[] {
       media: enriched.get(r.media.id)!,
       trackedId: trackedIds.get(r.media.id) ?? null,
     })),
-  ).filter((r) => visible(r.media) && Date.parse(r.releasedAt) <= now.getTime());
+  )
+    .map((r) => ({ ...r, media: { ...r.media, ...resolveAdult(r.media) } }))
+    .filter((r) => visible(r.media) && Date.parse(r.releasedAt) <= now.getTime());
   if (!db().inTransaction) snapshot = { key, at: now.getTime(), items };
   return items;
 }

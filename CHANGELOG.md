@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Mark any work 18+ yourself (or unmark a false positive) from its sheet; the choice applies everywhere.
+- Library: "All" and "Updates" tabs; reading statuses moved to a dropdown next to the sort.
+- Settings show one section at a time on desktop too.
+- Home hero uses the portrait cover on phones; opening a dropdown no longer hides the page scrollbar.
+- API: mark individual works as 18+, clear false positives, or reset to provider classification with `PATCH /api/media/adult`; decisions follow known provider identities across all catalog/library surfaces. Adult detail sheets remain accessible for editing.
+
 - Fixed: followed series disappeared from the library when their sources were flagged NSFW. Titles are now 18+ only from explicit content ratings; NSFW flags only hide sources from source search. The library says how many titles the 18+ setting hides, and toggling it refreshes every page.
 - Fixed: a source's whole back catalogue showed up as "latest releases". Source releases use the chapter's real upload date; first sightings are never "new".
 - Home: the weekly top 10 keeps its last good list instead of going blank, and the hero resolves catalog banners.

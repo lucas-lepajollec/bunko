@@ -30,7 +30,7 @@ import {
 } from '@/components/ui';
 
 type Shelf = 'READING' | 'CAUGHT_UP' | 'PLANNING' | 'PAUSED' | 'COMPLETED' | 'DROPPED';
-type View = Shelf | 'KAVITA' | 'UPDATES';
+type View = 'ALL' | 'KAVITA' | 'UPDATES';
 type Kind = 'all' | 'manga' | 'manhwa' | 'manhua' | 'novel';
 /** Needs a look: no source could be found automatically. */
 const needsReview = (e: TrackedMedia) => e.type === 'MANGA' && e.sourceMatch === 'not-found';
@@ -71,9 +71,9 @@ function Library() {
   }, [mutateList]);
   // Links to library updates (old Updates page, home) open that tab: /library?view=updates.
   const params = useSearchParams();
-  const [shelf, setShelf] = useState<View>(
-    params.get('view') === 'updates' ? 'UPDATES' : 'READING',
-  );
+  const [shelf, setShelf] = useState<View>(params.get('view') === 'updates' ? 'UPDATES' : 'ALL');
+  // Reading statuses live in a dropdown next to the sort instead of a row of tabs.
+  const [status, setStatus] = useState<Shelf | ''>('');
   const unmatched = useApi<KavitaSeriesSummary[]>('/api/kavita/series?unmatched=1');
   const [kind, setKind] = useState<Kind>('all');
   const [sort, setSort] = useState<Sort>('news');
@@ -98,7 +98,7 @@ function Library() {
   const owned = entries.reduce((sum, e) => sum + (e.progress?.owned ?? 0), 0);
   const toReview = entries.filter(needsReview).length;
   const shown = entries
-    .filter((e) => (review ? needsReview(e) : shelfOf(e) === shelf))
+    .filter((e) => (review ? needsReview(e) : !status || shelfOf(e) === status))
     .filter(
       (e) =>
         kind === 'all' ||
@@ -141,20 +141,17 @@ function Library() {
           setShelf(v);
         }}
         label={t('library.statusLabel')}
-        items={(['READING', 'CAUGHT_UP', 'PLANNING', 'PAUSED', 'COMPLETED', 'DROPPED'] as Shelf[])
-          .map<{ id: View; label: string; count?: number }>((s) => ({
-            id: s,
-            label: t(`shelf.${s}`),
-            count: counts[s],
-          }))
-          .concat([
-            { id: 'UPDATES', label: t('library.updates'), count: pendingUpdates || undefined },
-          ])
-          .concat(
-            unmatched.data?.length
-              ? [{ id: 'KAVITA', label: t('library.inKavita'), count: unmatched.data.length }]
-              : [],
-          )}
+        items={[
+          { id: 'ALL' as View, label: t('library.all'), count: entries.length },
+          {
+            id: 'UPDATES' as View,
+            label: t('library.updates'),
+            count: pendingUpdates || undefined,
+          },
+          ...(unmatched.data?.length
+            ? [{ id: 'KAVITA' as View, label: t('library.inKavita'), count: unmatched.data.length }]
+            : []),
+        ]}
       />
       {shelf === 'UPDATES' && !review ? (
         <LibraryUpdates />
@@ -193,18 +190,38 @@ function Library() {
                 {t('library.review', { count: toReview })}
               </button>
             )}
-            <label className="text-muted ml-auto flex items-center gap-2">
-              {t('catalog.sort')}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
               <Select
-                label={t('catalog.sort')}
-                value={sort}
-                onChange={(v) => setSort(v as Sort)}
-                options={(['news', 'recent', 'title', 'added'] as Sort[]).map((x) => ({
-                  value: x,
-                  label: t(`library.sort.${x}`),
-                }))}
+                label={t('library.statusLabel')}
+                value={status}
+                onChange={(v) => setStatus(v as Shelf | '')}
+                options={[
+                  { value: '', label: t('library.allStatuses') },
+                  ...(
+                    [
+                      'READING',
+                      'CAUGHT_UP',
+                      'PLANNING',
+                      'PAUSED',
+                      'COMPLETED',
+                      'DROPPED',
+                    ] as Shelf[]
+                  ).map((x) => ({ value: x, label: `${t(`shelf.${x}`)} · ${n(counts[x])}` })),
+                ]}
               />
-            </label>
+              <div className="text-muted flex items-center gap-2">
+                {t('catalog.sort')}
+                <Select
+                  label={t('catalog.sort')}
+                  value={sort}
+                  onChange={(v) => setSort(v as Sort)}
+                  options={(['news', 'recent', 'title', 'added'] as Sort[]).map((x) => ({
+                    value: x,
+                    label: t(`library.sort.${x}`),
+                  }))}
+                />
+              </div>
+            </div>
           </div>
           {library.error && <ErrorNote error={library.error} />}
           {library.data && entries.length === 0 && (

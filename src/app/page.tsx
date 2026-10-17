@@ -154,6 +154,7 @@ function Hero({
     >
       <Backdrop
         image={m.bannerUrl}
+        mobileImage={m.coverUrl}
         color={m.color}
         className="h-[calc(100%+140px)] md:h-[calc(100%+200px)]"
       />
@@ -166,7 +167,6 @@ function Hero({
       )}
       <div className="absolute inset-x-4 bottom-8 flex flex-col gap-3 md:inset-x-auto md:top-[150px] md:bottom-auto md:left-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))] md:w-[680px] md:gap-[18px]">
         {/* Without a wide banner the background stays plain: show the cover itself. */}
-        {!m.bannerUrl && <Cover src={m.coverUrl} alt="" className="w-20 md:hidden" />}
         <div className="text-soft flex flex-wrap items-center gap-3 text-[11px] tracking-[0.16em] uppercase md:text-xs">
           <span className="h-[3px] w-6 rounded-full" style={{ background: 'var(--accent)' }} />
           {t('home.newChapterKicker', { when: relative(r.releasedAt), meta: meta(m) })}
