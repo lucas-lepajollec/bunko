@@ -318,7 +318,10 @@ export interface Settings {
   libraryTargets: LibraryTargets;
   /** Follow every Kavita series automatically (matched to the catalog when possible). Default true. */
   autoImportKavita: boolean;
-  /** Show adult (18+) content. Off by default: such titles are hidden everywhere, library included. */
+  /**
+   * @deprecated Per user since multi-user: reads/writes the signed-in user's preference
+   * (see `MyAccount.adultContent`).
+   */
   adultContent: boolean;
   favoriteSourceIds: string[];
   extensionRepos: string[];
@@ -610,6 +613,52 @@ export interface AuthState {
   authenticated: boolean;
   setupRequired: boolean;
   username: string | null;
+  /** Signed-in user (null when signed out). */
+  userId: number | null;
+  role: UserRole | null;
+}
+/**
+ * `admin`: everything, including users and server settings (connections, Kavita libraries,
+ * downloads, sources/extensions, modules). `member`: their own library and account, downloads,
+ * matches of followed works.
+ */
+export type UserRole = 'admin' | 'member';
+/** GET /api/users (admin). */
+export interface UserAccount {
+  id: number;
+  username: string;
+  role: UserRole;
+  createdAt: string;
+  lastSeenAt: string | null;
+  /** The user saved their own Kavita API key (reading progress). */
+  kavitaLinked: boolean;
+}
+/** POST /api/users (admin). */
+export interface UserCreate {
+  username: string;
+  password: string;
+  role: UserRole;
+}
+/** PATCH /api/users (admin): change role or set a new password; DELETE /api/users {id}. */
+export interface UserPatch {
+  id: number;
+  role?: UserRole;
+  password?: string;
+}
+/** GET/PATCH /api/me — the signed-in user's own preferences. */
+export interface MyAccount {
+  id: number;
+  username: string;
+  role: UserRole;
+  /** Show filtered content (per user, off by default). */
+  adultContent: boolean;
+  /** Whether a personal Kavita API key is saved (never returned). */
+  kavitaLinked: boolean;
+}
+export interface MyAccountPatch {
+  adultContent?: boolean;
+  /** Personal Kavita API key for reading progress; null removes it. */
+  kavitaApiKey?: string | null;
 }
 /** POST /api/auth/setup (first start only) and POST /api/auth (sign in). */
 export interface Credentials {

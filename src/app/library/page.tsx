@@ -129,7 +129,7 @@ function Library() {
       {(activity.data?.hiddenAdult ?? 0) > 0 && (
         <p className="text-mid -mt-2 flex flex-wrap items-center gap-x-2 text-sm">
           {t('library.hiddenAdult', { count: activity.data!.hiddenAdult })}
-          <Link href="/settings#display" className="underline hover:text-white">
+          <Link href="/settings#account" className="underline hover:text-white">
             {t('library.hiddenAdultShow')}
           </Link>
         </p>

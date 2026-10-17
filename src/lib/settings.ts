@@ -1,3 +1,5 @@
+import { currentUser } from './user-context';
+import { userAdultContent, patchMyAccount } from './users';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -22,7 +24,7 @@ export function persistentSecret(name: string, bytes: number): Buffer {
   if (value.length !== bytes) throw new Error('Invalid persistent key file');
   return value;
 }
-function encrypt(value: string) {
+export function encrypt(value: string) {
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', persistentSecret('settings.key', 32), iv);
   const body = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
@@ -32,7 +34,7 @@ function encrypt(value: string) {
     body.toString('base64'),
   ]);
 }
-function decrypt(value: string) {
+export function decrypt(value: string) {
   const [iv, tag, body] = JSON.parse(value) as string[];
   const cipher = createDecipheriv(
     'aes-256-gcm',
@@ -45,7 +47,7 @@ function decrypt(value: string) {
   );
 }
 let settingsSnapshot: { version: number; value: Settings } | undefined;
-export function getSettings(): Settings {
+function serverSettings(): Settings {
   const version = writeVersion('settings');
   if (settingsSnapshot?.version === version) return settingsSnapshot.value;
   const result: Settings = {
@@ -82,6 +84,10 @@ export function getSettings(): Settings {
   if (!db().inTransaction) settingsSnapshot = { version, value: result };
   return result;
 }
+export function getSettings(): Settings {
+  const settings = serverSettings();
+  return currentUser()?.id ? { ...settings, adultContent: userAdultContent() } : settings;
+}
 export function publicSettings(): PublicSettings {
   const settings = getSettings();
   const { suwayomiPassword, kavitaApiKey, sonarrApiKey, prowlarrApiKey, ...safe } = settings;
@@ -97,6 +103,11 @@ export function publicSettings(): PublicSettings {
 }
 export function updateSettings(patch: SettingsPatch) {
   const current = getSettings();
+  const preference = currentUser()?.id ? patch.adultContent : undefined;
+  if (preference !== undefined) {
+    patch = { ...patch };
+    delete patch.adultContent;
+  }
   if (patch.libraryTargets !== undefined || patch.kavitaLibraryPath !== undefined)
     validateLibraryTargets(
       patch.libraryTargets ?? current.libraryTargets,
@@ -106,6 +117,13 @@ export function updateSettings(patch: SettingsPatch) {
     'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
   );
   db().transaction(() => {
+    if (preference !== undefined) patchMyAccount({ adultContent: preference });
+    if (patch.kavitaApiKey !== undefined && patch.kavitaApiKey !== current.kavitaApiKey) {
+      statement(
+        'UPDATE user_library SET last_read=NULL,last_read_at=NULL,progress_checked=0 WHERE user_id=1 AND EXISTS(SELECT 1 FROM users WHERE id=1 AND kavita_key IS NULL)',
+      ).run();
+      statement('DELETE FROM worker_state WHERE key=?').run('progress_refresh_attempt:1');
+    }
     for (const [key, value] of Object.entries(patch))
       insert.run(
         key,

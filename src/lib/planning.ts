@@ -1,3 +1,4 @@
+import { currentUser } from './user-context';
 import { z } from 'zod';
 import type { ChapterRelease, PlanningItem, PlanningWeek } from '@/types/shared';
 import { feedQuery, filterReleases, releaseStore, refreshReleases } from './releases';
@@ -120,14 +121,18 @@ export function buildPlanning(
     );
   return { start: days[0].date, days };
 }
-let snapshot:
-  { items: ChapterRelease[]; day: string; values: Map<string, PlanningWeek> } | undefined;
+const snapshots = new Map<
+  number,
+  { items: ChapterRelease[]; day: string; values: Map<string, PlanningWeek> }
+>();
 export function planning(q: z.infer<typeof planningQuery>): PlanningWeek {
   void refreshReleases().catch(() => {});
   const items = releaseStore();
   const day = localDate(new Date());
+  const userId = currentUser()?.id ?? 0;
+  let snapshot = snapshots.get(userId);
   if (snapshot?.items !== items || snapshot.day !== day)
-    snapshot = { items, day, values: new Map() };
+    snapshots.set(userId, (snapshot = { items, day, values: new Map() }));
   const key = JSON.stringify(q);
   const old = snapshot.values.get(key);
   if (old) return old;

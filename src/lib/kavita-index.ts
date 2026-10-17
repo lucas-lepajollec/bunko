@@ -1,3 +1,4 @@
+import { currentUser } from './user-context';
 import { mediaVisibility } from './adult';
 import { wakeWorker } from './worker-events';
 import { z } from 'zod';
@@ -167,8 +168,14 @@ export function withKavita<T extends UnifiedMedia>(
 }
 export function kavitaSummaries(unmatched = false, query = ''): KavitaSeriesSummary[] {
   const tracked = db()
-    .prepare('SELECT id,kavita_series_id,media_json FROM tracked_media')
-    .all() as { id: number; kavita_series_id: number | null; media_json: string }[];
+    .prepare(
+      `SELECT id,kavita_series_id,media_json FROM tracked_media ${currentUser() ? 'WHERE id IN (SELECT tracked_id FROM user_library WHERE user_id=?)' : ''}`,
+    )
+    .all(...(currentUser() ? [currentUser()!.id] : [])) as {
+    id: number;
+    kavita_series_id: number | null;
+    media_json: string;
+  }[];
   const links = new Map<number, number>();
   for (const t of tracked) {
     const match = matchKavita(JSON.parse(t.media_json), t.kavita_series_id);

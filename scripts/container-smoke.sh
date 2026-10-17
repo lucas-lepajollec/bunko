@@ -26,10 +26,10 @@ check 401 "API requires authentication" "$base/api/settings"
 # Every API route must be present in the image (an ignored folder once dropped one silently).
 check 200 "public auth state" "$base/api/auth"
 check 401 "password route exists" -X POST "$base/api/auth/password"
-for route in releases planning home discover genres media media/sources search search/stream manga/chapters tracked tracked/covers library/activity updates sources downloads extensions settings status kavita/status kavita/libraries kavita/series kavita/image suwayomi/image covers/1; do
+for route in releases planning home discover genres media media/sources search search/stream manga/chapters users me tracked tracked/covers library/activity updates sources downloads extensions settings status kavita/status kavita/libraries kavita/series kavita/image suwayomi/image covers/1; do
   check 401 "route /api/$route exists" "$base/api/$route"
 done
-check 401 "adult override route exists" -X PATCH "$base/api/media/adult"
+check 401 "content filter override route exists" -X PATCH "$base/api/media/adult"
 credentials='{"username":"SmokeAdmin","password":"synthetic-smoke-password"}'
 check 403 "cross-site setup rejected" -X POST "$base/api/auth/setup" -H 'Content-Type: application/json' -H 'Origin: https://evil.invalid' -d "$credentials"
 check 403 "cross-site login rejected" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H 'Origin: https://evil.invalid' -d "$credentials"
@@ -46,18 +46,34 @@ check 400 "planning date validated" -H "Authorization: Bearer $token" "$base/api
 check 200 "bearer API access" -H "Authorization: Bearer $token" "$base/api/settings"
 check 400 "Kavita image input validated" -H "Authorization: Bearer $token" "$base/api/kavita/image?seriesId=-1"
 check 400 "Suwayomi image input validated" -H "Authorization: Bearer $token" "$base/api/suwayomi/image?path=/api/graphql"
-check 400 "adult override input validated" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":"anilist:nope","adult":true}' "$base/api/media/adult"
+check 400 "content filter override input validated" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":"anilist:nope","adult":true}' "$base/api/media/adult"
+check 200 "admin users list" -H "Authorization: Bearer $token" "$base/api/users"
+check 200 "admin own account" -H "Authorization: Bearer $token" "$base/api/me"
+check 201 "create member" -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"username":"SmokeMember","password":"synthetic-member-password","role":"member"}' "$base/api/users"
+member_cookie="$(curl -fsS -D - -o /dev/null -X POST "$base/api/auth" -H 'Content-Type: application/json' -d '{"username":"SmokeMember","password":"synthetic-member-password"}' | sed -n 's/^[Ss]et-[Cc]ookie: \([^;]*\).*/\1/p' | tr -d '\r')"
+check 200 "member own account" -H "Cookie: $member_cookie" "$base/api/me"
+check 200 "member preferences" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"adultContent":true}' "$base/api/me"
+check 403 "member forbidden users list" -H "Cookie: $member_cookie" "$base/api/users"
+check 403 "member forbidden server settings" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{}' "$base/api/settings"
+check 403 "member forbidden extensions" -X POST -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"action":"refresh"}' "$base/api/extensions/action"
+curl -fsS -H "Cookie: $member_cookie" "$base/api/settings" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b);if(JSON.stringify(v)!==JSON.stringify({adultContent:true}))process.exit(1)})'
+echo "ok   member settings contain only their content filter preference"
 # Synthetic followed work only, in this container's disposable tmpfs.
 fixture='{"media":{"id":"suwayomi:7","adult":true,"title":"Smoke work","type":"MANGA","altTitles":[],"anilistId":123,"mangadexId":null,"mangaUpdatesId":"987","coverUrl":null,"bannerUrl":null,"synopsis":null,"genres":[],"authors":[],"score":null,"status":null,"chapters":null,"episodes":null,"webUrl":null,"providers":["local"],"sources":[],"trackedId":null,"kavitaSeriesId":null}}'
-check 201 "adult override fixture tracked" -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$fixture" "$base/api/tracked"
-check 200 "adult override false via MangaUpdates alias" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":"mangaupdates:987","adult":false}' "$base/api/media/adult"
+check 201 "content filter fixture tracked" -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$fixture" "$base/api/tracked"
+check 200 "content filter override false via MangaUpdates alias" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":"mangaupdates:987","adult":false}' "$base/api/media/adult"
 curl -fsS -H "Authorization: Bearer $token" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b);if(v.length!==1||v[0].media.adult!==false||v[0].media.adultOverride!==false)process.exit(1)})'
 echo "ok   manual false restores the provider false positive"
-check 200 "adult override true via source identity" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":"suwayomi:7","adult":true}' "$base/api/media/adult"
+check 200 "content filter override true via source identity" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":"suwayomi:7","adult":true}' "$base/api/media/adult"
 curl -fsS -H "Authorization: Bearer $token" "$base/api/library/activity" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).hiddenAdult!==1)process.exit(1)})'
 curl -fsS -H "Authorization: Bearer $token" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).length!==0)process.exit(1)})'
 echo "ok   manual true hides the work and updates hiddenAdult"
-check 200 "adult override reset via AniList alias" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":"anilist:123","adult":null}' "$base/api/media/adult"
+check 200 "content filter override reset via AniList alias" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":"anilist:123","adult":null}' "$base/api/media/adult"
 curl -fsS -H "Authorization: Bearer $token" "$base/api/media?id=suwayomi:7" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b);if(v.adult!==true||v.adultOverride!==null)process.exit(1)})'
 echo "ok   hidden detail stays accessible and reset restores the automatic flag"
+curl -fsS -H "Cookie: $member_cookie" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).length!==0)process.exit(1)})'
+check 201 "member follows existing shared work" -X POST -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d "$fixture" "$base/api/tracked"
+curl -fsS -H "Cookie: $member_cookie" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).length!==1)process.exit(1)})'
+curl -fsS -H "Authorization: Bearer $token" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(JSON.parse(b).length!==0)process.exit(1)})'
+echo "ok   overlapping libraries retain separate content filter preferences"
 echo "container smoke passed"

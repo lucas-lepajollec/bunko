@@ -210,6 +210,8 @@ function Header() {
   const { t } = useI18n();
   const pathname = usePathname();
   const activity = useActivity();
+  // Sources and extensions are server administration: members don't get the shortcut.
+  const isAdmin = useApi<AuthState>('/api/auth').data?.role !== 'member';
   const [solid, setSolid] = useState(false);
   useEffect(() => {
     const onScroll = () => setSolid(window.scrollY > 24);
@@ -272,20 +274,22 @@ function Header() {
             </span>
           )}
         </IconLink>
-        <IconLink
-          href="/sources"
-          label={
-            activity.updates
-              ? t('nav.sourcesUpdates', { count: activity.updates })
-              : t('nav.sources')
-          }
-          className="hidden md:flex"
-        >
-          <PuzzleIcon />
-          {activity.updates > 0 && (
-            <span className="bg-warn absolute top-2.5 right-2.5 size-2 rounded-full" />
-          )}
-        </IconLink>
+        {isAdmin && (
+          <IconLink
+            href="/sources"
+            label={
+              activity.updates
+                ? t('nav.sourcesUpdates', { count: activity.updates })
+                : t('nav.sources')
+            }
+            className="hidden md:flex"
+          >
+            <PuzzleIcon />
+            {activity.updates > 0 && (
+              <span className="bg-warn absolute top-2.5 right-2.5 size-2 rounded-full" />
+            )}
+          </IconLink>
+        )}
         <IconLink href="/settings" label={t('nav.settings')}>
           <SlidersIcon />
         </IconLink>

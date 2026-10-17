@@ -1,3 +1,4 @@
+import { currentUser } from './user-context';
 import { recentSourceChapter } from './source-chapters';
 import { visibleTracked } from './adult';
 import { randomUUID } from 'node:crypto';
@@ -35,8 +36,19 @@ export function updatesFeed(): UpdatesFeed {
   const tracked = visibleTracked(listTracked());
   const byId = new Map(tracked.map((t) => [t.id, t]));
   const batches = new Map(listBatches().map((b) => [b.id, b]));
+  const chapterMaps = new Map(
+    [...batches].map(([id, b]) => [
+      id,
+      {
+        ids: new Map(b.chapters.map((c) => [c.id, c])),
+        numbers: new Map(b.chapters.filter((c) => c.number !== null).map((c) => [c.number, c])),
+      },
+    ]),
+  );
   const entries = (
-    statement('SELECT * FROM update_entries ORDER BY id DESC LIMIT 200').all() as {
+    statement(
+      `SELECT * FROM update_entries ${currentUser() ? 'WHERE tracked_id IN (SELECT tracked_id FROM user_library WHERE user_id=?)' : ''} ORDER BY id DESC LIMIT 200`,
+    ).all(...(currentUser() ? [currentUser()!.id] : [])) as {
       id: number;
       tracked_id: number;
       source_name: string;
@@ -50,9 +62,9 @@ export function updatesFeed(): UpdatesFeed {
     ).all(row.id) as { chapter_id: number; number: number | null; batch_id: string | null }[];
     const states = chapters.map((c) => {
       const batch = c.batch_id ? batches.get(c.batch_id) : undefined;
-      const chapter = batch?.chapters.find(
-        (v) => v.id === c.chapter_id || (c.number !== null && v.number === c.number),
-      );
+      const map = c.batch_id ? chapterMaps.get(c.batch_id) : undefined;
+      const chapter =
+        map?.ids.get(c.chapter_id) ?? (c.number === null ? undefined : map?.numbers.get(c.number));
       if (chapter?.state === 'done') return 'completed';
       if (chapter?.state === 'error') return 'error';
       return batch?.state;

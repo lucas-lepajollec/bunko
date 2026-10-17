@@ -48,7 +48,7 @@ async function error(response: Response, status: number, code: string) {
   expect(response.headers.get('set-cookie')).toBeNull();
 }
 beforeEach(() => {
-  db().prepare('DELETE FROM administrator').run();
+  db().exec("DELETE FROM users; DELETE FROM sqlite_sequence WHERE name='users';");
   // Advance only Date.now, leaving real asynchronous scrypt/streams intact.
   clock += 61_000;
   vi.spyOn(Date, 'now').mockImplementation(() => clock);
@@ -69,6 +69,8 @@ describe('account routes', () => {
       authenticated: false,
       setupRequired: true,
       username: null,
+      userId: null,
+      role: null,
     });
     await error(await POST(request('/api/auth', credentials)), 409, 'SETUP_REQUIRED');
     const created = await setup(request('/api/auth/setup', credentials));
@@ -77,6 +79,8 @@ describe('account routes', () => {
       authenticated: true,
       setupRequired: false,
       username: credentials.username,
+      userId: 1,
+      role: 'admin',
     });
     expect(created.headers.get('set-cookie')).toContain(
       'HttpOnly; SameSite=Strict; Max-Age=604800',
@@ -86,6 +90,8 @@ describe('account routes', () => {
       authenticated: true,
       setupRequired: false,
       username: credentials.username,
+      userId: 1,
+      role: 'admin',
     });
     const signedOut = await GET(request());
     expect(signedOut.status).toBe(200);
@@ -93,9 +99,11 @@ describe('account routes', () => {
       authenticated: false,
       setupRequired: false,
       username: null,
+      userId: null,
+      role: null,
     });
     await error(await setup(request('/api/auth/setup', credentials)), 409, 'ALREADY_SET_UP');
-    expect(db().prepare('SELECT COUNT(*) AS n FROM administrator').get()).toEqual({ n: 1 });
+    expect(db().prepare('SELECT COUNT(*) AS n FROM users').get()).toEqual({ n: 1 });
     const login = await POST(
       request('/api/auth', { ...credentials, username: credentials.username.toLowerCase() }),
     );
@@ -123,10 +131,18 @@ describe('account routes', () => {
     // The invariant is enforced by SQLite, independently of JS's preflight check.
     const other = new Database(path.join(directory, 'bunko.db'));
     expect(() =>
-      other.prepare("INSERT INTO administrator VALUES(1,'Other','hash','epoch')").run(),
+      other
+        .prepare(
+          "INSERT INTO users(id,username,role,password_hash,session_epoch,created_at) VALUES(1,'Other','admin','hash','epoch','today')",
+        )
+        .run(),
     ).toThrow();
     expect(() =>
-      other.prepare("INSERT INTO administrator VALUES(2,'Other','hash','epoch')").run(),
+      other
+        .prepare(
+          "INSERT INTO users(username,role,password_hash,session_epoch,created_at) SELECT lower(username),'member','hash','epoch','today' FROM users LIMIT 1",
+        )
+        .run(),
     ).toThrow();
     other.close();
   });
@@ -147,7 +163,7 @@ describe('account routes', () => {
       400,
       'VALIDATION_ERROR',
     );
-    expect(db().prepare('SELECT * FROM administrator').get()).toBeUndefined();
+    expect(db().prepare('SELECT * FROM users').get()).toBeUndefined();
     expect(scrypt).not.toHaveBeenCalled();
   });
 
@@ -156,7 +172,7 @@ describe('account routes', () => {
       request('/api/auth/setup', { username: 'a'.repeat(40), password: 'a'.repeat(200) }),
     );
     expect(response.status).toBe(200);
-    const stored = db().prepare('SELECT password_hash FROM administrator').get() as {
+    const stored = db().prepare('SELECT password_hash FROM users').get() as {
       password_hash: string;
     };
     expect(stored.password_hash).toMatch(/^scrypt\$v1\$32768\$8\$1\$[a-f0-9]{32}\$[a-f0-9]{128}$/);
@@ -166,7 +182,7 @@ describe('account routes', () => {
     expect(await verifyPassword('a'.repeat(200), stored.password_hash)).toBe(true);
     expect(await verifyPassword('wrong-password', stored.password_hash)).toBe(false);
     expect(await verifyPassword('wrong-password', 'malformed')).toBe(false);
-    db().prepare('DELETE FROM administrator').run();
+    db().exec("DELETE FROM users; DELETE FROM sqlite_sequence WHERE name='users';");
     expect(
       (await setup(request('/api/auth/setup', { username: 'abc', password: 'a'.repeat(10) })))
         .status,
@@ -268,6 +284,8 @@ describe('account routes', () => {
         authenticated: false,
         setupRequired: false,
         username: null,
+        userId: null,
+        role: null,
       });
     }
     expect(
@@ -344,7 +362,7 @@ describe('account routes', () => {
     const session = cookie(created);
     for (const invalid of [
       `${session}bad`,
-      session.replace('v1.', 'v2.'),
+      session.replace('v2.', 'v3.'),
       'bunko_session=9999999999999.legacy-signature',
     ])
       expect(

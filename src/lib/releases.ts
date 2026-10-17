@@ -1,3 +1,4 @@
+import { currentUser } from './user-context';
 import { mediaVisibility, rememberAdultIdentities, automaticMedia, adultResolver } from './adult';
 import { z } from 'zod';
 import type { ChapterRelease, DiscoverKind, UnifiedMedia, ReleasesPage } from '@/types/shared';
@@ -260,9 +261,11 @@ export function refreshReleases(): Promise<void> {
   return job;
 }
 let rawSnapshot: { version: number; items: ChapterRelease[] } | undefined;
-let snapshot: { key: string; at: number; items: ChapterRelease[] } | undefined;
+const snapshots = new Map<number, { key: string; at: number; items: ChapterRelease[] }>();
 export function releaseStore(now = new Date()): ChapterRelease[] {
-  const key = `${writeVersion('releases')}:${writeVersion()}:${writeVersion('settings')}`;
+  const userId = currentUser()?.id ?? 0;
+  const snapshot = snapshots.get(userId);
+  const key = `${writeVersion('releases')}:${writeVersion()}:${writeVersion('settings')}:${userId ? writeVersion(`user:${userId}`) : 0}`;
   if (snapshot?.key === key && now.getTime() - snapshot.at < 60_000 && now.getTime() >= snapshot.at)
     return snapshot.items;
   const tracked = listTracked();
@@ -332,7 +335,7 @@ export function releaseStore(now = new Date()): ChapterRelease[] {
   )
     .map((r) => ({ ...r, media: { ...r.media, ...resolveAdult(r.media) } }))
     .filter((r) => visible(r.media) && Date.parse(r.releasedAt) <= now.getTime());
-  if (!db().inTransaction) snapshot = { key, at: now.getTime(), items };
+  if (!db().inTransaction) snapshots.set(userId, { key, at: now.getTime(), items });
   return items;
 }
 export function filterReleases(items: ChapterRelease[], q: FeedQuery) {

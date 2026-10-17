@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Multi-user: administrators create accounts (Settings → Users). Everyone shares the server, sources, downloads and Kavita files; each user has their own library, statuses, reading progress (with their own Kavita key) and content filter. Members only see their account settings. The existing account becomes the first administrator with its library intact (sign in again once after updating).
 - Per-work content filter override from the title sheet, applied everywhere.
 - Library: "All" and "Updates" tabs; reading statuses moved to a dropdown next to the sort.
 - Settings show one section at a time on desktop too.

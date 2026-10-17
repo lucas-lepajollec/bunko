@@ -1,3 +1,6 @@
+import { currentUser, asServer } from './user-context';
+import { withTracking } from './catalog';
+import { listTracked, trackedForMedia } from './db';
 import { chapterLabels } from './chapter-labels';
 import { randomUUID } from 'node:crypto';
 import { onWorkerWake, wakeWorker, waitForWorker, workerIdleMs } from './worker-events';
@@ -45,7 +48,20 @@ function update(batch: DownloadBatch, patch: Partial<DownloadBatch>) {
   Object.assign(batch, patch, { updatedAt: new Date().toISOString() });
   saveBatch(batch, false);
 }
+export function requireDownloadWork(media: EnqueueRequest['media']) {
+  if (currentUser()?.role === 'member' && !trackedForMedia(media, listTracked()))
+    throw new AppError('FORBIDDEN', 'Follow this work to manage its downloads', 403);
+}
+function requireBatch(id: string) {
+  if (currentUser()?.role !== 'member') return;
+  const batch = listBatches().find((b) => b.id === id);
+  if (!batch) throw new AppError('NOT_FOUND', 'Batch not found', 404);
+  requireDownloadWork(batch.media);
+}
 export function createBatch(input: EnqueueRequest): DownloadBatch {
+  requireDownloadWork(input.media);
+  if (currentUser()?.role === 'member')
+    input = { ...input, media: trackedForMedia(input.media, listTracked())!.media };
   input = { ...input, media: authoritativeMedia(input.media) };
   if (input.media.type === 'ANIME')
     throw new AppError('VALIDATION_ERROR', 'Use Arr releases for anime downloads');
@@ -99,6 +115,7 @@ export function createBatch(input: EnqueueRequest): DownloadBatch {
   return batch;
 }
 export function retryBatch(id: string, failedOnly = false, selectedIds?: number[]) {
+  requireBatch(id);
   const batch = listBatches().find((b) => b.id === id);
   if (!batch) throw new AppError('NOT_FOUND', 'Batch not found', 404);
   if (!['error', 'completed'].includes(batch.state))
@@ -164,6 +181,11 @@ export function engineStatus(): DownloadStatus {
   };
 }
 export async function controlEngine(control: DownloadControl): Promise<DownloadStatus> {
+  if (currentUser()?.role === 'member') {
+    if (!('batchId' in control) || !control.batchId)
+      throw new AppError('FORBIDDEN', 'Administrator access required for queue controls', 403);
+    requireBatch(control.batchId);
+  }
   if (control.action === 'retry_failed') {
     const batches = listBatches();
     if (control.batchId && !batches.some((b) => b.id === control.batchId))
@@ -402,7 +424,10 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 let running = false;
 let initialized = false;
 
-export async function workerTick() {
+export function workerTick() {
+  return asServer(workerTickShared);
+}
+async function workerTickShared() {
   if (running || !acquireWorker(owner)) return;
   running = true;
   const controller = new AbortController();
@@ -499,9 +524,14 @@ export function startWorker() {
   });
   schedule(0);
 }
+/** Enrich shared batch metadata only at the response boundary. Never persist a user's membership flags. */
+export function publicBatches(batches = listBatches()): DownloadBatch[] {
+  const media = withTracking(batches.map((b) => b.media));
+  return batches.map((b, i) => ({ ...b, media: media[i] }));
+}
 export async function snapshot(signal?: AbortSignal) {
   signal?.throwIfAborted();
-  return { status: engineStatus(), batches: listBatches() };
+  return { status: engineStatus(), batches: publicBatches() };
 }
 
 export function requestUpdateCheck() {

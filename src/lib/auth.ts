@@ -1,31 +1,29 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { z } from 'zod';
+import { credentials, passwordChange } from './account-validation';
+export { credentials, passwordChange } from './account-validation';
 import { persistentSecret } from './settings';
 import { db } from './db';
 import { AppError } from './errors';
 import { hashPassword, verifyPassword } from './passwords';
-import type { AuthState, Credentials, PasswordChange } from '@/types/shared';
+import { currentUser } from './user-context';
+import type { UserRole, AuthState, Credentials, PasswordChange } from '@/types/shared';
 
 const sessionSeconds = 7 * 24 * 60 * 60;
-const password = z.string().min(10).max(200);
-export const credentials = z.strictObject({
-  username: z
-    .string()
-    .min(3)
-    .max(40)
-    .regex(/^[A-Za-z0-9._-]+$/),
-  password,
-});
-export const passwordChange = z.strictObject({ currentPassword: password, newPassword: password });
-interface Account {
+export interface Account {
+  id: number;
   username: string;
+  role: UserRole;
   password_hash: string;
   session_epoch: string;
 }
-function account(): Account | undefined {
-  return db()
-    .prepare('SELECT username,password_hash,session_epoch FROM administrator WHERE id=1')
-    .get() as Account | undefined;
+export function firstAdmin(): Account | undefined {
+  return db().prepare("SELECT * FROM users WHERE role='admin' ORDER BY id LIMIT 1").get() as
+    Account | undefined;
+}
+function account(id?: number): Account | undefined {
+  return id === undefined
+    ? firstAdmin()
+    : (db().prepare('SELECT * FROM users WHERE id=?').get(id) as Account | undefined);
 }
 function epoch() {
   return randomBytes(32).toString('hex');
@@ -43,7 +41,8 @@ function sign(value: string) {
 }
 export function authenticate(request: Request) {
   const auth = request.headers.get('authorization');
-  if (auth?.startsWith('Bearer ') && equal(auth.slice(7), secret())) return;
+  if (auth?.startsWith('Bearer ') && equal(auth.slice(7), secret()))
+    return firstAdmin() ?? { id: 0, username: '', role: 'admin' as const };
   const cookie = request.headers
     .get('cookie')
     ?.split(';')
@@ -52,31 +51,48 @@ export function authenticate(request: Request) {
     ?.slice('bunko_session='.length);
   if (cookie) {
     const parts = cookie.split('.');
-    const [version, expiry, sessionEpoch, signature] = parts;
-    const current = account();
+    const [version, userId, expiry, sessionEpoch, signature] = parts;
+    const current = /^\d+$/.test(userId) ? account(Number(userId)) : undefined;
     if (
-      parts.length === 4 &&
-      version === 'v1' &&
+      parts.length === 5 &&
+      version === 'v2' &&
       /^\d+$/.test(expiry) &&
       Number(expiry) > Date.now() &&
       current &&
       equal(current.session_epoch, sessionEpoch) &&
-      equal(sign(`${version}.${expiry}.${sessionEpoch}`), signature)
+      equal(sign(`${version}.${userId}.${expiry}.${sessionEpoch}`), signature)
     )
-      return;
+      return current;
   }
   throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
 }
 export function authState(request: Request): AuthState {
-  const current = account();
-  if (!current) return { authenticated: false, setupRequired: true, username: null };
+  const first = firstAdmin();
+  const signedOut = {
+    authenticated: false,
+    setupRequired: !first || !first.password_hash,
+    username: null,
+    userId: null,
+    role: null,
+  };
   try {
-    authenticate(request);
-    return { authenticated: true, setupRequired: false, username: current.username };
+    const user = authenticate(request);
+    if (!user.id) return signedOut;
+    return {
+      authenticated: true,
+      setupRequired: false,
+      username: user.username,
+      userId: user.id,
+      role: user.role,
+    };
   } catch (error) {
     if (!(error instanceof AppError) || error.code !== 'UNAUTHORIZED') throw error;
-    return { authenticated: false, setupRequired: false, username: null };
+    return signedOut;
   }
+}
+export function requireAdmin() {
+  if (currentUser()?.role === 'member')
+    throw new AppError('FORBIDDEN', 'Administrator access required', 403);
 }
 export function checkOrigin(request: Request) {
   const origin = request.headers.get('origin');
@@ -120,45 +136,72 @@ function limit(username: string) {
 function invalidCredentials(): never {
   throw new AppError('INVALID_CREDENTIALS', 'Invalid username or password', 401);
 }
-function sessionCookie(request: Request, sessionEpoch: string) {
-  const value = `v1.${Date.now() + sessionSeconds * 1000}.${sessionEpoch}`;
+function sessionCookie(request: Request, userId: number, sessionEpoch: string) {
+  const value = `v2.${userId}.${Date.now() + sessionSeconds * 1000}.${sessionEpoch}`;
   return `bunko_session=${value}.${sign(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${sessionSeconds}${new URL(request.url).protocol === 'https:' ? '; Secure' : ''}`;
 }
 export async function setup(request: Request, input: Credentials) {
   checkOrigin(request);
-  if (account()) throw new AppError('ALREADY_SET_UP', 'Administrator account already exists', 409);
+  const first = firstAdmin();
+  if (first?.password_hash)
+    throw new AppError('ALREADY_SET_UP', 'Administrator account already exists', 409);
   const value = credentials.parse(input);
   const hash = await hashPassword(value.password);
   const sessionEpoch = epoch();
-  // The singleton primary key makes creation atomic even across connections/processes.
-  const inserted = db()
-    .prepare(
-      `INSERT INTO administrator(id,username,password_hash,session_epoch)
-    VALUES(1,?,?,?) ON CONFLICT(id) DO NOTHING`,
-    )
-    .run(value.username, hash, sessionEpoch);
-  if (!inserted.changes)
-    throw new AppError('ALREADY_SET_UP', 'Administrator account already exists', 409);
-  return sessionCookie(request, sessionEpoch);
+  const id = db()
+    .transaction(() => {
+      const existing = firstAdmin();
+      if (existing?.password_hash)
+        throw new AppError('ALREADY_SET_UP', 'Administrator account already exists', 409);
+      if (existing) {
+        // Recovery keeps the administrator identity, preferences and library intact.
+        db()
+          .prepare('UPDATE users SET password_hash=?,session_epoch=? WHERE id=?')
+          .run(hash, sessionEpoch, existing.id);
+        return existing.id;
+      }
+      const result = db()
+        .prepare(
+          `INSERT INTO users(username,role,password_hash,session_epoch,created_at,adult_content)
+      VALUES(?,'admin',?,?,?,COALESCE((SELECT value='true' FROM settings WHERE key='adultContent'),0))`,
+        )
+        .run(value.username, hash, sessionEpoch, new Date().toISOString());
+      const id = Number(result.lastInsertRowid);
+      // Installations predating account setup also retain their followed works.
+      db()
+        .prepare(
+          `INSERT OR IGNORE INTO user_library(user_id,tracked_id,status,last_read,last_read_at,progress_checked,created_at)
+      SELECT ?,id,status,last_read,last_read_at,progress_checked,created_at FROM tracked_media`,
+        )
+        .run(id);
+      return id;
+    })
+    .immediate();
+  return sessionCookie(request, id, sessionEpoch);
 }
 export async function login(request: Request, input: Credentials) {
   checkOrigin(request);
-  const current = account();
-  if (!current) throw new AppError('SETUP_REQUIRED', 'Create the administrator account first', 409);
+  if (!firstAdmin())
+    throw new AppError('SETUP_REQUIRED', 'Create the administrator account first', 409);
   const value = credentials.parse(input);
   const username = value.username.toLowerCase();
   limit(username);
-  const known = current.username.toLowerCase() === username;
-  const verified = await verifyPassword(value.password, known ? current.password_hash : null);
-  if (!verified || !known || account()?.session_epoch !== current.session_epoch)
+  const current = db()
+    .prepare('SELECT * FROM users WHERE username=? COLLATE NOCASE')
+    .get(username) as Account | undefined;
+  const verified = await verifyPassword(value.password, current?.password_hash ?? null);
+  if (!verified || !current || account(current.id)?.session_epoch !== current.session_epoch)
     invalidCredentials();
-  return sessionCookie(request, current.session_epoch);
+  db()
+    .prepare('UPDATE users SET last_seen_at=? WHERE id=?')
+    .run(new Date().toISOString(), current.id);
+  return sessionCookie(request, current.id, current.session_epoch);
 }
 export async function changePassword(request: Request, input: PasswordChange) {
   checkOrigin(request);
-  authenticate(request);
+  const identity = authenticate(request);
   const value = passwordChange.parse(input);
-  const current = account();
+  const current = account(identity.id);
   if (!current) throw new AppError('SETUP_REQUIRED', 'Create the administrator account first', 409);
   limit(current.username.toLowerCase());
   if (!(await verifyPassword(value.currentPassword, current.password_hash))) invalidCredentials();
@@ -166,10 +209,10 @@ export async function changePassword(request: Request, input: PasswordChange) {
   const sessionEpoch = epoch();
   const updated = db()
     .prepare(
-      `UPDATE administrator SET password_hash=?,session_epoch=?
-    WHERE id=1 AND session_epoch=?`,
+      `UPDATE users SET password_hash=?,session_epoch=?
+    WHERE id=? AND session_epoch=?`,
     )
-    .run(hash, sessionEpoch, current.session_epoch);
+    .run(hash, sessionEpoch, current.id, current.session_epoch);
   if (!updated.changes) throw new AppError('UNAUTHORIZED', 'Session has expired', 401);
-  return sessionCookie(request, sessionEpoch);
+  return sessionCookie(request, current.id, sessionEpoch);
 }

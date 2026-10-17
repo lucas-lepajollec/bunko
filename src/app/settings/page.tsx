@@ -2,12 +2,18 @@
 import { Select } from '@/components/select';
 import { clearPersistentCache } from '@/lib/client/cache';
 import Link from 'next/link';
-import { Notice, toast } from '@/components/notify';
+import { InfoBubble, Notice, toast } from '@/components/notify';
 import { useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
 import { useSWRConfig } from 'swr';
 import type {
   AuthState,
   KavitaIndexStatus,
+  MyAccount,
+  MyAccountPatch,
+  UserAccount,
+  UserCreate,
+  UserPatch,
+  UserRole,
   KavitaLibrary,
   LibraryKind,
   LibraryTargets,
@@ -32,14 +38,16 @@ import {
 } from '@/components/ui';
 
 const SECTIONS = [
+  'account',
+  'users',
   'connections',
   'kavita',
   'downloads',
-  'display',
   'sources',
   'modules',
-  'access',
 ] as const;
+/** Members only manage their own account; everything else is server administration. */
+const MEMBER_SECTIONS: readonly SectionId[] = ['account'];
 type Settings = PublicSettings & { updateIntervalMinutes?: number };
 
 type SectionId = (typeof SECTIONS)[number];
@@ -58,10 +66,12 @@ export default function SettingsPage() {
     () => '',
   );
   const [picked, setPicked] = useState<SectionId | null | undefined>(undefined);
+  const auth = useApi<AuthState>('/api/auth');
+  const visible: readonly SectionId[] = auth.data?.role === 'member' ? MEMBER_SECTIONS : SECTIONS;
   const open: SectionId | null =
     picked !== undefined
       ? picked
-      : (SECTIONS as readonly string[]).includes(hash)
+      : (visible as readonly string[]).includes(hash)
         ? (hash as SectionId)
         : null;
   const settings = useApi<Settings>('/api/settings');
@@ -79,11 +89,11 @@ export default function SettingsPage() {
           {t('nav.settings')}
         </h1>
         <div className="flex flex-col">
-          {SECTIONS.map((s, i) => (
+          {visible.map((s, i) => (
             <a
               key={s}
               href={`#${s}`}
-              aria-current={(open ?? SECTIONS[0]) === s ? 'page' : undefined}
+              aria-current={(open ?? visible[0]) === s ? 'page' : undefined}
               onClick={(e) => {
                 // One section at a time on every screen; the hash keeps it linkable.
                 e.preventDefault();
@@ -93,7 +103,7 @@ export default function SettingsPage() {
               }}
               className={cx(
                 'border-line flex min-h-14 items-center gap-3.5 border-b hover:text-white md:min-h-0 md:items-baseline md:py-2.5',
-                (open ?? SECTIONS[0]) === s ? 'md:font-semibold md:text-white' : 'text-mid',
+                (open ?? visible[0]) === s ? 'md:font-semibold md:text-white' : 'text-mid',
               )}
             >
               <span className="text-muted w-[30px] font-serif text-lg">{roman(i + 1)}</span>
@@ -123,54 +133,52 @@ export default function SettingsPage() {
         >
           <span aria-hidden>‹</span> {t('nav.settings')}
         </button>
-        {settings.error && <ErrorNote error={settings.error} />}
-        {!settings.data ? (
-          <Skeleton className="h-96 rounded-2xl" />
-        ) : (
-          <>
-            <Section open={open} id="connections" index={1}>
-              <Connections
-                settings={settings.data}
-                status={status.data}
-                onSaved={() => Promise.all([settings.mutate(), status.mutate()])}
-              />
-            </Section>
-            <Section open={open} id="kavita" index={2}>
-              <KavitaTargets
-                admin={status.data?.kavita.admin ?? null}
-                settings={settings.data}
-                onSaved={(s) => settings.mutate(s, { revalidate: false })}
-              />
-            </Section>
-            <Section open={open} id="downloads" index={3}>
-              <Downloads
-                settings={settings.data}
-                onSaved={(s) => settings.mutate(s, { revalidate: false })}
-              />
-            </Section>
-            <Section open={open} id="display" index={4}>
-              <Row label={t('settings.language')} tip={t('settings.languageTip')}>
-                <LanguageSelect className="h-11 pr-9 pl-4" />
-              </Row>
-              <AdultToggle
-                settings={settings.data}
-                onSaved={(s) => settings.mutate(s, { revalidate: false })}
-              />
-            </Section>
-            <Section open={open} id="sources" index={5}>
-              <p className="text-mid text-sm leading-relaxed">{t('settings.sourcesBody')}</p>
-              <Link href="/sources" className={cx(smallButton, 'self-start')}>
-                {t('settings.manageSources')} →
-              </Link>
-            </Section>
-            <Section open={open} id="modules" index={6}>
-              <Modules />
-            </Section>
-            <Section open={open} id="access" index={7}>
-              <Access />
-            </Section>
-          </>
+        <Section open={open} visible={visible} id="account">
+          <Account />
+        </Section>
+        {visible.includes('users') && (
+          <Section open={open} visible={visible} id="users">
+            <Users />
+          </Section>
         )}
+        {visible.includes('connections') &&
+          (settings.error ? (
+            <ErrorNote error={settings.error} />
+          ) : !settings.data ? (
+            <Skeleton className="h-96 rounded-2xl" />
+          ) : (
+            <>
+              <Section open={open} visible={visible} id="connections">
+                <Connections
+                  settings={settings.data}
+                  status={status.data}
+                  onSaved={() => Promise.all([settings.mutate(), status.mutate()])}
+                />
+              </Section>
+              <Section open={open} visible={visible} id="kavita">
+                <KavitaTargets
+                  admin={status.data?.kavita.admin ?? null}
+                  settings={settings.data}
+                  onSaved={(s) => settings.mutate(s, { revalidate: false })}
+                />
+              </Section>
+              <Section open={open} visible={visible} id="downloads">
+                <Downloads
+                  settings={settings.data}
+                  onSaved={(s) => settings.mutate(s, { revalidate: false })}
+                />
+              </Section>
+              <Section open={open} visible={visible} id="sources">
+                <p className="text-mid text-sm leading-relaxed">{t('settings.sourcesBody')}</p>
+                <Link href="/sources" className={cx(smallButton, 'self-start')}>
+                  {t('settings.manageSources')} →
+                </Link>
+              </Section>
+              <Section open={open} visible={visible} id="modules">
+                <Modules />
+              </Section>
+            </>
+          ))}
       </div>
     </Page>
   );
@@ -178,15 +186,16 @@ export default function SettingsPage() {
 
 function Section({
   open,
+  visible,
   id,
-  index,
   children,
 }: {
   open: SectionId | null;
-  id: (typeof SECTIONS)[number];
-  index: number;
+  visible: readonly SectionId[];
+  id: SectionId;
   children: ReactNode;
 }) {
+  const index = visible.indexOf(id) + 1;
   const { t } = useI18n();
   return (
     <section
@@ -195,7 +204,7 @@ function Section({
       className={cx(
         'scroll-mt-28 flex-col gap-[18px]',
         open === id ? 'flex' : 'hidden',
-        (open ?? SECTIONS[0]) === id ? 'md:flex' : 'md:hidden',
+        (open ?? visible[0]) === id ? 'md:flex' : 'md:hidden',
       )}
     >
       <div className="flex items-baseline gap-4">
@@ -510,94 +519,6 @@ function Modules() {
   );
 }
 
-function Access() {
-  const { t } = useI18n();
-  const { mutate } = useSWRConfig();
-  const auth = useApi<AuthState>('/api/auth');
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-  async function change(e: FormEvent) {
-    e.preventDefault();
-    setMessage(null);
-    if (next !== confirm) return setMessage({ ok: false, text: t('auth.mismatch') });
-    setBusy(true);
-    try {
-      await send('/api/auth/password', 'POST', { currentPassword: current, newPassword: next });
-      setCurrent('');
-      setNext('');
-      setConfirm('');
-      setMessage({ ok: true, text: t('auth.passwordChanged') });
-    } catch (err) {
-      setMessage({ ok: false, text: errorText(t, err) });
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="flex flex-col gap-5 text-sm">
-      <Row label={t('auth.signedInAs')}>
-        <span className="flex items-center gap-4">
-          <strong className="font-semibold">{auth.data?.username ?? '—'}</strong>
-          <button
-            type="button"
-            onClick={async () => {
-              await send('/api/auth', 'DELETE').catch(() => undefined);
-              clearPersistentCache();
-              await mutate('/api/auth');
-            }}
-            className={smallButton}
-          >
-            {t('settings.signOut')}
-          </button>
-        </span>
-      </Row>
-      <form
-        onSubmit={change}
-        className="flex flex-col gap-3.5 rounded-[18px] bg-white/[0.045] p-4 md:p-[22px]"
-      >
-        <span className="font-semibold">{t('auth.changePassword')}</span>
-        <div className="grid gap-3.5 md:grid-cols-3">
-          {(
-            [
-              ['current', t('auth.currentPassword'), current, setCurrent, 'current-password'],
-              ['next', t('auth.newPassword'), next, setNext, 'new-password'],
-              ['confirm', t('auth.confirm'), confirm, setConfirm, 'new-password'],
-            ] as const
-          ).map(([key, label, value, set, ac]) => (
-            <label key={key} className="text-muted flex flex-col gap-1.5 text-[13px]">
-              {label}
-              <input
-                type="password"
-                required
-                minLength={key === 'current' ? 1 : 10}
-                maxLength={200}
-                autoComplete={ac}
-                value={value}
-                onChange={(e) => set(e.target.value)}
-                className={field}
-              />
-            </label>
-          ))}
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={busy}
-            className="bg-fg text-bg h-10 rounded-full px-5 text-sm font-semibold disabled:opacity-50"
-          >
-            {busy ? t('common.working') : t('auth.changePassword')}
-          </button>
-          {message && <span className={message.ok ? 'text-ok' : 'text-bad'}>{message.text}</span>}
-        </div>
-      </form>
-      <p className="text-muted leading-relaxed">{t('auth.apiTokenHint')}</p>
-    </div>
-  );
-}
-
 const KINDS: LibraryKind[] = ['MANGA', 'MANHWA', 'MANHUA', 'NOVEL'];
 
 function KavitaTargets({
@@ -742,37 +663,323 @@ function KavitaTargets({
   );
 }
 
-/** 18+ content: off by default; switching refetches every list so hidden titles appear/disappear. */
-function AdultToggle({
-  settings,
-  onSaved,
-}: {
-  settings: Settings;
-  onSaved: (s: Settings) => void;
-}) {
+/** The signed-in user's own account: session, language, content filter, Kavita key, password. */
+function Account() {
   const { t } = useI18n();
   const { mutate } = useSWRConfig();
+  const auth = useApi<AuthState>('/api/auth');
+  const me = useApi<MyAccount>('/api/me');
+  const [kavitaKey, setKavitaKey] = useState('');
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function patchMe(body: MyAccountPatch, ok: string) {
+    try {
+      await me.mutate(await send<MyAccount>('/api/me', 'PATCH', body), { revalidate: false });
+      toast({ tone: 'ok', text: ok });
+      return true;
+    } catch (err) {
+      toast({ tone: 'bad', text: errorText(t, err) });
+      return false;
+    }
+  }
+  async function change(e: FormEvent) {
+    e.preventDefault();
+    if (next !== confirm) return toast({ tone: 'bad', text: t('auth.mismatch') });
+    setBusy(true);
+    try {
+      await send('/api/auth/password', 'POST', { currentPassword: current, newPassword: next });
+      setCurrent('');
+      setNext('');
+      setConfirm('');
+      toast({ tone: 'ok', text: t('auth.passwordChanged') });
+    } catch (err) {
+      toast({ tone: 'bad', text: errorText(t, err) });
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
-    <Row label={t('settings.adult')} tip={t('settings.adultTip')}>
-      <input
-        type="checkbox"
-        checked={settings.adultContent ?? false}
-        onChange={async (e) => {
-          try {
-            onSaved(
-              await send<Settings>('/api/settings', 'PATCH', { adultContent: e.target.checked }),
-            );
-            // Drop every cached list (not only mounted ones) so no page shows pre-toggle data.
-            clearPersistentCache();
-            await mutate((key) => typeof key === 'string' && key !== '/api/settings', undefined, {
-              revalidate: true,
-            });
-          } catch (err) {
-            toast({ tone: 'bad', text: errorText(t, err) });
-          }
+    <div className="flex flex-col gap-5 text-sm">
+      <Row label={t('auth.signedInAs')}>
+        <span className="flex items-center gap-4">
+          <strong className="font-semibold">{auth.data?.username ?? '—'}</strong>
+          {auth.data?.role && (
+            <span className="text-muted text-xs">{t(`users.role.${auth.data.role}`)}</span>
+          )}
+          <button
+            type="button"
+            onClick={async () => {
+              await send('/api/auth', 'DELETE').catch(() => undefined);
+              clearPersistentCache();
+              await mutate('/api/auth');
+            }}
+            className={smallButton}
+          >
+            {t('settings.signOut')}
+          </button>
+        </span>
+      </Row>
+      <Row label={t('settings.language')} tip={t('settings.languageTip')}>
+        <LanguageSelect className="h-11 pr-3 pl-4" />
+      </Row>
+      <Row label={t('settings.adult')} tip={t('settings.adultTip')}>
+        <input
+          type="checkbox"
+          checked={me.data?.adultContent ?? false}
+          disabled={!me.data}
+          onChange={async (e) => {
+            const value = e.target.checked;
+            if (await patchMe({ adultContent: value }, t('account.saved'))) {
+              // Drop every cached list (not only mounted ones) so no page shows stale data.
+              clearPersistentCache();
+              await mutate(
+                (key) => typeof key === 'string' && key !== '/api/me' && key !== '/api/auth',
+                undefined,
+                { revalidate: true },
+              );
+            }
+          }}
+          className="accent-fg size-[18px]"
+        />
+      </Row>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (await patchMe({ kavitaApiKey: kavitaKey.trim() }, t('account.kavitaSaved')))
+            setKavitaKey('');
         }}
-        className="accent-fg size-[18px]"
-      />
-    </Row>
+        className="flex flex-col gap-3 rounded-[18px] bg-white/[0.045] p-4 md:p-[22px]"
+      >
+        <span className="flex items-center gap-2 font-semibold">
+          {t('account.kavitaKey')}
+          <InfoBubble label={t('account.kavitaKey')}>{t('account.kavitaKeyInfo')}</InfoBubble>
+        </span>
+        <p className="text-mid">
+          {me.data?.kavitaLinked ? t('account.kavitaLinked') : t('account.kavitaNotLinked')}
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            type="password"
+            autoComplete="off"
+            value={kavitaKey}
+            onChange={(e) => setKavitaKey(e.target.value)}
+            placeholder={t('account.kavitaKeyPlaceholder')}
+            aria-label={t('account.kavitaKey')}
+            className={field}
+          />
+          <button
+            type="submit"
+            disabled={!kavitaKey.trim()}
+            className="bg-fg text-bg h-11 shrink-0 rounded-full px-5 font-semibold disabled:opacity-50"
+          >
+            {t('common.save')}
+          </button>
+          {me.data?.kavitaLinked && (
+            <button
+              type="button"
+              onClick={() => patchMe({ kavitaApiKey: null }, t('account.kavitaRemoved'))}
+              className={cx(smallButton, 'h-11 shrink-0')}
+            >
+              {t('account.kavitaRemove')}
+            </button>
+          )}
+        </div>
+      </form>
+      <form
+        onSubmit={change}
+        className="flex flex-col gap-3.5 rounded-[18px] bg-white/[0.045] p-4 md:p-[22px]"
+      >
+        <span className="font-semibold">{t('auth.changePassword')}</span>
+        <div className="grid gap-3.5 md:grid-cols-3">
+          {(
+            [
+              ['current', t('auth.currentPassword'), current, setCurrent, 'current-password'],
+              ['next', t('auth.newPassword'), next, setNext, 'new-password'],
+              ['confirm', t('auth.confirm'), confirm, setConfirm, 'new-password'],
+            ] as const
+          ).map(([key, label, value, set, ac]) => (
+            <label key={key} className="text-muted flex flex-col gap-1.5 text-[13px]">
+              {label}
+              <input
+                type="password"
+                required
+                minLength={key === 'current' ? 1 : 10}
+                maxLength={200}
+                autoComplete={ac}
+                value={value}
+                onChange={(e) => set(e.target.value)}
+                className={field}
+              />
+            </label>
+          ))}
+        </div>
+        <button
+          type="submit"
+          disabled={busy}
+          className="bg-fg text-bg h-10 self-start rounded-full px-5 text-sm font-semibold disabled:opacity-50"
+        >
+          {busy ? t('common.working') : t('auth.changePassword')}
+        </button>
+      </form>
+      {auth.data?.role !== 'member' && (
+        <p className="text-muted leading-relaxed">{t('auth.apiTokenHint')}</p>
+      )}
+    </div>
+  );
+}
+
+/** Admin: create accounts, change roles, reset passwords, remove users. */
+function Users() {
+  const { t } = useI18n();
+  const relative = useRelativeTime();
+  const auth = useApi<AuthState>('/api/auth');
+  const users = useApi<UserAccount[]>('/api/users');
+  const [draft, setDraft] = useState<UserCreate>({ username: '', password: '', role: 'member' });
+  const [busy, setBusy] = useState(false);
+  async function act(run: () => Promise<unknown>, ok: string) {
+    setBusy(true);
+    try {
+      await run();
+      await users.mutate();
+      toast({ tone: 'ok', text: ok });
+      return true;
+    } catch (err) {
+      toast({ tone: 'bad', text: errorText(t, err) });
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  const roleOptions = (['member', 'admin'] as UserRole[]).map((r) => ({
+    value: r,
+    label: t(`users.role.${r}`),
+  }));
+  return (
+    <div className="flex flex-col gap-5 text-sm">
+      <p className="text-mid leading-relaxed">{t('users.intro')}</p>
+      {users.error && <ErrorNote error={users.error} />}
+      {!users.data && !users.error && <Skeleton className="h-32 rounded-2xl" />}
+      <ul className="flex flex-col">
+        {(users.data ?? []).map((u) => {
+          const self = u.id === auth.data?.userId;
+          return (
+            <li
+              key={u.id}
+              className="border-line flex flex-wrap items-center gap-x-4 gap-y-2 border-b py-3"
+            >
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="font-semibold">
+                  {u.username}
+                  {self && <span className="text-muted ml-2 font-normal">{t('users.you')}</span>}
+                </span>
+                <span className="text-muted text-xs">
+                  {u.lastSeenAt
+                    ? t('users.lastSeen', { when: relative(u.lastSeenAt) })
+                    : t('users.neverSeen')}
+                  {' · '}
+                  {u.kavitaLinked ? t('users.kavitaLinked') : t('users.kavitaNotLinked')}
+                </span>
+              </span>
+              <Select
+                label={t('users.roleLabel', { name: u.username })}
+                value={u.role}
+                onChange={(role) =>
+                  act(
+                    () => send('/api/users', 'PATCH', { id: u.id, role: role as UserRole } satisfies UserPatch),
+                    t('users.updated'),
+                  )
+                }
+                options={roleOptions}
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  const password = window.prompt(t('users.resetPrompt', { name: u.username }));
+                  if (password)
+                    void act(
+                      () => send('/api/users', 'PATCH', { id: u.id, password } satisfies UserPatch),
+                      t('users.passwordReset'),
+                    );
+                }}
+                className={smallButton}
+              >
+                {t('users.resetPassword')}
+              </button>
+              {!self && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    window.confirm(t('users.deleteConfirm', { name: u.username })) &&
+                    act(() => send('/api/users', 'DELETE', { id: u.id }), t('users.deleted'))
+                  }
+                  className="text-bad h-9 rounded-full px-3 hover:bg-white/[0.06]"
+                >
+                  {t('users.delete')}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (await act(() => send('/api/users', 'POST', draft), t('users.created')))
+            setDraft({ username: '', password: '', role: 'member' });
+        }}
+        className="flex flex-col gap-3.5 rounded-[18px] bg-white/[0.045] p-4 md:p-[22px]"
+      >
+        <span className="font-semibold">{t('users.add')}</span>
+        <div className="grid gap-3.5 md:grid-cols-[1fr_1fr_auto]">
+          <label className="text-muted flex flex-col gap-1.5 text-[13px]">
+            {t('auth.username')}
+            <input
+              required
+              minLength={3}
+              maxLength={64}
+              autoComplete="off"
+              value={draft.username}
+              onChange={(e) => setDraft((d) => ({ ...d, username: e.target.value }))}
+              className={field}
+            />
+          </label>
+          <label className="text-muted flex flex-col gap-1.5 text-[13px]">
+            {t('auth.password')}
+            <input
+              type="password"
+              required
+              minLength={10}
+              maxLength={200}
+              autoComplete="new-password"
+              value={draft.password}
+              onChange={(e) => setDraft((d) => ({ ...d, password: e.target.value }))}
+              className={field}
+            />
+          </label>
+          <div className="text-muted flex flex-col gap-1.5 text-[13px]">
+            {t('users.role')}
+            <Select
+              label={t('users.role')}
+              value={draft.role}
+              onChange={(role) => setDraft((d) => ({ ...d, role: role as UserRole }))}
+              options={roleOptions}
+              size="lg"
+              className="rounded-xl"
+            />
+          </div>
+        </div>
+        <button
+          type="submit"
+          disabled={busy}
+          className="bg-fg text-bg h-10 self-start rounded-full px-5 text-sm font-semibold disabled:opacity-50"
+        >
+          {t('users.create')}
+        </button>
+      </form>
+    </div>
   );
 }

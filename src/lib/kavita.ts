@@ -1,3 +1,5 @@
+import { currentUser, userContext } from './user-context';
+import { progressKey } from './users';
 import { open, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -228,10 +230,12 @@ export function kavitaProgress(input: unknown): { read: number; lastReadAt: stri
 }
 export async function refreshTrackedProgress(tracked: TrackedMedia, signal?: AbortSignal) {
   if (manualKavitaLink(tracked.id) && tracked.kavitaSeriesId === null) return;
+  const user = currentUser();
+  const key = user ? progressKey(user.id) : getSettings().kavitaApiKey;
   const s = getSettings();
-  if (!s.kavitaUrl || !s.kavitaApiKey) return;
+  if (!s.kavitaUrl || !key) return;
   const bounded = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(10_000)]);
-  const headers = await kavitaHeaders(bounded);
+  const headers = await kavitaHeaders(bounded, key);
   const get = <T>(suffix: string) =>
     requestJson<T>(endpoint(s.kavitaUrl, suffix), { headers, signal: bounded }, 4000);
   let id = tracked.kavitaSeriesId ?? matchKavita(tracked.media)?.seriesId ?? null;
@@ -274,17 +278,39 @@ export async function refreshTrackedProgress(tracked: TrackedMedia, signal?: Abo
   if (id === null) return;
   db()
     .prepare(
-      'UPDATE tracked_media SET kavita_series_id=? WHERE id=? AND kavita_series_id IS ? AND kavita_manual=0',
+      'UPDATE tracked_media SET kavita_series_id=? WHERE id=? AND kavita_series_id IS ? AND kavita_manual=0 AND kavita_series_id IS NOT ?',
     )
-    .run(id, tracked.id, tracked.kavitaSeriesId);
+    .run(id, tracked.id, tracked.kavitaSeriesId, id);
   const progress = kavitaProgress(await get(`/api/Series/volumes?seriesId=${id}`));
-  db()
-    .prepare(
-      'UPDATE tracked_media SET last_read=?,last_read_at=?,progress_checked=1 WHERE id=? AND kavita_series_id IS ?',
-    )
-    .run(progress.read, progress.lastReadAt, tracked.id, id);
+  if (user) {
+    if (progressKey(user.id) !== key) return;
+    db()
+      .prepare(
+        `UPDATE user_library SET last_read=?,last_read_at=?,progress_checked=1
+      WHERE user_id=? AND tracked_id=? AND EXISTS(SELECT 1 FROM tracked_media WHERE id=? AND kavita_series_id IS ?)`,
+      )
+      .run(progress.read, progress.lastReadAt, user.id, tracked.id, tracked.id, id);
+  } else
+    db()
+      .prepare(
+        'UPDATE tracked_media SET last_read=?,last_read_at=?,progress_checked=1 WHERE id=? AND kavita_series_id IS ?',
+      )
+      .run(progress.read, progress.lastReadAt, tracked.id, id);
 }
 export async function refreshLibraryProgress(signal?: AbortSignal) {
+  if (!currentUser()) {
+    const users = db()
+      .prepare('SELECT id,username,role FROM users')
+      .all() as import('./user-context').Identity[];
+    if (users.length) {
+      for (const user of users) {
+        if (signal?.aborted) break;
+        if (progressKey(user.id)) await userContext.run(user, () => refreshLibraryProgress(signal));
+      }
+      return;
+    }
+  }
+  if (currentUser() && !progressKey(currentUser()!.id)) return;
   // Four requests in flight and a shared total deadline bound on-demand work for large libraries.
   const bounded = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(15_000)]);
   const queue = listTracked().filter((t) => t.type !== 'ANIME');

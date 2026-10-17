@@ -28,6 +28,8 @@ assert.deepEqual(await (await fetch(`${base}/api/auth`)).json(), {
   authenticated: false,
   setupRequired: true,
   username: null,
+  userId: null,
+  role: null,
 });
 assert.equal(
   (await authPost('/api/auth/setup', credentials, 'https://invalid.example')).status,

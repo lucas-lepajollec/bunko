@@ -1,5 +1,6 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+import { currentUser, asServer } from '@/lib/user-context';
 import { visibleTracked } from '@/lib/adult';
 import { wakeWorker } from '@/lib/worker-events';
 import { z } from 'zod';
@@ -12,6 +13,7 @@ import {
   untrack,
   sameMedia,
   authoritativeMedia,
+  requireFollowed,
 } from '@/lib/db';
 import { trackBody, trackPatch } from '@/lib/validation';
 import { refreshProgressOnDemand } from '@/lib/progress-refresh';
@@ -31,8 +33,17 @@ export const GET = route(async (r) => {
 export const POST = route(async (r) => json(track(await body(r, trackBody)), 201));
 export const PATCH = route(async (r) => {
   const input = await body(r, trackPatch);
+  requireFollowed(input.id);
   let current = getTracked(input.id);
   if (!current) throw new AppError('NOT_FOUND', 'Tracked media not found', 404);
+  const user = currentUser();
+  if (user && Object.keys(input).every((key) => key === 'id' || key === 'status')) {
+    if (input.status !== undefined)
+      db()
+        .prepare('UPDATE user_library SET status=? WHERE user_id=? AND tracked_id=? AND status<>?')
+        .run(input.status, user.id, input.id, input.status);
+    return json(getTracked(input.id));
+  }
   if (input.kavitaSeriesId != null && !indexedSeriesById(input.kavitaSeriesId))
     throw new AppError('NOT_FOUND', 'Kavita series is not indexed', 404);
   let auto = input.autoDownload ?? current.autoDownload;
@@ -81,7 +92,9 @@ export const PATCH = route(async (r) => {
       chosenUrl = selected.url;
     }
   }
-  const conflict = listTracked().some((t) => t.id !== input.id && sameMedia(t.media, media));
+  const conflict = asServer(() => listTracked()).some(
+    (t) => t.id !== input.id && sameMedia(t.media, media),
+  );
   if (conflict)
     throw new AppError('ALREADY_TRACKED', 'This catalog identity is already tracked', 409);
   const originalIdentity = current.media.id;
@@ -108,9 +121,20 @@ export const PATCH = route(async (r) => {
         db().prepare('DELETE FROM resolved_covers WHERE tracked_id=?').run(input.id);
       if (input.media || input.offCatalog || input.kavitaSeriesId !== undefined)
         db().prepare('UPDATE tracked_media SET source_match_at=NULL WHERE id=?').run(input.id);
+      const user = currentUser();
+      if (user && input.status !== undefined)
+        db()
+          .prepare('UPDATE user_library SET status=? WHERE user_id=? AND tracked_id=?')
+          .run(input.status, user.id, input.id);
+      if (input.kavitaSeriesId !== undefined && input.kavitaSeriesId !== current.kavitaSeriesId)
+        db()
+          .prepare(
+            'UPDATE user_library SET last_read=NULL,last_read_at=NULL,progress_checked=0 WHERE tracked_id=?',
+          )
+          .run(input.id);
       db()
         .prepare(
-          `UPDATE tracked_media SET status=?,auto_download=?,sources_json=?,
+          `UPDATE tracked_media SET status=CASE WHEN ? THEN status ELSE ? END,auto_download=?,sources_json=?,
       anilist_id=?,mangadex_id=?,title=?,type=?,cover_url=?,media_json=?,
       kavita_series_id=?,kavita_manual=CASE WHEN ? THEN 1 ELSE kavita_manual END,
       last_read=CASE WHEN ? THEN NULL ELSE last_read END,
@@ -120,6 +144,7 @@ export const PATCH = route(async (r) => {
       cover_choice_json=?,backdrop=? WHERE id=?`,
         )
         .run(
+          Number(Boolean(user)),
           input.status ?? current.status,
           Number(auto),
           JSON.stringify(sources),

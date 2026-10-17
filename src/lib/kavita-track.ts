@@ -1,7 +1,16 @@
+import { currentUser, asServer } from './user-context';
 import { indexedSeries, indexedSeriesById, matchKavita, type IndexedSeries } from './kavita-index';
 import { search, deduplicate } from './search-engine';
 import { titleScore } from './matching';
-import { track, db, getTracked, listTracked, manualKavitaLink, sameMedia } from './db';
+import {
+  track,
+  db,
+  getTracked,
+  listTracked,
+  manualKavitaLink,
+  sameMedia,
+  addToLibrary,
+} from './db';
 import { AppError } from './errors';
 import { emptyMedia } from './media';
 import type { UnifiedMedia } from '@/types/shared';
@@ -43,6 +52,15 @@ async function catalogMatch(series: IndexedSeries, signal?: AbortSignal) {
     : best.media;
 }
 export async function trackKavitaSeries(seriesId: number, signal?: AbortSignal, automatic = false) {
+  const caller = currentUser();
+  const tracked = await asServer(() => trackKavitaSeriesShared(seriesId, signal, automatic));
+  if (caller && tracked && !automatic) {
+    addToLibrary(caller.id, tracked.id);
+    return getTracked(tracked.id)!;
+  }
+  return tracked;
+}
+async function trackKavitaSeriesShared(seriesId: number, signal?: AbortSignal, automatic = false) {
   const series = indexedSeriesById(seriesId);
   if (!series) throw new AppError('NOT_FOUND', 'Kavita series is not indexed', 404);
   const linked = listTracked().find(
@@ -108,6 +126,24 @@ export async function autoImportKavita() {
       continue;
     try {
       const tracked = await trackKavitaSeries(series.seriesId, undefined, true);
+      if (tracked)
+        db().transaction(() => {
+          for (const admin of db()
+            .prepare(
+              "SELECT id,kavita_key IS NOT NULL AS personal_key FROM users WHERE role='admin'",
+            )
+            .all() as {
+            id: number;
+            personal_key: number;
+          }[])
+            // Indexed read state belongs to the server key, which only user 1 inherits.
+            addToLibrary(
+              admin.id,
+              tracked.id,
+              admin.id === 1 && !admin.personal_key && series.completed ? 'COMPLETED' : 'READING',
+              true,
+            );
+        })();
       if (tracked && !tracked.media.providers.includes('kavita'))
         await ensureKavitaCover(series, tracked.media);
     } catch {

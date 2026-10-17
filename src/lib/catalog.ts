@@ -11,6 +11,7 @@ import { requestJson } from './http';
 import { createHash } from 'node:crypto';
 import { getSettings } from './settings';
 import { AppError } from './errors';
+import { asServer } from './user-context';
 import { db, listTracked, trackedForMedia } from './db';
 import { cached, storedMetadata, saveMetadata } from './metadata-cache';
 import { kavitaMedia } from './kavita-track';
@@ -48,17 +49,19 @@ async function anilist<T>(query: string, variables: Record<string, unknown>, sig
 }
 export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
   const tracked = listTracked();
+  const shared = asServer(() => listTracked());
   const resolve = kavitaMatcher();
   const baseUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
   const resolveAdult = adultResolver();
   return items.map((m) => {
-    const t = trackedForMedia(m, tracked);
+    const own = trackedForMedia(m, tracked);
+    const t = trackedForMedia(m, shared);
     const enriched = withKavita(
       {
         ...m,
         adult: Boolean(m.adult || t?.media.adult),
         coverUrl: t ? t.coverUrl : m.coverUrl,
-        trackedId: t?.id ?? null,
+        trackedId: own?.id ?? null,
         kavitaSeriesId: t?.kavitaSeriesId ?? null,
       },
       t?.kavitaSeriesId,
@@ -151,7 +154,8 @@ export async function genres(signal?: AbortSignal): Promise<string[]> {
   const data = await cached('genres', 24 * 3600_000, () =>
     anilist<{ GenreCollection: string[] }>('query { GenreCollection }', {}),
   );
-  return data.GenreCollection.filter((g) => getSettings().adultContent || g !== 'Hentai');
+  const include = getSettings().adultContent;
+  return data.GenreCollection.filter((g) => include || g !== 'Hentai');
 }
 interface AniDetail extends AniMedia {
   tags: { name: string; rank: number; isMediaSpoiler: boolean }[];
@@ -315,7 +319,7 @@ function detailCacheKey(id: string) {
   return `detail:${namespace}:${id}`;
 }
 export async function mediaDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
-  const followed = listTracked().find(
+  const followed = asServer(() => listTracked()).find(
     (t) =>
       t.media.id === id ||
       (id.startsWith('anilist:') && t.anilistId === Number(id.slice(8))) ||

@@ -418,6 +418,16 @@ export async function browseSource(
     input.filters,
   );
   const tracked = listTracked();
+  const memberships = new Map<number, number>();
+  for (const t of tracked) {
+    for (const source of [...t.sources, ...t.media.sources])
+      if (source.sourceId === id && !memberships.has(source.suwayomiMangaId))
+        memberships.set(source.suwayomiMangaId, t.id);
+    if (t.media.id.startsWith('suwayomi:')) {
+      const mangaId = Number(t.media.id.slice(9));
+      if (!memberships.has(mangaId)) memberships.set(mangaId, t.id);
+    }
+  }
   return {
     source: { ...source, health: sourceHealth(id) },
     page: input.page,
@@ -425,15 +435,7 @@ export async function browseSource(
     items: result.results.map((m, i) => ({
       ...m,
       title: result.titles[i],
-      trackedId:
-        tracked.find(
-          (t) =>
-            t.sources.some((s) => s.sourceId === id && s.suwayomiMangaId === m.suwayomiMangaId) ||
-            t.media.sources.some(
-              (s) => s.sourceId === id && s.suwayomiMangaId === m.suwayomiMangaId,
-            ) ||
-            t.media.id === `suwayomi:${m.suwayomiMangaId}`,
-        )?.id ?? null,
+      trackedId: memberships.get(m.suwayomiMangaId) ?? null,
     })),
   };
 }

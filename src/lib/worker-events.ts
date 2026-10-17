@@ -1,3 +1,4 @@
+import { asServer } from './user-context';
 import { dataDir } from './db';
 import { env } from './env';
 type State = { listeners: Set<() => void> };
@@ -12,7 +13,7 @@ function state() {
   return value;
 }
 export function wakeWorker() {
-  for (const listener of state().listeners) listener();
+  for (const listener of state().listeners) asServer(listener);
 }
 export function onWorkerWake(listener: () => void) {
   state().listeners.add(listener);

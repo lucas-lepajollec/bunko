@@ -4,8 +4,14 @@ import { cached } from './metadata-cache';
 import { getSettings } from './settings';
 import { endpoint, requestJson } from './http';
 import { AppError } from './errors';
-export async function kavitaHeaders(signal?: AbortSignal): Promise<Record<string, string>> {
-  const s = getSettings();
+export async function kavitaHeaders(
+  signal?: AbortSignal,
+  progressApiKey?: string,
+): Promise<Record<string, string>> {
+  const s = {
+    ...getSettings(),
+    ...(progressApiKey === undefined ? {} : { kavitaApiKey: progressApiKey }),
+  };
   if (!s.kavitaUrl || !s.kavitaApiKey)
     throw new AppError('SERVICE_NOT_CONFIGURED', 'Kavita is not configured', 409);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };

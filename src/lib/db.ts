@@ -1,3 +1,6 @@
+import { progressKey } from './users';
+import { currentUser, asServer } from './user-context';
+import { AppError } from './errors';
 import { sourceUploadDate, type SourceChapter } from './source-chapters';
 import { adultResolver, automaticMedia } from './adult';
 import { storedCover, deleteStoredCoverFile } from './stored-covers';
@@ -100,6 +103,7 @@ export function db(): Database.Database {
     CREATE TABLE IF NOT EXISTS write_versions (domain TEXT PRIMARY KEY, version INTEGER NOT NULL);
     INSERT OR IGNORE INTO write_versions VALUES('library',0),('series',0),('settings',0),('linkage',0),('batches',0),('releases',0);`);
   migrateV8(connection);
+  migrateV9(connection);
   // Replace older trigger definitions atomically: every route bundle observes settings writes.
   const versionConnection = connection;
   connection.transaction(() => {
@@ -305,6 +309,19 @@ export function manualKavitaLink(id: number) {
   );
 }
 export function untrack(id: number) {
+  const user = currentUser();
+  if (user) {
+    return db().transaction(() => {
+      requireFollowed(id);
+      statement('INSERT OR IGNORE INTO user_dismissals(user_id,tracked_id) VALUES(?,?)').run(
+        user.id,
+        id,
+      );
+      statement('DELETE FROM user_library WHERE user_id=? AND tracked_id=?').run(user.id, id);
+      if (!statement('SELECT 1 FROM user_library WHERE tracked_id=? LIMIT 1').get(id))
+        asServer(() => untrack(id));
+    })();
+  }
   const cover = storedCover(id);
   db().transaction(() => {
     const tracked = getTracked(id);
@@ -332,10 +349,14 @@ function resetAccountAtStartup(database: Database.Database) {
   if (env('RESET_ACCOUNT') !== 'true') return;
   const reset = (runtime.__bunkoAccountReset ??= new Set());
   if (reset.has(dataDir)) return;
-  database.prepare('DELETE FROM administrator').run();
+  database
+    .prepare(
+      "UPDATE users SET password_hash='',session_epoch=lower(hex(randomblob(32))) WHERE id=(SELECT MIN(id) FROM users WHERE role='admin')",
+    )
+    .run();
   reset.add(dataDir);
   console.info(
-    'Bunko: administrator account and browser sessions reset; first-start setup is required.',
+    'Bunko: first administrator password and sessions reset; account recovery setup is required.',
   );
 }
 export function sameMedia(a: UnifiedMedia, b: UnifiedMedia) {
@@ -489,29 +510,38 @@ export function searchCatalog(query: string): (SourceMatch & { title: string })[
     mangaUrl: r.manga_url,
   }));
 }
-let trackedSnapshot:
-  | {
-      version: number;
-      entries: TrackedMedia[];
-      byId: Map<number, TrackedMedia>;
-      retry: Map<number, number>;
-    }
-  | undefined;
+type TrackedSnapshot = {
+  version: number;
+  entries: TrackedMedia[];
+  byId: Map<number, TrackedMedia>;
+  retry: Map<number, number>;
+};
+const trackedSnapshots = new Map<number, TrackedSnapshot>();
 function snapshotTracked(id?: number) {
-  const version = writeVersion();
-  if (trackedSnapshot?.version === version) return trackedSnapshot;
+  const userId = currentUser()?.id ?? 0;
+  const version = writeVersion() + (userId ? writeVersion(`user:${userId}`) : 0);
+  const trackedSnapshot = trackedSnapshots.get(userId);
+  if (!db().inTransaction && trackedSnapshot?.version === version) return trackedSnapshot;
   const outerTransaction = db().inTransaction;
   const resolveAdult = adultResolver();
+  const linkedProgress = !userId || Boolean(progressKey(userId));
+  const kavitaUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
   // A read transaction gives one consistent snapshot when another process commits concurrently.
   const result = db().transaction(() => {
     const select = (sql: string, column: string, suffix = '') =>
       statement(sql + (id === undefined ? '' : ` WHERE ${column}=?`) + suffix).all(
         ...(id === undefined ? [] : [id]),
       );
-    const rows = select('SELECT * FROM tracked_media', 'id', ' ORDER BY id DESC') as Record<
-      string,
-      unknown
-    >[];
+    const rows = (
+      userId
+        ? statement(`SELECT t.*,u.status,u.last_read,u.last_read_at,u.progress_checked,u.created_at
+          FROM tracked_media t JOIN user_library u ON u.tracked_id=t.id
+          WHERE u.user_id=? ${id === undefined ? '' : 'AND t.id=?'} ORDER BY t.id DESC`).all(
+            userId,
+            ...(id === undefined ? [] : [id]),
+          )
+        : select('SELECT * FROM tracked_media', 'id', ' ORDER BY id DESC')
+    ) as Record<string, unknown>[];
     const links = new Map<number, SourceLinkStatus[]>();
     for (const r of select('SELECT tracked_id,payload FROM source_links', 'tracked_id') as {
       tracked_id: number;
@@ -564,7 +594,6 @@ function snapshotTracked(id?: number) {
     const observed = numbers('observed_chapters');
     const retry = new Map<number, number>();
     const match = kavitaMatcher();
-    const kavitaUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
     const entries = rows.map((r): TrackedMedia => {
       const id = Number(r.id);
       const rawMedia = JSON.parse(String(r.media_json)) as UnifiedMedia;
@@ -604,6 +633,7 @@ function snapshotTracked(id?: number) {
             : (r.cover_url as string | null);
       const media = {
         ...rawMedia,
+        trackedId: id,
         ...resolveAdult({
           ...rawMedia,
           trackedId: id,
@@ -665,20 +695,19 @@ function snapshotTracked(id?: number) {
           owned: owned.size,
           released: known.length ? Math.max(...known) : null,
           unread: [...owned].filter((n) => read === null || n > read).length,
-          readSource: r.progress_checked ? 'kavita' : 'none',
+          readSource: r.progress_checked && linkedProgress ? 'kavita' : 'none',
         },
         newChapters: seen.filter((n) => !owned.has(n)).length,
       };
     });
     const snapshot = { version, entries, byId: new Map(entries.map((t) => [t.id, t])), retry };
-    if (id === undefined && !outerTransaction) trackedSnapshot = snapshot;
+    if (id === undefined && !outerTransaction) trackedSnapshots.set(userId, snapshot);
     return snapshot;
   })();
   // Prime committed index/settings caches after our read transaction. Never publish a
   // cache assembled inside a caller's write transaction (its version may roll back).
   if (!outerTransaction) {
     kavitaMatcher();
-    getSettings();
   }
   return result;
 }
@@ -711,7 +740,7 @@ export function getTracked(id: number): TrackedMedia | undefined {
 /** Client artwork cannot replace the authoritative artwork of an already followed work. */
 export function authoritativeMedia(media: UnifiedMedia): UnifiedMedia {
   media = automaticMedia(media);
-  const tracked = trackedForMedia(media, listTracked());
+  const tracked = asServer(() => trackedForMedia(media, listTracked()));
   return tracked
     ? {
         ...media,
@@ -732,9 +761,44 @@ export function authoritativeMedia(media: UnifiedMedia): UnifiedMedia {
 }
 
 export function track(input: TrackRequest): TrackedMedia {
+  const user = currentUser();
   return db()
-    .transaction(() => insertTracked(input))
+    .transaction(() => {
+      const shared = asServer(() => insertTracked(input));
+      if (user) addToLibrary(user.id, shared.id, input.status ?? 'READING');
+      return getTracked(shared.id)!;
+    })
     .immediate();
+}
+export function addToLibrary(
+  userId: number,
+  trackedId: number,
+  status = 'READING',
+  automatic = false,
+) {
+  if (
+    automatic &&
+    statement('SELECT 1 FROM user_dismissals WHERE user_id=? AND tracked_id=?').get(
+      userId,
+      trackedId,
+    )
+  )
+    return;
+  if (!automatic)
+    statement('DELETE FROM user_dismissals WHERE user_id=? AND tracked_id=?').run(
+      userId,
+      trackedId,
+    );
+  statement(`INSERT OR IGNORE INTO user_library(user_id,tracked_id,status,created_at)
+    VALUES(?,?,?,?)`).run(userId, trackedId, status, new Date().toISOString());
+}
+export function requireFollowed(id: number) {
+  const user = currentUser();
+  if (
+    user &&
+    !statement('SELECT 1 FROM user_library WHERE user_id=? AND tracked_id=?').get(user.id, id)
+  )
+    throw new AppError('FORBIDDEN', 'Follow this work to perform this action', 403);
 }
 function insertTracked(input: TrackRequest): TrackedMedia {
   const existing = listTracked().find(
@@ -744,7 +808,7 @@ function insertTracked(input: TrackRequest): TrackedMedia {
       t.media.id === input.media.id,
   );
   if (existing) return existing;
-  const m = automaticMedia(input.media);
+  const m = { ...automaticMedia(input.media), trackedId: null };
   const id = Number(
     statement(
       'INSERT INTO tracked_media(anilist_id,mangadex_id,title,type,cover_url,kavita_series_id,auto_download,created_at,media_json,sources_json,status) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
@@ -856,4 +920,54 @@ export function migrateV8(database: Database.Database) {
         WHERE json_extract(media_json,'$.id') LIKE 'suwayomi:%';
       PRAGMA user_version=8;`);
   })();
+}
+
+/** Split existing reading state from the shared works in one atomic, repeatable migration. */
+export function migrateV9(database: Database.Database) {
+  database
+    .transaction(() => {
+      if (Number(database.pragma('user_version', { simple: true })) >= 9) return;
+      database.exec(`CREATE TABLE users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      role TEXT NOT NULL CHECK(role IN ('admin','member')), password_hash TEXT NOT NULL,
+      session_epoch TEXT NOT NULL, created_at TEXT NOT NULL, last_seen_at TEXT,
+      adult_content INTEGER NOT NULL DEFAULT 0 CHECK(adult_content IN (0,1)), kavita_key TEXT);
+      CREATE TABLE user_library (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        tracked_id INTEGER NOT NULL REFERENCES tracked_media(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'READING',last_read REAL,last_read_at TEXT,
+        progress_checked INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,
+        PRIMARY KEY(user_id,tracked_id));
+      CREATE INDEX user_library_tracked ON user_library(tracked_id,user_id);
+      CREATE TABLE user_dismissals (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        tracked_id INTEGER NOT NULL REFERENCES tracked_media(id) ON DELETE CASCADE,
+        PRIMARY KEY(user_id,tracked_id));
+      INSERT INTO users(id,username,role,password_hash,session_epoch,created_at,adult_content)
+        SELECT 1,username,'admin',password_hash,session_epoch,strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+          COALESCE((SELECT CAST(value AS TEXT)='true' FROM settings WHERE key='adultContent'),0)
+        FROM administrator WHERE id=1;
+      INSERT INTO user_library(user_id,tracked_id,status,last_read,last_read_at,progress_checked,created_at)
+        SELECT 1,id,status,last_read,last_read_at,progress_checked,created_at FROM tracked_media
+        WHERE EXISTS(SELECT 1 FROM users WHERE id=1);
+      INSERT OR IGNORE INTO write_versions VALUES('users',0);
+      INSERT OR IGNORE INTO write_versions SELECT 'user:'||id,0 FROM users;
+      PRAGMA user_version=9;`);
+      // Retire credentials from the legacy table after the copy commits atomically.
+      database.exec('DELETE FROM administrator');
+      for (const op of ['INSERT', 'UPDATE', 'DELETE']) {
+        const ref = op === 'DELETE' ? 'OLD' : 'NEW';
+        database.exec(`CREATE TRIGGER version_user_library_${op} AFTER ${op} ON user_library BEGIN
+        INSERT INTO write_versions(domain,version) VALUES('user:'||${ref}.user_id,1)
+        ON CONFLICT(domain) DO UPDATE SET version=version+1; END;`);
+      }
+      database.exec(`CREATE TRIGGER version_users_INSERT AFTER INSERT ON users BEGIN
+      INSERT OR IGNORE INTO write_versions VALUES('user:'||NEW.id,0);
+      UPDATE write_versions SET version=version+1 WHERE domain='users'; END;
+      CREATE TRIGGER version_users_UPDATE AFTER UPDATE OF role,password_hash,session_epoch,adult_content,kavita_key ON users BEGIN
+      UPDATE write_versions SET version=version+1 WHERE domain='users' OR domain='user:'||NEW.id; END;
+      CREATE TRIGGER version_users_DELETE AFTER DELETE ON users BEGIN
+      UPDATE write_versions SET version=version+1 WHERE domain='users' OR domain='user:'||OLD.id; END;`);
+    })
+    .immediate();
 }

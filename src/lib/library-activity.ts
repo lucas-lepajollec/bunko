@@ -6,12 +6,16 @@ import { listTracked } from './db';
 import { visibleTracked } from './adult';
 
 export function libraryActivity(): LibraryActivity {
-  const current = activeSourceMatch();
+  const entries = listTracked();
+  const visible = visibleTracked(entries);
+  const ids = new Set(visible.map((t) => t.id));
+  const active = activeSourceMatch();
+  const current = active && ids.has(active.id) ? active : null;
   const lastAt = workerValue('last_check_at');
   return {
-    hiddenAdult: listTracked().length - visibleTracked(listTracked()).length,
+    hiddenAdult: entries.length - visible.length,
     matching: {
-      queued: sourceMatchQueue().filter((t) => t.id !== current?.id).length,
+      queued: sourceMatchQueue().filter((t) => ids.has(t.id) && t.id !== current?.id).length,
       current: current?.title ?? null,
     },
     refresh: {
