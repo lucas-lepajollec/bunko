@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Accounts can be renamed (by an administrator in Settings → Users, or by yourself in My account); you stay signed in. A `/library/<username>` mount must be renamed in the compose file too.
 - Multi-user: every account is a separate Bunko instance with its own settings, Suwayomi and Kavita connections, library, downloads and content filter (administrators also manage accounts in Settings → Users). The existing installation becomes the first account unchanged — same session, same `/library` mount; additional accounts mount their Kavita folders under `/library/<username>`.
 - Per-work content filter override from the title sheet, applied everywhere.
 - Library: "All" and "Updates" tabs; reading statuses moved to a dropdown next to the sort.

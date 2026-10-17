@@ -2,7 +2,7 @@
 import { Select } from '@/components/select';
 import { clearPersistentCache } from '@/lib/client/cache';
 import Link from 'next/link';
-import { Notice, toast } from '@/components/notify';
+import { InfoBubble, Notice, toast } from '@/components/notify';
 import { useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
 import { useSWRConfig } from 'swr';
 import type {
@@ -677,6 +677,7 @@ function Account() {
   const { mutate } = useSWRConfig();
   const auth = useApi<AuthState>('/api/auth');
   const me = useApi<MyAccount>('/api/me');
+  const [newName, setNewName] = useState('');
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -728,6 +729,42 @@ function Account() {
           </button>
         </span>
       </Row>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const username = newName.trim();
+          if (!username || username === auth.data?.username) return;
+          if (await patchMe({ username }, t('users.renamed', { name: username }))) {
+            setNewName('');
+            await mutate('/api/auth');
+          }
+        }}
+        className="flex flex-col gap-2"
+      >
+        <span className="text-muted flex items-center gap-2 text-[13px]">
+          {t('account.rename')}
+          <InfoBubble label={t('account.rename')}>{t('account.renameInfo')}</InfoBubble>
+        </span>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder={auth.data?.username ?? ''}
+            minLength={3}
+            maxLength={64}
+            autoComplete="username"
+            aria-label={t('account.rename')}
+            className={field}
+          />
+          <button
+            type="submit"
+            disabled={!newName.trim() || newName.trim() === auth.data?.username}
+            className={cx(smallButton, 'h-11 shrink-0 px-5')}
+          >
+            {t('users.rename')}
+          </button>
+        </div>
+      </form>
       <Row label={t('settings.language')} tip={t('settings.languageTip')}>
         <LanguageSelect className="h-11 pr-3 pl-4" />
       </Row>
@@ -794,9 +831,10 @@ function Account() {
   );
 }
 
-/** Admin: create accounts, change roles, reset passwords, remove users. */
+/** Admin: create accounts, rename, change roles, reset passwords, remove users. */
 function Users() {
   const { t } = useI18n();
+  const { mutate } = useSWRConfig();
   const relative = useRelativeTime();
   const auth = useApi<AuthState>('/api/auth');
   const users = useApi<UserAccount[]>('/api/users');
@@ -861,6 +899,29 @@ function Users() {
                 }
                 options={roleOptions}
               />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  const username = window
+                    .prompt(t('users.renamePrompt', { name: u.username }), u.username)
+                    ?.trim();
+                  if (username && username !== u.username)
+                    void act(
+                      async () => {
+                        await send('/api/users', 'PATCH', {
+                          id: u.id,
+                          username,
+                        } satisfies UserPatch);
+                        if (self) await mutate('/api/auth');
+                      },
+                      t('users.renamed', { name: username }),
+                    );
+                }}
+                className={smallButton}
+              >
+                {t('users.rename')}
+              </button>
               <button
                 type="button"
                 disabled={busy}

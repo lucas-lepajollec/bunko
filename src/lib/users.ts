@@ -7,6 +7,7 @@ import { inTenant } from './tenant-context';
 import { currentUser } from './user-context';
 import { getSettings, updateSettings } from './settings';
 import { credentials, password } from './account-validation';
+import { rememberMediaRootBeforeRename } from './media-root';
 import { requireAdmin } from './auth';
 import { hashPassword } from './passwords';
 import { AppError } from './errors';
@@ -17,14 +18,22 @@ export const userPatch = z.strictObject({
   id: z.number().int().positive(),
   role: z.enum(['admin', 'member']).optional(),
   password: password.optional(),
+  username: credentials.shape.username.optional(),
 });
-export const myAccountPatch = z.strictObject({ adultContent: z.boolean().optional() });
+export const myAccountPatch = z.strictObject({
+  adultContent: z.boolean().optional(),
+  username: credentials.shape.username.optional(),
+});
 export const userDelete = z.strictObject({
   id: z.number().int().positive(),
   confirmDeleteData: z.literal(true),
 });
 export function myAccount(): MyAccount {
-  const user = currentUser();
+  const identity = currentUser();
+  const user =
+    identity &&
+    (accountsDb().prepare('SELECT id,username,role FROM users WHERE id=?').get(identity.id) as
+      typeof identity | undefined);
   if (!user) throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
   return {
     id: user.id,
@@ -34,8 +43,29 @@ export function myAccount(): MyAccount {
   };
 }
 export function patchMyAccount(input: MyAccountPatch) {
-  updateSettings(input);
+  const user = currentUser();
+  if (!user) throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+  accountsDb()
+    .transaction(() => renameUser(user.id, input.username))
+    .immediate();
+  if (input.adultContent !== undefined) updateSettings({ adultContent: input.adultContent });
   return myAccount();
+}
+/** Called inside the account write transaction; keep IDs, hashes and session epochs intact. */
+function renameUser(id: number, username: string | undefined) {
+  if (username === undefined) return;
+  const previous = accountsDb().prepare('SELECT username FROM users WHERE id=?').get(id) as
+    { username: string } | undefined;
+  if (!previous) throw new AppError('NOT_FOUND', 'User not found', 404);
+  if (previous.username === username) return;
+  inTenant(id, () => rememberMediaRootBeforeRename(previous.username));
+  try {
+    accountsDb().prepare('UPDATE users SET username=? WHERE id=?').run(username, id);
+  } catch (error) {
+    if ((error as { code?: string }).code?.startsWith('SQLITE_CONSTRAINT_UNIQUE'))
+      throw new AppError('USERNAME_TAKEN', 'Username already exists', 409);
+    throw error;
+  }
 }
 export function listUsers(): UserAccount[] {
   requireAdmin();
@@ -106,6 +136,7 @@ export async function patchUser(input: UserPatch) {
     .transaction(() => {
       target(input.id);
       if (input.role === 'member') preserveAdmin(input.id);
+      renameUser(input.id, input.username);
       if (input.role !== undefined)
         accountsDb().prepare('UPDATE users SET role=? WHERE id=?').run(input.role, input.id);
       if (hash !== undefined)

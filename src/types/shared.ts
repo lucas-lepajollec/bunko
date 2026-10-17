@@ -645,6 +645,8 @@ export interface UserPatch {
   id: number;
   role?: UserRole;
   password?: string;
+  /** Rename the account (same rules as setup; unique). Media root `/library/<username>` follows it. */
+  username?: string;
 }
 /** GET/PATCH /api/me — the signed-in user's own preferences. */
 export interface MyAccount {
@@ -656,6 +658,8 @@ export interface MyAccount {
 }
 export interface MyAccountPatch {
   adultContent?: boolean;
+  /** Rename one's own account (same rules as `UserPatch.username`). */
+  username?: string;
 }
 /** POST /api/auth/setup (first start only) and POST /api/auth (sign in). */
 export interface Credentials {

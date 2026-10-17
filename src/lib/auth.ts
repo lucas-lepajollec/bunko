@@ -195,7 +195,13 @@ export async function login(request: Request, input: Credentials) {
     .prepare('SELECT * FROM users WHERE username=? COLLATE NOCASE')
     .get(username) as Account | undefined;
   const verified = await verifyPassword(value.password, current?.password_hash ?? null);
-  if (!verified || !current || account(current.id)?.session_epoch !== current.session_epoch)
+  const latest = current && account(current.id);
+  if (
+    !verified ||
+    !current ||
+    latest?.session_epoch !== current.session_epoch ||
+    latest.username.toLowerCase() !== username
+  )
     invalidCredentials();
   db()
     .prepare('UPDATE users SET last_seen_at=? WHERE id=?')

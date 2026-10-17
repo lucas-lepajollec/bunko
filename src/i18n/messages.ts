@@ -746,6 +746,13 @@ const en: Dictionary = {
   'error.LAST_ADMIN': 'There must remain at least one administrator.',
   'error.USERNAME_TAKEN': 'This username is already used.',
   'kavita.mediaRoot': 'Your Kavita folders are expected inside Bunko under',
+  'users.rename': 'Rename',
+  'users.renamed': 'Renamed to {name}',
+  'users.renamePrompt':
+    'New username for {name}. If their Kavita folders are mounted under /library/{name}, rename that folder in the Docker compose too.',
+  'account.rename': 'Username',
+  'account.renameInfo':
+    'You stay signed in. If your Kavita folders are mounted under /library/<your name>, rename that path in the Docker compose too.',
 };
 
 const fr: Dictionary = {
@@ -1469,6 +1476,13 @@ const fr: Dictionary = {
   'error.LAST_ADMIN': 'Il doit rester au moins un administrateur.',
   'error.USERNAME_TAKEN': 'Ce nom d’utilisateur est déjà pris.',
   'kavita.mediaRoot': 'Tes dossiers Kavita sont attendus dans Bunko sous',
+  'users.rename': 'Renommer',
+  'users.renamed': 'Renommé en {name}',
+  'users.renamePrompt':
+    'Nouveau nom pour {name}. Si ses dossiers Kavita sont montés sous /library/{name}, renomme aussi ce dossier dans le compose Docker.',
+  'account.rename': 'Nom d’utilisateur',
+  'account.renameInfo':
+    'Tu restes connecté. Si tes dossiers Kavita sont montés sous /library/<ton nom>, renomme aussi ce chemin dans le compose Docker.',
 };
 
 const es: Dictionary = {
@@ -2187,6 +2201,13 @@ const es: Dictionary = {
   'error.LAST_ADMIN': 'Debe quedar al menos un administrador.',
   'error.USERNAME_TAKEN': 'Este nombre de usuario ya existe.',
   'kavita.mediaRoot': 'Tus carpetas de Kavita se esperan en Bunko bajo',
+  'users.rename': 'Renombrar',
+  'users.renamed': 'Renombrado a {name}',
+  'users.renamePrompt':
+    'Nuevo nombre para {name}. Si sus carpetas de Kavita están montadas en /library/{name}, cambia también esa ruta en el compose de Docker.',
+  'account.rename': 'Nombre de usuario',
+  'account.renameInfo':
+    'Sigues conectado. Si tus carpetas de Kavita están montadas en /library/<tu nombre>, cambia también esa ruta en el compose de Docker.',
 };
 
 const de: Dictionary = {
@@ -2909,6 +2930,13 @@ const de: Dictionary = {
   'error.LAST_ADMIN': 'Mindestens ein Administrator muss bleiben.',
   'error.USERNAME_TAKEN': 'Dieser Benutzername ist vergeben.',
   'kavita.mediaRoot': 'Deine Kavita-Ordner werden in Bunko erwartet unter',
+  'users.rename': 'Umbenennen',
+  'users.renamed': 'Umbenannt in {name}',
+  'users.renamePrompt':
+    'Neuer Name für {name}. Sind die Kavita-Ordner unter /library/{name} eingehängt, benenne diesen Pfad auch im Docker-Compose um.',
+  'account.rename': 'Benutzername',
+  'account.renameInfo':
+    'Du bleibst angemeldet. Sind deine Kavita-Ordner unter /library/<dein Name> eingehängt, ändere diesen Pfad auch im Docker-Compose.',
 };
 
 const it: Dictionary = {
@@ -3627,6 +3655,13 @@ const it: Dictionary = {
   'error.LAST_ADMIN': 'Deve restare almeno un amministratore.',
   'error.USERNAME_TAKEN': 'Questo nome utente è già usato.',
   'kavita.mediaRoot': 'Le tue cartelle Kavita sono attese in Bunko sotto',
+  'users.rename': 'Rinomina',
+  'users.renamed': 'Rinominato in {name}',
+  'users.renamePrompt':
+    'Nuovo nome per {name}. Se le sue cartelle Kavita sono montate in /library/{name}, rinomina anche quel percorso nel compose Docker.',
+  'account.rename': 'Nome utente',
+  'account.renameInfo':
+    'Resti connesso. Se le tue cartelle Kavita sono montate in /library/<tuo nome>, rinomina anche quel percorso nel compose Docker.',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };
