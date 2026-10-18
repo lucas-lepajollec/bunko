@@ -1,3 +1,4 @@
+import { rememberMediaPreview, mediaPreview } from './media-preview';
 import { deduplicate } from './search-engine';
 import { rakutenDetail } from './rakuten';
 import {
@@ -73,6 +74,7 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
   const baseUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
   const resolveAdult = adultResolver();
   return items.map((m) => {
+    rememberMediaPreview(m);
     const own = trackedForMedia(m, tracked);
     const associated = trackedForMedia(m, shared);
     const t =
@@ -124,6 +126,20 @@ export async function discover(
   });
   return { ...result, items: raw ? result.items : withTracking(result.items).filter(visibleMedia) };
 }
+/** Interactive pages expose completed provider lanes while the others continue independently. */
+export async function progressiveDiscover(
+  q: DiscoverQuery,
+  signal?: AbortSignal,
+): Promise<DiscoverPage> {
+  signal?.throwIfAborted();
+  if ((q.kind !== 'novel' && q.kind !== 'book') || !hardcoverConfigured())
+    return discover(q, signal);
+  const providers = { openlibrary: () => discoverBooks(q), hardcover: () => discoverHardcover(q) };
+  const key = `discover:progressive:v1:${JSON.stringify(q)}:${includeProviderAdults()}:${credentialScope(getSettings().hardcoverToken)}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}`;
+  const page = await discoverAll(key, q.page ?? 1, providers, true);
+  return { ...page, items: withTracking(page.items).filter(visibleMedia) };
+}
+
 async function discoverLane(
   q: DiscoverQuery,
   signal?: AbortSignal,
@@ -436,7 +452,11 @@ function detailCacheKey(id: string) {
     .digest('hex');
   return `detail:${namespace}:${id}`;
 }
-export async function mediaDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
+export async function mediaDetail(
+  id: string,
+  signal?: AbortSignal,
+  progressive = false,
+): Promise<MediaDetail> {
   const followed = listTracked().find(
     (t) =>
       t.media.id === id ||
@@ -506,7 +526,16 @@ export async function mediaDetail(id: string, signal?: AbortSignal): Promise<Med
     };
   }
   signal?.throwIfAborted();
-  return { ...enrichDetail(await cached(key, 30 * 60_000, load)), ...metadataStatus(key) };
+  const preview = progressive ? mediaPreview(id) : undefined;
+  const detail = await cached(
+    key,
+    30 * 60_000,
+    load,
+    preview
+      ? { initial: () => ({ ...preview, tags: [], relations: [], recommendations: [] }) }
+      : {},
+  );
+  return { ...enrichDetail(detail), ...metadataStatus(key) };
 }
 
 export async function suwayomiDetail(id: number, signal?: AbortSignal): Promise<MediaDetail> {

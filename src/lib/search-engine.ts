@@ -221,6 +221,7 @@ export async function search(
   type?: MediaType,
   signal?: AbortSignal,
   fast = false,
+  progressive = false,
 ): Promise<SearchResponse> {
   const start = Date.now();
   const key = `${includeProviderAdults()}:${type}:${query.toLowerCase()}`;
@@ -296,7 +297,12 @@ export async function search(
           );
         return j.provider === 'local' && !j.cacheProvider
           ? await j.run()
-          : await cached(`search:${j.cacheProvider ?? j.provider}:${key}`, 30_000, j.run);
+          : await cached(
+              `search:${j.cacheProvider ?? j.provider}:${key}`,
+              30_000,
+              j.run,
+              progressive ? { initial: () => [] } : {},
+            );
       } finally {
         timings[i] = Date.now() - at;
       }

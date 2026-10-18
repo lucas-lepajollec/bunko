@@ -52,9 +52,11 @@ export function ChapterTable({
   ownedVolumes = new Set<number>(),
   onViewChange,
   inventoryCorrection,
+  pending = false,
 }: {
   /** Start in the volume view (works counted in volumes). */
   defaultByVolume?: boolean;
+  pending?: boolean;
   onViewChange?: (volume: boolean) => void;
   inventoryCorrection?: { active: boolean; busy: boolean; onCorrect: () => void };
   ownedVolumes?: Set<number>;
@@ -303,7 +305,7 @@ export function ChapterTable({
           })}
         </p>
       )}
-      {total === 0 && (
+      {total === 0 && !pending && (
         <p className="text-muted py-6 font-serif text-xl italic">
           {t(
             byVolume

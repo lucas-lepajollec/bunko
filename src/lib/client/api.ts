@@ -98,14 +98,15 @@ export function openStream(
 
 /**
  * Catalog search in two steps: the fast answer (local catalog + cached providers) shows at once,
- * the complete one replaces it when every provider has answered.
+ * the next snapshots add each completed provider without waiting for the slowest.
  */
 export function useProgressiveSearch(q: string) {
   const path = q.length >= 2 ? `/api/search?q=${encodeURIComponent(q)}` : null;
   // Retaining a previous query lets its full answer mask the new query's fast results.
   const fast = useApi<SearchResponse>(path && `${path}&fast=1`);
   const full = useApi<SearchResponse>(path, {
-    refreshInterval: (data) => (data?.pending ? 1500 : 0),
+    refreshInterval: (data) => (data?.pending ? 750 : 0),
+    dedupingInterval: 500,
   });
   const data = full.data ?? fast.data;
   return {

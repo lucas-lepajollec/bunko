@@ -59,7 +59,7 @@ export default function TitlePage() {
   const detail = useApi<MediaDetail>(`/api/media?id=${encodeURIComponent(id)}`, {
     refreshInterval: (data) => (data?.pending ? 1500 : 0),
   });
-  if (detail.error)
+  if (detail.error && !detail.data)
     return (
       <main className="mx-auto max-w-[1760px] px-4 pt-24 md:px-10 md:pt-32">
         <Empty title={t('title.unavailable')}>
@@ -78,7 +78,12 @@ export default function TitlePage() {
         </div>
       </main>
     );
-  return <Title key={id} media={detail.data} />;
+  return (
+    <Title
+      key={id}
+      media={{ ...detail.data, partial: detail.data.partial || Boolean(detail.error) }}
+    />
+  );
 }
 
 function Title({ media }: { media: MediaDetail }) {
@@ -200,9 +205,16 @@ function Title({ media }: { media: MediaDetail }) {
       : null;
   const chapters = useSWR<ChaptersResponse>(
     chaptersKey,
-    () => send<ChaptersResponse>('/api/manga/chapters', 'POST', { sources, mediaId: media.id }),
+    () =>
+      send<ChaptersResponse>('/api/manga/chapters', 'POST', {
+        sources,
+        mediaId: media.id,
+        progressive: true,
+      }),
     {
       revalidateOnFocus: false,
+      refreshInterval: (data) => (data?.pending ? 750 : 0),
+      dedupingInterval: 500,
     },
   );
   const active = (batches.data ?? []).filter(
@@ -217,9 +229,9 @@ function Title({ media }: { media: MediaDetail }) {
   const missing = (chapters.data?.chapters ?? []).filter((c) => isMissing(c, owned, ownedVolumes));
   const matching =
     !scanFailed &&
-    (needsMatch || matchRun > 0) &&
-    (lanes === null || lanes.some((l) => l.state === 'loading'));
-  const checking = matching || chapters.isLoading || chapters.isValidating;
+    (lanes === null ? needsMatch || matchRun > 0 : lanes.some((l) => l.state === 'loading'));
+  const checking =
+    matching || chapters.isLoading || chapters.isValidating || Boolean(chapters.data?.pending);
   const incomplete = Boolean(
     scanFailed ||
     chapters.error ||
@@ -464,10 +476,10 @@ function Title({ media }: { media: MediaDetail }) {
                 onClick={() => download(missing.map((c) => c.key))}
                 className={primaryButton}
               >
-                {checking || (!chapters.data && sources.length > 0)
-                  ? t('title.loadingChapters')
-                  : missing.length
-                    ? t('title.completeSeries', { count: missing.length })
+                {missing.length
+                  ? t('title.completeSeries', { count: missing.length })
+                  : checking || (!chapters.data && sources.length > 0)
+                    ? t('title.loadingChapters')
                     : incomplete
                       ? t('chapters.partialLabel')
                       : sources.length && chapters.data?.chapters.length
@@ -643,6 +655,7 @@ function Title({ media }: { media: MediaDetail }) {
                           }
                         : undefined
                     }
+                    pending={checking}
                     ownedVolumes={ownedVolumes}
                     mediaId={entry?.media.id ?? media.id}
                     defaultByVolume={entry?.unit === 'volume'}

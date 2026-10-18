@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Display search/catalog results and source chapters incrementally as each provider responds. Show owned rows immediately and retain selection/read/download actions while slower work continues. Open known-card sheets from their available metadata while details load; preserve content on errors and avoid perpetual failed-provider loading loops.
+
 - Persist reliable automatic source matches for followed works directly from title discovery, refresh library/chapter state after completed scans, and request release updates when sources change. Retry transient matching failures after five minutes; language or extension changes requeue source-less works. Manual choices and dismissals remain authoritative.
 
 - Show when search, title sheets and release feeds are still being completed, refresh pending data automatically and report partial source failures. Show the displayed/total chapter count and avoid premature empty or “complete series” claims.
