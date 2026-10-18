@@ -1,6 +1,12 @@
 import { deduplicate } from './search-engine';
 import { rakutenDetail } from './rakuten';
-import { discoverComics, metronDetail, metronConfigured, metronScope } from './metron';
+import {
+  discoverComics,
+  metronDetail,
+  metronConfigured,
+  metronScope,
+  metronCoverUrl,
+} from './metron';
 import { discoverAll } from './discover-all';
 import { credentialScope } from './catalog-provider-http';
 import { discoverHardcover, hardcoverConfigured, hardcoverDetail } from './hardcover';
@@ -74,7 +80,10 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
         format: t?.media.format ?? m.format,
         type: t?.media.type ?? m.type,
         adult: Boolean(m.adult || t?.media.adult),
-        coverUrl: t ? t.coverUrl : m.coverUrl,
+        // Repair already cached/tracked Metron series without waiting for their metadata TTL.
+        coverUrl:
+          (t ? t.coverUrl : m.coverUrl) ??
+          (/^metron:\d+$/.test(m.id) ? metronCoverUrl(Number(m.id.slice(7))) : null),
         trackedId: own?.id ?? null,
         kavitaSeriesId: t?.kavitaSeriesId ?? null,
       },

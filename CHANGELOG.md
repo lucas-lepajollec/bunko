@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Show BD/comic covers in catalog and search cards by resolving Metron issue artwork on demand, including previously cached series. Keep provider pacing and reuse the issue cache.
+- Search Metron alternative names as well as primary names, and prevent a previous query's full results from masking the next query's fast results.
+
 - Preserve reader completion when moving immediately to the next chapter, and flush intermediate positions on navigation or exit.
 - Keep distinct catalog works with conflicting provider identities, creators or publication years instead of merging homonyms by title.
 - Discover all formats across AniList, Open Library, MangaUpdates and configured Hardcover/Metron catalogs. Results arrive progressively, retain provider pagination and report partial outages.

@@ -1,5 +1,12 @@
 # Verification — current and historical evidence
 
+## Comic artwork and search follow-up — 2026-10-18
+
+- `npm run check`: lint, strict TypeScript, **540 tests / 40 files**, optimized production build; no warnings. Regression fixtures cover Metron series without image fields, authenticated cover redirects, shared issue-page lookup, warm-cache repair, credential replacement, hostile/mismatched artwork and cover retention without CDN auth forwarding. Search fixtures exercise eight formats through every enabled catalog adapter/local index, plus fast/full query changes.
+- Local image `bunko:comic-cover-search` builds successfully; `scripts/container-smoke.sh` passes **111 checks**. This is a local validation image, not a new published GHCR release.
+- Production-image browser QA uses tmpfs-only data/library, a synthetic administrator/token and synthetic upstream metadata. Eight cards load artwork through the actual protected redirect, using the public issue image from Metron's documented example. All eight load on desktop and mobile (390 × 844), no horizontal overflow or console errors. Alpha → Beta search shows only the new result. Temporary browser/container state removed.
+- Provider coverage is verified by code and isolated protocol fixtures. Real NAS credentials, catalog contents and deployment are not accessed. Upstream matching pages remain bounded; publication-only providers and live extension search are separate integrations.
+
 ## Catalog/reader audit corrections — 2026-10-18
 
 - Final `npm run check` exits 0 on Node 22.23.1: zero-warning ESLint, strict TypeScript, **534 tests / 39 files** and optimized production build without warnings. Source remained unchanged throughout the accepted run.

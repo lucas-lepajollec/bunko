@@ -16,7 +16,7 @@ export function localImageUrl(value: string): boolean {
     if (url.origin !== 'http://bunko.invalid' || !value.startsWith(url.pathname + '?'))
       return false;
     const keys = [...url.searchParams.keys()];
-    if (url.pathname === '/api/kavita/image')
+    if (url.pathname === '/api/kavita/image' || url.pathname === '/api/metron/cover')
       return (
         keys.length === 1 &&
         keys[0] === 'seriesId' &&

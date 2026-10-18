@@ -1,5 +1,19 @@
 # Architecture
 
+Catalog search without a `type` restriction fans out to AniList (including novels), MangaDex,
+MangaUpdates, Open Library, configured Metron/Hardcover, tracked works, the local Suwayomi FTS
+index and the Kavita index. Provider responses are bounded relevance pages (20–100 entries),
+not exhaustive exports of all upstream matches. Google Books, BnF, Rakuten and Royal Road RSS
+are publication-feed/detail integrations rather than additional global-search engines. Live
+extension search stays separate. Fast and full browser responses belong to their exact query;
+a previous full response must never mask the next query's fast answer.
+
+Metron series cards resolve artwork through an authenticated, on-demand issue-cover redirect.
+The issue cache remains private and credential-scoped, with provider-wide pacing and at most
+two queued cover lookups so browsing does not monopolize the provider queue. Covers can arrive
+progressively on a cold cache. Null covers in older cached/tracked series are repaired on output;
+retaining a cover for imports resolves the same route server-side without forwarding auth to the CDN.
+
 Bunko is a long-running Node 22 Next.js App Router service. All route handlers run in the Node runtime, dynamically, with private JSON responses marked no-store and a persistent private image cache. The root page renders a French React interface with a server layout, locally bundled Geist font, Tailwind CSS and Radix dialogs/tabs. `src/lib/client/api.ts` is the browser adapter over the shared contract; server integrations never enter the client bundle. Authentication gates the views, signed HttpOnly cookies authenticate SSE, and logout/expiry resets interface state.
 
 ## Data and execution

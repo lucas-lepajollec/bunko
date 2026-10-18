@@ -94,8 +94,9 @@ export function openStream(
  */
 export function useProgressiveSearch(q: string) {
   const path = q.length >= 2 ? `/api/search?q=${encodeURIComponent(q)}` : null;
-  const fast = useApi<SearchResponse>(path && `${path}&fast=1`, { keepPreviousData: true });
-  const full = useApi<SearchResponse>(path, { keepPreviousData: true });
+  // Retaining a previous query lets its full answer mask the new query's fast results.
+  const fast = useApi<SearchResponse>(path && `${path}&fast=1`);
+  const full = useApi<SearchResponse>(path);
   const data = full.data ?? fast.data;
   return {
     data,

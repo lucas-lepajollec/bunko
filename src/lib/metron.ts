@@ -12,6 +12,7 @@ import { AppError } from './errors';
 import { publicationDay } from './edition-feeds';
 import { releaseNumber } from './release-providers';
 import { saveMetadata, storedMetadata } from './metadata-cache';
+import { sharedConcurrencyGate } from './concurrency';
 const DAY = 86400_000;
 export interface MetronSeries {
   id: number;
@@ -86,11 +87,42 @@ export function metronMedia(row: MetronSeries): UnifiedMedia {
     chapters: collected ? null : (row.issue_count ?? null),
     volumes: collected ? (row.issue_count ?? null) : null,
     synopsis: cleanSynopsis(row.desc),
-    coverUrl: row.image ?? null,
+    coverUrl: row.image ?? metronCoverUrl(row.id),
     genres: row.genres?.map((g) => g.name) ?? [],
     status: row.status ?? (row.year_end ? 'completed' : null),
     webUrl: `https://metron.cloud/series/${row.id}/`,
   };
+}
+/** Series responses have no artwork. Resolve only covers the browser actually displays. */
+export function metronCoverUrl(id: number) {
+  return `/api/metron/cover?seriesId=${id}`;
+}
+export async function metronCover(id: number, signal?: AbortSignal): Promise<string | null> {
+  // Keep at most two cover lookups in the provider queue so browsing cannot starve searches.
+  return sharedConcurrencyGate('metron:covers', 2)(async () => {
+    const issues = await metronJson<Page<MetronIssue>>(`/issue/?series_id=${id}`, 7 * DAY);
+    for (const issue of issues.results) {
+      if (issue.series?.id !== id || !issue.image) continue;
+      try {
+        const url = new URL(issue.image);
+        if (
+          url.protocol === 'https:' &&
+          !url.username &&
+          !url.password &&
+          !url.port &&
+          [
+            'static.metron.cloud',
+            'metron.cloud',
+            'metron-static.nyc3.digitaloceanspaces.com',
+          ].includes(url.hostname)
+        )
+          return url.href;
+      } catch {
+        /* Ignore malformed upstream artwork URLs. */
+      }
+    }
+    return null;
+  }, signal);
 }
 function pageMedia(data: Page<MetronSeries>) {
   return data.results.map(metronMedia);
@@ -115,14 +147,13 @@ export async function discoverComics(q: DiscoverQuery): Promise<DiscoverPage> {
 export async function searchComics(query: string): Promise<UnifiedMedia[]> {
   if (!metronConfigured()) return [];
   return pageMedia(
-    await metronJson<Page<MetronSeries>>(`/series/?${new URLSearchParams({ name: query })}`),
+    await metronJson<Page<MetronSeries>>(`/series/?${new URLSearchParams({ q: query })}`),
   );
 }
 export async function metronDetail(id: number): Promise<MediaDetail> {
   const row = await metronJson<MetronSeries>(`/series/${id}/`, 7 * DAY);
   const media = metronMedia(row);
-  const issues = await metronJson<Page<MetronIssue>>(`/issue/?series_id=${id}`, 7 * DAY);
-  media.coverUrl ??= issues.results.find((r) => r.image)?.image ?? null;
+  media.coverUrl = row.image ?? (await metronCover(id));
   return {
     ...media,
     tags: [row.publisher?.name, row.year_end ? String(row.year_end) : null].filter(

@@ -41,6 +41,8 @@ export function allowedCoverUrl(value: string) {
         'www.mangaupdates.com',
         'books.google.com',
         'static.metron.cloud',
+        'metron.cloud',
+        'metron-static.nyc3.digitaloceanspaces.com',
         'assets.hardcover.app',
         'thumbnail.image.rakuten.co.jp',
       ].includes(url.hostname)
@@ -228,6 +230,11 @@ export async function selectedCover(url: string, parentSignal?: AbortSignal) {
   if (allowedCoverUrl(url)) return downloadCover(url, parentSignal);
   if (!localImageUrl(url)) return null;
   const parsed = new URL(url, 'http://bunko.invalid');
+  if (parsed.pathname === '/api/metron/cover') {
+    const { metronCover } = await import('./metron');
+    const artwork = await metronCover(Number(parsed.searchParams.get('seriesId')), parentSignal);
+    return artwork && allowedCoverUrl(artwork) ? downloadCover(artwork, parentSignal) : null;
+  }
   if (parsed.pathname.startsWith('/api/covers/')) {
     const saved = storedCover(Number(parsed.pathname.split('/').at(-1)));
     return saved && saved.hash === parsed.searchParams.get('v') ? readStoredCover(saved) : null;
