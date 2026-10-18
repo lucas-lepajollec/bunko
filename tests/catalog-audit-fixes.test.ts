@@ -5,7 +5,7 @@ import path from 'node:path';
 const dir = mkdtempSync(path.join(tmpdir(), 'bunko-p2-'));
 process.env.BUNKO_DATA_DIR = dir;
 process.env.BUNKO_WORKER = 'false';
-const { enterFixtureTenant } = await import('./tenant-fixture');
+const { enterFixtureTenant, settleCatalogTasks } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { db, closeTenant } = await import('@/lib/db');
 const { inTenant } = await import('@/lib/tenant-context');
@@ -215,9 +215,9 @@ it('fans out all formats with provider pagination and refreshes new at midnight 
   });
   const query = { kind: 'all' as const, sort: 'new' as const, page: 2, perPage: 8 };
   await discover(query);
-  await vi.waitFor(async () => expect((await discover(query)).pending).toBe(false), {
-    timeout: 3000,
-  });
+  // This asserts completed content/cache identity, not elapsed time: upstream pacing is real.
+  await settleCatalogTasks();
+  expect((await discover(query)).pending).toBe(false);
   expect((await discover(query)).items.map((m) => m.id).sort()).toEqual([
     'anilist:1',
     'mangaupdates:4',
@@ -227,7 +227,8 @@ it('fans out all formats with provider pagination and refreshes new at midnight 
   expect(calls).toHaveLength(4);
   vi.setSystemTime(new Date('2027-01-01T00:01:00Z'));
   await discover(query);
-  await vi.waitFor(async () => expect((await discover(query)).pending).toBe(false));
+  await settleCatalogTasks();
+  expect((await discover(query)).pending).toBe(false);
   expect(calls.filter((url) => url.includes('anilist'))).toHaveLength(2);
 });
 it('keeps coalesced aggregate pages separate across accounts', async () => {
