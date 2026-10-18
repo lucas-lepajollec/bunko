@@ -236,19 +236,27 @@ it('persists unit through PATCH and a new DB connection; counts distinct volumes
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({
     unit: 'volume',
-    progress: { read: 1, owned: 4, released: 12, unread: 3, readSource: 'kavita' },
-    newChapters: 1,
+    progress: { read: 1, owned: 3, released: 12, unread: 2, readSource: 'kavita' },
+    newChapters: 2,
   });
   closeTenant(1);
   expect(getTracked(t.id)?.unit).toBe('volume');
   db().prepare("UPDATE tracked_media SET unit='chapter' WHERE id=?").run(t.id);
   expect(getTracked(t.id)?.progress).toMatchObject({ read: 20, owned: 5, released: 120 });
 });
-it('uses complete Kavita volumes, excludes sentinels and derives read volume from read chapters when absent', () => {
+it('uses explicit complete Kavita volumes, excludes sentinels and does not infer full ownership from chapter imports', () => {
   expect(
     kavitaVolumeProgress([
-      { name: '1', chapters: [{ pages: 10, pagesRead: 10 }] },
-      { name: '2', chapters: [{ pages: 10, pagesRead: 9 }] },
+      {
+        name: '1',
+        chapters: [
+          { pages: 10, pagesRead: 10, files: [{ filePath: '/library/Story Vol. 1.cbz' }] },
+        ],
+      },
+      {
+        name: '2',
+        chapters: [{ pages: 10, pagesRead: 9, files: [{ filePath: '/library/Story Vol. 2.cbz' }] }],
+      },
       { name: '-100000', chapters: [] },
     ]),
   ).toEqual({ volumes: [1, 2], volumeRead: 1 });
@@ -256,7 +264,7 @@ it('uses complete Kavita volumes, excludes sentinels and derives read volume fro
   recordImport(t.media, { id: 10, chapterNumber: 10, name: 'Volume 1' });
   recordImport(t.media, { id: 11, chapterNumber: 11, name: 'Volume 2' });
   db().prepare("UPDATE tracked_media SET unit='volume',last_read=10 WHERE id=?").run(t.id);
-  expect(getTracked(t.id)?.progress).toMatchObject({ read: 1, owned: 2, unread: 1 });
+  expect(getTracked(t.id)?.progress).toMatchObject({ read: 0, owned: 0, unread: 0 });
 });
 it('does not detect or auto-download chapters covered by an owned volume, even in chapter mode', async () => {
   const t = track({ media: work(), sources: [source], autoDownload: true });

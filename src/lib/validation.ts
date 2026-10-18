@@ -204,6 +204,12 @@ export const settingsPatch = z
       .max(2000)
       .regex(/^[^\s\x00-\x1f]*$/)
       .optional(),
+    metronApiToken: z
+      .string()
+      .trim()
+      .max(4000)
+      .regex(/^[^\s\x00-\x1f\x7f]*$/)
+      .optional(),
     metronUsername: z
       .string()
       .trim()

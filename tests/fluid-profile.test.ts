@@ -9,6 +9,7 @@ const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { db, indexCatalog } = await import('@/lib/db');
 const { emptyMedia } = await import('@/lib/media');
+const { sourceServerKey } = await import('@/lib/source-server');
 const { saveMetadata } = await import('@/lib/metadata-cache');
 const { persistentSecret } = await import('@/lib/settings');
 const routes = {
@@ -56,11 +57,14 @@ it('profiles 30k releases, 100 followed works and 5k observations through authen
     coverUrl: 'https://s4.anilist.co/cover.jpg',
     bannerUrl: 'https://s4.anilist.co/banner.jpg',
   }));
+  const namespace = sourceServerKey();
   db().transaction(() => {
     const tracked = db().prepare(
       'INSERT INTO tracked_media(id,anilist_id,title,type,created_at,media_json,sources_json) VALUES(?,?,?,?,?,?,?)',
     );
-    const observed = db().prepare('INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name) VALUES(?,?,?,?,?)');
+    const observed = db().prepare(
+      'INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name,namespace) VALUES(?,?,?,?,?,?)',
+    );
     const release = db().prepare('INSERT INTO chapter_releases VALUES(?,?,?)');
     for (const [i, media] of works.entries()) {
       tracked.run(
@@ -72,7 +76,7 @@ it('profiles 30k releases, 100 followed works and 5k observations through authen
         JSON.stringify(media),
         '[]',
       );
-      for (let c = 0; c < 50; c++) observed.run(i + 1, i * 1000 + c, c, '1', 'Fixture');
+      for (let c = 0; c < 50; c++) observed.run(i + 1, i * 1000 + c, c, '1', 'Fixture', namespace);
       for (let c = 0; c < 300; c++) {
         const date = new Date(Date.now() - (c % 29) * 86400000 - c * 1000).toISOString();
         const value = {

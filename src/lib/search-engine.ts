@@ -1,9 +1,9 @@
-import { searchComics, metronConfigured } from './metron';
+import { searchComics, metronConfigured, metronScope } from './metron';
 import { searchHardcover, hardcoverConfigured } from './hardcover';
 import { credentialScope } from './catalog-provider-http';
 import { getSettings } from './settings';
 import { sourceResultVisibility } from './source-visibility';
-import { novelRecord } from './novels';
+import { enrichNovelRecords, resolvedNovelRecord } from './novels';
 import { searchBooks } from './openlibrary';
 import { isTextKind } from './library-kinds';
 import { sourceFormat } from './library-kinds';
@@ -37,10 +37,37 @@ function identities(m: UnifiedMedia) {
 export function deduplicate(input: UnifiedMedia[]): UnifiedMedia[] {
   const output: UnifiedMedia[] = [];
   const exact = new Map<string, UnifiedMedia>();
+  const providerIds = new WeakMap<UnifiedMedia, Map<string, string>>();
+  const ids = (m: UnifiedMedia) =>
+    new Map([
+      [m.id.split(':')[0], m.id.slice(m.id.indexOf(':') + 1)],
+      ...(m.anilistId ? [['anilist', String(m.anilistId)]] : []),
+      ...(m.mangadexId ? [['mangadex', m.mangadexId]] : []),
+      ...(m.mangaUpdatesId ? [['mangaupdates', m.mangaUpdatesId]] : []),
+    ] as [string, string][]);
+  const sameWork = (m: UnifiedMedia, other: UnifiedMedia) => {
+    const left = providerIds.get(m) ?? ids(m),
+      right = ids(other);
+    if ([...right].some(([p, id]) => left.has(p) && left.get(p) !== id)) return false;
+    const linked = [...right].some(([p, id]) => left.get(p) === id);
+    if (linked) return true;
+    if (m.format && other.format && m.format !== other.format) return false;
+    if (m.year && other.year && m.year !== other.year) return false;
+    // A title alone is insufficient for western comics/books; require a shared creator.
+    if (isTextKind(m) || isTextKind(other) || m.format === 'COMIC' || other.format === 'COMIC')
+      return m.authors.some((a) =>
+        other.authors.some((b) => normalizeTitle(a) === normalizeTitle(b)),
+      );
+    return (
+      !m.authors.length ||
+      !other.authors.length ||
+      m.authors.some((a) => other.authors.some((b) => normalizeTitle(a) === normalizeTitle(b)))
+    );
+  };
   const aliases = new Map<string, UnifiedMedia[]>();
   const index = (m: UnifiedMedia) => {
-    if (m.anilistId) exact.set(`${m.type}:al:${m.anilistId}`, m);
-    if (m.mangadexId) exact.set(`${m.type}:md:${m.mangadexId}`, m);
+    for (const [provider, id] of providerIds.get(m) ?? ids(m))
+      exact.set(`${m.type}:${provider}:${id}`, m);
     for (const key of identities(m)) {
       const name = `${m.type}:${key}`;
       const list = aliases.get(name) ?? [];
@@ -64,21 +91,29 @@ export function deduplicate(input: UnifiedMedia[]): UnifiedMedia[] {
         media.id.startsWith('openlibrary:') &&
         m.id !== media.id
       );
+    const exactTarget = [...ids(media)]
+      .flatMap(([p, id]) => exact.get(`${media.type}:${p}:${id}`) ?? [])
+      .find((m) => compatible(m) && sameWork(m, media));
     const target =
-      (media.anilistId ? exact.get(`${media.type}:al:${media.anilistId}`) : undefined) ??
+      (exactTarget && compatible(exactTarget) && sameWork(exactTarget, media)
+        ? exactTarget
+        : undefined) ??
       [...candidates].find(
         (m) =>
           compatible(m) &&
+          sameWork(m, media) &&
           !(m.anilistId && media.anilistId && m.anilistId !== media.anilistId) &&
           !(m.mangadexId && media.mangadexId && m.mangadexId !== media.mangadexId),
       );
     if (!target) {
       const copy = structuredClone(media);
+      providerIds.set(copy, ids(copy));
       output.push(copy);
       index(copy);
       continue;
     }
     target.adult = Boolean(target.adult || media.adult);
+    providerIds.set(target, new Map([...(providerIds.get(target) ?? ids(target)), ...ids(media)]));
     target.altTitles = [...new Set([...target.altTitles, media.title, ...media.altTitles])].filter(
       (t) => t !== target.title,
     );
@@ -172,7 +207,9 @@ async function mangaupdates(
     },
     2500,
   );
-  const records = await Promise.all(r.results.map(({ record }) => novelRecord(record)));
+  const summaries = r.results.map(({ record }) => record);
+  enrichNovelRecords(summaries);
+  const records = summaries.map(resolvedNovelRecord);
   return records
     .filter((m) => !isUnwantedUpdatesType(m.type))
     .filter((m) => type !== 'NOVEL' || /novel/i.test(m.type ?? ''))
@@ -197,7 +234,7 @@ export async function search(
   if ((!type || type === 'MANGA') && metronConfigured())
     jobs.push({
       provider: 'local',
-      cacheProvider: `metron:${credentialScope(getSettings().metronUsername, getSettings().metronPassword)}`,
+      cacheProvider: `metron:${metronScope()}`,
       run: () => searchComics(query),
     });
   if ((!type || type === 'NOVEL') && hardcoverConfigured())

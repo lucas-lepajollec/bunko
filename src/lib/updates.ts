@@ -1,3 +1,4 @@
+import { sourceServerKey } from './source-server';
 import { recentSourceChapter } from './source-chapters';
 import { visibleTracked } from './adult';
 import { randomUUID } from 'node:crypto';
@@ -54,7 +55,9 @@ export function updatesFeed(): UpdatesFeed {
     ]),
   );
   const entries = (
-    statement('SELECT * FROM update_entries ORDER BY id DESC LIMIT 200').all() as {
+    statement('SELECT * FROM update_entries WHERE namespace=? ORDER BY id DESC LIMIT 200').all(
+      sourceServerKey(),
+    ) as {
       id: number;
       tracked_id: number;
       source_name: string;
@@ -64,8 +67,8 @@ export function updatesFeed(): UpdatesFeed {
     const t = byId.get(row.tracked_id);
     if (!t) return [];
     const chapters = statement(
-      'SELECT c.chapter_id,c.number,c.batch_id,o.volume FROM update_chapters c LEFT JOIN observed_chapters o ON o.chapter_id=c.chapter_id AND o.tracked_id=? WHERE c.entry_id=? ORDER BY c.number',
-    ).all(t.id, row.id) as {
+      'SELECT c.chapter_id,c.number,c.batch_id,o.volume FROM update_chapters c LEFT JOIN observed_chapters o ON o.chapter_id=c.chapter_id AND o.tracked_id=? AND o.namespace=? WHERE c.entry_id=? ORDER BY c.number',
+    ).all(t.id, sourceServerKey(), row.id) as {
       chapter_id: number;
       number: number | null;
       batch_id: string | null;
@@ -156,6 +159,9 @@ export async function runUpdateCheck(
   parentSignal?: AbortSignal,
   ownsLease: () => boolean = () => true,
 ) {
+  const namespace = sourceServerKey();
+  const leaseCheck = ownsLease;
+  ownsLease = () => leaseCheck() && sourceServerKey() === namespace;
   if (parentSignal?.aborted || !ownsLease()) return;
   const lease = statement('SELECT owner FROM worker_lock WHERE id=1').get() as
     { owner: string } | undefined;
@@ -198,23 +204,23 @@ export async function runUpdateCheck(
             await refreshSourceStatuses(t, result, signal, ownsLease);
             if (signal.aborted || !ownsLease()) return;
             const seen = statement(
-              'SELECT chapter_id,number FROM observed_chapters WHERE tracked_id=?',
-            ).all(t.id) as { chapter_id: number; number: number | null }[];
+              'SELECT chapter_id,number FROM observed_chapters WHERE tracked_id=? AND namespace=?',
+            ).all(t.id, namespace) as { chapter_id: number; number: number | null }[];
             const imported = statement(
-              'SELECT chapter_id,number FROM imported_chapters WHERE tracked_id=?',
-            ).all(t.id) as { chapter_id: number; number: number | null }[];
+              'SELECT chapter_id,number,namespace FROM imported_chapters WHERE tracked_id=?',
+            ).all(t.id) as { chapter_id: number; number: number | null; namespace: string }[];
             const known = new Set(
               listBatches()
-                .filter((b) => sameMedia(b.media, t.media))
+                .filter((b) => b.sourceKey === namespace && sameMedia(b.media, t.media))
                 .flatMap((b) => b.chapterIds),
             );
             const ownedVolumes = ownedVolumeNumbers(t);
             const kavitaNumbers = matchKavita(t.media, t.kavitaSeriesId)?.numbers ?? [];
             const baselines = new Set(
               (
-                statement('SELECT source_id,manga_id FROM source_baselines WHERE tracked_id=?').all(
-                  t.id,
-                ) as { source_id: string; manga_id: number }[]
+                statement(
+                  'SELECT source_id,manga_id FROM source_baselines WHERE tracked_id=? AND namespace=?',
+                ).all(t.id, namespace) as { source_id: string; manga_id: number }[]
               ).map((s) => `${s.source_id}:${s.manga_id}`),
             );
             const fresh = result.chapters
@@ -229,7 +235,7 @@ export async function runUpdateCheck(
                   ) &&
                   !imported.some((s) =>
                     c.number === null
-                      ? c.variants.some((v) => v.id === s.chapter_id)
+                      ? s.namespace === namespace && c.variants.some((v) => v.id === s.chapter_id)
                       : s.number === c.number,
                   ),
               )
@@ -247,14 +253,13 @@ export async function runUpdateCheck(
               observeChapters(
                 t.id,
                 result.chapters.flatMap((c) => c.variants),
+                namespace,
               );
               for (const source of t.sources)
                 if (!result.errors.some((e) => e.mangaId === source.suwayomiMangaId))
-                  statement('INSERT OR IGNORE INTO source_baselines VALUES(?,?,?)').run(
-                    t.id,
-                    source.sourceId,
-                    source.suwayomiMangaId,
-                  );
+                  statement(
+                    'INSERT OR IGNORE INTO source_baselines(tracked_id,source_id,manga_id,namespace) VALUES(?,?,?,?)',
+                  ).run(t.id, source.sourceId, source.suwayomiMangaId, namespace);
               // A detection group remains whole; its durable batches are capped at 500 chapters.
               const sourceOrder = [
                 ...new Map(t.sources.map((source) => [source.sourceId, source])).values(),
@@ -264,9 +269,14 @@ export async function runUpdateCheck(
                 if (!selected.length) continue;
                 const id = Number(
                   statement(
-                    'INSERT INTO update_entries(tracked_id,source_id,source_name,detected_at) VALUES(?,?,?,?)',
-                  ).run(t.id, source.sourceId, source.sourceName, new Date().toISOString())
-                    .lastInsertRowid,
+                    'INSERT INTO update_entries(tracked_id,source_id,source_name,detected_at,namespace) VALUES(?,?,?,?,?)',
+                  ).run(
+                    t.id,
+                    source.sourceId,
+                    source.sourceName,
+                    new Date().toISOString(),
+                    namespace,
+                  ).lastInsertRowid,
                 );
                 for (const c of selected)
                   statement(

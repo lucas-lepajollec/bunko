@@ -13,3 +13,18 @@ export function enterFixtureTenant(createAccount = true) {
     accountsDb().prepare("INSERT OR IGNORE INTO account_state VALUES('token_user','1')").run();
   }
 }
+
+/** Let background catalog fixtures finish before replacing fetch or removing their tenant DB. */
+export async function settleCatalogTasks() {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const runtime = globalThis as typeof globalThis & {
+    __bunkoDiscoverLoads?: Map<string, Promise<void>>;
+    __bunkoNovelLoads?: Map<string, Promise<void>>;
+  };
+  await Promise.allSettled([
+    ...new Set([
+      ...(runtime.__bunkoDiscoverLoads?.values() ?? []),
+      ...(runtime.__bunkoNovelLoads?.values() ?? []),
+    ]),
+  ]);
+}

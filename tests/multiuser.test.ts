@@ -18,6 +18,7 @@ const directory = mkdtempSync(path.join(tmpdir(), 'bunko-tenants-'));
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
 process.env.BUNKO_WORKER = 'false';
+const { settleCatalogTasks } = await import('./tenant-fixture');
 const { inTenant, tenantId, tenantContext, tenantPath } = await import('@/lib/tenant-context');
 const { accountsDb } = await import('@/lib/accounts-store');
 const {
@@ -140,7 +141,8 @@ beforeAll(async () => {
         .run(String(Date.now()));
     });
 });
-afterEach(() => {
+afterEach(async () => {
+  await settleCatalogTasks();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -500,6 +502,7 @@ it('authenticates the complete route inventory and concurrently exercises every 
       exported++;
       const context = { params: Promise.resolve({ id: '123' }) };
       const queries: Record<string, string> = {
+        '/api/discover': '?kind=manga',
         '/api/media': '?id=anilist:1',
         '/api/media/sources': '?id=anilist:1',
         '/api/tracked/covers': '?id=1',
@@ -516,7 +519,8 @@ it('authenticates the complete route inventory and concurrently exercises every 
       );
       for (const [i, r] of responses.entries()) {
         expect(r.status, `${method} ${pathname}, tenant ${i + 1}`).not.toBe(500);
-        if (pathname === '/api/users' && i === 1) expect(r.status).toBe(403);
+        if (['/api/users', '/api/settings/test-provider'].includes(pathname) && i === 1)
+          expect(r.status).toBe(403);
         else expect(r.status, `${method} ${pathname}`).not.toBe(403);
         // Infinite download SSE snapshots are checked separately; cancel rather than await forever.
         if (pathname === '/api/downloads/stream') {

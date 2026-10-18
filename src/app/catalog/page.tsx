@@ -1,6 +1,6 @@
 'use client';
 import { Select } from '@/components/select';
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import useSWRInfinite from 'swr/infinite';
 import Link from 'next/link';
@@ -18,14 +18,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { PosterCard } from '@/components/media';
 import { ReleaseCard } from '@/components/releases';
-import {
-  Empty,
-  ErrorNote,
-  PageTitle,
-  PosterSkeletons,
-  cx,
-  smallButton,
-} from '@/components/ui';
+import { Empty, ErrorNote, PageTitle, PosterSkeletons, cx, smallButton } from '@/components/ui';
 
 const KINDS: DiscoverKind[] = [
   'all',
@@ -94,7 +87,11 @@ function Catalog() {
     router.replace(`${pathname}${next.size ? `?${next}` : ''}`, { scroll: false });
   };
   const query = (page: number) => {
-    const q = new URLSearchParams({ sort, page: String(page), perPage: '32' });
+    const q = new URLSearchParams({
+      sort,
+      page: String(page),
+      perPage: kind === 'all' ? '8' : '32',
+    });
     if (kind !== 'all') q.set('kind', kind);
     if (genre) q.set('genre', genre);
     if (status) q.set('status', status);
@@ -106,7 +103,9 @@ function Catalog() {
     (index, previous: DiscoverPage | null) =>
       q || view === 'chapters' || (previous && !previous.hasNextPage) ? null : query(index + 1),
     (path: string) => api<DiscoverPage>(path),
-    { revalidateFirstPage: false },
+    {
+      revalidateFirstPage: false,
+    },
   );
   const releases = useSWRInfinite<ReleasesPage>(
     (index, previous: ReleasesPage | null) => {
@@ -125,6 +124,26 @@ function Catalog() {
     releases.isLoading ||
     (releases.size > 0 && releases.data && typeof releases.data[releases.size - 1] === 'undefined');
   const items = (pages.data ?? []).flatMap((p) => p.items);
+  const enriching = pages.data?.some((p) => p.pending) ?? false;
+  const mutatePages = pages.mutate;
+  useEffect(() => {
+    if (!enriching) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      // SWR Infinite's generic refresh interval skips cached pages when revalidateFirstPage=false.
+      // Explicitly select pending pages while retaining every completed page in the browser cache.
+      await mutatePages((data) => data, { revalidate: (page) => Boolean(page?.pending) }).catch(
+        () => {},
+      );
+      if (!stopped) timer = setTimeout(poll, 1500);
+    };
+    timer = setTimeout(poll, 1500);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [enriching, mutatePages]);
   const last = pages.data?.[pages.data.length - 1];
   const loadingMore =
     pages.isLoading ||
@@ -352,6 +371,11 @@ function Catalog() {
         </>
       )}
       {pages.error && <ErrorNote error={pages.error} />}
+      {!q && view !== 'chapters' && pages.data?.some((p) => p.warnings?.length) && (
+        <p role="status" className="text-muted text-sm">
+          {t('catalog.partial')}
+        </p>
+      )}
       {searched.error && <ErrorNote error={searched.error} />}
       {view === 'chapters' && !q ? (
         <>
@@ -386,10 +410,11 @@ function Catalog() {
                 subtitle={dated ? formatStartDate(m.startDate, locale) : undefined}
               />
             ))}
-            {(q ? searched.isLoading : loadingMore) && <PosterSkeletons count={16} />}
+            {(q ? searched.isLoading : loadingMore || enriching) && <PosterSkeletons count={16} />}
           </div>
           {!q &&
             !loadingMore &&
+            !enriching &&
             !pages.error &&
             items.length === 0 &&
             (kind === 'comic' ? (

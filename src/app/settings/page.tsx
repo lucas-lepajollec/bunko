@@ -7,6 +7,7 @@ import { useState, useSyncExternalStore, type FormEvent, type ReactNode } from '
 import { useSWRConfig } from 'swr';
 import type {
   AuthState,
+  CatalogProvider,
   KavitaIndexStatus,
   MyAccount,
   MyAccountPatch,
@@ -75,7 +76,7 @@ export default function SettingsPage() {
       : (visible as readonly string[]).includes(hash)
         ? (hash as SectionId)
         : null;
-  const settings = useApi<Settings>('/api/settings');
+  const settings = useApi<Settings>('/api/settings', { revalidateOnFocus: true });
   const status = useApi<ServicesStatus>('/api/status');
   return (
     <Page className="pb-20 md:grid md:grid-cols-[260px_minmax(0,1fr)] md:gap-20">
@@ -1050,7 +1051,6 @@ function Users() {
   );
 }
 
-type CatalogProvider = 'googlebooks' | 'metron' | 'rakuten' | 'hardcover';
 const CATALOGS: {
   id: CatalogProvider;
   url: string;
@@ -1058,13 +1058,14 @@ const CATALOGS: {
 }[] = [
   {
     id: 'googlebooks',
-    url: 'https://developers.google.com/books/docs/v1/using#APIKey',
+    url: 'https://console.cloud.google.com/apis/credentials',
     fields: [{ key: 'googleBooksApiKey', secret: true }],
   },
   {
     id: 'metron',
-    url: 'https://metron.cloud/accounts/signup/',
+    url: 'https://metron.cloud/accounts/tokens/',
     fields: [
+      { key: 'metronApiToken', secret: true },
       { key: 'metronUsername', secret: false },
       { key: 'metronPassword', secret: true },
     ],
@@ -1089,10 +1090,12 @@ function Catalogs({ settings, onSaved }: { settings: Settings; onSaved: (s: Sett
   const { t } = useI18n();
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const canManage = settings.catalogs?.canManage ?? false;
   const configured = (k: string) =>
     (settings.secretsConfigured as Record<string, boolean>)[k] ??
     Boolean((settings as unknown as Record<string, unknown>)[k]);
   async function save(p: (typeof CATALOGS)[number], clear = false) {
+    if (!canManage) return;
     setBusy(p.id);
     try {
       const patch = Object.fromEntries(
@@ -1112,6 +1115,7 @@ function Catalogs({ settings, onSaved }: { settings: Settings; onSaved: (s: Sett
     }
   }
   async function test(id: CatalogProvider) {
+    if (!canManage) return;
     setBusy(id);
     try {
       await send('/api/settings/test-provider', 'POST', { provider: id });
@@ -1122,11 +1126,26 @@ function Catalogs({ settings, onSaved }: { settings: Settings; onSaved: (s: Sett
       setBusy(null);
     }
   }
+  const renderField = (f: (typeof CATALOGS)[number]['fields'][number]) => (
+    <label key={f.key} className="flex flex-col gap-1.5">
+      <span className="text-mid text-xs">{t(`catalogs.field.${f.key}`)}</span>
+      <input
+        type={f.secret ? 'password' : 'text'}
+        autoComplete="off"
+        value={draft[f.key] ?? (f.secret ? '' : String(settings[f.key as keyof Settings] ?? ''))}
+        onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+        placeholder={configured(f.key) && f.secret ? '••••••••' : t(`catalogs.field.${f.key}`)}
+        className={field}
+      />
+    </label>
+  );
   return (
     <div className="flex flex-col gap-5 text-sm">
       <p className="text-mid leading-relaxed">{t('catalogs.intro')}</p>
+      {!canManage && <p className="text-mid">{t('catalogs.managedByAdmin')}</p>}
       {CATALOGS.map((p) => {
-        const on = p.fields.every((f) => configured(f.key));
+        const on = settings.catalogs?.configured[p.id] ?? false;
+        const dirty = p.fields.some((f) => (draft[f.key] ?? '').trim());
         return (
           <div
             key={p.id}
@@ -1136,65 +1155,103 @@ function Catalogs({ settings, onSaved }: { settings: Settings; onSaved: (s: Sett
               <span className="font-semibold">{t(`catalogs.${p.id}.name`)}</span>
               <Dot tone={on ? 'ok' : 'idle'} />
               <span className="text-muted">{on ? t('catalogs.on') : t('catalogs.off')}</span>
-              <a
-                href={p.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-mid ml-auto underline hover:text-white"
-              >
-                {t('catalogs.getKey')} ↗
-              </a>
-            </div>
-            <p className="text-mid">{t(`catalogs.${p.id}.what`)}</p>
-            <div className="grid gap-2 md:grid-cols-2">
-              {p.fields.map((f) => (
-                <input
-                  key={f.key}
-                  type={f.secret ? 'password' : 'text'}
-                  autoComplete="off"
-                  value={draft[f.key] ?? ''}
-                  onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
-                  placeholder={
-                    configured(f.key) && f.secret ? '••••••••' : t(`catalogs.field.${f.key}`)
-                  }
-                  aria-label={t(`catalogs.field.${f.key}`)}
-                  className={field}
-                />
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={busy === p.id || !p.fields.some((f) => (draft[f.key] ?? '').trim())}
-                onClick={() => save(p)}
-                className="bg-fg text-bg h-10 rounded-full px-5 font-semibold disabled:opacity-50"
-              >
-                {t('common.save')}
-              </button>
-              {on && (
-                <>
-                  <button
-                    type="button"
-                    disabled={busy === p.id}
-                    onClick={() => test(p.id)}
-                    className={smallButton}
-                  >
-                    {busy === p.id ? t('common.working') : t('catalogs.test')}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy === p.id}
-                    onClick={() => save(p, true)}
-                    className="text-bad h-9 rounded-full px-3 hover:bg-white/[0.06]"
-                  >
-                    {t('catalogs.remove')}
-                  </button>
-                </>
+              {canManage && (
+                <a
+                  href={p.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-mid ml-auto underline hover:text-white"
+                >
+                  {t('catalogs.getKey')} ↗
+                </a>
               )}
             </div>
+            <p className="text-mid">{t(`catalogs.${p.id}.what`)}</p>
+            {canManage && (
+              <>
+                {p.id === 'googlebooks' && <GoogleBooksHelp />}
+                {p.id === 'metron' && <p className="text-mid">{t('catalogs.metron.help')}</p>}
+                <div className="grid gap-2 md:grid-cols-2">
+                  {p.fields
+                    .filter((f) => !['metronUsername', 'metronPassword'].includes(f.key))
+                    .map(renderField)}
+                </div>
+                {p.id === 'metron' && (
+                  <details
+                    className="text-mid"
+                    open={!configured('metronApiToken') && configured('metronPassword')}
+                  >
+                    <summary className="cursor-pointer">{t('catalogs.metron.legacy')}</summary>
+                    <p className="my-2">{t('catalogs.metron.legacyHelp')}</p>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {p.fields
+                        .filter((f) => ['metronUsername', 'metronPassword'].includes(f.key))
+                        .map(renderField)}
+                    </div>
+                  </details>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={busy !== null || !dirty}
+                    onClick={() => save(p)}
+                    className="bg-fg text-bg h-10 rounded-full px-5 font-semibold disabled:opacity-50"
+                  >
+                    {t('common.save')}
+                  </button>
+                  {on && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy !== null || Boolean(dirty)}
+                        onClick={() => test(p.id)}
+                        className={smallButton}
+                      >
+                        {busy === p.id ? t('common.working') : t('catalogs.test')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy !== null}
+                        onClick={() => save(p, true)}
+                        className="text-bad h-9 rounded-full px-3 hover:bg-white/[0.06]"
+                      >
+                        {t('catalogs.remove')}
+                      </button>
+                    </>
+                  )}
+                </div>
+                {dirty && <p className="text-muted text-xs">{t('catalogs.saveBeforeTest')}</p>}
+              </>
+            )}
           </div>
         );
       })}
     </div>
+  );
+}
+
+function GoogleBooksHelp() {
+  const { t } = useI18n();
+  return (
+    <details className="text-mid leading-relaxed">
+      <summary className="cursor-pointer">{t('catalogs.googlebooks.setup')}</summary>
+      <ol className="mt-2 list-decimal space-y-2 pl-5">
+        <li>{t('catalogs.googlebooks.project')}</li>
+        <li>
+          <a
+            className="underline"
+            href="https://console.cloud.google.com/apis/library/books.googleapis.com"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t('catalogs.googlebooks.enable')} ↗
+          </a>
+        </li>
+        <li>{t('catalogs.googlebooks.create')}</li>
+        <li>{t('catalogs.googlebooks.restrict')}</li>
+        <li>{t('catalogs.googlebooks.paste')}</li>
+      </ol>
+      <p className="mt-2">{t('catalogs.googlebooks.serverKey')}</p>
+    </details>
   );
 }

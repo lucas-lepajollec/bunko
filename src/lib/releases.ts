@@ -1,3 +1,4 @@
+import { sourceServerKey } from './source-server';
 import { fetchRakutenReleases } from './rakuten';
 import { fetchMetronReleases } from './metron';
 import { fetchGoogleEditions, fetchBnfEditions, type EditionRelease } from './edition-feeds';
@@ -9,6 +10,8 @@ import { z } from 'zod';
 import type { ChapterRelease, DiscoverKind, UnifiedMedia, ReleasesPage } from '@/types/shared';
 import { db, statement, listTracked, trackedForMedia, writeVersion, dataDir } from './db';
 import { withTracking } from './catalog';
+import { accountsDb } from './accounts-store';
+import { catalogSettingsVersion } from './catalog-settings-store';
 import { deduplicate } from './search-engine';
 import { fromAniList, normalizeTitle, type AniMedia } from './media';
 import { decodeMetadata } from './metadata-cache';
@@ -221,11 +224,23 @@ export function refreshReleases(): Promise<void> {
   if (old) return old;
   const last = statement("SELECT value FROM worker_state WHERE key='release_refresh'").get() as
     { value: string } | undefined;
-  if (last && Date.now() - Number(last.value) < 20 * 60_000) return Promise.resolve();
+  const catalogVersion = catalogSettingsVersion(accountsDb());
+  const previousCatalog = statement(
+    "SELECT value FROM worker_state WHERE key='release_catalog_revision'",
+  ).get() as { value: string } | undefined;
+  if (
+    last &&
+    Date.now() - Number(last.value) < 20 * 60_000 &&
+    (previousCatalog?.value ?? '0') === catalogVersion
+  )
+    return Promise.resolve();
   // Persist attempts before network: failures and route reloads cannot create a retry loop.
   statement(
     "INSERT INTO worker_state(key,value) VALUES('release_refresh',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
   ).run(String(Date.now()));
+  statement(
+    "INSERT INTO worker_state(key,value) VALUES('release_catalog_revision',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+  ).run(catalogVersion);
   const job = (async () => {
     const page = Number(
       (
@@ -326,8 +341,9 @@ export function releaseStore(now = new Date(), includeExpected = false): Chapter
     (r) => Date.parse(r.releasedAt) >= now.getTime() - 42 * DAY && r.provider !== 'source',
   );
   const observations = statement(`SELECT o.*,d.uploaded_at AS at FROM observation_dates d
-    JOIN observed_chapters o ON o.tracked_id=d.tracked_id AND o.chapter_id=d.chapter_id
-    WHERE d.uploaded_at>=? AND d.uploaded_at<=? ORDER BY d.uploaded_at DESC LIMIT 30000`).all(
+    JOIN observed_chapters o ON o.tracked_id=d.tracked_id AND o.chapter_id=d.chapter_id AND o.namespace=d.namespace
+    WHERE d.namespace=? AND d.uploaded_at>=? AND d.uploaded_at<=? ORDER BY d.uploaded_at DESC LIMIT 30000`).all(
+    sourceServerKey(),
     new Date(now.getTime() - 30 * DAY).toISOString(),
     now.toISOString(),
   ) as {

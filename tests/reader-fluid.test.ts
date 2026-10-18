@@ -20,7 +20,8 @@ const { saveMetadata } = await import('@/lib/metadata-cache');
 const { chapterVolume } = await import('@/lib/chapter-volume');
 const { readerDirection, saveReaderProgress } = await import('@/lib/reader');
 const { registerReaderArchive } = await import('@/lib/reader-archives');
-const { chapterFilename, importChapter, refreshTrackedProgress } = await import('@/lib/kavita');
+const { chapterFilename, importChapter, refreshTrackedProgress, seriesDirectory } =
+  await import('@/lib/kavita');
 const { libraryKind, targetFor } = await import('@/lib/library-paths');
 const { syncKavitaIndex, indexedSeries, suggestLibraries } = await import('@/lib/kavita-index');
 const { kavitaMedia, trackKavitaSeries } = await import('@/lib/kavita-track');
@@ -246,12 +247,7 @@ it('prefers imported local CBZ, reads a single ZIP entry, and recovers legacy im
   await chaptersFor([selection]);
   await importChapter(t.media, chapter());
   expect(calls.filter((c) => c.includes('/page/'))).toHaveLength(3);
-  const file = path.join(
-    directory,
-    'library/1/Comics',
-    media().title,
-    'Fixture BD Vol. 03 Ch. 0010.cbz',
-  );
+  const file = path.join(await seriesDirectory(t.media), 'Fixture BD Vol. 03 Ch. 0010.cbz');
   const zip = new AdmZip(file);
   expect(zip.readAsText('ComicInfo.xml')).toContain('<Volume>3</Volume>');
   expect(zip.readAsText('ComicInfo.xml')).toContain('<Manga>No</Manga>');

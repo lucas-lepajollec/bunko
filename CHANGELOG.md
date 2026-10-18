@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Preserve reader completion when moving immediately to the next chapter, and flush intermediate positions on navigation or exit.
+- Keep distinct catalog works with conflicting provider identities, creators or publication years instead of merging homonyms by title.
+- Discover all formats across AniList, Open Library, MangaUpdates and configured Hardcover/Metron catalogs. Results arrive progressively, retain provider pagination and report partial outages.
+- Classify cold web-novel pages in the background without waiting for every detail sheet; keep upstream pacing and require positive web-novel evidence.
+- Write the downloaded source variant's language into ComicInfo, omitting unknown/multilingual values.
+
+- Preserve existing CBZ files on import conflicts. New works receive separate stable folders, including homonyms; matching import fingerprints make interrupted publication retryable without replacement.
+- Keep partial chapter imports separate from complete-volume ownership, so later chapters in the same tome are detected and downloaded.
+- Scope chapter imports, archive pointers, jobs, observations and batches to their Suwayomi connection. Switching servers preserves local files/history, detaches obsolete numeric source links and blocks old batches from running against the replacement server.
+
+- Catalog credentials are shared across accounts and managed by administrators; everyone can use configured catalogs while personal libraries, service connections and caches stay separate. Existing catalog credentials migrate once from the oldest administrator, without merging different users' keys.
+- Metron accepts an API token without a username, with priority over the retained password connection. Settings include a direct token link and step-by-step Google Books key setup in all five interface languages.
+- Shared catalog changes refresh each account's release feed on its next request, including when the regular twenty-minute refresh window has not elapsed.
+
 - Downloaded chapters show up right after Kavita's scan; chapters you own only as files appear in the table and open in the reader; the table shows all chapters by default and folds the range picker.
 - Sources: one shared request budget per Suwayomi server across accounts (interactive first), health no longer counts Bunko's own queue, stale "slow" states clear quickly; popular/latest requests match Suwayomi's own web UI and extension errors are reported in full.
 - Matches: search sources with another name; choose whether Bunko's cover is pushed to Kavita. One "Read" button (Bunko reader, Kavita in its menu); status centered on phones; sign out in the phone menu.

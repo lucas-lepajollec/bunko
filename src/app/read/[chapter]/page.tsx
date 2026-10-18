@@ -12,7 +12,8 @@ import {
   type ReactNode,
 } from 'react';
 import type { ReaderChapter, ReaderProgressUpdate } from '@/types/shared';
-import { mediaHref, send, useApi } from '@/lib/client/api';
+import { api, mediaHref, useApi } from '@/lib/client/api';
+import { ReaderProgressWriter } from '@/lib/client/reader-progress';
 import { useI18n } from '@/i18n/I18nProvider';
 import { ErrorNote, Spinner, cx } from '@/components/ui';
 
@@ -65,23 +66,44 @@ function Reader() {
   const current = page ?? data.data?.resumePage ?? 0;
   const [chrome, setChrome] = useState(true);
 
-  // Save the position, debounced; the server marks the chapter read on the last page.
-  const timer = useRef<number | undefined>(undefined);
+  const progress = useMemo(
+    () =>
+      new ReaderProgressWriter((value) =>
+        api('/api/reader/progress', {
+          method: 'PUT',
+          body: JSON.stringify(value),
+          keepalive: true,
+        }),
+      ),
+    [],
+  );
+  // Completion is immediate. Leaving the chapter flushes any intermediate position too.
   useEffect(() => {
     if (!data.data || !media || !pages.length) return;
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => {
-      const body: ReaderProgressUpdate = {
-        mediaId: media,
-        chapterId: data.data!.chapterId,
-        number: data.data!.number,
-        page: current,
-        pageCount: pages.length,
-      };
-      void send('/api/reader/progress', 'PUT', body).catch(() => undefined);
-    }, 1200);
-    return () => window.clearTimeout(timer.current);
-  }, [current, data.data, media, pages.length]);
+    const body: ReaderProgressUpdate = {
+      mediaId: media,
+      chapterId: data.data!.chapterId,
+      number: data.data!.number,
+      page: current,
+      pageCount: pages.length,
+    };
+    progress.update(body);
+  }, [current, data.data, media, pages.length, progress]);
+  useEffect(() => {
+    const flush = () => {
+      void progress.flush();
+    };
+    const hidden = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', hidden);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', hidden);
+      void progress.close();
+    };
+  }, [progress]);
 
   // Prefetch the next pages, and the next chapter's first pages near the end.
   const prefetch = useMemo(() => {

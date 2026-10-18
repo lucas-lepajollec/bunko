@@ -106,7 +106,17 @@ beforeEach(() => {
     throw new Error('No non-fixture network permitted');
   });
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(async () => {
+  const runtime = globalThis as typeof globalThis & {
+    __bunkoDiscoverLoads?: Map<string, Promise<void>>;
+    __bunkoNovelLoads?: Map<string, Promise<void>>;
+  };
+  await Promise.allSettled([
+    ...(runtime.__bunkoDiscoverLoads?.values() ?? []),
+    ...(runtime.__bunkoNovelLoads?.values() ?? []),
+  ]);
+  vi.unstubAllGlobals();
+});
 afterAll(() => {
   db().close();
   rmSync(directory, { recursive: true, force: true });
@@ -191,7 +201,11 @@ it('discovers LN through AniList, WN through full MU records, and fiction/non-fi
     JSON.parse(calls.find((c) => c.url.hostname === 'graphql.anilist.co')!.init!.body as string)
       .variables.format,
   ).toBe('NOVEL');
-  expect((await discover({ kind: 'webnovel' })).items[0].format).toBe('WEB_NOVEL');
+  expect((await discover({ kind: 'webnovel' })).pending).toBe(true);
+  await vi.waitFor(async () =>
+    expect((await discover({ kind: 'webnovel' })).items[0]?.format).toBe('WEB_NOVEL'),
+  );
+  await vi.waitFor(async () => expect((await discover({ kind: 'webnovel' })).pending).toBe(false));
   expect(calls.some((c) => c.url.pathname === '/v1/series/123456')).toBe(true);
   for (const [sort, providerSort] of [
     ['trending', 'trending'],

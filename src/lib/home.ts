@@ -2,7 +2,7 @@ import { normalizeHome } from './home-shape';
 import { heroArtwork } from './hero-artwork';
 import type { ChapterRelease, HomeFeed } from '@/types/shared';
 import { releaseStore, refreshReleases, mediaKind } from './releases';
-import { discover, withTracking } from './catalog';
+import { discoverAniList, withTracking } from './catalog';
 import { cached, storedMetadata } from './metadata-cache';
 import { mediaVisibility, includeProviderAdults } from './adult';
 
@@ -50,7 +50,8 @@ export async function homeFeed(): Promise<HomeFeed> {
     key,
     5 * 60_000,
     async () =>
-      (await discover({ sort: 'trending', kind: 'all', perPage: 20 }, undefined, true)).items,
+      (await discoverAniList({ sort: 'trending', kind: 'all', perPage: 20 }, undefined, true))
+        .items,
     { accept: (items) => Array.isArray(items) && items.length > 0 },
   ).catch(() => {});
   return normalizeHome(composeHome(heroArtwork(releaseStore()), top));

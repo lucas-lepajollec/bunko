@@ -1,3 +1,4 @@
+import { storageWorkKeys } from './library-storage';
 import path from 'node:path';
 import { realpath, stat, readdir } from 'node:fs/promises';
 import { chapterLabels } from './chapter-labels';
@@ -22,20 +23,24 @@ export type ReaderSourceChapter = {
   manga?: { id: number; source?: { id: string; name: string } };
 };
 export const readerNamespace = () => `${sourceServerKey()}:reader`;
-export function registerReaderArchive(filename: string, chapter: ReaderSourceChapter) {
+export function registerReaderArchive(
+  filename: string,
+  chapter: ReaderSourceChapter,
+  namespace = readerNamespace(),
+) {
   statement(`INSERT INTO reader_archives(chapter_id,namespace,filename,payload) VALUES(?,?,?,?)
-    ON CONFLICT(chapter_id) DO UPDATE SET namespace=excluded.namespace,filename=excluded.filename,payload=excluded.payload`).run(
+    ON CONFLICT(namespace,chapter_id) DO UPDATE SET filename=excluded.filename,payload=excluded.payload`).run(
     chapter.id,
-    readerNamespace(),
+    namespace,
     filename,
     JSON.stringify(chapter),
   );
 }
-export async function readerArchive(id: number) {
+export async function readerArchive(id: number, namespace = readerNamespace()) {
   const row = statement(
     'SELECT filename,payload FROM reader_archives WHERE chapter_id=? AND namespace=?',
-  ).get(id, readerNamespace()) as { filename: string; payload: string } | undefined;
-  if (!row) return legacyArchive(id);
+  ).get(id, namespace) as { filename: string; payload: string } | undefined;
+  if (!row) return legacyArchive(id, namespace);
   try {
     if (!inside(libraryRoot(), row.filename)) return null;
     await safeLibraryDirectory(path.dirname(row.filename));
@@ -73,12 +78,14 @@ export function readerNeighbours(mangaId: number, number: number | null) {
 /** Locate imports made before the archive pointer existed, without contacting Suwayomi. */
 async function legacyArchive(
   id: number,
+  namespace: string,
 ): Promise<{ filename: string; chapter: ReaderSourceChapter } | null> {
   const imported = statement(
-    'SELECT media_json,number,source_id,source_name FROM imported_chapters WHERE chapter_id=?',
-  ).get(id) as
+    'SELECT media_json,number,source_id,source_name,tracked_id FROM imported_chapters WHERE chapter_id=? AND namespace=?',
+  ).get(id, namespace.replace(/:reader$/, '')) as
     | {
         media_json: string;
+        tracked_id: number | null;
         number: number | null;
         source_id: string | null;
         source_name: string | null;
@@ -104,9 +111,18 @@ async function legacyArchive(
     };
     const { chapterFilename, seriesName } = await import('./kavita');
     const existing = matchKavita(media);
-    const folder = existing?.folder
-      ? mapKavitaPath(existing.folder)
-      : path.join(targetFor(media).local, seriesName(media));
+    const { workKey, mediaKey } = storageWorkKeys(media);
+    const reserved = statement('SELECT folder FROM library_folders WHERE work_key IN (?,?)').all(
+      workKey,
+      mediaKey,
+    ) as { folder: string }[];
+    const target = targetFor(media);
+    const known = reserved.find((r) => inside(target.local, r.folder))?.folder;
+    const folder =
+      known ??
+      (existing?.folder
+        ? mapKavitaPath(existing.folder)
+        : path.join(target.local, seriesName(media)));
     if (!folder) return null;
     const safe = await safeLibraryDirectory(folder);
     let filename = path.join(safe, chapterFilename(media, chapter));
@@ -124,7 +140,7 @@ async function legacyArchive(
     }
     const actual = await realpath(filename);
     if (!inside(await realpath(libraryRoot()), actual)) return null;
-    registerReaderArchive(actual, chapter);
+    registerReaderArchive(actual, chapter, namespace);
     return { filename: actual, chapter };
   } catch {
     return null;
@@ -138,14 +154,14 @@ export async function localNumberArchive(media: UnifiedMedia, number: number) {
   const owned = ownedChapters(media).find((c) => c.number === number);
   if (!owned) return null;
   const tracked = trackedForMedia(media, listTracked());
-  const imports = statement(`SELECT chapter_id FROM imported_chapters
+  const imports = statement(`SELECT chapter_id,namespace FROM imported_chapters
     WHERE (tracked_id=? OR media_json ->> '$.id'=?) AND number=?`).all(
     tracked?.id ?? null,
     media.id,
     number,
-  ) as { chapter_id: number }[];
+  ) as { chapter_id: number; namespace: string }[];
   for (const row of imports) {
-    const archive = await readerArchive(row.chapter_id);
+    const archive = await readerArchive(row.chapter_id, `${row.namespace}:reader`);
     if (archive) return { filename: archive.filename, volume: owned.volume };
   }
   const series = matchKavita(media, tracked?.kavitaSeriesId);

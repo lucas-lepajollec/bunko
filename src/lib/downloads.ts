@@ -42,6 +42,7 @@ import { sharedConcurrencyGate } from './concurrency';
 import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
 import { targetFor } from './library-paths';
 import { env } from '@/lib/env';
+import { sourceServerKey } from './source-server';
 import { drainSourceMatches } from './tracked-sources';
 const chapterGate = sharedConcurrencyGate('chapters', 1);
 const downloadState = tenantState(() => ({
@@ -78,6 +79,7 @@ export function createBatch(input: EnqueueRequest): DownloadBatch {
   const labels = chapterLabels(ids);
   const current = listBatches().find(
     (b) =>
+      b.sourceKey === sourceServerKey() &&
       sameMedia(b.media, input.media) &&
       b.state !== 'completed' &&
       b.state !== 'error' &&
@@ -86,6 +88,7 @@ export function createBatch(input: EnqueueRequest): DownloadBatch {
   if (current) return current;
   const batch: DownloadBatch = {
     id: randomUUID(),
+    sourceKey: sourceServerKey(),
     media: input.media,
     chapterIds: ids,
     chapters: ids.map((id) => ({
@@ -94,7 +97,7 @@ export function createBatch(input: EnqueueRequest): DownloadBatch {
       number: null,
       sourceName: '',
       ...labels.get(id),
-      state: imported(id) ? 'done' : 'queued',
+      state: imported(id, input.media) ? 'done' : 'queued',
       progress: null,
       error: null,
     })),
@@ -107,7 +110,7 @@ export function createBatch(input: EnqueueRequest): DownloadBatch {
   };
   saveBatch(batch);
   for (const id of ids)
-    if (!imported(id))
+    if (!imported(id, input.media))
       saveJob(id, {
         state: 'QUEUED',
         progress: 0,
@@ -132,6 +135,8 @@ export function retryBatch(id: string, failedOnly = false, selectedIds?: number[
     );
   if (!['error', 'completed'].includes(batch.state))
     throw new AppError('INVALID_STATE', 'Only finished batches can be retried', 409);
+  if (batch.sourceKey !== sourceServerKey())
+    throw new AppError('SOURCE_CHANGED', 'Batch belongs to another source connection', 409);
   const failed = batch.chapters.filter(
     (c) => c.state === 'error' && (!selectedIds || selectedIds.includes(c.id)),
   );
@@ -144,7 +149,9 @@ export function retryBatch(id: string, failedOnly = false, selectedIds?: number[
     !batch.error
   )
     throw new AppError('INVALID_STATE', 'Batch has no failed work', 409);
-  const ids = failedOnly ? failed.map((c) => c.id) : batch.chapterIds.filter((id) => !imported(id));
+  const ids = failedOnly
+    ? failed.map((c) => c.id)
+    : batch.chapterIds.filter((id) => !imported(id, batch.media, batch.sourceKey));
   for (const chapter of batch.chapters) {
     if (!ids.includes(chapter.id)) continue;
     Object.assign(chapter, { state: 'queued', error: null, progress: null });
@@ -167,24 +174,44 @@ export function retryBatch(id: string, failedOnly = false, selectedIds?: number[
   wakeWorker();
   return batch;
 }
-function imported(id: number) {
-  return !!statement('SELECT 1 FROM imported_chapters WHERE chapter_id=?').get(id);
+function imported(id: number, media?: DownloadBatch['media'], namespace = sourceServerKey()) {
+  const row = statement(
+    'SELECT media_json,tracked_id FROM imported_chapters WHERE namespace=? AND chapter_id=?',
+  ).get(namespace, id) as { media_json: string; tracked_id: number | null } | undefined;
+  if (!row) return false;
+  return (
+    !media ||
+    sameMedia(JSON.parse(row.media_json), media) ||
+    listTracked().some((t) => t.id === row.tracked_id && sameMedia(t.media, media))
+  );
 }
 function jobs(): DownloadItem[] {
   return (
-    statement('SELECT payload FROM download_jobs ORDER BY rowid').all() as { payload: string }[]
+    statement('SELECT payload FROM download_jobs WHERE namespace=? ORDER BY rowid').all(
+      sourceServerKey(),
+    ) as { payload: string }[]
   ).map((r) => JSON.parse(r.payload));
 }
-function saveJob(id: number, job: DownloadItem) {
+function saveJob(id: number, job: DownloadItem, namespace = sourceServerKey()) {
   statement(
-    'INSERT INTO download_jobs(chapter_id,payload) VALUES(?,?) ON CONFLICT(chapter_id) DO UPDATE SET payload=excluded.payload',
-  ).run(id, JSON.stringify(job));
+    'INSERT INTO download_jobs(chapter_id,payload,namespace) VALUES(?,?,?) ON CONFLICT(namespace,chapter_id) DO UPDATE SET payload=excluded.payload',
+  ).run(id, JSON.stringify(job), namespace);
 }
 export function engineStatus(): DownloadStatus {
+  const pending = listBatches().filter(
+    (b) => b.sourceKey === sourceServerKey() && !['completed', 'error'].includes(b.state),
+  );
   return {
     state: paused() ? 'STOPPED' : 'STARTED',
     queue: jobs()
-      .filter((j) => !imported(j.chapter.id))
+      .filter(
+        (j) =>
+          !imported(j.chapter.id) ||
+          pending.some(
+            (b) =>
+              b.chapterIds.includes(j.chapter.id) && !imported(j.chapter.id, b.media, b.sourceKey),
+          ),
+      )
       .map((j, position) => ({
         ...j,
         position,
@@ -229,11 +256,15 @@ export async function controlEngine(control: DownloadControl): Promise<DownloadS
         !listBatches().some(
           (b) =>
             b.id !== batch.id &&
+            b.sourceKey === batch.sourceKey &&
             !['completed', 'error'].includes(b.state) &&
             b.chapterIds.includes(id),
         )
       )
-        statement('DELETE FROM download_jobs WHERE chapter_id=?').run(id);
+        statement('DELETE FROM download_jobs WHERE chapter_id=? AND namespace=?').run(
+          id,
+          batch.sourceKey,
+        );
   }
   if (control.action === 'pause') {
     setWorkerValue('download_paused', '1');
@@ -249,10 +280,11 @@ export async function controlEngine(control: DownloadControl): Promise<DownloadS
     for (const batch of listBatches().filter(
       (b) =>
         ['enqueuing', 'downloading', 'importing', 'error'].includes(b.state) &&
-        b.chapterIds.some((id) => !imported(id)),
+        b.sourceKey === sourceServerKey() &&
+        b.chapterIds.some((id) => !imported(id, b.media, b.sourceKey)),
     ))
       cancelBatch(batch);
-    statement('DELETE FROM download_jobs').run();
+    statement('DELETE FROM download_jobs WHERE namespace=?').run(sourceServerKey());
     // Cached pages remain available to an explicit batch retry; active writers settle safely.
   }
   wakeWorker();
@@ -262,7 +294,7 @@ function cancelBatch(batch: DownloadBatch) {
   setWorkerValue(`download_cancel:${batch.id}`, randomUUID());
   statement('DELETE FROM worker_state WHERE key=?').run(`download_retry_failed:${batch.id}`);
   for (const chapter of batch.chapters) {
-    if (imported(chapter.id)) {
+    if (imported(chapter.id, batch.media, batch.sourceKey)) {
       Object.assign(chapter, { state: 'done', progress: null, error: null });
       if (!batch.importedIds.includes(chapter.id)) batch.importedIds.push(chapter.id);
     } else Object.assign(chapter, { state: 'error', progress: null, error: 'CANCELLED' });
@@ -276,6 +308,10 @@ export async function processBatch(batch: DownloadBatch) {
     ['completed', 'error'].includes(batch.state)
   )
     return;
+  if (batch.sourceKey !== sourceServerKey()) {
+    update(batch, { state: 'error', error: 'SOURCE_CHANGED' });
+    return;
+  }
   batch.chapters = batch.chapterIds.slice(0, 500).map(
     (id) =>
       batch.chapters?.find((c) => c.id === id) ?? {
@@ -297,6 +333,7 @@ export async function processBatch(batch: DownloadBatch) {
     const current = listBatches().find((b) => b.id === batch.id);
     if (
       paused() ||
+      batch.sourceKey !== sourceServerKey() ||
       workerValue('download_generation') !== generation ||
       workerValue(`download_cancel:${batch.id}`) !== cancellation ||
       !current ||
@@ -319,18 +356,39 @@ export async function processBatch(batch: DownloadBatch) {
         checkControl();
         signal.throwIfAborted();
         const id = chapter.id;
-        if (imported(id)) {
+        if (imported(id, batch.media, batch.sourceKey)) {
           Object.assign(chapter, { state: 'done', progress: null, error: null });
           if (!batch.importedIds.includes(id)) batch.importedIds.push(id);
-          statement('DELETE FROM download_jobs WHERE chapter_id=?').run(id);
+          statement('DELETE FROM download_jobs WHERE chapter_id=? AND namespace=?').run(
+            id,
+            batch.sourceKey,
+          );
           persist();
           continue;
         }
         if (chapter.state === 'error') continue;
         try {
           await chapterGate(async () => {
-            if (imported(id)) return;
+            if (imported(id, batch.media, batch.sourceKey)) return;
             const source = await chapterState(id, signal);
+            checkControl();
+            signal.throwIfAborted();
+            const selections = [
+              ...batch.media.sources,
+              ...(listTracked().find((t) => sameMedia(t.media, batch.media))?.sources ?? []),
+            ];
+            if (
+              selections.length &&
+              !selections.some(
+                (s) =>
+                  s.suwayomiMangaId === source.manga?.id && s.sourceId === source.manga?.source?.id,
+              )
+            )
+              throw new AppError(
+                'SOURCE_CHANGED',
+                'Chapter no longer belongs to the selected source',
+                409,
+              );
             Object.assign(chapter, {
               name: source.name.slice(0, 500),
               number: chapterNumber(source.name, source.chapterNumber),
@@ -349,7 +407,7 @@ export async function processBatch(batch: DownloadBatch) {
               chapter: { id, name: chapter.name, chapterNumber: source.chapterNumber },
               manga: { id: source.manga?.id ?? 0, title: batch.media.title },
             };
-            saveJob(id, job);
+            saveJob(id, job, batch.sourceKey);
             await importChapter(
               batch.media,
               source,
@@ -358,7 +416,7 @@ export async function processBatch(batch: DownloadBatch) {
                 chapter.progress = total ? Math.max(0, Math.min(1, done / total)) : 0;
                 persist();
                 Object.assign(job, { progress: chapter.progress, tries });
-                saveJob(id, job);
+                saveJob(id, job, batch.sourceKey);
               },
               () => {
                 chapter.state = 'importing';
@@ -370,18 +428,21 @@ export async function processBatch(batch: DownloadBatch) {
           }, signal);
           Object.assign(chapter, { state: 'done', progress: null, error: null });
           if (!batch.importedIds.includes(id)) batch.importedIds.push(id);
-          statement('DELETE FROM download_jobs WHERE chapter_id=?').run(id);
+          statement('DELETE FROM download_jobs WHERE chapter_id=? AND namespace=?').run(
+            id,
+            batch.sourceKey,
+          );
           persist();
         } catch (error) {
           checkControl();
           if (signal.aborted) {
             const job = jobs().find((j) => j.chapter.id === id);
-            if (paused() && job) saveJob(id, { ...job, state: 'QUEUED' });
+            if (paused() && job) saveJob(id, { ...job, state: 'QUEUED' }, batch.sourceKey);
             throw error;
           }
           Object.assign(chapter, { state: 'error', progress: null, error: errorCode(error) });
           const job = jobs().find((j) => j.chapter.id === id);
-          if (job) saveJob(id, { ...job, state: 'ERROR' });
+          if (job) saveJob(id, { ...job, state: 'ERROR' }, batch.sourceKey);
           persist();
         }
       }
@@ -552,7 +613,11 @@ export async function runTenantWorkers() {
 /** Recompute tenant library flags at the response boundary. */
 export function publicBatches(batches = listBatches()): DownloadBatch[] {
   const media = withTracking(batches.map((b) => b.media));
-  return batches.map((b, i) => ({ ...b, media: media[i] }));
+  return batches.map((b, i) => {
+    const safe = { ...b, media: media[i] };
+    delete safe.sourceKey;
+    return safe;
+  });
 }
 export async function snapshot(signal?: AbortSignal) {
   signal?.throwIfAborted();

@@ -479,10 +479,10 @@ export async function chapterState(id: number, signal?: AbortSignal) {
         name: string;
         chapterNumber: number;
         isDownloaded: boolean;
-        manga?: { id: number; source?: { id: string; name: string } };
+        manga?: { id: number; source?: { id: string; name: string; lang?: string } };
       };
     }>(
-      'query($id: Int!) { chapter(id: $id) { id name chapterNumber isDownloaded manga { id source { id name } } } }',
+      'query($id: Int!) { chapter(id: $id) { id name chapterNumber isDownloaded manga { id source { id name lang } } } }',
       { id },
       20_000,
       signal,

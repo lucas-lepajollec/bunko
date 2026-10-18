@@ -1,3 +1,4 @@
+import { sourceServerKey } from './source-server';
 import { ownedChapters } from './owned-chapters';
 import { mediaId as mediaIdentifier } from './validation';
 import { mediaDetail } from './catalog';
@@ -127,8 +128,10 @@ export async function readerChapter(
     .sort((a, b) => a.number! - b.number! || a.id - b.id);
   const tracked = work(mediaId, mangaId);
   const imported = local
-    ? (statement('SELECT media_json FROM imported_chapters WHERE chapter_id=?').get(id) as
-        { media_json: string } | undefined)
+    ? (statement('SELECT media_json FROM imported_chapters WHERE chapter_id=? AND namespace=?').get(
+        id,
+        sourceServerKey(),
+      ) as { media_json: string } | undefined)
     : undefined;
   const importedMedia = imported ? (JSON.parse(imported.media_json) as UnifiedMedia) : undefined;
   const formatMedia =

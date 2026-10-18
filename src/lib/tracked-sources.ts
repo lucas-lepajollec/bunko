@@ -1,3 +1,4 @@
+import { sourceServerKey } from './source-server';
 import { withBackgroundSources } from './source-gate';
 import type { ChapterSelection, SourceCandidate, TrackedMedia } from '@/types/shared';
 import { statement, db, getTracked, saveSourceStatus } from './db';
@@ -24,8 +25,8 @@ export function replaceSources(t: TrackedMedia, sources: ChapterSelection[]) {
       !sources.some((s) => s.sourceId === old.sourceId && s.suwayomiMangaId === old.suwayomiMangaId)
     )
       statement(
-        'DELETE FROM source_baselines WHERE tracked_id=? AND source_id=? AND manga_id=?',
-      ).run(t.id, old.sourceId, old.suwayomiMangaId);
+        'DELETE FROM source_baselines WHERE tracked_id=? AND source_id=? AND manga_id=? AND namespace=?',
+      ).run(t.id, old.sourceId, old.suwayomiMangaId, sourceServerKey());
   for (const old of t.sources)
     if (!sources.some((s) => sameSource(s, old)))
       statement('INSERT OR IGNORE INTO source_dismissals VALUES(?,?,?)').run(

@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { chapterVolume } from './chapter-volume';
+import { chapterNumber } from './suwayomi';
 import { bookFormat } from './openlibrary';
 import { createHash } from 'node:crypto';
 import { setImmediate as yieldIO } from 'node:timers/promises';
@@ -53,6 +56,7 @@ export interface IndexedSeries {
   folder: string | null;
   numbers: number[];
   chapterFiles?: { number: number; volume: number | null; path: string | null }[];
+  /** Explicit complete-volume archives; partial chapter groupings are excluded. */
   volumes?: number[];
   volumeRead?: number | null;
   summary?: string | null;
@@ -542,7 +546,7 @@ export function allKavitaRead(input: unknown): boolean {
   );
 }
 
-/** Numeric volumes only; specials and Kavita's unassigned sentinel never become owned tomes. */
+/** A volume folder with chapter files is partial evidence, not a complete volume archive. */
 export function kavitaVolumeProgress(input: unknown): {
   volumes: number[];
   volumeRead: number | null;
@@ -555,7 +559,16 @@ export function kavitaVolumeProgress(input: unknown): {
         number: z.union([z.string(), z.number()]).nullable().optional(),
         name: z.string().optional(),
         chapters: z
-          .array(z.object({ pages: z.number().optional(), pagesRead: z.number().optional() }))
+          .array(
+            z.object({
+              pages: z.number().optional(),
+              pagesRead: z.number().optional(),
+              files: z
+                .array(z.object({ filePath: z.string() }))
+                .nullable()
+                .optional(),
+            }),
+          )
           .nullable(),
       }),
     )
@@ -571,8 +584,19 @@ export function kavitaVolumeProgress(input: unknown): {
           ? v.minNumber
           : undefined;
     if (number == null || !Number.isFinite(number) || number <= 0 || !v.chapters?.length) continue;
+    const complete = v.chapters.filter((c) =>
+      c.files?.some((f) => {
+        const basename = path.posix.basename(f.filePath.replaceAll('\\', '/'));
+        return (
+          /\.(?:cbz|cbr|epub|pdf)$/i.test(basename) &&
+          chapterVolume(basename) === number &&
+          chapterNumber(basename) === null
+        );
+      }),
+    );
+    if (!complete.length) continue;
     owned.add(number);
-    if (v.chapters.every((c) => (c.pages ?? 0) > 0 && (c.pagesRead ?? 0) >= c.pages!))
+    if (complete.every((c) => (c.pages ?? 0) > 0 && (c.pagesRead ?? 0) >= c.pages!))
       read.add(number);
   }
   return {
@@ -745,7 +769,7 @@ export async function refreshScannedSeries(
       })();
       if (
         [...expected].every((n) => series.numbers.includes(n)) &&
-        [...expectedVolumes].every((n) => series.volumes?.includes(n))
+        [...expectedVolumes].every((n) => kavitaChapterFiles(volumes).some((c) => c.volume === n))
       )
         return;
     }

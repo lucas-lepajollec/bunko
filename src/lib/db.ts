@@ -10,7 +10,10 @@ import { activeSourceMatch, SOURCE_MATCH_RETRY_MS } from './source-match-state';
 import { matchKavita, kavitaPresence, kavitaMatcher } from './kavita-index';
 import { existsSync, mkdirSync, lstatSync } from 'node:fs';
 import path from 'node:path';
-import { getSettings } from './settings';
+import { getSettings, decrypt } from './settings';
+import { sourceServerKey, sourceConnectionKey } from './source-server';
+import { migrateV14 } from './source-ledger-migration';
+import { env } from './env';
 import { kavitaLibraryClassification } from './library-kinds';
 import { tenantId, tenantPath, tenantState } from './tenant-context';
 import { accountsDb, tenantExists } from './accounts-store';
@@ -140,6 +143,28 @@ export function db(): Database.Database {
     }
     migrateV8(connection);
     migrateV9(connection);
+    migrateV10(connection);
+    migrateV11(connection);
+    migrateV12(connection);
+    migrateV13(connection);
+    migrateV14(connection, () => {
+      const read = (key: string, environment: string, secret = false) => {
+        const row = connection.prepare('SELECT value FROM settings WHERE key=?').get(key) as
+          { value: string } | undefined;
+        return row
+          ? secret
+            ? decrypt(row.value)
+            : JSON.parse(row.value)
+          : tenantId() === 1
+            ? (process.env[environment] ?? env(environment) ?? '')
+            : '';
+      };
+      return sourceConnectionKey({
+        suwayomiUrl: read('suwayomiUrl', 'SUWAYOMI_URL'),
+        suwayomiUsername: read('suwayomiUsername', 'SUWAYOMI_USERNAME'),
+        suwayomiPassword: read('suwayomiPassword', 'SUWAYOMI_PASSWORD', true),
+      });
+    });
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -182,10 +207,6 @@ export function db(): Database.Database {
         }
       }
     })();
-    migrateV10(connection);
-    migrateV11(connection);
-    migrateV12(connection);
-    migrateV13(connection);
     connections.set(folder, connection);
     return connection;
   } catch (error) {
@@ -444,14 +465,16 @@ export function recordImport(
     volume?: number | null;
     manga?: { id: number; source?: { id: string; name: string } };
   },
+  namespace = sourceServerKey(),
 ) {
   const tracked = listTracked().find((t) => sameMedia(t.media, media));
+  assertImportIdentity(media, chapter.id, namespace);
   const source =
     chapter.manga?.source ?? tracked?.sources.find((s) => s.suwayomiMangaId === chapter.manga?.id);
   const match = media.sources.find((s) => s.suwayomiMangaId === chapter.manga?.id);
   statement(
-    `INSERT INTO imported_chapters(chapter_id, tracked_id, media_json, number, source_id, source_name, imported_at,volume)
-    VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(chapter_id) DO UPDATE SET tracked_id=excluded.tracked_id,
+    `INSERT INTO imported_chapters(chapter_id, tracked_id, media_json, number, source_id, source_name, imported_at,volume,namespace)
+    VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(namespace,chapter_id) DO UPDATE SET tracked_id=excluded.tracked_id,media_json=excluded.media_json,
     number=excluded.number,source_id=excluded.source_id,source_name=excluded.source_name,volume=excluded.volume`,
   ).run(
     chapter.id,
@@ -462,12 +485,35 @@ export function recordImport(
     source && 'name' in source ? source.name : (source?.sourceName ?? match?.sourceName ?? null),
     new Date().toISOString(),
     chapterVolume(chapter.name, chapter.volume),
+    namespace,
   );
 }
-export function observeChapters(trackedId: number, chapters: SourceChapter[]) {
+/** A reset at the same URL must fail closed rather than reassign another work's history. */
+export function assertImportIdentity(
+  media: UnifiedMedia,
+  id: number,
+  namespace = sourceServerKey(),
+) {
+  const existing = statement(
+    'SELECT media_json,tracked_id FROM imported_chapters WHERE namespace=? AND chapter_id=?',
+  ).get(namespace, id) as { media_json: string; tracked_id: number | null } | undefined;
+  if (!existing || sameMedia(JSON.parse(existing.media_json), media)) return;
+  const tracked = trackedForMedia(media, listTracked());
+  if (tracked && tracked.id === existing.tracked_id) return;
+  throw new AppError(
+    'SOURCE_CHANGED',
+    'Chapter identity is already assigned to a different work',
+    409,
+  );
+}
+export function observeChapters(
+  trackedId: number,
+  chapters: SourceChapter[],
+  namespace = sourceServerKey(),
+) {
   const insert =
-    statement(`INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name,volume)
-    VALUES(?,?,?,?,?,?) ON CONFLICT(tracked_id,chapter_id) DO UPDATE SET number=excluded.number,volume=excluded.volume`);
+    statement(`INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name,volume,namespace)
+    VALUES(?,?,?,?,?,?,?) ON CONFLICT(namespace,tracked_id,chapter_id) DO UPDATE SET number=excluded.number,volume=excluded.volume`);
   db().transaction(() => {
     for (const c of chapters) {
       insert.run(
@@ -477,12 +523,13 @@ export function observeChapters(trackedId: number, chapters: SourceChapter[]) {
         c.sourceId,
         c.sourceName,
         chapterVolume(c.name, c.volume),
+        namespace,
       );
       statement(
-        `INSERT INTO observation_dates(tracked_id,chapter_id,at,uploaded_at) VALUES(?,?,?,?)
-        ON CONFLICT(tracked_id,chapter_id) DO UPDATE SET uploaded_at=excluded.uploaded_at
+        `INSERT INTO observation_dates(tracked_id,chapter_id,at,uploaded_at,namespace) VALUES(?,?,?,?,?)
+        ON CONFLICT(namespace,tracked_id,chapter_id) DO UPDATE SET uploaded_at=excluded.uploaded_at
         WHERE uploaded_at IS NOT excluded.uploaded_at`,
-      ).run(trackedId, c.id, new Date().toISOString(), sourceUploadDate(c.uploadDate));
+      ).run(trackedId, c.id, new Date().toISOString(), sourceUploadDate(c.uploadDate), namespace);
     }
     const numbers = chapters.flatMap((c) => (c.number === null ? [] : [c.number]));
     if (numbers.length)
@@ -558,6 +605,7 @@ function snapshotTracked(id?: number) {
   const outerTransaction = db().inTransaction;
   const resolveAdult = adultResolver();
   const settings = getSettings();
+  const namespace = sourceConnectionKey(settings);
   const linkedProgress = Boolean(settings.kavitaApiKey);
   const kavitaUrl = settings.kavitaUrl.replace(/\/+$/, '');
   const classify = kavitaLibraryClassification(settings.libraryTargets);
@@ -613,10 +661,12 @@ function snapshotTracked(id?: number) {
     );
     // SQLite groups distinct ownership/observations once for the entire library.
     const ledgerNumbers = (table: string) => {
+      const scoped = table === 'observed_chapters';
       const rows = statement(`SELECT tracked_id,
         json_group_array(DISTINCT number) FILTER(WHERE number IS NOT NULL) AS numbers,
         json_group_array(DISTINCT volume) FILTER(WHERE volume IS NOT NULL) AS volumes
-        FROM ${table} WHERE (number IS NOT NULL OR volume IS NOT NULL) ${id === undefined ? '' : 'AND tracked_id=?'} GROUP BY tracked_id`).all(
+        FROM ${table} WHERE (number IS NOT NULL OR volume IS NOT NULL) ${scoped ? 'AND namespace=?' : ''} ${id === undefined ? '' : 'AND tracked_id=?'} GROUP BY tracked_id`).all(
+        ...(scoped ? [namespace] : []),
         ...(id === undefined ? [] : [id]),
       ) as { tracked_id: number; numbers: string; volumes: string }[];
       return {
@@ -627,7 +677,6 @@ function snapshotTracked(id?: number) {
     const imports = ledgerNumbers('imported_chapters'),
       observations = ledgerNumbers('observed_chapters');
     const imported = imports.numbers,
-      importedVolumes = imports.volumes,
       observed = observations.numbers,
       observedVolumes = observations.volumes;
     const external = new Map<string, import('@/types/shared').ChapterRelease[]>();
@@ -711,7 +760,7 @@ function snapshotTracked(id?: number) {
       const volumeMode = unit === 'volume';
       const owned = new Set(
         volumeMode
-          ? [...(importedVolumes.get(id) ?? []), ...(kavita?.volumes ?? [])]
+          ? [...(kavita?.volumes ?? [])]
           : [...(imported.get(id) ?? []), ...(kavita?.numbers ?? [])],
       );
       const seen = [
@@ -737,11 +786,13 @@ function snapshotTracked(id?: number) {
       const chapterRead = r.last_read as number | null;
       const derivedRead =
         volumeMode && chapterRead !== null
-          ? ((
-              statement(
-                `SELECT MAX(volume) AS n FROM (SELECT volume,number FROM observed_chapters WHERE tracked_id=? UNION ALL SELECT volume,number FROM imported_chapters WHERE tracked_id=?) WHERE volume IS NOT NULL GROUP BY volume HAVING COUNT(number)=COUNT(*) AND MAX(number)<=? ORDER BY n DESC LIMIT 1`,
-              ).get(id, id, chapterRead) as { n: number } | undefined
-            )?.n ?? null)
+          ? Math.max(
+              0,
+              ...[...owned].filter((v) => {
+                const chapters = kavita?.chapterFiles?.filter((c) => c.volume === v) ?? [];
+                return chapters.length > 0 && chapters.every((c) => c.number <= chapterRead);
+              }),
+            )
           : null;
       const read = volumeMode
         ? ((r.volume_read as number | null) ?? kavita?.volumeRead ?? derivedRead)
@@ -914,13 +965,14 @@ function insertTracked(input: TrackRequest): TrackedMedia {
     statement('UPDATE tracked_media SET kavita_manual=1 WHERE id=?').run(id);
   // Imports can precede tracking; link their durable identity when the series is added.
   const unlinked = statement(
-    'SELECT chapter_id,media_json FROM imported_chapters WHERE tracked_id IS NULL',
-  ).all() as { chapter_id: number; media_json: string }[];
+    'SELECT chapter_id,namespace,media_json FROM imported_chapters WHERE tracked_id IS NULL',
+  ).all() as { chapter_id: number; namespace: string; media_json: string }[];
   for (const row of unlinked)
     if (sameMedia(JSON.parse(row.media_json), m))
-      statement('UPDATE imported_chapters SET tracked_id=? WHERE chapter_id=?').run(
+      statement('UPDATE imported_chapters SET tracked_id=? WHERE chapter_id=? AND namespace=?').run(
         id,
         row.chapter_id,
+        row.namespace,
       );
   const created = getTracked(id)!;
   for (const status of created.sourceStatus) saveSourceStatus(id, status);
@@ -928,19 +980,20 @@ function insertTracked(input: TrackRequest): TrackedMedia {
   return getTracked(id)!;
 }
 export function saveBatch(batch: DownloadBatch, linkUpdates = true) {
+  batch.sourceKey ??= sourceServerKey();
   statement(
     'INSERT INTO download_batches(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',
   ).run(batch.id, JSON.stringify(batch));
   if (!linkUpdates) return;
   for (const t of listTracked().filter((t) => sameMedia(t.media, batch.media))) {
     const link = statement(`UPDATE update_chapters SET batch_id=? WHERE chapter_id=? AND entry_id IN
-      (SELECT id FROM update_entries WHERE tracked_id=?)`);
+      (SELECT id FROM update_entries WHERE tracked_id=? AND namespace=?)`);
     const alternate = statement(`UPDATE update_chapters SET batch_id=? WHERE number=(
-      SELECT number FROM observed_chapters WHERE tracked_id=? AND chapter_id=?) AND entry_id IN
-      (SELECT id FROM update_entries WHERE tracked_id=?)`);
+      SELECT number FROM observed_chapters WHERE tracked_id=? AND chapter_id=? AND namespace=?) AND entry_id IN
+      (SELECT id FROM update_entries WHERE tracked_id=? AND namespace=?)`);
     for (const id of batch.chapterIds) {
-      link.run(batch.id, id, t.id);
-      alternate.run(batch.id, t.id, id, t.id);
+      link.run(batch.id, id, t.id, batch.sourceKey);
+      alternate.run(batch.id, t.id, id, batch.sourceKey, t.id, batch.sourceKey);
     }
   }
 }
@@ -1155,15 +1208,9 @@ export function migrateV12(database: Database.Database) {
     }
   })();
 }
+/** Only explicitly indexed complete volume archives can suppress missing chapters. */
 export function ownedVolumeNumbers(tracked: TrackedMedia): Set<number> {
-  return new Set([
-    ...(kavitaMatcher()(tracked.media, tracked.kavitaSeriesId)?.volumes ?? []),
-    ...(
-      statement(
-        'SELECT DISTINCT volume FROM imported_chapters WHERE tracked_id=? AND volume IS NOT NULL',
-      ).all(tracked.id) as { volume: number }[]
-    ).map((r) => r.volume),
-  ]);
+  return new Set(kavitaMatcher()(tracked.media, tracked.kavitaSeriesId)?.volumes ?? []);
 }
 
 export function migrateV13(database: Database.Database) {

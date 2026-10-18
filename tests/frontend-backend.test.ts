@@ -35,6 +35,7 @@ const { db, migrateV2, track, listTracked, recordImport, listBatches, observeCha
 const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { emptyMedia } = await import('@/lib/media');
+const { sourceServerKey } = await import('@/lib/source-server');
 const { updateSettings, publicSettings, persistentSecret } = await import('@/lib/settings');
 const { getSourcePreferences, setSourcePreferences, recordSourceHealth, sourceHealth } =
   await import('@/lib/source-preferences');
@@ -286,7 +287,7 @@ afterAll(async () => {
 });
 // First assertion deliberately runs before destructive fixture resets, on an actual v1 database.
 it('migrates an existing v1 database transactionally and idempotently without losing tracked data', () => {
-  expect(db().pragma('user_version', { simple: true })).toBe(13);
+  expect(db().pragma('user_version', { simple: true })).toBe(14);
   expect(listTracked()[0]).toMatchObject({
     id: 1,
     title: 'Legacy',
@@ -708,7 +709,9 @@ function establishedTrack(input: Parameters<typeof track>[0]) {
   const t = track(input);
   for (const source of t.sources)
     db()
-      .prepare('INSERT OR IGNORE INTO source_baselines VALUES(?,?,?)')
-      .run(t.id, source.sourceId, source.suwayomiMangaId);
+      .prepare(
+        'INSERT OR IGNORE INTO source_baselines(tracked_id,source_id,manga_id,namespace) VALUES(?,?,?,?)',
+      )
+      .run(t.id, source.sourceId, source.suwayomiMangaId, sourceServerKey());
   return t;
 }

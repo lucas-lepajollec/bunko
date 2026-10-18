@@ -24,7 +24,7 @@ export function openLibraryJson<T>(
       serial(async () => {
         const signal = AbortSignal.timeout(15_000);
         const wait = Math.max(0, (scope.__bunkoOlNext ?? 0) - Date.now());
-        if (wait > 60_000) throw new AppError('RATE_LIMITED', 'Open Library is cooling down', 502);
+        if (wait > 5000) throw new AppError('RATE_LIMITED', 'Open Library is cooling down', 502);
         if (wait) await delay(wait, undefined, { signal });
         scope.__bunkoOlNext = Date.now() + 1000;
         const response = await fetch(`https://openlibrary.org${path}`, {

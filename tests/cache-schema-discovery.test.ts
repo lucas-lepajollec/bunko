@@ -31,6 +31,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-17T12:00:00Z'));
   (globalThis as typeof globalThis & { __bunkoOlNext?: number }).__bunkoOlNext = 0;
+  (globalThis as typeof globalThis & { __bunkoMuNext?: number }).__bunkoMuNext = 0;
   db().exec(
     'DELETE FROM metadata_cache; DELETE FROM worker_state; DELETE FROM chapter_releases; DELETE FROM tracked_media',
   );
@@ -38,6 +39,14 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await flush();
+  const runtime = globalThis as typeof globalThis & {
+    __bunkoDiscoverLoads?: Map<string, Promise<void>>;
+    __bunkoNovelLoads?: Map<string, Promise<void>>;
+  };
+  await Promise.allSettled([
+    ...(runtime.__bunkoDiscoverLoads?.values() ?? []),
+    ...(runtime.__bunkoNovelLoads?.values() ?? []),
+  ]);
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });

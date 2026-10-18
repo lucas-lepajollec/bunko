@@ -11,7 +11,7 @@ const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { accountsDb } = await import('@/lib/accounts-store');
 const { inTenant } = await import('@/lib/tenant-context');
-const { closeTenant } = await import('@/lib/db');
+const { closeTenant, db } = await import('@/lib/db');
 const { getSettings, updateSettings, persistentSecret } = await import('@/lib/settings');
 const { libraryRoot, mapKavitaPath, safeLibraryDirectory, targetFor, resolveLibraryFolder } =
   await import('@/lib/library-paths');
@@ -58,6 +58,22 @@ it('keeps legacy downloads, metadata and scan paths working without changing the
     kavitaApiKey: 'fixture',
     libraryTargets: { MANGA: { libraryId: 1, folder: '/medias/Manga' } },
   });
+  // A real existing Kavita folder must retain its exact legacy path.
+  mkdirSync(path.join(root, 'Manga', 'Legacy Story'));
+  db()
+    .prepare('INSERT INTO kavita_series VALUES(?,?)')
+    .run(
+      7,
+      JSON.stringify({
+        seriesId: 7,
+        libraryId: 1,
+        libraryName: 'Manga',
+        name: 'Legacy Story',
+        names: ['Legacy Story'],
+        folder: '/medias/Manga/Legacy Story',
+        numbers: [],
+      }),
+    );
   const scans: string[] = [];
   vi.stubGlobal(
     'fetch',

@@ -45,6 +45,23 @@ afterEach(() => {
 });
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
+function preservedRows(database: Database.Database, table: string) {
+  return JSON.stringify(
+    (
+      database.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all() as Record<string, unknown>[]
+    ).map((row) => {
+      const copy = { ...row };
+      delete copy.namespace;
+      if (table === 'download_batches') {
+        const payload = JSON.parse(String(copy.payload));
+        delete payload.sourceKey;
+        copy.payload = JSON.stringify(payload);
+      }
+      return copy;
+    }),
+  );
+}
+
 async function fixture(name: string, v9: boolean, legacyName = false) {
   const volume = path.join(directory, name);
   mkdirSync(volume, { recursive: true });
@@ -54,6 +71,17 @@ async function fixture(name: string, v9: boolean, legacyName = false) {
   writeFileSync(path.join(volume, 'access.token'), token, { mode: 0o600 });
   const old = new Database(filename);
   old.pragma('foreign_keys=ON');
+  // Build actual pre-v14 tables; the template now contains the current schema.
+  old.exec(`DROP TABLE imported_chapters;
+    CREATE TABLE imported_chapters(chapter_id INTEGER PRIMARY KEY,tracked_id INTEGER REFERENCES tracked_media(id) ON DELETE SET NULL,media_json TEXT NOT NULL,number REAL,source_id TEXT,source_name TEXT,imported_at TEXT NOT NULL,volume REAL);
+    DROP TABLE download_jobs; CREATE TABLE download_jobs(chapter_id INTEGER PRIMARY KEY,payload TEXT NOT NULL);
+    DROP TABLE observed_chapters; CREATE TABLE observed_chapters(tracked_id INTEGER REFERENCES tracked_media(id) ON DELETE CASCADE,chapter_id INTEGER,number REAL,source_id TEXT,source_name TEXT,volume REAL,PRIMARY KEY(tracked_id,chapter_id));
+    DROP TABLE observation_dates; CREATE TABLE observation_dates(tracked_id INTEGER REFERENCES tracked_media(id) ON DELETE CASCADE,chapter_id INTEGER,at TEXT,uploaded_at TEXT,PRIMARY KEY(tracked_id,chapter_id));
+    DROP TABLE source_baselines; CREATE TABLE source_baselines(tracked_id INTEGER REFERENCES tracked_media(id) ON DELETE CASCADE,source_id TEXT,manga_id INTEGER,PRIMARY KEY(tracked_id,source_id,manga_id));
+    DROP TABLE reader_archives; CREATE TABLE reader_archives(chapter_id INTEGER PRIMARY KEY,namespace TEXT NOT NULL,filename TEXT NOT NULL,payload TEXT NOT NULL);
+    ALTER TABLE update_entries DROP COLUMN namespace;
+    DROP TABLE library_folders; DROP TABLE library_work_keys;`);
+
   old.exec(`CREATE TABLE administrator(id INTEGER PRIMARY KEY CHECK(id=1),username TEXT NOT NULL,password_hash TEXT NOT NULL,session_epoch TEXT NOT NULL);
     INSERT INTO administrator VALUES(1,'LegacyAdmin','legacy-password-hash','retained-session-epoch');
     PRAGMA user_version=8;`);
@@ -85,7 +113,9 @@ async function fixture(name: string, v9: boolean, legacyName = false) {
         )
         .run(id, id, JSON.stringify(media), id, '2026-01-01');
       old
-        .prepare('INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name) VALUES(?,?,?,?,?)')
+        .prepare(
+          'INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name) VALUES(?,?,?,?,?)',
+        )
         .run(id, id, id + 1, '123', 'Fixture');
     }
     old
@@ -197,15 +227,12 @@ for (const v9 of [false, true])
         : []),
     ]);
     for (const [table, before] of f.preserved)
-      expect(
-        JSON.stringify(state.first.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()),
-        table,
-      ).toBe(before);
+      expect(preservedRows(state.first, table), table).toBe(before);
     expect(state.tenant.inTenant(1, () => state.settings.getSettings().kavitaApiKey)).toBe(
       'encrypted-fixture-key',
     );
     expect(state.tenant.inTenant(1, () => state.lib.listTracked())).toHaveLength(1200);
-    expect(state.first.pragma('user_version', { simple: true })).toBe(13);
+    expect(state.first.pragma('user_version', { simple: true })).toBe(14);
     expect(
       state.first
         .prepare(
@@ -243,10 +270,7 @@ for (const v9 of [false, true])
     for (const d of handles.splice(0)) if (d.open) d.close();
     const again = await boot(f.volume);
     for (const [table, before] of f.preserved)
-      expect(
-        JSON.stringify(again.first.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()),
-        table,
-      ).toBe(before);
+      expect(preservedRows(again.first, table), table).toBe(before);
   });
 it('resumes filesystem relocation after an injected crash, without losing accounts or overwriting bytes', async () => {
   const f = await fixture('interrupted', true);
@@ -265,10 +289,7 @@ it('resumes filesystem relocation after an injected crash, without losing accoun
   const state = await boot(f.volume);
   expect(state.accounts.prepare('SELECT COUNT(*) n FROM users').get()).toEqual({ n: 2 });
   for (const [table, before] of f.preserved)
-    expect(
-      JSON.stringify(state.first.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()),
-      table,
-    ).toBe(before);
+    expect(preservedRows(state.first, table), table).toBe(before);
   expect(readFileSync(path.join(f.volume, 'users', '1', 'covers', '1-fixture.png'))).toEqual(
     Buffer.from([0, 1, 255, 9]),
   );

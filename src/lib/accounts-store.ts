@@ -13,6 +13,7 @@ import path from 'node:path';
 import { accountsDir, tenantPath } from './tenant-context';
 import { env } from './env';
 import { migrateMediaRoots } from './media-root-store';
+import { initializeCatalogStore, migrateCatalogSettings } from './catalog-settings-store';
 
 let connection: Database.Database | undefined;
 const runtime = globalThis as typeof globalThis & { __bunkoAccountReset?: Set<string> };
@@ -42,6 +43,7 @@ export function accountsDb(): Database.Database {
     CREATE TABLE IF NOT EXISTS deleted_tenants (id INTEGER PRIMARY KEY);
     CREATE TABLE IF NOT EXISTS login_attempts (username TEXT PRIMARY KEY, start INTEGER NOT NULL, total INTEGER NOT NULL);`);
   try {
+    initializeCatalogStore(database);
     // The transaction is also a startup lock across independent Next route bundles/processes.
     // Filesystem moves can precede a rolled-back commit: restart discovers the relocated DB.
     database
@@ -132,6 +134,7 @@ export function accountsDb(): Database.Database {
       );
     }
     migrateMediaRoots(database);
+    migrateCatalogSettings(database);
     cleanupDeletedTenants(database);
     connection = database;
     return database;

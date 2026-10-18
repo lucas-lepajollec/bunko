@@ -1,6 +1,8 @@
 import { deduplicate } from './search-engine';
 import { rakutenDetail } from './rakuten';
-import { discoverComics, metronDetail } from './metron';
+import { discoverComics, metronDetail, metronConfigured, metronScope } from './metron';
+import { discoverAll } from './discover-all';
+import { credentialScope } from './catalog-provider-http';
 import { discoverHardcover, hardcoverConfigured, hardcoverDetail } from './hardcover';
 import { discoverBooks, openLibraryDetail } from './openlibrary';
 import { discoverWebNovels } from './novels';
@@ -94,11 +96,27 @@ export async function discover(
   signal?: AbortSignal,
   raw = false,
 ): Promise<DiscoverPage> {
+  if (q.kind && q.kind !== 'all') return discoverLane(q, signal, raw);
+  signal?.throwIfAborted();
+  const key = `discover:all:v2:${JSON.stringify(q)}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}:${includeProviderAdults()}:${metronScope()}:${credentialScope(getSettings().hardcoverToken)}`;
+  const lane = (kind: DiscoverQuery['kind']) => () => discoverLane({ ...q, kind }, undefined, true);
+  const result = await discoverAll(key, q.page ?? 1, {
+    anilist: lane('all'),
+    novel: lane('novel'),
+    book: lane('book'),
+    webnovel: lane('webnovel'),
+    ...(metronConfigured() ? { comic: lane('comic') } : {}),
+  });
+  return { ...result, items: raw ? result.items : withTracking(result.items).filter(visibleMedia) };
+}
+async function discoverLane(
+  q: DiscoverQuery,
+  signal?: AbortSignal,
+  raw = false,
+): Promise<DiscoverPage> {
   signal?.throwIfAborted();
   const kind = q.kind ?? 'all';
-  const sort = q.sort ?? 'trending';
   const page = q.page ?? 1;
-  const perPage = q.perPage ?? 24;
   if (kind === 'novel' || kind === 'book') {
     const outcomes = await Promise.allSettled([
       discoverBooks(q),
@@ -131,6 +149,19 @@ export async function discover(
       items: raw ? result.items : withTracking(result.items).filter(visibleMedia),
     };
   }
+  return discoverAniList(q, signal, raw);
+}
+/** AniList's ranking is kept for the home Top 10; catalog All uses the aggregate above. */
+export async function discoverAniList(
+  q: DiscoverQuery,
+  signal?: AbortSignal,
+  raw = false,
+): Promise<DiscoverPage> {
+  signal?.throwIfAborted();
+  const kind = q.kind ?? 'all';
+  const sort = q.sort ?? 'trending';
+  const page = q.page ?? 1;
+  const perPage = q.perPage ?? 24;
   const variables: Record<string, unknown> = {
     page,
     perPage,

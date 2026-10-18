@@ -7,7 +7,7 @@ import type { AniMedia } from '@/lib/media';
 const directory = mkdtempSync(path.join(tmpdir(), 'bunko-adult-tests-'));
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_WORKER = 'false';
-const { enterFixtureTenant } = await import('./tenant-fixture');
+const { enterFixtureTenant, settleCatalogTasks } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { db, track, untrack, listTracked, indexCatalog, observeChapters } = await import('@/lib/db');
 const { emptyMedia, fromAniList, fromMangaDex, fromMangaUpdates } = await import('@/lib/media');
@@ -158,7 +158,8 @@ beforeEach(() => {
     throw new Error('Unexpected upstream');
   });
 });
-afterEach(() => {
+afterEach(async () => {
+  await settleCatalogTasks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
