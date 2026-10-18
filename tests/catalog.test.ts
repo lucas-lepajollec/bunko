@@ -20,7 +20,7 @@ process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_WORKER = 'false';
 const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant();
-const { discover } = await import('@/lib/catalog');
+const { discoverAniList: discover } = await import('@/lib/catalog');
 const { deduplicate } = await import('@/lib/search-engine');
 const { db } = await import('@/lib/db');
 const { GET: discoverRoute } = await import('@/app/api/discover/route');
@@ -93,8 +93,8 @@ describe('publication date mapping and validation', () => {
     [null, '2026', '2026-05', '2026-05-03'],
     ['2026-05-03', '2026', null, '2026-05'],
   ])('keeps the most precise date regardless of provider order: %j', (...dates) => {
-    const records = dates.map((startDate, i) => ({
-      ...emptyMedia(`local:${i}`, 'Same title', 'MANGA'),
+    const records = dates.map((startDate) => ({
+      ...emptyMedia('anilist:1', 'Same title', 'MANGA'),
       startDate,
     }));
     const merged = deduplicate(records);

@@ -10,7 +10,7 @@ export type MediaFormat =
   | 'ONE_SHOT'
   | 'LIGHT_NOVEL'
   | 'WEB_NOVEL'
-  /** Western comics / BD (sources and Kavita only; no public discovery catalog). */
+  /** Western comics / BD, with optional Metron discovery plus sources and Kavita. */
   | 'COMIC'
   /** Novel (fiction book: "roman"), distinct from LN/WN. */
   | 'NOVEL'
@@ -171,6 +171,10 @@ export interface DiscoverPage {
   items: UnifiedMedia[];
   page: number;
   hasNextPage: boolean;
+  /** More provider results/classification are loading; revalidate this page until false. */
+  pending?: boolean;
+  /** Partial upstream failure; available items remain usable. */
+  warnings?: { provider: string; code: 'METADATA_UNAVAILABLE' }[];
 }
 /** A title found on a Suwayomi source, scored against the requested media (0..1). */
 export interface SourceCandidate extends SourceMatch {
@@ -315,6 +319,8 @@ export interface EnqueueRequest {
 }
 export interface DownloadBatch {
   id: string;
+  /** Internal connection identity; older batches are bound during migration. */
+  sourceKey?: string;
   media: UnifiedMedia;
   chapterIds: number[];
   importedIds: number[];
@@ -390,8 +396,9 @@ export interface Settings {
   libraryTargets: LibraryTargets;
   /** Follow every Kavita series automatically (matched to the catalog when possible). Default true. */
   autoImportKavita: boolean;
-  /** Optional catalog providers (each user's own keys; empty = provider unused or keyless mode). */
+  /** Shared optional catalog credentials, managed by admins; empty = unused or keyless mode. */
   googleBooksApiKey: string;
+  metronApiToken: string;
   metronUsername: string;
   metronPassword: string;
   rakutenApplicationId: string;
@@ -418,13 +425,27 @@ export type SecretSetting =
   | 'sonarrApiKey'
   | 'prowlarrApiKey'
   | 'googleBooksApiKey'
+  | 'metronApiToken'
   | 'metronPassword'
   | 'rakutenApplicationId'
   | 'rakutenAccessKey'
   | 'hardcoverToken';
 export type PublicSettings = Omit<Settings, SecretSetting> & {
   secretsConfigured: Record<SecretSetting, boolean>;
+  /** Shared availability is visible to members; credential changes/probes require an admin. */
+  catalogs: { canManage: boolean; configured: Record<CatalogProvider, boolean> };
 };
+export type CatalogProvider = 'googlebooks' | 'metron' | 'rakuten' | 'hardcover';
+export const catalogSettingKeys = [
+  'googleBooksApiKey',
+  'metronApiToken',
+  'metronUsername',
+  'metronPassword',
+  'rakutenApplicationId',
+  'rakutenAccessKey',
+  'hardcoverToken',
+] as const satisfies readonly (keyof Settings)[];
+export type CatalogSetting = (typeof catalogSettingKeys)[number];
 export type SettingsPatch = Partial<Settings>;
 export interface TrackedMedia {
   id: number;
@@ -524,7 +545,7 @@ export type ReadingStatus = 'PLANNING' | 'READING' | 'PAUSED' | 'COMPLETED' | 'D
 export interface LibraryProgress {
   /** Highest chapter number read, from Kavita reading progress when available. */
   read: number | null;
-  /** Chapters present in the library (imported CBZ). */
+  /** Owned chapters, or explicitly indexed complete volumes when the work uses volume units. */
   owned: number;
   /** Highest chapter number known on metadata or sources. */
   released: number | null;

@@ -1,11 +1,21 @@
 import { registerReaderArchive } from './reader-archives';
 import { chapterVolume } from './chapter-volume';
-import { open, realpath, rename, unlink, writeFile } from 'node:fs/promises';
+import { open, realpath, rename, link, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
+import { constants } from 'node:fs';
+import { storageWorkKeys } from './library-storage';
+import { sourceServerKey } from './source-server';
 import AdmZip from 'adm-zip';
 import { z } from 'zod';
-import { db, listTracked, recordImport, manualKavitaLink, trackedForMedia } from './db';
+import {
+  db,
+  listTracked,
+  recordImport,
+  manualKavitaLink,
+  trackedForMedia,
+  assertImportIdentity,
+} from './db';
 import type { TrackedMedia, UnifiedMedia } from '@/types/shared';
 import { getSettings } from './settings';
 import { endpoint, requestJson } from './http';
@@ -33,7 +43,15 @@ export function xmlEscape(value: string) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
 }
-export function comicInfo(media: UnifiedMedia, number: number | null, title: string) {
+export function comicInfo(
+  media: UnifiedMedia,
+  number: number | null,
+  title: string,
+  language?: string,
+) {
+  const code = language?.toLowerCase().split(/[-_]/)[0];
+  const knownLanguage =
+    code && /^[a-z]{2,3}$/.test(code) && !['all', 'any', 'und', 'unk', 'mul'].includes(code);
   const fields: Record<string, string> = {
     Series: media.title,
     ...(number !== null ? { Number: String(number) } : { Format: 'Special' }),
@@ -42,7 +60,7 @@ export function comicInfo(media: UnifiedMedia, number: number | null, title: str
     Writer: media.authors.join(', '),
     Genre: media.genres.join(', '),
     Web: media.webUrl ?? '',
-    LanguageISO: 'fr',
+    ...(knownLanguage ? { LanguageISO: code } : {}),
     Manga: media.format === 'COMIC' ? 'No' : 'Yes',
   };
   return `<?xml version="1.0" encoding="utf-8"?>\n<ComicInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">\n${Object.entries(
@@ -69,16 +87,21 @@ export function seriesName(media: UnifiedMedia) {
 }
 export async function seriesDirectory(media: UnifiedMedia) {
   const target = targetFor(media);
+  const { tracked, mediaKey, workKey } = storageWorkKeys(media);
   const existing = matchKavita(media);
-  const tracked = trackedForMedia(media, listTracked());
-  const imported = tracked
-    ? (db()
-        .prepare(
-          `SELECT a.filename FROM reader_archives a
-    JOIN imported_chapters c ON c.chapter_id=a.chapter_id WHERE c.tracked_id=? ORDER BY c.imported_at DESC LIMIT 1`,
-        )
-        .get(tracked.id) as { filename: string } | undefined)
-    : undefined;
+  const imported = db()
+    .prepare(
+      `SELECT a.filename FROM reader_archives a
+    JOIN imported_chapters c ON c.chapter_id=a.chapter_id AND a.namespace=c.namespace||':reader'
+    WHERE c.tracked_id=? OR c.media_json ->> '$.id'=? ORDER BY c.imported_at DESC LIMIT 1`,
+    )
+    .get(tracked?.id ?? null, media.id) as { filename: string } | undefined;
+  const reserved = db()
+    .prepare('SELECT folder FROM library_folders WHERE work_key IN (?,?) ORDER BY folder')
+    .all(workKey, mediaKey) as { folder: string }[];
+  const known = reserved.find(
+    (r) => inside(target.local, r.folder) && r.folder !== target.local,
+  )?.folder;
   const local = existing?.folder
     ? mapKavitaPath(existing.folder)
     : imported
@@ -89,11 +112,39 @@ export async function seriesDirectory(media: UnifiedMedia) {
     inside(target.local, local) &&
     local !== target.local &&
     (!existing || target.libraryId === null || target.libraryId === existing.libraryId);
-  return safeLibraryDirectory(
-    reuse ? local : path.join(/* turbopackIgnore: true */ target.local, seriesName(media)),
+  const suffix = createHash('sha256').update(workKey).digest('hex').slice(0, 12);
+  const folder = await safeLibraryDirectory(
+    (tracked && manualKavitaLink(tracked.id) && reuse ? local : known) ??
+      (reuse
+        ? local
+        : path.join(
+            /* turbopackIgnore: true */ target.local,
+            `${seriesName(media)} [bunko-${suffix}]`,
+          )),
     true,
   );
+  db()
+    .transaction(() => {
+      const owner = db()
+        .prepare('SELECT work_key FROM library_folders WHERE folder=?')
+        .get(folder) as { work_key: string } | undefined;
+      if (owner && owner.work_key !== workKey && owner.work_key !== mediaKey) {
+        const orphan =
+          owner.work_key.startsWith('tracked:') &&
+          !db().prepare('SELECT 1 FROM library_work_keys WHERE work_key=?').get(owner.work_key);
+        if (!orphan || !imported || path.dirname(imported.filename) !== folder)
+          throw new AppError('IMPORT_CONFLICT', 'Library folder belongs to a different work', 409);
+      }
+      db()
+        .prepare(
+          'INSERT INTO library_folders(folder,work_key) VALUES(?,?) ON CONFLICT(folder) DO UPDATE SET work_key=excluded.work_key',
+        )
+        .run(folder, workKey);
+    })
+    .immediate();
+  return folder;
 }
+
 function padded(value: number, digits: number) {
   const [whole, decimal] = String(value).split('.');
   return whole.padStart(digits, '0') + (decimal ? `.${decimal}` : '');
@@ -149,12 +200,14 @@ export async function importChapter(
     chapterNumber: number;
     name: string;
     volume?: number | null;
-    manga?: { id: number; source?: { id: string; name: string } };
+    manga?: { id: number; source?: { id: string; name: string; lang?: string } };
   },
   signal?: AbortSignal,
   progress?: (done: number, total: number, tries: number) => void,
   importing?: () => void,
 ) {
+  const namespace = sourceServerKey();
+  assertImportIdentity(media, chapter.id, namespace);
   const folder = await seriesDirectory(media);
   const pages = await chapterPages(chapter.id, signal, progress);
   signal?.throwIfAborted();
@@ -166,10 +219,19 @@ export async function importChapter(
       `${String(index + 1).padStart(4, '0')}.${pages[index].extension}`,
       pages[index].bytes,
     );
-  let xml = comicInfo(media, number, chapter.name);
+  const source = chapter.manga?.source;
+  const language =
+    source?.lang ??
+    media.sources.find((s) => s.sourceId === source?.id && s.suwayomiMangaId === chapter.manga?.id)
+      ?.lang;
+  let xml = comicInfo(media, number, chapter.name, language);
   const volume = chapterVolume(chapter.name, chapter.volume);
   if (volume !== null)
     xml = xml.replace('</ComicInfo>', `  <Volume>${volume}</Volume>\n</ComicInfo>`);
+  const provenance = createHash('sha256')
+    .update(JSON.stringify([media.type, media.id, namespace, chapter.id]))
+    .digest('hex');
+  xml = xml.replace('</ComicInfo>', `  <BunkoImport>${provenance}</BunkoImport>\n</ComicInfo>`);
   zip.addFile('ComicInfo.xml', Buffer.from(xml));
   // Recheck the directory immediately before writing, including cached/existing folders.
   await safeLibraryDirectory(
@@ -186,9 +248,20 @@ export async function importChapter(
       await handle.close();
     }
     signal?.throwIfAborted();
-    await rename(tmp, target);
-    registerReaderArchive(target, chapter);
-    recordImport(media, { ...chapter, chapterNumber: number ?? -1 });
+    if (sourceServerKey() !== namespace)
+      throw new AppError('SOURCE_CHANGED', 'Source connection changed during import', 409);
+    try {
+      // link is atomic and fails if the destination exists, including symlinks.
+      await link(tmp, target);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      if (!(await matchingImport(target, provenance)))
+        throw new AppError('IMPORT_CONFLICT', 'Existing archive was preserved', 409);
+    }
+    db().transaction(() => {
+      registerReaderArchive(target, chapter, `${namespace}:reader`);
+      recordImport(media, { ...chapter, chapterNumber: number ?? -1 }, namespace);
+    })();
   } finally {
     await unlink(tmp).catch((e) => {
       if (e.code !== 'ENOENT') throw e;
@@ -196,6 +269,25 @@ export async function importChapter(
   }
   await discardChapterCache(chapter.id);
 }
+/** Recover a published file after a crash before its SQLite acknowledgement, without replacing it. */
+async function matchingImport(filename: string, provenance: string) {
+  try {
+    const handle = await open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const info = await handle.stat();
+      if (!info.isFile() || info.size > MAX_CHAPTER_BYTES + 1024 * 1024) return false;
+      const archive = new AdmZip(await handle.readFile());
+      const entry = archive.getEntry('ComicInfo.xml');
+      if (!entry || entry.header.size > 64 * 1024) return false;
+      return entry.getData().toString('utf8').includes(`<BunkoImport>${provenance}</BunkoImport>`);
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return false;
+  }
+}
+
 export async function scanLibrary(media: UnifiedMedia, signal?: AbortSignal) {
   const folder = await seriesDirectory(media);
   const kavitaFolder = kavitaPathForLocal(folder, targetFor(media));

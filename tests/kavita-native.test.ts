@@ -15,7 +15,7 @@ mkdirSync(path.join(tenantLibraryRoot, 'Manga', 'Existing Folder'), { recursive:
 mkdirSync(path.join(tenantLibraryRoot, 'Novels'), { recursive: true });
 const { db, track, listTracked, listBatches, recordImport, indexCatalog } =
   await import('@/lib/db');
-const { enterFixtureTenant } = await import('./tenant-fixture');
+const { enterFixtureTenant, settleCatalogTasks } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { emptyMedia } = await import('@/lib/media');
 const { updateSettings, persistentSecret } = await import('@/lib/settings');
@@ -321,7 +321,10 @@ beforeEach(async () => {
   });
   setSourcePreferences({ enabledSourceIds: [], languages: ['fr'] });
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(async () => {
+  await settleCatalogTasks();
+  vi.unstubAllGlobals();
+});
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   for (const connection of connections) if (connection.open) connection.close();

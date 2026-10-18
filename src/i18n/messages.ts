@@ -145,6 +145,7 @@ const en: Dictionary = {
   'genre.Thriller': 'Thriller',
   'catalog.title': 'Catalog',
   'catalog.aside': 'everything, sorted your way',
+  'catalog.partial': 'Some catalogs are temporarily unavailable. Available results are shown.',
   'catalog.kind': 'Type',
   'catalog.genres': 'Genres',
   'catalog.status': 'Status',
@@ -433,6 +434,9 @@ const en: Dictionary = {
   'error.DOWNLOAD_FAILED': 'a chapter failed in Suwayomi',
   'error.IMPORT_HTTP_ERROR': 'the import transfer failed',
   'error.IMPORT_TOO_LARGE': 'chapter too large to import',
+  'error.IMPORT_CONFLICT':
+    'existing file or folder belongs to another import; nothing was overwritten',
+  'error.SOURCE_CHANGED': 'source connection changed; select the source again',
   'error.INVALID_ARCHIVE': 'the chapter archive has no pages',
   'error.UNSAFE_ARCHIVE': 'the chapter archive was rejected',
   'error.UNSAFE_PATH': 'unsafe library path',
@@ -826,7 +830,7 @@ const en: Dictionary = {
   'release.volume': 'Vol. {v}',
   'settings.section.catalogs': 'Catalogs',
   'catalogs.intro':
-    'Optional: each provider adds content when its free key is set. Without keys Bunko keeps working with its keyless catalogs.',
+    'Catalogs are shared across all accounts. An administrator configures the optional keys once; libraries and service connections stay personal.',
   'catalogs.on': 'active',
   'catalogs.off': 'not configured',
   'catalogs.getKey': 'Get a key',
@@ -855,6 +859,24 @@ const en: Dictionary = {
   'match.sourcesSearch': 'Search the sources with another name…',
   'match.kavitaCoverSync': 'Use Bunko’s cover in Kavita',
   'match.kavitaCoverSyncHint': 'Off: Kavita keeps its own cover.',
+  'catalogs.managedByAdmin':
+    'An administrator manages these connections. Configured catalogs are available in your account.',
+  'catalogs.saveBeforeTest': 'Save your changes before testing the connection.',
+  'catalogs.field.metronApiToken': 'Metron API token',
+  'catalogs.metron.help':
+    'In your Metron account, create an API token under API Tokens and paste the token alone here. No username is needed. A saved token takes priority over password login.',
+  'catalogs.metron.legacy': 'Connect with a Metron password',
+  'catalogs.metron.legacyHelp':
+    'Use your real Metron account password here. Paste API tokens in the token field above.',
+  'catalogs.googlebooks.setup': 'How to create a Google Books key',
+  'catalogs.googlebooks.project': 'Open Google Cloud Console and select or create a project.',
+  'catalogs.googlebooks.enable': 'Enable Books API in that project',
+  'catalogs.googlebooks.create':
+    'Open APIs & Services → Credentials → Create credentials → API key. Choose an API key, rather than OAuth credentials.',
+  'catalogs.googlebooks.restrict': 'Under API restrictions, restrict the key to Books API.',
+  'catalogs.googlebooks.paste': 'Copy the key into the field below, save it, then select Test.',
+  'catalogs.googlebooks.serverKey':
+    'Bunko calls Google from your server. Website restrictions do not fit this connection. If you restrict by IP, allow the server’s outgoing public IP, rather than its LAN address.',
 };
 
 const fr: Dictionary = {
@@ -972,6 +994,8 @@ const fr: Dictionary = {
   'genre.Thriller': 'Thriller',
   'catalog.title': 'Catalogue',
   'catalog.aside': 'tout le catalogue, rangé comme tu veux',
+  'catalog.partial':
+    'Certains catalogues sont temporairement indisponibles. Les résultats disponibles restent affichés.',
   'catalog.kind': 'Type',
   'catalog.genres': 'Genres',
   'catalog.status': 'Statut',
@@ -1263,6 +1287,9 @@ const fr: Dictionary = {
   'error.DOWNLOAD_FAILED': 'un chapitre a échoué dans Suwayomi',
   'error.IMPORT_HTTP_ERROR': 'le transfert vers la bibliothèque a échoué',
   'error.IMPORT_TOO_LARGE': 'chapitre trop lourd à importer',
+  'error.IMPORT_CONFLICT':
+    'un fichier ou dossier appartient à un autre import ; rien n’a été écrasé',
+  'error.SOURCE_CHANGED': 'la connexion source a changé ; sélectionne à nouveau la source',
   'error.INVALID_ARCHIVE': 'l’archive du chapitre ne contient aucune page',
   'error.UNSAFE_ARCHIVE': 'l’archive du chapitre a été refusée',
   'error.UNSAFE_PATH': 'chemin de bibliothèque refusé',
@@ -1659,7 +1686,7 @@ const fr: Dictionary = {
   'release.volume': 'T. {v}',
   'settings.section.catalogs': 'Catalogues',
   'catalogs.intro':
-    'Optionnel : chaque fournisseur ajoute du contenu quand sa clé gratuite est renseignée. Sans clé, Bunko continue avec ses catalogues libres.',
+    'Les catalogues sont partagés entre tous les comptes. Un administrateur configure les clés optionnelles une seule fois ; bibliothèques et connexions aux services restent personnelles.',
   'catalogs.on': 'actif',
   'catalogs.off': 'non configuré',
   'catalogs.getKey': 'Obtenir une clé',
@@ -1690,6 +1717,26 @@ const fr: Dictionary = {
   'match.sourcesSearch': 'Chercher dans les sources avec un autre nom…',
   'match.kavitaCoverSync': 'Utiliser la couverture de Bunko dans Kavita',
   'match.kavitaCoverSyncHint': 'Désactivé : Kavita garde sa propre couverture.',
+  'catalogs.managedByAdmin':
+    'Un administrateur gère ces connexions. Les catalogues configurés sont disponibles dans ton compte.',
+  'catalogs.saveBeforeTest': 'Enregistre tes modifications avant de tester la connexion.',
+  'catalogs.field.metronApiToken': 'Token API Metron',
+  'catalogs.metron.help':
+    'Dans ton compte Metron, crée un token dans API Tokens et colle uniquement ce token ici. Aucun nom d’utilisateur nécessaire. Le token enregistré est prioritaire sur la connexion par mot de passe.',
+  'catalogs.metron.legacy': 'Se connecter avec un mot de passe Metron',
+  'catalogs.metron.legacyHelp':
+    'Utilise ici le vrai mot de passe de ton compte Metron. Colle les tokens API dans le champ token ci-dessus.',
+  'catalogs.googlebooks.setup': 'Comment créer une clé Google Books',
+  'catalogs.googlebooks.project': 'Ouvre Google Cloud Console et sélectionne ou crée un projet.',
+  'catalogs.googlebooks.enable': 'Active Books API dans ce projet',
+  'catalogs.googlebooks.create':
+    'Ouvre API et services → Identifiants → Créer des identifiants → Clé API. Choisis une clé API, plutôt que des identifiants OAuth.',
+  'catalogs.googlebooks.restrict':
+    'Dans Restrictions relatives aux API, limite la clé à Books API.',
+  'catalogs.googlebooks.paste':
+    'Copie la clé dans le champ ci-dessous, enregistre-la, puis clique sur Tester.',
+  'catalogs.googlebooks.serverKey':
+    'Bunko appelle Google depuis ton serveur. Les restrictions par site web ne conviennent pas à cette connexion. Si tu limites par IP, autorise l’IP publique de sortie du serveur, plutôt que son adresse locale.',
 };
 
 const es: Dictionary = {
@@ -1807,6 +1854,8 @@ const es: Dictionary = {
   'genre.Thriller': 'Suspense',
   'catalog.title': 'Catálogo',
   'catalog.aside': 'todo, ordenado a tu manera',
+  'catalog.partial':
+    'Algunos catálogos no están disponibles temporalmente. Se muestran los resultados disponibles.',
   'catalog.kind': 'Tipo',
   'catalog.genres': 'Géneros',
   'catalog.status': 'Estado',
@@ -2093,6 +2142,9 @@ const es: Dictionary = {
   'error.DOWNLOAD_FAILED': 'un capítulo falló en Suwayomi',
   'error.IMPORT_HTTP_ERROR': 'falló la transferencia a la biblioteca',
   'error.IMPORT_TOO_LARGE': 'capítulo demasiado grande',
+  'error.IMPORT_CONFLICT':
+    'el archivo o la carpeta pertenece a otra importación; no se sobrescribió nada',
+  'error.SOURCE_CHANGED': 'la conexión de origen cambió; selecciona de nuevo la fuente',
   'error.INVALID_ARCHIVE': 'el archivo del capítulo no tiene páginas',
   'error.UNSAFE_ARCHIVE': 'el archivo del capítulo fue rechazado',
   'error.UNSAFE_PATH': 'ruta de biblioteca no segura',
@@ -2489,7 +2541,7 @@ const es: Dictionary = {
   'release.volume': 'T. {v}',
   'settings.section.catalogs': 'Catálogos',
   'catalogs.intro':
-    'Opcional: cada proveedor añade contenido cuando pones su clave gratuita. Sin claves, Bunko sigue con sus catálogos libres.',
+    'Los catálogos se comparten entre todas las cuentas. Un administrador configura las claves opcionales una vez; las bibliotecas y conexiones a servicios siguen siendo personales.',
   'catalogs.on': 'activo',
   'catalogs.off': 'sin configurar',
   'catalogs.getKey': 'Obtener una clave',
@@ -2518,6 +2570,24 @@ const es: Dictionary = {
   'match.sourcesSearch': 'Buscar en las fuentes con otro nombre…',
   'match.kavitaCoverSync': 'Usar la portada de Bunko en Kavita',
   'match.kavitaCoverSyncHint': 'Desactivado: Kavita conserva su portada.',
+  'catalogs.managedByAdmin':
+    'Un administrador gestiona estas conexiones. Los catálogos configurados están disponibles en tu cuenta.',
+  'catalogs.saveBeforeTest': 'Guarda los cambios antes de probar la conexión.',
+  'catalogs.field.metronApiToken': 'Token API de Metron',
+  'catalogs.metron.help':
+    'Crea un token en API Tokens de tu cuenta Metron y pega solo el token aquí. No hace falta un usuario. El token guardado tiene prioridad sobre la contraseña.',
+  'catalogs.metron.legacy': 'Conectar con una contraseña de Metron',
+  'catalogs.metron.legacyHelp':
+    'Introduce aquí la contraseña real de tu cuenta Metron. Pega los tokens API en el campo de token de arriba.',
+  'catalogs.googlebooks.setup': 'Cómo crear una clave de Google Books',
+  'catalogs.googlebooks.project': 'Abre Google Cloud Console y selecciona o crea un proyecto.',
+  'catalogs.googlebooks.enable': 'Activa Books API en ese proyecto',
+  'catalogs.googlebooks.create':
+    'Abre APIs y servicios → Credenciales → Crear credenciales → Clave de API. Elige una clave API en lugar de credenciales OAuth.',
+  'catalogs.googlebooks.restrict': 'En Restricciones de API, limita la clave a Books API.',
+  'catalogs.googlebooks.paste': 'Copia la clave en el campo de abajo, guárdala y pulsa Probar.',
+  'catalogs.googlebooks.serverKey':
+    'Bunko llama a Google desde tu servidor. Las restricciones por sitio web no sirven para esta conexión. Si limitas por IP, permite la IP pública de salida del servidor, no su dirección local.',
 };
 
 const de: Dictionary = {
@@ -2635,6 +2705,8 @@ const de: Dictionary = {
   'genre.Thriller': 'Thriller',
   'catalog.title': 'Katalog',
   'catalog.aside': 'alles, so sortiert wie du willst',
+  'catalog.partial':
+    'Einige Kataloge sind vorübergehend nicht verfügbar. Verfügbare Ergebnisse werden angezeigt.',
   'catalog.kind': 'Typ',
   'catalog.genres': 'Genres',
   'catalog.status': 'Status',
@@ -2925,6 +2997,9 @@ const de: Dictionary = {
   'error.DOWNLOAD_FAILED': 'ein Kapitel ist in Suwayomi fehlgeschlagen',
   'error.IMPORT_HTTP_ERROR': 'die Übertragung in die Bibliothek ist fehlgeschlagen',
   'error.IMPORT_TOO_LARGE': 'Kapitel zu groß für den Import',
+  'error.IMPORT_CONFLICT':
+    'Datei oder Ordner gehört zu einem anderen Import; nichts wurde überschrieben',
+  'error.SOURCE_CHANGED': 'Quellverbindung geändert; Quelle erneut auswählen',
   'error.INVALID_ARCHIVE': 'das Kapitelarchiv enthält keine Seiten',
   'error.UNSAFE_ARCHIVE': 'das Kapitelarchiv wurde abgelehnt',
   'error.UNSAFE_PATH': 'unsicherer Bibliothekspfad',
@@ -3322,7 +3397,7 @@ const de: Dictionary = {
   'release.volume': 'Bd. {v}',
   'settings.section.catalogs': 'Kataloge',
   'catalogs.intro':
-    'Optional: jeder Anbieter ergänzt Inhalte, sobald sein kostenloser Schlüssel gesetzt ist. Ohne Schlüssel nutzt Bunko die freien Kataloge.',
+    'Kataloge werden von allen Konten gemeinsam genutzt. Ein Administrator richtet die optionalen Schlüssel einmal ein; Bibliotheken und Dienstverbindungen bleiben persönlich.',
   'catalogs.on': 'aktiv',
   'catalogs.off': 'nicht eingerichtet',
   'catalogs.getKey': 'Schlüssel holen',
@@ -3351,6 +3426,27 @@ const de: Dictionary = {
   'match.sourcesSearch': 'Quellen mit anderem Namen durchsuchen…',
   'match.kavitaCoverSync': 'Bunko-Cover in Kavita verwenden',
   'match.kavitaCoverSyncHint': 'Aus: Kavita behält sein eigenes Cover.',
+  'catalogs.managedByAdmin':
+    'Ein Administrator verwaltet diese Verbindungen. Eingerichtete Kataloge stehen deinem Konto zur Verfügung.',
+  'catalogs.saveBeforeTest': 'Speichere deine Änderungen vor dem Verbindungstest.',
+  'catalogs.field.metronApiToken': 'Metron-API-Token',
+  'catalogs.metron.help':
+    'Erstelle in deinem Metron-Konto unter API Tokens ein Token und füge hier nur das Token ein. Ein Benutzername ist nicht nötig. Ein gespeichertes Token hat Vorrang vor der Passwortanmeldung.',
+  'catalogs.metron.legacy': 'Mit einem Metron-Passwort verbinden',
+  'catalogs.metron.legacyHelp':
+    'Verwende hier das echte Passwort deines Metron-Kontos. API-Tokens gehören in das Token-Feld oben.',
+  'catalogs.googlebooks.setup': 'Einen Google-Books-Schlüssel erstellen',
+  'catalogs.googlebooks.project':
+    'Öffne die Google Cloud Console und wähle oder erstelle ein Projekt.',
+  'catalogs.googlebooks.enable': 'Books API in diesem Projekt aktivieren',
+  'catalogs.googlebooks.create':
+    'Öffne APIs und Dienste → Anmeldedaten → Anmeldedaten erstellen → API-Schlüssel. Wähle einen API-Schlüssel statt OAuth-Anmeldedaten.',
+  'catalogs.googlebooks.restrict':
+    'Beschränke den Schlüssel unter API-Einschränkungen auf Books API.',
+  'catalogs.googlebooks.paste':
+    'Kopiere den Schlüssel in das Feld unten, speichere ihn und wähle Testen.',
+  'catalogs.googlebooks.serverKey':
+    'Bunko ruft Google von deinem Server aus auf. Website-Einschränkungen passen nicht zu dieser Verbindung. Bei einer IP-Beschränkung muss die ausgehende öffentliche IP des Servers erlaubt sein, nicht seine LAN-Adresse.',
 };
 
 const it: Dictionary = {
@@ -3468,6 +3564,8 @@ const it: Dictionary = {
   'genre.Thriller': 'Thriller',
   'catalog.title': 'Catalogo',
   'catalog.aside': 'tutto, ordinato come vuoi',
+  'catalog.partial':
+    'Alcuni cataloghi sono temporaneamente non disponibili. I risultati disponibili restano visibili.',
   'catalog.kind': 'Tipo',
   'catalog.genres': 'Generi',
   'catalog.status': 'Stato',
@@ -3756,6 +3854,9 @@ const it: Dictionary = {
   'error.DOWNLOAD_FAILED': 'un capitolo non è riuscito in Suwayomi',
   'error.IMPORT_HTTP_ERROR': 'il trasferimento in libreria non è riuscito',
   'error.IMPORT_TOO_LARGE': 'capitolo troppo grande da importare',
+  'error.IMPORT_CONFLICT':
+    'il file o la cartella appartiene a un’altra importazione; nulla è stato sovrascritto',
+  'error.SOURCE_CHANGED': 'la connessione alla fonte è cambiata; seleziona di nuovo la fonte',
   'error.INVALID_ARCHIVE': 'l’archivio del capitolo non contiene pagine',
   'error.UNSAFE_ARCHIVE': 'l’archivio del capitolo è stato rifiutato',
   'error.UNSAFE_PATH': 'percorso della libreria non sicuro',
@@ -4149,7 +4250,7 @@ const it: Dictionary = {
   'release.volume': 'Vol. {v}',
   'settings.section.catalogs': 'Cataloghi',
   'catalogs.intro':
-    'Facoltativo: ogni fornitore aggiunge contenuti quando imposti la sua chiave gratuita. Senza chiavi Bunko usa i cataloghi liberi.',
+    'I cataloghi sono condivisi tra tutti gli account. Un amministratore configura le chiavi opzionali una volta; librerie e connessioni ai servizi restano personali.',
   'catalogs.on': 'attivo',
   'catalogs.off': 'non configurato',
   'catalogs.getKey': 'Ottieni una chiave',
@@ -4178,6 +4279,24 @@ const it: Dictionary = {
   'match.sourcesSearch': 'Cerca nelle fonti con un altro nome…',
   'match.kavitaCoverSync': 'Usa la copertina di Bunko in Kavita',
   'match.kavitaCoverSyncHint': 'Disattivato: Kavita mantiene la sua copertina.',
+  'catalogs.managedByAdmin':
+    'Un amministratore gestisce queste connessioni. I cataloghi configurati sono disponibili nel tuo account.',
+  'catalogs.saveBeforeTest': 'Salva le modifiche prima di provare la connessione.',
+  'catalogs.field.metronApiToken': 'Token API Metron',
+  'catalogs.metron.help':
+    'Nel tuo account Metron, crea un token in API Tokens e incolla qui solo il token. Non serve un nome utente. Il token salvato ha priorità sulla password.',
+  'catalogs.metron.legacy': 'Connetti con una password Metron',
+  'catalogs.metron.legacyHelp':
+    'Usa qui la vera password del tuo account Metron. Incolla i token API nel campo token qui sopra.',
+  'catalogs.googlebooks.setup': 'Come creare una chiave Google Books',
+  'catalogs.googlebooks.project': 'Apri Google Cloud Console e seleziona o crea un progetto.',
+  'catalogs.googlebooks.enable': 'Attiva Books API in quel progetto',
+  'catalogs.googlebooks.create':
+    'Apri API e servizi → Credenziali → Crea credenziali → Chiave API. Scegli una chiave API anziché credenziali OAuth.',
+  'catalogs.googlebooks.restrict': 'In Restrizioni API, limita la chiave a Books API.',
+  'catalogs.googlebooks.paste': 'Copia la chiave nel campo sotto, salvala e seleziona Prova.',
+  'catalogs.googlebooks.serverKey':
+    'Bunko chiama Google dal tuo server. Le restrizioni per sito web non sono adatte a questa connessione. Se limiti per IP, autorizza l’IP pubblico di uscita del server, non il suo indirizzo locale.',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

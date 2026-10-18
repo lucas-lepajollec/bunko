@@ -23,18 +23,22 @@ const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { db, listTracked } = await import('@/lib/db');
 const { emptyMedia } = await import('@/lib/media');
+const { sourceServerKey } = await import('@/lib/source-server');
 const { persistentSecret } = await import('@/lib/settings');
 const { GET } = await import('@/app/api/tracked/route');
 const { runUpdateCheck } = await import('@/lib/updates');
 const downloads = await import('@/lib/downloads');
 const database = db();
 function seed(n: number) {
+  const namespace = sourceServerKey();
   database.transaction(() => {
     database.exec('DELETE FROM tracked_media;DELETE FROM kavita_series');
     const entry = database.prepare(
       'INSERT INTO tracked_media(id,title,type,created_at,media_json,sources_json,kavita_series_id) VALUES(?,?,?, ?,?,?,?)',
     );
-    const observed = database.prepare('INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name) VALUES(?,?,?,?,?)');
+    const observed = database.prepare(
+      'INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name,namespace) VALUES(?,?,?,?,?,?)',
+    );
     const series = database.prepare('INSERT INTO kavita_series VALUES(?,?)');
     for (let id = 1; id <= n; id++) {
       const media = emptyMedia(`anilist:${id}`, `Fixture ${id}`, 'MANGA');
@@ -65,7 +69,7 @@ function seed(n: number) {
         }),
       );
       for (let c = 1; c <= 50; c++)
-        observed.run(id, id * 1000 + c, c, String((c % 3) + 1), 'Source');
+        observed.run(id, id * 1000 + c, c, String((c % 3) + 1), 'Source', namespace);
     }
   })();
 }

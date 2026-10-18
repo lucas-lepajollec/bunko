@@ -44,7 +44,13 @@ interface Page<T> {
 }
 export function metronConfigured() {
   const s = getSettings();
-  return Boolean(s.metronUsername && s.metronPassword);
+  return Boolean(s.metronApiToken || (s.metronUsername && s.metronPassword));
+}
+/** Fingerprint only the active mode: a rejected token must never silently fall back to a password. */
+export function metronScope(path = '', s = getSettings()) {
+  return s.metronApiToken
+    ? credentialScope('bearer', s.metronApiToken, path)
+    : credentialScope(s.metronUsername, s.metronPassword, path);
 }
 export function metronJson<T>(path: string, ttl = DAY): Promise<T> {
   const s = getSettings();
@@ -52,11 +58,13 @@ export function metronJson<T>(path: string, ttl = DAY): Promise<T> {
     throw new AppError('PROVIDER_UNCONFIGURED', 'Provider is not configured', 409);
   return providerJson(
     'metron',
-    credentialScope(s.metronUsername, s.metronPassword, path),
+    metronScope(path, s),
     `https://metron.cloud/api${path}`,
     {
       headers: {
-        Authorization: `Basic ${Buffer.from(`${s.metronUsername}:${s.metronPassword}`).toString('base64')}`,
+        Authorization: s.metronApiToken
+          ? `Bearer ${s.metronApiToken}`
+          : `Basic ${Buffer.from(`${s.metronUsername}:${s.metronPassword}`).toString('base64')}`,
       },
     },
     ttl,
@@ -159,7 +167,6 @@ export async function fetchMetronReleases(
   // Bounded weekly range, all pages up to ten; repeated polls use the six-hour durable cache.
   const series = new Map<number, MetronSeries>();
   let lookups = 30;
-  const settings = getSettings();
   for (let page = 1; page <= 10; page++) {
     const data = await metronJson<Page<MetronIssue>>(
       `/issue/?${new URLSearchParams({ store_date_range_after: since, store_date_range_before: until, page: String(page) })}`,
@@ -169,9 +176,7 @@ export async function fetchMetronReleases(
       let detail = series.get(row.series.id);
       if (!detail) {
         const path = `/series/${row.series.id}/`;
-        const hit = storedMetadata<MetronSeries>(
-          `optional:metron:${credentialScope(settings.metronUsername, settings.metronPassword, path)}`,
-        );
+        const hit = storedMetadata<MetronSeries>(`optional:metron:${metronScope(path)}`);
         if (!hit && lookups-- <= 0) continue;
         detail = await metronJson<MetronSeries>(`/series/${row.series.id}/`, 7 * DAY);
         series.set(detail.id, detail);

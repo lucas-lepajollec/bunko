@@ -1,4 +1,28 @@
-# Verification — 2026-10-15
+# Verification — current and historical evidence
+
+## Catalog/reader audit corrections — 2026-10-18
+
+- Final `npm run check` exits 0 on Node 22.23.1: zero-warning ESLint, strict TypeScript, **534 tests / 39 files** and optimized production build without warnings. Source remained unchanged throughout the accepted run.
+
+- New catalog/client regressions cover immediate completion and intermediate-exit flushing, serialized writes with one active retry, conservative provider identity/creator/year matching, transitive homonyms, slow/failed provider lanes, failed classification ending pending state, bounded cold aggregate waits, provider pagination, UTC midnight refresh, account cache isolation, progressive cold WN classification and actual archive language. An existing real CBZ import fixture now verifies English variant metadata despite a French linked source.
+- Browser QA uses the production Docker image with disposable accounts/archives and synthetic catalog cache fixtures. Three page turns and chapter navigation in **575 ms** persist chapter 201 at page 2/3 and `last_read=1` (repeated on the final image at mobile width in **610 ms**); intermediate chapter-202 exit in **402 ms** persists page 1/3. Catalog All renders mixed formats and partial-outage feedback at desktop 1280 and mobile 390×844, with no horizontal overflow or console errors. The final image also passes a real pending-page browser check: a newly published synthetic book appears automatically without navigation/reload, the original result stays visible and all loading skeletons disappear. These are local observations, not provider/NAS performance claims.
+- Final-source image `bunko:audit-fixes` builds; `scripts/container-smoke.sh bunko:audit-fixes` passes **111 checks**, including session/origin checks, private account layout, local reader pages/progress and imports/mount contracts. No image publication, real-provider login or NAS deployment is implied.
+- Screenshots use explicitly synthetic offline works without cover artwork: [desktop](assets/audit-catalog-desktop.jpg), [mobile](assets/audit-catalog-mobile.jpg).
+
+## P1 import integrity corrections — 2026-10-18
+
+- Final `npm run check` exits 0 on Node 22.23.1: ESLint with zero warnings, strict TypeScript, **521 tests / 37 files**, optimized Next production build without warnings. Final run uses isolated temporary fixtures; no source changes during this run. No packaging/dependency changes, Docker smoke or real-provider/NAS acceptance in this slice.
+- `tests/import-integrity.test.ts` adds nine regressions: concurrent same-title work imports, stable folder ownership despite deleted/reused tracked row IDs, conflict preservation and recovery after file publication without acknowledgement, incomplete volumes even after Kavita indexing, reused IDs/jobs/history across server switches with historical local reading, late connection changes during transfer, explicit Kavita folder choice/conflicting ownership, same-URL reused chapter IDs assigned to another work, and atomic/idempotent/rollback-safe v14 migration with archive provenance.
+- Existing migration tests still cover copied pre-v9/v9 installations with 1,200 followed works, row/file/session preservation through restart and injected relocation interruption. Legacy folder/mount paths, partial-volume progress, scan polling, worker retry and source association fixtures are updated for the actual contracts.
+- Three performance/profile fixtures retain 5,000 observations in the active source namespace, including 100 followed works and 30,000 release rows where applicable. Their cold-query-count and response bounds pass with the populated scoped ledger; a redundant settings lookup was removed from the snapshot path rather than raising the guard.
+- Existing files and manual Kavita paths do not move. New folders use stable work suffixes. Conflicting destinations fail with translated `IMPORT_CONFLICT`; a changed/reused source identity fails with `SOURCE_CHANGED`. URL changes require source reassociation; full-volume ownership intentionally excludes unknown/partial archive evidence. Connection fingerprints are internal, redacted from public batch JSON.
+
+## Shared catalogs correction — 2026-10-18
+
+- Node 22.23.1, `npm run check`: lint, strict TypeScript, **512 tests across 36 files**, production build passed. A subsequent build passed without warnings after adding the existing Turbopack filesystem-tracing opt-out to the runtime migration path.
+- New isolated fixtures verify shared encrypted credentials, admin-only writes/clears/probes, member catalog use without key/username disclosure, private service settings, token priority and failed-token behavior, credential rotation and warm cache identities, SQLite cross-connection edits/rollback, migration from the oldest admin without combining accounts, explicit clear/restart preservation and per-account publication refresh after shared edits. The existing route inventory now expects provider probes to require admin.
+- Browser checked the built **standalone production server** with disposable storage and synthetic admin/member accounts. French settings at desktop width 1280 and mobile 390×844: token field, legacy password disclosure, all five Google Books steps, disabled probe while changes are unsaved, and member read-only availability. No horizontal overflow or browser console errors observed. Member catalog section has no credential fields or probe controls; switching accounts clears the prior view.
+- Temporary browser tab/server/storage removed after QA. No real provider credentials, NAS services or media used. Actual provider authentication with operator keys and deployed NAS acceptance remain unverified; no deployment or image publication performed.
 
 ## Scope
 

@@ -9,7 +9,7 @@ const directory = mkdtempSync(path.join(tmpdir(), 'bunko-persistent-cache-'));
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
 process.env.BUNKO_WORKER = 'false';
-const { enterFixtureTenant } = await import('./tenant-fixture');
+const { enterFixtureTenant, settleCatalogTasks } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { db, track, listTracked } = await import('@/lib/db');
 const connections = [db()];
@@ -168,6 +168,7 @@ beforeEach(() => {
   });
 });
 afterEach(async () => {
+  await settleCatalogTasks();
   await flush();
   vi.unstubAllGlobals();
   vi.useRealTimers();

@@ -7,6 +7,11 @@ import { wakeWorker } from './worker-events';
 import { accountsDir, tenantId, tenantState } from './tenant-context';
 import { validateLibraryTargets } from './library-paths';
 import { chosenMediaRoot, withMediaRootChoice } from './media-root';
+import { accountsDb } from './accounts-store';
+import { catalogSettingsRows, writeCatalogSettings } from './catalog-settings-store';
+import { currentUser } from './user-context';
+import { requireAdmin } from './auth';
+import { catalogSettingKeys, type CatalogSetting } from '@/types/shared';
 import type { PublicSettings, SecretSetting, Settings, SettingsPatch } from '@/types/shared';
 export const secretKeys: SecretSetting[] = [
   'suwayomiPassword',
@@ -14,6 +19,7 @@ export const secretKeys: SecretSetting[] = [
   'sonarrApiKey',
   'prowlarrApiKey',
   'googleBooksApiKey',
+  'metronApiToken',
   'metronPassword',
   'rakutenApplicationId',
   'rakutenAccessKey',
@@ -81,6 +87,7 @@ function serverSettings(): Settings {
     prowlarrUrl: '',
     prowlarrApiKey: '',
     googleBooksApiKey: '',
+    metronApiToken: '',
     metronUsername: '',
     metronPassword: '',
     rakutenApplicationId: '',
@@ -98,7 +105,7 @@ function serverSettings(): Settings {
     key: keyof Settings;
     value: string;
   }[]) {
-    if (!(row.key in result)) continue;
+    if (!(row.key in result) || catalogSettingKeys.includes(row.key as CatalogSetting)) continue;
     Object.assign(result, {
       [row.key]: secretKeys.includes(row.key as SecretSetting)
         ? decrypt(row.value)
@@ -109,8 +116,22 @@ function serverSettings(): Settings {
   if (!db().inTransaction) state.snapshot = { version, value: result };
   return result;
 }
+let catalogSnapshot:
+  { rows: ReturnType<typeof catalogSettingsRows>; value: Partial<Settings> } | undefined;
 export function getSettings(): Settings {
-  return { ...structuredClone(serverSettings()), mediaRoot: chosenMediaRoot() };
+  const privateSettings = serverSettings();
+  const rows = catalogSettingsRows(accountsDb());
+  if (catalogSnapshot?.rows !== rows) {
+    const value: Partial<Settings> = {};
+    for (const [key, raw] of Object.entries(rows))
+      Object.assign(value, { [key]: key === 'metronUsername' ? JSON.parse(raw) : decrypt(raw) });
+    catalogSnapshot = { rows, value };
+  }
+  return {
+    ...structuredClone(privateSettings),
+    ...catalogSnapshot.value,
+    mediaRoot: chosenMediaRoot(),
+  };
 }
 export function publicSettings(): PublicSettings {
   const settings = getSettings();
@@ -120,10 +141,36 @@ export function publicSettings(): PublicSettings {
     secretsConfigured[key] = Boolean(settings[key]);
     delete safe[key];
   }
-  return { ...safe, secretsConfigured } as PublicSettings;
+  const canManage = currentUser()?.role === 'admin';
+  if (!canManage) safe.metronUsername = '';
+  return {
+    ...safe,
+    secretsConfigured,
+    catalogs: {
+      canManage,
+      configured: {
+        googlebooks: Boolean(settings.googleBooksApiKey),
+        metron: Boolean(
+          settings.metronApiToken || (settings.metronUsername && settings.metronPassword),
+        ),
+        rakuten: Boolean(settings.rakutenApplicationId && settings.rakutenAccessKey),
+        hardcover: Boolean(settings.hardcoverToken),
+      },
+    },
+  } as PublicSettings;
 }
 export function updateSettings(patch: SettingsPatch) {
+  const shared = Object.entries(patch).filter(([key]) =>
+    catalogSettingKeys.includes(key as CatalogSetting),
+  );
+  if (shared.length) requireAdmin();
   const current = getSettings();
+  const sharedRows = Object.fromEntries(
+    shared.map(([key, value]) => [
+      key,
+      key === 'metronUsername' ? JSON.stringify(value) : encrypt(String(value)),
+    ]),
+  );
   withMediaRootChoice(patch.mediaRoot, () => {
     if (patch.libraryTargets !== undefined || patch.kavitaLibraryPath !== undefined)
       validateLibraryTargets(
@@ -134,6 +181,14 @@ export function updateSettings(patch: SettingsPatch) {
       'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
     );
     db().transaction(() => {
+      if (patch.suwayomiUrl !== undefined && patch.suwayomiUrl !== current.suwayomiUrl) {
+        // Numeric manga/source identities from the previous server cannot be reused safely.
+        db().exec(`UPDATE tracked_media SET sources_json='[]',source_match_at=NULL,
+          media_json=json_set(media_json,'$.sources',json('[]'));
+          DELETE FROM source_links; DELETE FROM source_dismissals;
+          DELETE FROM catalog_fts; DELETE FROM catalog_keys;
+          DELETE FROM source_health; DELETE FROM source_flags;`);
+      }
       if (
         (patch.kavitaApiKey !== undefined && patch.kavitaApiKey !== current.kavitaApiKey) ||
         (patch.kavitaUrl !== undefined && patch.kavitaUrl !== current.kavitaUrl)
@@ -145,7 +200,7 @@ export function updateSettings(patch: SettingsPatch) {
         statement("UPDATE kavita_series SET payload=json_remove(payload,'$.volumeRead')").run();
       }
       for (const [key, value] of Object.entries(patch)) {
-        if (key === 'mediaRoot') continue;
+        if (key === 'mediaRoot' || catalogSettingKeys.includes(key as CatalogSetting)) continue;
         insert.run(
           key,
           secretKeys.includes(key as SecretSetting)
@@ -153,6 +208,7 @@ export function updateSettings(patch: SettingsPatch) {
             : JSON.stringify(value),
         );
       }
+      if (shared.length) writeCatalogSettings(accountsDb(), sharedRows);
     })();
   });
   wakeWorker();

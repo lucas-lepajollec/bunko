@@ -192,6 +192,7 @@ afterAll(() => {
 });
 
 it('polls a newly scanned series until imports appear, links it immediately and exposes ownership through both routes', async () => {
+  seedSeries();
   const t = track({ media: media(), sources: [selection] });
   recordImport(media(), { id: 73, name: 'Vol. 1 Ch. 3', chapterNumber: 3 });
   visibleAfter = 3;

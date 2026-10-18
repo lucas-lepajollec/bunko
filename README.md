@@ -94,12 +94,12 @@ Then, in **Settings → Kavita libraries**, pick the library folder that receive
 
 Bunko also indexes what Kavita already holds: titles you own show an *In Kavita* badge, owned chapters are never downloaded again, and existing series can be followed from **Library → In Kavita**.
 
-> **Good to know.** Bunko asks Suwayomi only for the chapter pages, then builds each CBZ itself, named the way Kavita expects (`Series/Series Ch. 0012.cbz`) with embedded metadata. Suwayomi's own download folder and settings are left untouched, and the two containers do not need to share a volume.
+> **Good to know.** Bunko asks Suwayomi only for the chapter pages, then builds each CBZ itself, named the way Kavita expects (`Series [bunko-…]/Series Ch. 0012.cbz` for new works) with embedded metadata. Suwayomi's own download folder and settings are left untouched, and the two containers do not need to share a volume.
 
 <details>
 <summary><b>Several people?</b> One Bunko, one separate instance per account</summary>
 
-The administrator creates accounts in **Settings → Users**. Each account is a separate Bunko: its own settings, Suwayomi and Kavita connections, library, downloads and content filter. To share a Suwayomi server, simply enter the same address in both accounts.
+The administrator creates accounts in **Settings → Users**. Each account is a separate Bunko: its own settings, Suwayomi and Kavita connections, library, downloads and content filter. Optional catalog keys are shared and managed by administrators, so everyone can use the same catalogs. To share a Suwayomi server, simply enter the same address in both accounts.
 
 Mount each person's Kavita folder as a subfolder of `/library` (any names), then each account picks its folder in **Settings → Kavita libraries**. Two accounts cannot use the same folder.
 
@@ -137,6 +137,16 @@ Then add an extension repository you trust under **Sources → Repositories** an
 
 </details>
 
+## Optional catalogs
+
+An administrator configures **Settings → Catalogs** once for all accounts: Google Books, Metron, Rakuten Books and Hardcover. Members can use configured catalogs and see their availability; only administrators can save, remove or test credentials. Keys stay encrypted on the server and are never returned to the browser. Personal libraries, reading progress and Suwayomi/Kavita connections remain separate.
+
+- **Metron:** create a token in [your account's API Tokens page](https://metron.cloud/accounts/tokens/) and paste it into **Metron API token**, without a username. A token takes priority over the historical username/password connection. That alternative remains available under **Connect with a Metron password** and requires your actual account password. Save, then Test. See [Metron's authentication documentation](https://github.com/Metron-Project/metron/blob/master/api/README.md#authentication).
+- **Google Books:** choose or create a project in Google Cloud Console, [enable Books API](https://console.cloud.google.com/apis/library/books.googleapis.com), then open [Credentials → Create credentials → API key](https://console.cloud.google.com/apis/credentials). Restrict the key to Books API, paste it into Bunko, Save and Test. Bunko makes server requests: website/referrer restrictions do not apply, and an optional IP restriction must allow the server's outgoing public IP, rather than its LAN address. The interface includes the same steps. [Official API-key guide](https://developers.google.com/books/docs/v1/using#APIKey).
+- **Rakuten Books:** enter both the application ID and access key. **Hardcover:** enter its API token. Without optional keys, Bunko retains its keyless catalogs.
+
+On upgrade, Bunko copies the oldest administrator's existing catalog configuration once. It preserves that configuration's encrypted values and does not combine keys from different accounts. Older per-account catalog rows remain intact but are no longer used; re-enter a key from another account as an administrator if needed. Clearing a shared key never restores an old per-account value. Existing cached public metadata may remain available after a key is removed.
+
 ## Configuration and persistence
 
 | Variable | Default | Purpose |
@@ -151,6 +161,14 @@ Everything else lives in **Settings**: connections, new-chapter check interval (
 - **Forgot your password?** Start the container once with `BUNKO_RESET_ACCOUNT=true`, create the account again, then remove the variable (otherwise the account is reset at every start). Settings and library are kept.
 - **API and scripts** authenticate with `Authorization: Bearer <token>`, the token being in `/data/access.token`. To rotate it, stop the container, delete that file and start again.
 - **To update**, `docker compose pull && docker compose up -d`. Images are published for `amd64` and `arm64`; pin a version tag (`ghcr.io/lucas-lepajollec/bunko:x.y.z`) once releases are tagged.
+
+### Updating and rollback
+
+Stop Bunko before backing up its entire `/data` volume, including `accounts.db`, every account database and the persistent encryption/signing keys. Keep the previous image digest and back up `/library` with your usual media backup. Then pull the chosen image, recreate the container and verify `/api/health` plus your library before resuming downloads.
+
+This update automatically migrates account databases to schema **v14** and moves optional catalog configuration into the shared accounts store. Existing files and chosen folders stay in place; new works use stable folder suffixes. Complete-volume ownership is conservatively reindexed. Changing the Suwayomi address requires relinking sources and prevents older batches from running against the replacement server.
+
+To roll back, stop Bunko and restore the matching pre-upgrade `/data` backup together with the previous image. An older image must not reuse an upgraded database. Retain media files unless you deliberately restore their backup too.
 
 ## Security, privacy, and limitations
 

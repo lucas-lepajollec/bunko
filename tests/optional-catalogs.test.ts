@@ -3,15 +3,25 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import fixture from './fixtures/optional-catalogs.json';
+import type { SettingsPatch } from '@/types/shared';
 const dir = mkdtempSync(path.join(tmpdir(), 'bunko-catalog-keys-'));
 process.env.BUNKO_DATA_DIR = dir;
 process.env.BUNKO_WORKER = 'false';
 const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { db } = await import('@/lib/db');
+const { accountsDb } = await import('@/lib/accounts-store');
+const { userContext } = await import('@/lib/user-context');
 const { inTenant } = await import('@/lib/tenant-context');
-const { getSettings, updateSettings, publicSettings, persistentSecret, secretKeys } =
-  await import('@/lib/settings');
+const {
+  getSettings,
+  updateSettings: patchSettings,
+  publicSettings,
+  persistentSecret,
+  secretKeys,
+} = await import('@/lib/settings');
+const admin = { id: 1, username: 'FixtureAdmin', role: 'admin' as const };
+const updateSettings = (patch: SettingsPatch) => userContext.run(admin, () => patchSettings(patch));
 const { settingsPatch } = await import('@/lib/validation');
 const {
   metronRelease,
@@ -55,6 +65,7 @@ function req(url: string, value: unknown, method = 'POST') {
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(now);
+  accountsDb().prepare('DELETE FROM catalog_settings').run();
   for (const table of [
     'settings',
     'metadata_cache',
@@ -89,16 +100,22 @@ it('encrypts, redacts, validates and clears every optional credential through se
     expect(value.secretsConfigured[key]).toBe(true);
     expect(getSettings()[key]).toBe(secretPatch[key]);
     expect(
-      (db().prepare('SELECT value FROM settings WHERE key=?').get(key) as { value: string }).value,
+      (
+        accountsDb().prepare('SELECT value FROM catalog_settings WHERE key=?').get(key) as {
+          value: string;
+        }
+      ).value,
     ).not.toContain(secretPatch[key]);
   }
-  expect(publicSettings().metronUsername).toBe('FixtureUser');
+  expect(userContext.run(admin, publicSettings).metronUsername).toBe('FixtureUser');
   for (const patch of [
     { googleBooksApiKey: 7 },
     { hardcoverToken: 'bad\r\nheader' },
     { metronUsername: 'name:password' },
     { rakutenApplicationId: 'spaces here' },
     { metronPassword: 'bad\0password' },
+    { metronApiToken: 'bad\r\nheader' },
+    { metronApiToken: 'token with spaces' },
     { unknownSecret: 'x' },
   ])
     expect(settingsPatch.safeParse(patch).success).toBe(false);
@@ -108,12 +125,11 @@ it('encrypts, redacts, validates and clears every optional credential through se
   for (const key of Object.keys(secretPatch).filter((k) => k !== 'metronUsername'))
     expect(cleared.secretsConfigured[key as keyof typeof cleared.secretsConfigured]).toBe(false);
 });
-it('isolates credentials and optional metadata results per tenant, including identical provider IDs', async () => {
+it('shares catalog credentials while isolating optional metadata results per tenant', async () => {
   updateSettings(secretPatch);
   await inTenant(2, async () => {
-    expect(getSettings().googleBooksApiKey).toBe('');
-    expect(getSettings().metronPassword).toBe('');
-    updateSettings({ googleBooksApiKey: 'tenant-two-key' });
+    expect(getSettings().googleBooksApiKey).toBe(secretPatch.googleBooksApiKey);
+    expect(getSettings().metronPassword).toBe(secretPatch.metronPassword);
   });
   const fetcher = vi.fn(async (input: string | URL) =>
     Response.json({
@@ -125,7 +141,7 @@ it('isolates credentials and optional metadata results per tenant, including ide
   const url = 'https://www.googleapis.com/books/v1/volumes?q=test';
   expect(await googleBooksJson(url, 1000)).toMatchObject({ keySeen: 'fixture-google-key' });
   await inTenant(2, async () => {
-    expect(await googleBooksJson(url, 1000)).toMatchObject({ keySeen: 'tenant-two-key' });
+    expect(await googleBooksJson(url, 1000)).toMatchObject({ keySeen: 'fixture-google-key' });
   });
   expect(fetcher).toHaveBeenCalledTimes(2);
 });

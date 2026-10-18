@@ -9,7 +9,7 @@ const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { db } = await import('@/lib/db');
 const { homeFeed, composeHome } = await import('@/lib/home');
-const { discover } = await import('@/lib/catalog');
+const { discoverAniList: discover } = await import('@/lib/catalog');
 const { saveReleases } = await import('@/lib/releases');
 const { emptyMedia } = await import('@/lib/media');
 const { storedMetadata, saveMetadata } = await import('@/lib/metadata-cache');

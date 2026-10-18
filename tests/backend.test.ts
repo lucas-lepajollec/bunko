@@ -370,7 +370,7 @@ describe('chapters, metadata and releases', () => {
     expect(r.chapters[0].number).toBe(112);
   });
   it('escapes XML, embeds ComicInfo in CBZ and rejects archives without pages', () => {
-    const xml = comicInfo(media, 112, 'Chapter 112');
+    const xml = comicInfo(media, 112, 'Chapter 112', 'fr');
     expect(xml).toContain('Series &amp; &lt;Example&gt;');
     expect(xml).toContain('<LanguageISO>fr</LanguageISO>');
     expect(xml).not.toContain('<b>');
@@ -428,7 +428,8 @@ describe('durable download pipeline', () => {
     await processBatch(batch);
     expect(batch.state).toBe('completed');
     expect(batch.importedIds).toEqual([10]);
-    const folder = path.join(directory, 'library', '1', 'Manga', seriesName(media));
+    const { seriesDirectory } = await import('@/lib/kavita');
+    const folder = await seriesDirectory(media);
     const archive = readdirSync(folder).find((n) => n.endsWith('.cbz'))!;
     expect(
       new AdmZip(readFileSync(path.join(folder, archive))).readAsText('ComicInfo.xml'),
