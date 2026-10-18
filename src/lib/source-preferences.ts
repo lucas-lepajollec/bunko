@@ -3,6 +3,7 @@ import { db } from './db';
 import { getSettings } from './settings';
 import { sourcePreferences } from './validation';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { sourceLanguage } from './source-language';
 const runtime = globalThis as typeof globalThis & {
   __bunkoSourceLanguageContext?: AsyncLocalStorage<string>;
 };
@@ -11,14 +12,18 @@ const sourceLanguageContext = (runtime.__bunkoSourceLanguageContext ??=
 export function withSourceLanguage<T>(language: string, run: () => T): T {
   return sourceLanguageContext.run(language, run);
 }
+export function preferredSourceLanguage() {
+  return sourceLanguage(sourceLanguageContext.getStore());
+}
+export function orderedSourceLanguages(languages: string[]) {
+  const preferred = preferredSourceLanguage();
+  return preferred && languages.includes(preferred)
+    ? [preferred, ...languages.filter((lang) => lang !== preferred)]
+    : languages;
+}
 /** Match the interface's supported browser-language fallback; English is always available. */
 export function defaultSourceLanguages(acceptLanguage = ''): string[] {
-  const language =
-    acceptLanguage
-      .split(',')
-      .filter((tag) => !/;\s*q=0(?:\.0*)?\s*$/.test(tag))
-      .map((tag) => tag.trim().split(/[;-]/)[0].toLowerCase())
-      .find((tag) => ['en', 'fr', 'es', 'de', 'it'].includes(tag)) ?? 'en';
+  const language = sourceLanguage(acceptLanguage) ?? 'en';
   return [...new Set([language, 'en'])];
 }
 export function getSourcePreferences(

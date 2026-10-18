@@ -26,7 +26,14 @@ import { getSettings } from './settings';
 import { endpoint, requestJson } from './http';
 import { AppError, errorCode, errorDetail, sourceFailure } from './errors';
 import { db, indexCatalog, listTracked } from './db';
-import { getSourcePreferences, recordSourceHealth, sourceHealth } from './source-preferences';
+import {
+  getSourcePreferences,
+  orderedSourceLanguages,
+  preferredSourceLanguage,
+  recordSourceHealth,
+  sourceHealth,
+} from './source-preferences';
+import { compareSourceLanguage } from './source-language';
 import { proxyImage } from './images';
 import { sourceCall, isBackgroundSourceWork } from './source-gate';
 import { matchKavita } from './kavita-index';
@@ -125,12 +132,13 @@ export async function sourceInfos(signal?: AbortSignal): Promise<SourceInfo[]> {
 export async function sources(signal?: AbortSignal, all = false): Promise<Source[]> {
   return (await sourceInfos(signal))
     .filter((s) => all || s.enabled)
+    .sort((a, b) => compareSourceLanguage(a.lang, b.lang, preferredSourceLanguage()))
     .map(({ id, name, lang, nsfw }) => ({ id, name, lang, nsfw }));
 }
 export type MatchingSource = Source & { extensionId: string | null };
 /** Installed sources in selected languages, independent of global-search favourites. */
 export async function matchingSources(signal?: AbortSignal): Promise<MatchingSource[]> {
-  const languages = getSourcePreferences().languages;
+  const languages = orderedSourceLanguages(getSourcePreferences().languages);
   const seen = new Set<string>();
   return (await sourceInfos(signal))
     .filter(

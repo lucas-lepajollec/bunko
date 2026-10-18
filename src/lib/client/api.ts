@@ -1,6 +1,7 @@
 'use client';
 import useSWR, { type SWRConfiguration } from 'swr';
 import type { ApiError, SearchResponse } from '@/types/shared';
+import { getUiLanguage } from '@/i18n/language';
 
 /** A failed API call; `code` is the backend's stable error code, translated by the UI. */
 export class ApiFailure extends Error {
@@ -16,11 +17,14 @@ export const UNAUTHORIZED_EVENT = 'bunko:unauthorized';
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
+  const headers = new Headers(init.headers);
+  headers.set('Accept-Language', getUiLanguage());
+  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   try {
     response = await fetch(path, {
       ...init,
       credentials: 'same-origin',
-      headers: init.body ? { 'Content-Type': 'application/json', ...init.headers } : init.headers,
+      headers,
     });
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e;
@@ -61,7 +65,11 @@ export function openStream(
   handlers: Record<string, (data: unknown) => void>,
   onFailure?: () => void,
 ): () => void {
-  const source = new EventSource(path);
+  // EventSource cannot set Accept-Language; carry the same explicit interface choice in the URL.
+  const [pathname, query] = path.split('?');
+  const params = new URLSearchParams(query);
+  params.set('uiLanguage', getUiLanguage());
+  const source = new EventSource(`${pathname}?${params}`);
   let finished = false;
   for (const [event, handler] of Object.entries(handlers))
     source.addEventListener(event, (e) => {

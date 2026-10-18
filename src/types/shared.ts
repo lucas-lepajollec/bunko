@@ -180,7 +180,7 @@ export interface DiscoverPage {
 export interface SourceCandidate extends SourceMatch {
   title: string;
   score: number;
-  /** Chapters available on that source, when known (used to prefer the most complete source). */
+  /** Chapters available; browser suggestions prefer interface language after relevance, then completeness. */
   chapterCount?: number | null;
 }
 export type MatchEventMap = {
@@ -629,7 +629,7 @@ export interface SourceInfo extends Source {
 export interface SourcePreferences {
   /** Ordered list of source ids searched globally; empty means every installed source of the user's languages. */
   enabledSourceIds: string[];
-  /** Source languages to consider (ISO codes, e.g. ["fr"]). */
+  /** Allowed source languages (ISO codes); foreground search favors the active interface language within this list. */
   languages: string[];
 }
 /** Mirrors Suwayomi source filters, flattened for rendering. `position` is the index in the source filter list. */

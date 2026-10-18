@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Favor sources matching Bunko's interface language in live search and title source suggestions. Manual interface choices now reach fetch/SSE requests; matching title relevance still comes first, other selected languages remain available, and saved filters/links are preserved.
+
 - Show BD/comic covers in catalog and search cards by resolving Metron issue artwork on demand, including previously cached series. Keep provider pacing and reuse the issue cache.
 - Search Metron alternative names as well as primary names, and prevent a previous query's full results from masking the next query's fast results.
 

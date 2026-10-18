@@ -23,6 +23,7 @@ import {
   useApi,
 } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
+import { rankSourceCandidates } from '@/lib/client/source-ranking';
 import { Backdrop } from '@/components/backdrop';
 import { ChapterTable, isMissing, preferredVariant } from '@/components/chapters';
 import { PosterCard } from '@/components/media';
@@ -78,7 +79,7 @@ export default function TitlePage() {
 }
 
 function Title({ media }: { media: MediaDetail }) {
-  const { t, n } = useI18n();
+  const { t, n, language } = useI18n();
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const batches = useApi<DownloadBatch[]>('/api/downloads/batches', {
     refreshInterval: batchesInterval,
@@ -142,7 +143,7 @@ function Title({ media }: { media: MediaDetail }) {
         ),
     );
     return close;
-  }, [needsMatch, matchRun, media.id, scanQuery]);
+  }, [needsMatch, matchRun, media.id, scanQuery, language]);
 
   // A custom query (Matches → Sources search box) replaces the work's titles for the scan.
   const rescan = useCallback((q?: string) => {
@@ -153,21 +154,17 @@ function Title({ media }: { media: MediaDetail }) {
 
   const autoPicked = useMemo(
     () =>
-      // Up to three confident sources: most relevant first, then the most complete.
+      // Up to three confident sources: relevance, interface language, then completeness.
       (lanes ?? [])
         .filter((l) => l.candidates[0]?.score >= 0.9)
-        .sort(
-          (a, b) =>
-            b.candidates[0].score - a.candidates[0].score ||
-            (b.candidates[0].chapterCount ?? 0) - (a.candidates[0].chapterCount ?? 0),
-        )
+        .sort((a, b) => rankSourceCandidates(a.candidates[0], b.candidates[0], language))
         .slice(0, 3)
         .map((l) => ({
           suwayomiMangaId: l.candidates[0].suwayomiMangaId,
           sourceId: l.source.id,
           sourceName: l.source.name,
         })),
-    [lanes],
+    [lanes, language],
   );
   const sources = override ?? stored ?? (fromDetail.length ? fromDetail : autoPicked);
   // Something needs a look: no source, or none could be found automatically.

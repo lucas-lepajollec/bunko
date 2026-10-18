@@ -1,5 +1,15 @@
 # Architecture
 
+The active interface language is shared by React and browser request transport. Fetch sends
+that choice through `Accept-Language`; SSE adds the supported `uiLanguage` hint because
+EventSource cannot set headers. Foreground source searches schedule the interface language
+first within the user's allowed source languages. Result lanes keep useful hits before
+pending/empty/error lanes, then favor that language with stable source-priority ties. Title
+source suggestions rank title relevance, interface language, then chapter count. Interface
+changes restart active search/matching streams. Saved language filters, favourite IDs, manual
+source links and background matching preferences remain unchanged; an excluded language is
+never silently enabled.
+
 Catalog search without a `type` restriction fans out to AniList (including novels), MangaDex,
 MangaUpdates, Open Library, configured Metron/Hardcover, tracked works, the local Suwayomi FTS
 index and the Kavita index. Provider responses are bounded relevance pages (20–100 entries),

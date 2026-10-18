@@ -1470,6 +1470,66 @@ it.each([
   },
 );
 
+it('prioritizes the explicit interface language for live search without rewriting saved filters or favourites', async () => {
+  const { GET } = await import('@/app/api/search/stream/route');
+  const { matchingSources } = await import('@/lib/suwayomi');
+  const { getSourcePreferences, withSourceLanguage } = await import('@/lib/source-preferences');
+  sources = [
+    { id: '9007199254740993', name: 'English', lang: 'en' },
+    { id: '9223372036854775806', name: 'French', lang: 'fr' },
+    { id: '3', name: 'Spanish excluded', lang: 'es' },
+    { id: '4', name: 'Multilingual', lang: 'all' },
+  ];
+  const prefs = { enabledSourceIds: sources.map((s) => s.id), languages: ['en', 'fr'] };
+  setSourcePreferences(prefs);
+  const response = await GET(
+    new Request('http://localhost/api/search/stream?q=Owned&uiLanguage=fr', {
+      headers: {
+        Authorization: `Bearer ${persistentSecret('access.token', 32).toString('hex')}`,
+        'Accept-Language': 'en-US',
+      },
+    }),
+  );
+  const stream = await response.text();
+  const announced = JSON.parse(stream.split('event: sources\ndata: ')[1].split('\n')[0]).sources;
+  expect(announced.map((s: Source) => s.id)).toEqual([
+    '9223372036854775806',
+    '9007199254740993',
+    '4',
+  ]);
+  expect(stream.match(/event: source_result\n/g)).toHaveLength(3);
+  expect(getSourcePreferences()).toEqual(prefs);
+  expect((await withSourceLanguage('fr', () => matchingSources()))[0].lang).toBe('fr');
+  expect((await matchingSources())[0].lang).toBe('en'); // Background retains saved preference.
+  expect(
+    (await withSourceLanguage('es', () => matchingSources())).some((s) => s.lang === 'es'),
+  ).toBe(false);
+});
+
+it('uses the manual interface hint for initial languages and ignores unsupported hints', async () => {
+  const { GET } = await import('@/app/api/sources/preferences/route');
+  db().prepare("DELETE FROM settings WHERE key='sourcePreferences'").run();
+  const response = await GET(
+    new Request('http://localhost/api/sources/preferences?uiLanguage=it', {
+      headers: {
+        Authorization: `Bearer ${persistentSecret('access.token', 32).toString('hex')}`,
+        'Accept-Language': 'en-US',
+      },
+    }),
+  );
+  expect((await response.json()).languages).toEqual(['it', 'en']);
+  db().prepare("DELETE FROM settings WHERE key='sourcePreferences'").run();
+  const fallback = await GET(
+    new Request('http://localhost/api/sources/preferences?uiLanguage=xx', {
+      headers: {
+        Authorization: `Bearer ${persistentSecret('access.token', 32).toString('hex')}`,
+        'Accept-Language': 'de-DE',
+      },
+    }),
+  );
+  expect((await fallback.json()).languages).toEqual(['de', 'en']);
+});
+
 it('keeps one lane per selected source in 33 multilingual extensions and deduplicates both matching paths', async () => {
   const { matchingSources, sourceInfos } = await import('@/lib/suwayomi');
   const { GET } = await import('@/app/api/media/sources/route');

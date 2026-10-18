@@ -1,5 +1,12 @@
 # Verification — current and historical evidence
 
+## Source language preference — 2026-10-18
+
+- Full `npm run check` passes: **551 tests / 42 files**, TypeScript and optimized build. Final `eslint . --max-warnings 0` and strict TypeScript pass after removing two unused fixture arguments; nine focused language/ranking cases pass again on that final test source.
+- Regressions cover all five interface languages, matching relevance before language, language before chapter completeness, result availability before language, stable source ties, preserved saved filters/favourites, excluded languages, unsupported hints, browser-English/manual-French fetch and SSE, storage-blocked choices and retained 64-bit source IDs.
+- Local `bunko:source-language` image builds; **111 container smoke checks** pass. Production browser QA uses disposable tmpfs-only data/library and synthetic Suwayomi responses: manually select German despite a French browser, verify DE source first, then select French and verify FR first with EN/DE retained. Desktop and 390×844 have no overflow/console errors. Temporary QA tab/container removed, viewport restored. No actual NAS or provider credentials used.
+- Existing manual links and background language preferences remain preserved; this is foreground search/source-suggestion priority among eligible languages, not automatic extension installation or filter expansion. This validation does not publish an image or establish NAS acceptance.
+
 ## Comic artwork and search follow-up — 2026-10-18
 
 - `npm run check`: lint, strict TypeScript, **540 tests / 40 files**, optimized production build; no warnings. Regression fixtures cover Metron series without image fields, authenticated cover redirects, shared issue-page lookup, warm-cache repair, credential replacement, hostile/mismatched artwork and cover retention without CDN auth forwarding. Search fixtures exercise eight formats through every enabled catalog adapter/local index, plus fast/full query changes.
