@@ -37,8 +37,9 @@ function Reader() {
   const params = useSearchParams();
   const media = params.get('media');
   // `local-<n>`: a chapter only present in the library files (no source chapter id).
-  const local = /^local-(\d+(?:\.\d+)?)$/.exec(chapter)?.[1];
-  const query = `/api/reader/chapter?${local ? `local=${local}` : `id=${encodeURIComponent(chapter)}`}${media ? `&media=${encodeURIComponent(media)}` : ''}`;
+  const local = /^local-(?:volume-)?(\d+(?:\.\d+)?)$/.exec(chapter)?.[1];
+  const localUnit = chapter.startsWith('local-volume-') ? 'volume' : 'chapter';
+  const query = `/api/reader/chapter?${local ? `local=${local}&unit=${localUnit}` : `id=${encodeURIComponent(chapter)}`}${media ? `&media=${encodeURIComponent(media)}` : ''}`;
   const data = useApi<ReaderChapter>(query);
   const next = useApi<ReaderChapter>(
     data.data?.nextId
@@ -119,13 +120,23 @@ function Reader() {
       if (target >= pages.length) {
         if (data.data.nextId) router.push(chapterHref(data.data.nextId, media));
         else if (data.data.nextLocal != null)
-          router.push(chapterHref(`local-${data.data.nextLocal}`, media));
+          router.push(
+            chapterHref(
+              `local-${data.data.unit === 'volume' ? 'volume-' : ''}${data.data.nextLocal}`,
+              media,
+            ),
+          );
         return;
       }
       if (target < 0) {
         if (data.data.prevId) router.push(chapterHref(data.data.prevId, media));
         else if (data.data.prevLocal != null)
-          router.push(chapterHref(`local-${data.data.prevLocal}`, media));
+          router.push(
+            chapterHref(
+              `local-${data.data.unit === 'volume' ? 'volume-' : ''}${data.data.prevLocal}`,
+              media,
+            ),
+          );
         return;
       }
       setPage(target);
@@ -167,7 +178,14 @@ function Reader() {
           ‹
         </Link>
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm font-semibold">{d?.label ?? '…'}</span>
+          <span className="truncate text-sm font-semibold">
+            {d?.local !== undefined
+              ? t(
+                  d.unit === 'volume' ? 'chapters.volume' : 'chapters.number',
+                  d.unit === 'volume' ? { v: n(d.local) } : { n: n(d.local) },
+                )
+              : (d?.label ?? '…')}
+          </span>
           <span className="text-mid truncate text-xs">
             {d
               ? `${d.sourceName} · ${n(Math.min(current + 1, pages.length))} / ${n(pages.length)}`
@@ -288,14 +306,17 @@ function ChapterEnd({ d, media, back }: { d: ReaderChapter; media: string | null
     <div className="flex gap-2 p-4">
       {d.nextId || d.nextLocal != null ? (
         <Link
-          href={chapterHref(d.nextId ?? `local-${d.nextLocal}`, media)}
+          href={chapterHref(
+            d.nextId ?? `local-${d.unit === 'volume' ? 'volume-' : ''}${d.nextLocal}`,
+            media,
+          )}
           className="flex h-11 items-center rounded-full bg-white px-5 text-sm font-semibold text-black"
         >
-          {t('reader.nextChapter')} →
+          {t(d.unit === 'volume' ? 'reader.nextVolume' : 'reader.nextChapter')} →
         </Link>
       ) : (
         <span className="text-mid flex h-11 items-center px-2 text-sm">
-          {t('reader.lastChapter')}
+          {t(d.unit === 'volume' ? 'reader.lastVolume' : 'reader.lastChapter')}
         </span>
       )}
       <Link href={back} className="flex h-11 items-center rounded-full bg-white/10 px-5 text-sm">

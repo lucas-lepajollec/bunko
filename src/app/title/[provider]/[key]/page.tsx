@@ -1,4 +1,5 @@
 'use client';
+import { LoadNotice } from '@/components/load-notice';
 import { Select } from '@/components/select';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -55,7 +56,9 @@ export default function TitlePage() {
   const { provider, key } = useParams<{ provider: string; key: string }>();
   const id = `${provider}:${decodeURIComponent(key)}`;
   const { t } = useI18n();
-  const detail = useApi<MediaDetail>(`/api/media?id=${encodeURIComponent(id)}`);
+  const detail = useApi<MediaDetail>(`/api/media?id=${encodeURIComponent(id)}`, {
+    refreshInterval: (data) => (data?.pending ? 1500 : 0),
+  });
   if (detail.error)
     return (
       <main className="mx-auto max-w-[1760px] px-4 pt-24 md:px-10 md:pt-32">
@@ -95,6 +98,7 @@ function Title({ media }: { media: MediaDetail }) {
   const [override, setOverride] = useState<ChapterSelection[] | null>(null);
   const [lanes, setLanes] = useState<Lane[] | null>(null);
   const [matchRun, setMatchRun] = useState(0);
+  const [scanFailed, setScanFailed] = useState(false);
   const [scanQuery, setScanQuery] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [choice, setChoice] = useState<Record<string, number>>({});
@@ -110,6 +114,12 @@ function Title({ media }: { media: MediaDetail }) {
 
   useEffect(() => {
     if (!needsMatch && matchRun === 0) return;
+    const failScan = () => {
+      setScanFailed(true);
+      setLanes((ls) =>
+        (ls ?? []).map((l) => (l.state === 'loading' ? { ...l, state: 'error' } : l)),
+      );
+    };
     const close = openStream(
       `/api/media/sources?id=${encodeURIComponent(media.id)}${scanQuery ? `&q=${encodeURIComponent(scanQuery)}` : ''}`,
       {
@@ -136,17 +146,16 @@ function Title({ media }: { media: MediaDetail }) {
           );
         },
         done: () => undefined,
+        error: failScan,
       },
-      () =>
-        setLanes((ls) =>
-          (ls ?? []).map((l) => (l.state === 'loading' ? { ...l, state: 'error' } : l)),
-        ),
+      failScan,
     );
     return close;
   }, [needsMatch, matchRun, media.id, scanQuery, language]);
 
   // A custom query (Matches → Sources search box) replaces the work's titles for the scan.
   const rescan = useCallback((q?: string) => {
+    setScanFailed(false);
     setScanQuery(q?.trim() || null);
     setLanes(null);
     setMatchRun((r) => r + 1);
@@ -170,7 +179,16 @@ function Title({ media }: { media: MediaDetail }) {
   // Something needs a look: no source, or none could be found automatically.
   const attention = isComic && Boolean(entry) && sources.length === 0;
   const priority = sources.map((s) => s.sourceId);
-  const chaptersKey = isComic && sources.length ? ['chapters', JSON.stringify(sources)] : null;
+  const chaptersKey =
+    isComic && (sources.length || entry)
+      ? [
+          'chapters',
+          media.id,
+          JSON.stringify(sources),
+          entry?.ownedAsVolumes,
+          entry?.ownedVolumes?.join(','),
+        ]
+      : null;
   const chapters = useSWR<ChaptersResponse>(
     chaptersKey,
     () => send<ChaptersResponse>('/api/manga/chapters', 'POST', { sources, mediaId: media.id }),
@@ -186,10 +204,22 @@ function Title({ media }: { media: MediaDetail }) {
     active.flatMap((b) => b.chapterIds.filter((cid) => !b.importedIds.includes(cid))),
   );
   const owned = new Set(chapters.data?.inKavita ?? []);
-  const missing = (chapters.data?.chapters ?? []).filter((c) => isMissing(c, owned));
+  const ownedVolumes = new Set(entry?.ownedVolumes ?? chapters.data?.ownedVolumes ?? []);
+  const missing = (chapters.data?.chapters ?? []).filter((c) => isMissing(c, owned, ownedVolumes));
+  const matching =
+    !scanFailed &&
+    (needsMatch || matchRun > 0) &&
+    (lanes === null || lanes.some((l) => l.state === 'loading'));
+  const checking = matching || chapters.isLoading || chapters.isValidating;
+  const incomplete = Boolean(
+    scanFailed ||
+    chapters.error ||
+    chapters.data?.errors.length ||
+    lanes?.some((l) => l.state === 'error'),
+  );
   // Catalogs often lag behind: the real count is the highest of catalog, sources and library.
   const sourceMax = Math.max(0, ...(chapters.data?.chapters ?? []).map((c) => c.number ?? 0));
-  const released =
+  const chapterReleased =
     Math.max(
       media.chapters ?? 0,
       sourceMax,
@@ -203,6 +233,8 @@ function Title({ media }: { media: MediaDetail }) {
     unread: 0,
     readSource: 'none' as const,
   };
+  const released =
+    entry?.unit === 'volume' ? (entry.progress?.released ?? media.volumes) : chapterReleased;
   const progress = { ...baseProgress, released };
   // Works counted in volumes use "tome" wording for their progress.
   const vol = (key: string) => (entry?.unit === 'volume' ? `${key}Vol` : key);
@@ -211,13 +243,28 @@ function Title({ media }: { media: MediaDetail }) {
     const list = chapters.data?.chapters ?? [];
     const mediaId = encodeURIComponent(entry?.media.id ?? media.id);
     const pos = entry?.readerPosition;
-    if (pos)
+    const retypedPosition = entry?.ownedAsVolumes && pos?.number != null && !owned.has(pos.number);
+    const unavailableVolumePosition =
+      pos?.chapterId && pos.chapterId < 0 && pos.number === null && !ownedVolumes.size;
+    if (pos && !retypedPosition && !unavailableVolumePosition)
       return {
         href: `/read/${pos.chapterId}?media=${mediaId}`,
         label: pos.number !== null ? t('title.resumeAt', { n: n(pos.number) }) : t('title.resume'),
       };
+    if (isComic && entry?.unit === 'volume') {
+      const volume = [...ownedVolumes]
+        .sort((a, b) => a - b)
+        .find((v) => progress.read === null || v > progress.read);
+      if (volume !== undefined)
+        return {
+          href: `/read/local-volume-${volume}?media=${mediaId}`,
+          label: t('title.readVolume', { n: n(volume) }),
+        };
+    }
     const firstUnread = [...list]
-      .filter((c) => c.number !== null && (progress.read === null || c.number > progress.read))
+      .filter(
+        (c) => c.number !== null && (entry?.chapterRead == null || c.number > entry.chapterRead),
+      )
       .sort((a, b) => (a.number ?? 0) - (b.number ?? 0))[0];
     const v = firstUnread && preferredVariant(firstUnread, priority, choice[firstUnread.key]);
     return v
@@ -260,7 +307,7 @@ function Title({ media }: { media: MediaDetail }) {
   async function download(keys: string[]) {
     const list = chapters.data?.chapters ?? [];
     const ids = list
-      .filter((c) => keys.includes(c.key) && isMissing(c, owned))
+      .filter((c) => keys.includes(c.key) && isMissing(c, owned, ownedVolumes))
       .map((c) => preferredVariant(c, priority, choice[c.key])?.id)
       .filter((v): v is number => typeof v === 'number' && !queued.has(v));
     if (!ids.length) return;
@@ -299,7 +346,7 @@ function Title({ media }: { media: MediaDetail }) {
       t('title.facts.publication'),
       [
         media.status ? t(`status.${statusKey(media.status)}`) : null,
-        released ? t('title.chaptersCount', { count: n(released) }) : null,
+        chapterReleased ? t('title.chaptersCount', { count: n(chapterReleased) }) : null,
         media.volumes ? t('title.volumesCount', { count: n(media.volumes) }) : null,
       ]
         .filter(Boolean)
@@ -357,7 +404,6 @@ function Title({ media }: { media: MediaDetail }) {
           <Automation entry={entry} disabled={!sources.length} onAuto={setAuto} />
         </div>
       )}
-      {entry && <UnitToggle entry={entry} />}
       <AdultMark media={media} />
     </>
   );
@@ -409,13 +455,15 @@ function Title({ media }: { media: MediaDetail }) {
                 onClick={() => download(missing.map((c) => c.key))}
                 className={primaryButton}
               >
-                {chapters.isLoading || (!chapters.data && sources.length > 0)
+                {checking || (!chapters.data && sources.length > 0)
                   ? t('title.loadingChapters')
                   : missing.length
                     ? t('title.completeSeries', { count: missing.length })
-                    : sources.length
-                      ? t('title.complete')
-                      : t('title.noSource')}
+                    : incomplete
+                      ? t('chapters.partialLabel')
+                      : sources.length && chapters.data?.chapters.length
+                        ? t('title.complete')
+                        : t('title.noSource')}
               </button>
             )}
             <Select
@@ -463,6 +511,43 @@ function Title({ media }: { media: MediaDetail }) {
             </div>
           )}
 
+          {entry && <UnitToggle entry={entry} />}
+          <LoadNotice
+            pending={media.pending || checking || library.isLoading}
+            partial={media.partial || incomplete}
+          />
+          {ownedVolumes.size > 0 && (
+            <section
+              className="flex flex-col gap-2 rounded-2xl bg-white/[0.04] p-4"
+              aria-label={t('unit.ownedVolumes')}
+            >
+              <h2 className="text-sm font-semibold">
+                {t('unit.ownedVolumes')} · {n(ownedVolumes.size)}
+              </h2>
+              <div className="flex max-h-48 flex-wrap gap-2 overflow-y-auto">
+                {[...ownedVolumes]
+                  .sort((a, b) => a - b)
+                  .map((v) =>
+                    isComic ? (
+                      <Link
+                        key={v}
+                        className={cx(smallButton, 'text-sm')}
+                        href={`/read/local-volume-${v}?media=${encodeURIComponent(entry?.media.id ?? media.id)}`}
+                      >
+                        {t('chapters.volume', { v: n(v) })}
+                      </Link>
+                    ) : (
+                      <span
+                        key={v}
+                        className="text-mid rounded-full bg-white/[0.06] px-3 py-2 text-sm"
+                      >
+                        {t('chapters.volume', { v: n(v) })}
+                      </span>
+                    ),
+                  )}
+              </div>
+            </section>
+          )}
           <div className="mt-2 md:hidden">
             <Segmented
               value={tab}
@@ -510,8 +595,19 @@ function Title({ media }: { media: MediaDetail }) {
                     ) : undefined
                   }
                 />
-                {!sources.length ? (
-                  <NoSource lanes={lanes} onSearch={() => setDrawer('sources')} />
+                {!sources.length && !entry ? (
+                  scanFailed ? (
+                    <Notice
+                      title={t('loading.partial')}
+                      action={
+                        <button type="button" className={smallButton} onClick={() => rescan()}>
+                          {t('common.retry')}
+                        </button>
+                      }
+                    />
+                  ) : (
+                    <NoSource lanes={lanes} onSearch={() => setDrawer('sources')} />
+                  )
                 ) : chapters.error ? (
                   <Notice
                     tone="bad"
@@ -536,11 +632,14 @@ function Title({ media }: { media: MediaDetail }) {
                   </div>
                 ) : (
                   <ChapterTable
+                    key={`${media.id}:${entry?.unit}`}
+                    ownedVolumes={ownedVolumes}
                     mediaId={entry?.media.id ?? media.id}
                     defaultByVolume={entry?.unit === 'volume'}
                     chapters={chapters.data.chapters}
                     priority={priority}
-                    read={progress.read}
+                    read={entry?.chapterRead ?? null}
+                    volumeRead={entry?.volumeRead ?? null}
                     selected={selected}
                     setSelected={setSelected}
                     choice={choice}
@@ -823,43 +922,73 @@ function AdultMark({ media }: { media: MediaDetail }) {
   );
 }
 
-/** Count this work in chapters or in volumes (tomes), e.g. when Kavita holds volumes. */
+/** Counting unit and existing inventory classification are independent choices. */
 function UnitToggle({ entry }: { entry: TrackedMedia }) {
   const { t } = useI18n();
   const { mutate } = useSWRConfig();
-  const unit = entry.unit ?? 'chapter';
+  const [busy, setBusy] = useState(false);
+  async function update(patch: { unit?: 'chapter' | 'volume'; ownedAsVolumes?: boolean }) {
+    setBusy(true);
+    try {
+      await send('/api/tracked', 'PATCH', { id: entry.id, ...patch });
+      await mutate(libraryKeys);
+    } catch (e) {
+      toast({ tone: 'bad', text: errorText(t, e) });
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
-    <div className="border-line flex flex-wrap items-center gap-3 border-t pt-5 text-sm">
-      <span className="text-muted">{t('unit.label')}</span>
-      <InfoBubble label={t('unit.label')}>{t('unit.info')}</InfoBubble>
-      <div
-        className="ml-auto flex rounded-full bg-white/[0.06] p-0.5"
-        role="group"
-        aria-label={t('unit.label')}
-      >
-        {(['chapter', 'volume'] as const).map((u) => (
-          <button
-            key={u}
-            type="button"
-            aria-pressed={unit === u}
-            onClick={async () => {
-              if (u === unit) return;
-              try {
-                await send('/api/tracked', 'PATCH', { id: entry.id, unit: u });
-                await mutate(libraryKeys);
-              } catch (e) {
-                toast({ tone: 'bad', text: errorText(t, e) });
-              }
-            }}
-            className={cx(
-              'h-8 rounded-full px-3.5',
-              unit === u ? 'bg-fg text-bg font-semibold' : 'text-mid hover:text-white',
-            )}
-          >
-            {t(`unit.${u}`)}
-          </button>
-        ))}
+    <div
+      className="border-line flex max-w-[680px] flex-col gap-3 border-t pt-4 text-sm"
+      aria-busy={busy}
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-muted">{t('unit.label')}</span>
+        <InfoBubble label={t('unit.label')}>{t('unit.info')}</InfoBubble>
+        <div
+          className="flex rounded-full bg-white/[0.06] p-0.5"
+          role="group"
+          aria-label={t('unit.label')}
+        >
+          {(['chapter', 'volume'] as const).map((unit) => (
+            <button
+              key={unit}
+              type="button"
+              disabled={busy}
+              aria-pressed={(entry.unit ?? 'chapter') === unit}
+              onClick={() => update({ unit })}
+              className={cx(
+                'h-9 rounded-full px-3.5 disabled:opacity-50',
+                (entry.unit ?? 'chapter') === unit
+                  ? 'bg-fg text-bg font-semibold'
+                  : 'text-mid hover:text-white',
+              )}
+            >
+              {t(`unit.${unit}`)}
+            </button>
+          ))}
+        </div>
       </div>
+      {(entry.ownedAsVolumes ||
+        (entry.ownedChapterCount ?? 0) > 0 ||
+        (entry.ownedVolumes?.length ?? 0) > 0) && (
+        <>
+          <label className="flex flex-wrap items-center gap-3">
+            <span className="text-muted">{t('unit.inventory')}</span>
+            <select
+              disabled={busy}
+              value={entry.ownedAsVolumes ? 'volume' : 'auto'}
+              onChange={(e) => update({ ownedAsVolumes: e.target.value === 'volume' })}
+              className="bg-raised border-line min-h-10 max-w-full rounded-xl border px-3"
+            >
+              <option value="auto">{t('unit.detect')}</option>
+              <option value="volume">{t('unit.declareVolumes')}</option>
+            </select>
+          </label>
+          <p className="text-muted text-xs leading-relaxed">{t('unit.inventoryHelp')}</p>
+        </>
+      )}
     </div>
   );
 }

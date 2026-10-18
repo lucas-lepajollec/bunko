@@ -310,6 +310,19 @@ export function refreshReleases(): Promise<void> {
   pending.set(tenantKey, job);
   return job;
 }
+export function releaseLoadingState() {
+  const pending = Boolean(scope.__bunkoReleaseRefresh?.has(dataDir()));
+  const row = statement(
+    "SELECT value FROM worker_state WHERE key='release_refresh_result'",
+  ).get() as { value: string } | undefined;
+  let partial = false;
+  try {
+    partial = Boolean(row && JSON.parse(row.value).failed);
+  } catch {
+    partial = true;
+  }
+  return { pending, partial };
+}
 const rawSnapshotCache = tenantState(() => ({
   value: undefined as { version: number; items: ChapterRelease[] } | undefined,
 }));
@@ -436,6 +449,7 @@ export function releasesPage(q: FeedQuery): ReleasesPage {
   const last = page.at(-1);
   return {
     items: page,
+    ...releaseLoadingState(),
     nextCursor:
       items.length > 50 && last
         ? Buffer.from(JSON.stringify({ at: last.releasedAt, id: last.id, filter })).toString(

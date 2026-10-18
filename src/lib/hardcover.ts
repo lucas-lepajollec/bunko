@@ -3,6 +3,7 @@ import { emptyMedia, cleanSynopsis } from './media';
 import { bookFormat } from './openlibrary';
 import { getSettings } from './settings';
 import { providerJson, credentialScope } from './catalog-provider-http';
+import { discoveryStatus } from './metadata-cache';
 import { AppError } from './errors';
 const DAY = 86400_000;
 export interface HardcoverBook {
@@ -107,9 +108,16 @@ export async function discoverHardcover(q: DiscoverQuery): Promise<DiscoverPage>
       : q.sort === 'score'
         ? '{rating: desc_nulls_last}'
         : '{users_count: desc_nulls_last}';
-  const data = await hardcoverQuery<{ books: HardcoverBook[] }>(
-    `query BunkoDiscover($limit: Int!, $offset: Int!, $today: date!) { books(limit: $limit, offset: $offset, where: {release_date: {_lte: $today}}, order_by: ${order}) { ${fields} } }`,
-    { limit, offset: (page - 1) * limit, today: new Date().toISOString().slice(0, 10) },
+  const query = `query BunkoDiscover($limit: Int!, $offset: Int!, $today: date!) { books(limit: $limit, offset: $offset, where: {release_date: {_lte: $today}}, order_by: ${order}) { ${fields} } }`;
+  const variables = {
+    limit,
+    offset: (page - 1) * limit,
+    today: new Date().toISOString().slice(0, 10),
+  };
+  const data = await hardcoverQuery<{ books: HardcoverBook[] }>(query, variables);
+  const state = discoveryStatus(
+    `optional:hardcover:${credentialScope(getSettings().hardcoverToken.replace(/^Bearer\s+/i, ''), query, JSON.stringify(variables))}`,
+    'hardcover',
   );
   const items = data.books
     .map(hardcoverMedia)
@@ -119,7 +127,7 @@ export async function discoverHardcover(q: DiscoverQuery): Promise<DiscoverPage>
         (!q.year || m.year === q.year) &&
         (!q.genre || m.genres.some((g) => g.toLowerCase() === q.genre!.toLowerCase())),
     );
-  return { items, page, hasNextPage: data.books.length === limit };
+  return { ...state, items, page, hasNextPage: data.books.length === limit };
 }
 export async function hardcoverDetail(id: number): Promise<MediaDetail> {
   const data = await hardcoverQuery<{ books_by_pk: HardcoverBook | null }>(

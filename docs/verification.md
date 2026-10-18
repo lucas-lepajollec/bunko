@@ -1,5 +1,12 @@
 # Verification — current and historical evidence
 
+## Progressive results and owned tomes — 2026-10-18
+
+- Isolated regression fixtures cover schema v15 migration/idempotence, 13 existing files retyped as 13 volumes independently of presentation, reversal preserving chapter progress, future imports with overlapping numbers, tenant/connection isolation, safe local archive resolution, distinct reader identities and tome completions, known-volume coverage/read state, cache pending/failure transitions, followed sheet relations and release/home/planning flags. Older current-schema assertions now expect v15; standalone v14 migration assertions remain v14.
+- `npm run check`: **561 tests / 43 files**, strict TypeScript and production build. Final acceptance and image smoke evidence is recorded with the branch checkpoint; no real runtime/credentials used.
+- Production-image browser QA uses tmpfs-only state, a synthetic account, 13 synthetic CBZs and delayed metadata providers. Desktop and 390×844: declare tomes beside progress, see 13 owned/released tomes against 110 catalog chapters, finish tome2 and retain **2 tomes read** after leaving immediately. Known source-volume mappings then correctly reduce 40 unread chapters to24. Catalog search shows one fast result and an explicit incomplete notice, then automatically adds the second result and removes the notice. A failed provider retains both available results with an incomplete-results warning. No horizontal overflow or browser console errors observed.
+- Screenshots contain **synthetic test data**, without cover artwork: [owned tomes desktop](assets/owned-volumes-desktop.jpg), [mobile](assets/owned-volumes-mobile.jpg), [search loading](assets/search-loading-mobile.jpg) and [partial provider failure](assets/search-partial-mobile.jpg). These prove interface behavior, not live catalog/NAS acceptance. This work does not publish or deploy an image.
+
 ## Source language preference — 2026-10-18
 
 - Full `npm run check` passes: **551 tests / 42 files**, TypeScript and optimized build. Final `eslint . --max-warnings 0` and strict TypeScript pass after removing two unused fixture arguments; nine focused language/ranking cases pass again on that final test source.

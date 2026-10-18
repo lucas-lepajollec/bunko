@@ -104,14 +104,17 @@ export function useProgressiveSearch(q: string) {
   const path = q.length >= 2 ? `/api/search?q=${encodeURIComponent(q)}` : null;
   // Retaining a previous query lets its full answer mask the new query's fast results.
   const fast = useApi<SearchResponse>(path && `${path}&fast=1`);
-  const full = useApi<SearchResponse>(path);
+  const full = useApi<SearchResponse>(path, {
+    refreshInterval: (data) => (data?.pending ? 1500 : 0),
+  });
   const data = full.data ?? fast.data;
   return {
     data,
     error: full.error && !data ? full.error : undefined,
     isLoading: Boolean(path) && !data,
     /** Fast results are shown and the complete answer is still coming. */
-    refining: Boolean(path) && full.isLoading && Boolean(fast.data),
+    refining: Boolean(path) && (full.isLoading || Boolean(full.data?.pending)) && Boolean(data),
+    partial: Boolean(full.error) || Boolean(data?.providers.some((p) => p.status === 'error')),
   };
 }
 

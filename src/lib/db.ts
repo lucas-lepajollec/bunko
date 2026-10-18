@@ -13,6 +13,7 @@ import path from 'node:path';
 import { getSettings, decrypt } from './settings';
 import { sourceServerKey, sourceConnectionKey } from './source-server';
 import { migrateV14 } from './source-ledger-migration';
+import { projectStock, type StockImport, stockContext } from './owned-stock';
 import { env } from './env';
 import { kavitaLibraryClassification } from './library-kinds';
 import { tenantId, tenantPath, tenantState } from './tenant-context';
@@ -165,6 +166,7 @@ export function db(): Database.Database {
         suwayomiPassword: read('suwayomiPassword', 'SUWAYOMI_PASSWORD', true),
       });
     });
+    migrateV15(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -679,6 +681,17 @@ function snapshotTracked(id?: number) {
     const imported = imports.numbers,
       observed = observations.numbers,
       observedVolumes = observations.volumes;
+    const overrideImports = new Map<number, StockImport[]>();
+    if (rows.some((r) => r.volume_override_json)) {
+      for (const row of statement(`SELECT tracked_id,namespace,chapter_id,number,volume FROM imported_chapters
+        WHERE number IS NOT NULL AND tracked_id IN (SELECT id FROM tracked_media WHERE volume_override_json IS NOT NULL)`).all() as (StockImport & {
+        tracked_id: number;
+      })[]) {
+        const list = overrideImports.get(row.tracked_id) ?? [];
+        list.push(row);
+        overrideImports.set(row.tracked_id, list);
+      }
+    }
     const external = new Map<string, import('@/types/shared').ChapterRelease[]>();
     const releaseKeys = (m: UnifiedMedia) =>
       [
@@ -758,10 +771,21 @@ function snapshotTracked(id?: number) {
       };
       const unit = r.unit as 'chapter' | 'volume';
       const volumeMode = unit === 'volume';
+      const stock = r.volume_override_json
+        ? projectStock(
+            kavita,
+            overrideImports.get(id) ?? [],
+            r.volume_override_json,
+            stockContext(kavitaUrl),
+          )
+        : null;
       const owned = new Set(
         volumeMode
-          ? [...(kavita?.volumes ?? [])]
-          : [...(imported.get(id) ?? []), ...(kavita?.numbers ?? [])],
+          ? (stock?.volumes ?? [...(kavita?.volumes ?? [])])
+          : (stock?.chapters.map((c) => c.number) ?? [
+              ...(imported.get(id) ?? []),
+              ...(kavita?.numbers ?? []),
+            ]),
       );
       const seen = [
         ...new Set([
@@ -789,13 +813,15 @@ function snapshotTracked(id?: number) {
           ? Math.max(
               0,
               ...[...owned].filter((v) => {
+                if (stock?.declared.includes(v)) return false;
                 const chapters = kavita?.chapterFiles?.filter((c) => c.volume === v) ?? [];
                 return chapters.length > 0 && chapters.every((c) => c.number <= chapterRead);
               }),
             )
           : null;
       const read = volumeMode
-        ? ((r.volume_read as number | null) ?? kavita?.volumeRead ?? derivedRead)
+        ? ((r.volume_read as number | null) ??
+          (stock?.asVolumes ? derivedRead : (kavita?.volumeRead ?? derivedRead)))
         : chapterRead;
       retry.set(
         id,
@@ -804,6 +830,16 @@ function snapshotTracked(id?: number) {
       return {
         id,
         unit,
+        ownedAsVolumes: stock?.asVolumes ?? false,
+        ownedChapterCount:
+          stock?.chapters.length ??
+          new Set([...(imported.get(id) ?? []), ...(kavita?.numbers ?? [])]).size,
+        ownedVolumes: stock?.volumes ?? kavita?.volumes ?? [],
+        chapterRead,
+        volumeRead: volumeMode
+          ? read
+          : ((r.volume_read as number | null) ??
+            (stock?.asVolumes ? null : (kavita?.volumeRead ?? null))),
         anilistId: r.anilist_id as number | null,
         mangadexId: r.mangadex_id as string | null,
         title: media.title,
@@ -1210,7 +1246,20 @@ export function migrateV12(database: Database.Database) {
 }
 /** Only explicitly indexed complete volume archives can suppress missing chapters. */
 export function ownedVolumeNumbers(tracked: TrackedMedia): Set<number> {
-  return new Set(kavitaMatcher()(tracked.media, tracked.kavitaSeriesId)?.volumes ?? []);
+  return new Set(
+    tracked.ownedVolumes ?? kavitaMatcher()(tracked.media, tracked.kavitaSeriesId)?.volumes ?? [],
+  );
+}
+
+/** Reversible per-work inventory declarations; existing progress/files are untouched. */
+export function migrateV15(database: Database.Database) {
+  database.transaction(() => {
+    const columns = database.pragma('table_info(tracked_media)') as { name: string }[];
+    if (!columns.some((c) => c.name === 'volume_override_json'))
+      database.exec('ALTER TABLE tracked_media ADD COLUMN volume_override_json TEXT');
+    if (Number(database.pragma('user_version', { simple: true })) < 15)
+      database.pragma('user_version = 15');
+  })();
 }
 
 export function migrateV13(database: Database.Database) {

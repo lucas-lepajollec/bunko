@@ -6,6 +6,7 @@ import type { SearchResponse, Source, SourceResult } from '@/types/shared';
 import { openStream, useApi } from '@/lib/client/api';
 import { rankSourceLanes } from '@/lib/client/source-ranking';
 import { useI18n } from '@/i18n/I18nProvider';
+import { LoadNotice } from '@/components/load-notice';
 import { Page, SearchIcon } from '@/components/shell';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import { Cover, Dot, ErrorNote, PageTitle, Skeleton } from '@/components/ui';
@@ -143,6 +144,14 @@ function Search() {
         <p className="text-muted font-serif text-2xl italic">{t('extsearch.hint')}</p>
       )}
       {streamFailed && <ErrorNote error={null} />}
+      <LoadNotice
+        pending={
+          Boolean(live) &&
+          !streamFailed &&
+          (lanes?.length === 0 || Boolean(lanes?.some((l) => l.state === 'loading')))
+        }
+        partial={streamFailed || lanes?.some((l) => l.state === 'error')}
+      />
       {live && ready && lanes?.length === 0 && !streamFailed && (
         <Skeleton className="h-24 rounded-2xl" />
       )}

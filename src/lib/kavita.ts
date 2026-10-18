@@ -1,3 +1,4 @@
+import { ownedStock } from './owned-chapters';
 import { registerReaderArchive } from './reader-archives';
 import { chapterVolume } from './chapter-volume';
 import { open, realpath, rename, link, unlink, writeFile } from 'node:fs/promises';
@@ -312,7 +313,10 @@ const chapterProgressSchema = z.object({
   lastReadingProgressUtc: z.string().optional(),
   lastReadingProgress: z.string().optional(),
 });
-export function kavitaProgress(input: unknown): { read: number; lastReadAt: string | null } {
+export function kavitaProgress(
+  input: unknown,
+  include: (number: number) => boolean = () => true,
+): { read: number; lastReadAt: string | null } {
   const volumes = z
     .array(z.object({ chapters: z.array(chapterProgressSchema).nullable() }))
     .parse(input);
@@ -334,7 +338,7 @@ export function kavitaProgress(input: unknown): { read: number; lastReadAt: stri
     // A partly read chapter is not counted as completed. Specials do not advance numeric progress.
     if (!c.isSpecial && c.pages > 0 && c.pagesRead >= c.pages) {
       const number = c.maxNumber ?? Number(c.number ?? c.range);
-      if (Number.isFinite(number) && number >= 0) read = Math.max(read, number);
+      if (Number.isFinite(number) && number >= 0 && include(number)) read = Math.max(read, number);
     }
   }
   return { read, lastReadAt };
@@ -392,12 +396,16 @@ export async function refreshTrackedProgress(tracked: TrackedMedia, signal?: Abo
     )
     .run(id, tracked.id, tracked.kavitaSeriesId, id);
   const volumes = await get(`/api/Series/volumes?seriesId=${id}`);
-  const progress = kavitaProgress(volumes);
-  const volumeRead = kavitaVolumeProgress(volumes).volumeRead;
+  const stock = ownedStock(tracked.media);
+  const progress = kavitaProgress(volumes, (n) => !stock.retyped.has(n));
+  const declaredRead = stock.asVolumes
+    ? kavitaProgress(volumes, (n) => stock.retyped.has(n)).read
+    : null;
+  const volumeRead = Math.max(kavitaVolumeProgress(volumes).volumeRead ?? 0, declaredRead ?? 0);
   if (getSettings().kavitaApiKey !== key || getSettings().kavitaUrl !== s.kavitaUrl) return;
   db()
     .prepare(
-      `UPDATE tracked_media SET last_read=MAX(COALESCE(last_read,0),?),last_read_at=MAX(COALESCE(last_read_at,''),COALESCE(?,'')),progress_checked=1,volume_read=? WHERE id=? AND kavita_series_id IS ?`,
+      `UPDATE tracked_media SET last_read=MAX(COALESCE(last_read,0),?),last_read_at=MAX(COALESCE(last_read_at,''),COALESCE(?,'')),progress_checked=1,volume_read=MAX(COALESCE(volume_read,0),?) WHERE id=? AND kavita_series_id IS ?`,
     )
     .run(progress.read, progress.lastReadAt, volumeRead, tracked.id, id);
 }

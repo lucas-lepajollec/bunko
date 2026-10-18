@@ -23,13 +23,24 @@ const rank = (priority: string[], id: string) => {
   return i < 0 ? priority.length : i;
 };
 /** Missing = not in Kavita (by chapter number) and not already downloaded through Suwayomi. */
-export const isMissing = (c: MergedChapter, owned?: Set<number>) =>
-  !(c.number !== null && owned?.has(c.number)) && !c.variants.some((v) => v.isDownloaded);
+export const isMissing = (c: MergedChapter, owned?: Set<number>, ownedVolumes?: Set<number>) =>
+  !(c.volume !== null && ownedVolumes?.has(c.volume)) &&
+  !(c.number !== null && owned?.has(c.number)) &&
+  !c.variants.some((v) => v.isDownloaded);
+
+export const chapterIsRead = (
+  c: MergedChapter,
+  chapterRead: number | null,
+  volumeRead: number | null = null,
+) =>
+  (chapterRead !== null && c.number !== null && c.number <= chapterRead) ||
+  (volumeRead !== null && c.volume !== null && c.volume <= volumeRead);
 
 export function ChapterTable({
   chapters,
   priority,
   read,
+  volumeRead = null,
   selected,
   setSelected,
   choice,
@@ -38,14 +49,17 @@ export function ChapterTable({
   owned,
   mediaId,
   defaultByVolume,
+  ownedVolumes = new Set<number>(),
 }: {
   /** Start in the volume view (works counted in volumes). */
   defaultByVolume?: boolean;
+  ownedVolumes?: Set<number>;
   /** Opens chapters in the built-in reader with this work's progress. */
   mediaId: string;
   chapters: MergedChapter[];
   priority: string[];
   read: number | null;
+  volumeRead?: number | null;
   selected: Set<string>;
   setSelected: (next: Set<string>) => void;
   choice: Record<string, number>;
@@ -68,11 +82,11 @@ export function ChapterTable({
     () => [...chapters].sort((a, b) => (b.number ?? -1) - (a.number ?? -1)),
     [chapters],
   );
-  const missing = ordered.filter((c) => isMissing(c, owned));
-  const unread = ordered.filter((c) => read === null || (c.number ?? 0) > read);
+  const missing = ordered.filter((c) => isMissing(c, owned, ownedVolumes));
+  const unread = ordered.filter((c) => !chapterIsRead(c, read, volumeRead));
   const visible = ordered.filter((c) => {
-    if (filter === 'missing') return isMissing(c, owned);
-    if (filter === 'unread') return read === null || (c.number ?? 0) > read;
+    if (filter === 'missing') return isMissing(c, owned, ownedVolumes);
+    if (filter === 'unread') return !chapterIsRead(c, read, volumeRead);
     return true;
   });
   const toggle = (key: string) => {
@@ -88,9 +102,11 @@ export function ChapterTable({
       <ChapterRow
         key={c.key}
         owned={owned}
+        ownedVolumes={ownedVolumes}
         chapter={c}
         variant={variant}
         read={read}
+        volumeRead={volumeRead}
         mediaId={mediaId}
         checked={selected.has(c.key)}
         onToggle={() => toggle(c.key)}
@@ -224,6 +240,14 @@ export function ChapterTable({
           )}
         </div>
       </div>
+      {!byVolume && visible.length > limit && (
+        <p className="text-muted py-2 text-xs" role="status">
+          {t('chapters.displayed', {
+            shown: Math.min(limit, visible.length),
+            total: visible.length,
+          })}
+        </p>
+      )}
       {visible.length === 0 && (
         <p className="text-muted py-6 font-serif text-xl italic">
           {filter === 'missing' ? t('chapters.noneMissing') : t('chapters.none')}
@@ -313,16 +337,20 @@ function ChapterRow({
   chapter,
   variant,
   read,
+  volumeRead,
   mediaId,
   checked,
   onToggle,
   onChoose,
   queued,
   owned,
+  ownedVolumes,
 }: {
+  ownedVolumes: Set<number>;
   chapter: MergedChapter;
   variant: ChapterVariant | undefined;
   read: number | null;
+  volumeRead: number | null;
   mediaId: string;
   checked: boolean;
   onToggle: () => void;
@@ -331,9 +359,11 @@ function ChapterRow({
   owned: Set<number>;
 }) {
   const { t, n } = useI18n();
-  const downloaded = !isMissing(chapter, owned);
-  const inKavita = chapter.number !== null && owned.has(chapter.number);
-  const isRead = read !== null && chapter.number !== null && chapter.number <= read;
+  const downloaded = !isMissing(chapter, owned, ownedVolumes);
+  const inKavita =
+    (chapter.number !== null && owned.has(chapter.number)) ||
+    (chapter.volume !== null && ownedVolumes.has(chapter.volume));
+  const isRead = chapterIsRead(chapter, read, volumeRead);
   const state = queued
     ? t('chapters.queued')
     : inKavita

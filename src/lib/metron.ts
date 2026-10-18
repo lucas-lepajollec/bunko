@@ -11,7 +11,7 @@ import { providerJson, credentialScope } from './catalog-provider-http';
 import { AppError } from './errors';
 import { publicationDay } from './edition-feeds';
 import { releaseNumber } from './release-providers';
-import { saveMetadata, storedMetadata } from './metadata-cache';
+import { saveMetadata, storedMetadata, discoveryStatus } from './metadata-cache';
 import { sharedConcurrencyGate } from './concurrency';
 const DAY = 86400_000;
 export interface MetronSeries {
@@ -135,8 +135,10 @@ export async function discoverComics(q: DiscoverQuery): Promise<DiscoverPage> {
   if (q.year) params.set('year_began', String(q.year));
   else if (q.sort === 'new') params.set('year_began', String(new Date().getUTCFullYear()));
   if (q.status) params.set('status', q.status === 'FINISHED' ? 'completed' : 'continuing');
-  const data = await metronJson<Page<MetronSeries>>(`/series/?${params}`);
+  const resource = `/series/?${params}`;
+  const data = await metronJson<Page<MetronSeries>>(resource);
   return {
+    ...discoveryStatus(`optional:metron:${metronScope(resource)}`, 'metron'),
     items: pageMedia(data).filter(
       (m) => !q.genre || m.genres.some((g) => g.toLowerCase() === q.genre!.toLowerCase()),
     ),

@@ -1,5 +1,6 @@
 import { sourceServerKey } from './source-server';
-import { ownedChapters } from './owned-chapters';
+import { importStockKey } from './owned-stock';
+import { ownedChapters, ownedStock } from './owned-chapters';
 import { mediaId as mediaIdentifier } from './validation';
 import { mediaDetail } from './catalog';
 import { sourceFormat } from './library-kinds';
@@ -96,6 +97,11 @@ async function localReadingWork(id: string) {
   ).get(id) as { media_json: string } | undefined;
   return imported ? { id: 0, media: JSON.parse(imported.media_json) as UnifiedMedia } : undefined;
 }
+const localIdentity = (key: string) => ({
+  mediaId: key.replace(/^@volume:/, ''),
+  unit: key.startsWith('@volume:') ? ('volume' as const) : ('chapter' as const),
+});
+
 export async function readerChapter(
   id: number,
   mediaId?: string,
@@ -105,11 +111,28 @@ export async function readerChapter(
     const row = statement('SELECT media_id,number FROM local_reader_chapters WHERE id=?').get(
       -id,
     ) as { media_id: string; number: number } | undefined;
-    if (!row || (mediaId && (await localReadingWork(mediaId))?.media.id !== row.media_id))
+    const local = row && localIdentity(row.media_id);
+    if (
+      !row ||
+      !local ||
+      (mediaId && (await localReadingWork(mediaId))?.media.id !== local.mediaId)
+    )
       throw new AppError('NOT_FOUND', 'Local chapter not found', 404);
-    return localReaderChapter(row.number, row.media_id);
+    return localReaderChapter(row.number, local.mediaId, local.unit);
   }
   const local = await readerArchive(id);
+  if (local) {
+    const tracked = work(mediaId, local.chapter.manga?.id ?? 0);
+    const number = chapterNumber(local.chapter.name, local.chapter.chapterNumber);
+    if (
+      tracked &&
+      number !== null &&
+      ownedStock(tracked.media).retypedImports.has(
+        importStockKey({ namespace: sourceServerKey(), chapter_id: id }),
+      )
+    )
+      return localReaderChapter(number, tracked.media.id, 'volume');
+  }
   const data = local
     ? {
         chapter: local.chapter,
@@ -164,7 +187,8 @@ export async function readerPage(request: Request, id: number, index: number) {
       -id,
     ) as { media_id: string; number: number } | undefined;
     if (!row) throw new AppError('NOT_FOUND', 'Local chapter not found', 404);
-    return localReaderPage(request, row.number, row.media_id, index);
+    const local = localIdentity(row.media_id);
+    return localReaderPage(request, row.number, local.mediaId, index, local.unit);
   }
   const local = await readerArchive(id);
   if (local) {
@@ -233,6 +257,16 @@ function persistProgress(value: ReaderProgressUpdate) {
       value.pageCount,
       now,
     );
+    const local =
+      value.chapterId < 0
+        ? (statement('SELECT media_id,number FROM local_reader_chapters WHERE id=?').get(
+            -value.chapterId,
+          ) as { media_id: string; number: number } | undefined)
+        : undefined;
+    const volume = local?.media_id === `@volume:${value.mediaId}` ? local.number : null;
+    statement(
+      `UPDATE tracked_media SET volume_read=CASE WHEN ? AND ? IS NOT NULL THEN MAX(COALESCE(volume_read,0),?) ELSE volume_read END WHERE media_json ->> '$.id'=?`,
+    ).run(Number(value.page === value.pageCount - 1), volume, volume, value.mediaId);
     statement(
       `UPDATE tracked_media SET last_read_at=?,last_read=CASE WHEN ? AND ? IS NOT NULL THEN MAX(COALESCE(last_read,0),?) ELSE last_read END WHERE media_json ->> '$.id'=?`,
     ).run(
@@ -262,7 +296,11 @@ export async function saveReaderProgress(value: ReaderProgressUpdate, signal?: A
     value.mediaId !== `suwayomi:${chapter.mangaId}`
   )
     throw new AppError('NOT_FOUND', 'Reading work does not match this chapter', 404);
-  value = { ...value, mediaId: entry?.media.id ?? localWork?.media.id ?? value.mediaId };
+  value = {
+    ...value,
+    chapterId: chapter.chapterId,
+    mediaId: entry?.media.id ?? localWork?.media.id ?? value.mediaId,
+  };
   if (
     tracked &&
     chapter.local === undefined &&
@@ -316,31 +354,40 @@ export async function saveReaderProgress(value: ReaderProgressUpdate, signal?: A
   }
 }
 
-export async function localReaderChapter(number: number, mediaId: string): Promise<ReaderChapter> {
+export async function localReaderChapter(
+  number: number,
+  mediaId: string,
+  unit: 'chapter' | 'volume' = 'chapter',
+): Promise<ReaderChapter> {
   const tracked = await localReadingWork(mediaId);
   if (!tracked) throw new AppError('NOT_FOUND', 'Local reading work not found', 404);
-  const archive = await localNumberArchive(tracked.media, number);
+  const archive = await localNumberArchive(tracked.media, number, unit);
   if (!archive) throw new AppError('NOT_FOUND', 'Owned chapter archive not found', 404);
   const pages = await cbzPages(archive.filename);
+  const localKey = unit === 'volume' ? `@volume:${tracked.media.id}` : tracked.media.id;
   statement('INSERT OR IGNORE INTO local_reader_chapters(media_id,number) VALUES(?,?)').run(
-    tracked.media.id,
+    localKey,
     number,
   );
   const row = statement('SELECT id FROM local_reader_chapters WHERE media_id=? AND number=?').get(
-    tracked.media.id,
+    localKey,
     number,
   ) as { id: number };
   const chapterId = -row.id;
   const position = statement(
     'SELECT page FROM reader_progress WHERE media_id=? AND chapter_id=?',
   ).get(tracked.media.id, chapterId) as { page: number } | undefined;
-  const neighbours = ownedChapters(tracked.media).map((c) => c.number);
+  const neighbours =
+    unit === 'volume'
+      ? ownedStock(tracked.media).volumes
+      : ownedChapters(tracked.media).map((c) => c.number);
   return {
     chapterId,
     mangaId: 0,
     sourceName: '',
-    label: `Chapter ${number}`,
-    number,
+    label: `${unit === 'volume' ? 'Volume' : 'Chapter'} ${number}`,
+    number: unit === 'volume' ? null : number,
+    unit,
     volume: archive.volume,
     local: number,
     prevId: null,
@@ -357,10 +404,11 @@ export async function localReaderPage(
   number: number,
   mediaId: string,
   index: number,
+  unit: 'chapter' | 'volume' = 'chapter',
 ) {
   const tracked = await localReadingWork(mediaId);
   if (!tracked) throw new AppError('NOT_FOUND', 'Local reading work not found', 404);
-  const archive = await localNumberArchive(tracked.media, number);
+  const archive = await localNumberArchive(tracked.media, number, unit);
   if (!archive) throw new AppError('NOT_FOUND', 'Owned chapter archive not found', 404);
   const pages = await cbzPages(archive.filename);
   if (!pages[index]) throw new AppError('NOT_FOUND', 'Page not found', 404);

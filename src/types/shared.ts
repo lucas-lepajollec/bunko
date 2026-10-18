@@ -79,7 +79,13 @@ export interface RelatedMedia {
   relation: string;
   media: UnifiedMedia;
 }
-export interface MediaDetail extends UnifiedMedia {
+export interface LoadState {
+  /** Data is still being enriched/refreshed. Existing items may be used but are not final. */
+  pending?: boolean;
+  /** One or more upstream refreshes failed; retained items may be incomplete. */
+  partial?: boolean;
+}
+export interface MediaDetail extends UnifiedMedia, LoadState {
   tags: string[];
   relations: RelatedMedia[];
   recommendations: UnifiedMedia[];
@@ -134,13 +140,13 @@ export interface ChapterRelease {
   trackedId: number | null;
 }
 /** GET /api/releases?kind=&genre=&library=1&cursor= */
-export interface ReleasesPage {
+export interface ReleasesPage extends LoadState {
   items: ChapterRelease[];
   /** Opaque cursor for "load more"; null at the end. */
   nextCursor: string | null;
 }
 /** GET /api/planning?week=YYYY-MM-DD (any day of the week; default current week)&kind=&library=1 */
-export interface PlanningWeek {
+export interface PlanningWeek extends LoadState {
   /** Monday of the week (ISO date) in the server's time zone. */
   start: string;
   days: PlanningDay[];
@@ -159,7 +165,7 @@ export interface PlanningItem {
   trackedId: number | null;
 }
 /** GET /api/home */
-export interface HomeFeed {
+export interface HomeFeed extends LoadState {
   /** Latest releases for the hero carousel (with artwork). */
   hero: ChapterRelease[];
   /** Weekly trending top 10, all formats. */
@@ -195,7 +201,7 @@ export interface ProviderOutcome {
   status: 'ok' | 'error';
   durationMs: number;
 }
-export interface SearchResponse {
+export interface SearchResponse extends LoadState {
   results: UnifiedMedia[];
   providers: ProviderOutcome[];
   durationMs: number;
@@ -260,6 +266,7 @@ export interface MergedChapter {
 /* ---- Built-in reader (contract for /api/reader/*) ---- */
 /** GET /api/reader/chapter?id=<suwayomi chapter id>&media=<media id, optional> */
 export interface ReaderChapter {
+  unit?: 'chapter' | 'volume';
   chapterId: number;
   mangaId: number;
   sourceName: string;
@@ -282,7 +289,7 @@ export interface ReaderChapter {
   prevLocal?: number | null;
   nextLocal?: number | null;
 }
-/** PUT /api/reader/progress — saved while reading; finishing a chapter raises `progress.read`. */
+/** PUT /api/reader/progress — finishing advances the verified chapter or local-volume unit. */
 export interface ReaderProgressUpdate {
   mediaId: string;
   chapterId: number;
@@ -291,6 +298,7 @@ export interface ReaderProgressUpdate {
   pageCount: number;
 }
 export interface ChaptersResponse {
+  ownedVolumes?: number[];
   chapters: MergedChapter[];
   errors: { mangaId: number; code: string }[];
   /** Chapter numbers already in the matching Kavita series (empty when none is known). */
@@ -477,6 +485,15 @@ export interface TrackedMedia {
    * volume counts and source volume numbers).
    */
   unit?: 'chapter' | 'volume';
+  /** Current owned inventory was explicitly declared as volumes by the user. */
+  ownedAsVolumes?: boolean;
+  /** Owned chapter count, independent of the chosen display unit. */
+  ownedChapterCount?: number;
+  /** Verified complete volumes, including the user's current-inventory declaration. */
+  ownedVolumes?: number[];
+  /** Reading position in chapters, independent of the displayed progress unit. */
+  chapterRead?: number | null;
+  volumeRead?: number | null;
   /** Last position in the built-in reader, for "Resume". */
   readerPosition?: {
     chapterId: number;
@@ -562,6 +579,8 @@ export interface TrackPatch {
   displayTitle?: string | null;
   /** Count this work in volumes (tomes) or chapters. */
   unit?: 'chapter' | 'volume';
+  /** Explicitly reinterpret currently owned numbered files as complete tomes; false restores detection. */
+  ownedAsVolumes?: boolean;
   /** Push Bunko's cover for this work to Kavita (default true). */
   kavitaCoverSync?: boolean;
   /** Show the catalog banner behind the title (`auto`) or hide it (`hidden`). */

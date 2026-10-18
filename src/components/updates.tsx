@@ -10,6 +10,7 @@ import type {
 } from '@/types/shared';
 import { mediaHref, send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
+import { LoadNotice } from './load-notice';
 import { useRelativeTime } from './time';
 import { InfoBubble, toast } from './notify';
 import { isMissing, preferredVariant } from './chapters';
@@ -33,7 +34,9 @@ export function chapterSpan(chapters: number[], fmt: (n: number) => string) {
 /** Chapters detected on the library's sources, grouped by day; lives in the Library page. */
 export function LibraryUpdates() {
   const { t } = useI18n();
-  const feed = useApi<UpdatesFeed>('/api/updates', { refreshInterval: 60_000 });
+  const feed = useApi<UpdatesFeed>('/api/updates', {
+    refreshInterval: (data) => (data?.checking ? 1500 : 60_000),
+  });
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const settings = useApi<PublicSettings>('/api/settings');
   const relative = useRelativeTime();
@@ -80,9 +83,10 @@ export function LibraryUpdates() {
           {t('updates.checkNow')}
         </button>
       </div>
+      <LoadNotice pending={feed.isLoading || feed.data?.checking} partial={Boolean(feed.error)} />
       {feed.error && <ErrorNote error={feed.error} className="mt-4" />}
       {!feed.data && !feed.error && <Skeleton className="mt-6 h-48 rounded-2xl" />}
-      {feed.data && entries.length === 0 && (
+      {feed.data && !feed.data.checking && entries.length === 0 && (
         <div className="mt-6">
           <Empty title={t('updates.empty')}>{t('updates.emptyBody')}</Empty>
         </div>

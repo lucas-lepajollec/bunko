@@ -1,4 +1,4 @@
-import { ownedChapters } from './owned-chapters';
+import { ownedChapters, ownedStock } from './owned-chapters';
 import { sourceServerKey } from './source-server';
 import { chapterVolume } from './chapter-volume';
 import { sourceUploadDate } from './source-chapters';
@@ -450,6 +450,7 @@ export async function chaptersFor(
   return {
     chapters,
     inKavita,
+    ownedVolumes: owner ? ownedStock(owner).volumes : [],
     errors: settled.flatMap((r, i) =>
       r.status === 'rejected'
         ? [{ mangaId: selections[i].suwayomiMangaId, code: errorCode(r.reason) }]

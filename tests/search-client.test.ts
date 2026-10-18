@@ -41,3 +41,14 @@ it('does not show another title query as an answer while both new requests are p
   expect(useProgressiveSearch('uncached')).toMatchObject({ data: undefined, isLoading: true });
   expect(useProgressiveSearch('')).toMatchObject({ data: undefined, isLoading: false });
 });
+
+it('keeps the completion indicator active for background cache enrichment and distinguishes failed providers', () => {
+  state.data.set('/api/search?q=stale', { ...answer(1), pending: true });
+  expect(useProgressiveSearch('stale')).toMatchObject({ refining: true, partial: false });
+  state.data.set('/api/search?q=stale', {
+    ...answer(2),
+    pending: false,
+    providers: [{ provider: 'anilist', status: 'error', durationMs: 1 }],
+  });
+  expect(useProgressiveSearch('stale')).toMatchObject({ refining: false, partial: true });
+});

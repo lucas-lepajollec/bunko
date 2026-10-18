@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ChapterRelease, HomeFeed, TrackedMedia } from '@/types/shared';
 import { mediaHref, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
+import { LoadNotice } from '@/components/load-notice';
 import { Backdrop } from '@/components/backdrop';
 import { ScrollRow, TopRow } from '@/components/media';
 import { ReleaseRow, useChapterLabel } from '@/components/releases';
@@ -28,7 +29,7 @@ export default function HomePage() {
   const { t } = useI18n();
   // A fresh install warms its feeds in the background: poll until they have content.
   const feed = useApi<HomeFeed>('/api/home', {
-    refreshInterval: (d) => (!d || d.top.length === 0 || d.hero.length === 0 ? 10_000 : 300_000),
+    refreshInterval: (d) => (d?.pending ? 1500 : 300_000),
   });
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const resume = useMemo(
@@ -47,8 +48,13 @@ export default function HomePage() {
   let n = 0;
   return (
     <main className="relative">
-      <Hero items={feed.data?.hero ?? []} loading={feed.isLoading} error={feed.error} />
+      <Hero
+        items={feed.data?.hero ?? []}
+        loading={feed.isLoading || Boolean(feed.data?.pending && !feed.data.hero.length)}
+        error={feed.error}
+      />
       <div className="relative mx-auto flex max-w-[1760px] flex-col gap-10 px-4 pb-16 md:gap-14 md:px-10">
+        <LoadNotice pending={feed.isLoading || feed.data?.pending} partial={feed.data?.partial} />
         {resume.length > 0 && (
           <section className="flex flex-col gap-4 md:gap-5">
             <SectionHeading
@@ -88,7 +94,7 @@ export default function HomePage() {
               href={`/catalog?view=chapters&kind=${k}`}
               linkLabel={t('home.allReleases')}
             />
-            {feed.data && (feed.data.latest?.[k]?.length ?? 0) === 0 ? (
+            {feed.data && !feed.data.pending && (feed.data.latest?.[k]?.length ?? 0) === 0 ? (
               <p className="text-muted font-serif text-lg italic">{t('home.noReleasesYet')}</p>
             ) : (
               <ReleaseRow items={feed.data?.latest?.[k]} label={t(`home.latestKind.${k}`)} />

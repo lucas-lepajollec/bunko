@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Show when search, title sheets and release feeds are still being completed, refresh pending data automatically and report partial source failures. Show the displayed/total chapter count and avoid premature empty or “complete series” claims.
+- Declare current owned files as tomes directly beside title progress, independently of chapter/tome presentation. Keep future chapter downloads separate, provide owned-volume reading with the correct progress unit, and make the declaration reversible. Library totals now distinguish chapters and tomes.
+
 - Favor sources matching Bunko's interface language in live search and title source suggestions. Manual interface choices now reach fetch/SSE requests; matching title relevance still comes first, other selected languages remain available, and saved filters/links are preserved.
 
 - Show BD/comic covers in catalog and search cards by resolving Metron issue artwork on demand, including previously cached series. Keep provider pacing and reuse the issue cache.

@@ -1,7 +1,8 @@
 'use client';
 import { useState } from 'react';
 import type { KavitaSeriesSummary, SearchResponse } from '@/types/shared';
-import { useApi } from '@/lib/client/api';
+import { LoadNotice } from './load-notice';
+import { useApi, useProgressiveSearch } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Cover, Skeleton, cx, field, smallButton, useMediaMeta } from './ui';
 
@@ -16,9 +17,7 @@ export function CatalogPicker({
   const meta = useMediaMeta();
   const [q, setQ] = useState(initial);
   const [query, setQuery] = useState(initial);
-  const results = useApi<SearchResponse>(
-    query.length >= 2 ? `/api/search?q=${encodeURIComponent(query)}` : null,
-  );
+  const results = useProgressiveSearch(query);
   return (
     <div className="flex flex-col gap-2 rounded-2xl bg-white/[0.04] p-3">
       <form
@@ -38,6 +37,7 @@ export function CatalogPicker({
           {t('extsearch.run')}
         </button>
       </form>
+      <LoadNotice pending={results.isLoading || results.refining} partial={results.partial} />
       {results.isLoading && <Skeleton className="h-12 rounded-lg" />}
       {(results.data?.results ?? []).slice(0, 6).map((m) => (
         <button
@@ -89,6 +89,10 @@ export function KavitaPicker({
           {t('extsearch.run')}
         </button>
       </form>
+      <LoadNotice
+        pending={series.isLoading || series.isValidating}
+        partial={Boolean(series.error)}
+      />
       {(series.data ?? []).slice(0, 6).map((s) => (
         <button
           key={s.seriesId}

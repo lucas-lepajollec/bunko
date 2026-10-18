@@ -1,6 +1,6 @@
 import type { DiscoverPage, DiscoverQuery, MediaDetail, UnifiedMedia } from '@/types/shared';
 import { emptyMedia, cleanSynopsis } from './media';
-import { cached } from './metadata-cache';
+import { cached, metadataStatus } from './metadata-cache';
 import { sharedConcurrencyGate } from './concurrency';
 import { BUNKO_USER_AGENT } from './mangaupdates';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -223,6 +223,7 @@ export async function discoverBooks(q: DiscoverQuery): Promise<BookDiscoverPage>
         ),
       page,
       hasNextPage: page * perPage < (data.numFound ?? data.num_found ?? 0),
+      pending: metadataStatus(`openlibrary:${resource}`).pending,
       ...(discoveryErrors().has(resource) ? { warnings } : {}),
     };
   } catch {

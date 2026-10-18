@@ -15,6 +15,7 @@ import { ActivityLine } from '@/components/activity';
 import { LibraryUpdates } from '@/components/updates';
 import { api, mediaHref, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
+import { LoadNotice } from '@/components/load-notice';
 import { Page } from '@/components/shell';
 import {
   Cover,
@@ -66,12 +67,19 @@ function Library() {
   const { t, n } = useI18n();
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const { mutate: mutateList } = library;
+  const [refreshing, setRefreshing] = useState(true);
+  const [refreshFailed, setRefreshFailed] = useState(false);
   useEffect(() => {
     // Reading progress comes from Kavita; refresh it once per visit without blanking the shelf.
     const controller = new AbortController();
     api<TrackedMedia[]>('/api/tracked?refresh=progress', { signal: controller.signal })
       .then((fresh) => mutateList(fresh, { revalidate: false }))
-      .catch(() => undefined);
+      .catch(() => {
+        if (!controller.signal.aborted) setRefreshFailed(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setRefreshing(false);
+      });
     return () => controller.abort();
   }, [mutateList]);
   // Links to library updates (old Updates page, home) open that tab: /library?view=updates.
@@ -100,7 +108,11 @@ function Library() {
     for (const e of entries) c[shelfOf(e)]++;
     return c;
   }, [entries]);
-  const owned = entries.reduce((sum, e) => sum + (e.progress?.owned ?? 0), 0);
+  const ownedChapters = entries.reduce(
+    (sum, e) => sum + (e.ownedChapterCount ?? (e.unit !== 'volume' ? (e.progress?.owned ?? 0) : 0)),
+    0,
+  );
+  const ownedVolumes = entries.reduce((sum, e) => sum + (e.ownedVolumes?.length ?? 0), 0);
   const toReview = entries.filter(needsReview).length;
   const shown = entries
     .filter((e) => (review ? needsReview(e) : !status || shelfOf(e) === status))
@@ -126,11 +138,24 @@ function Library() {
         title={t('library.title')}
         aside={
           library.data
-            ? t('library.aside', { series: n(entries.length), chapters: n(owned) })
+            ? t('library.inventory', {
+                series: n(entries.length),
+                chapters: n(ownedChapters),
+                volumes: n(ownedVolumes),
+              })
             : undefined
         }
       />
       <ActivityLine className="-mt-4" />
+      <LoadNotice
+        pending={
+          refreshing ||
+          library.isLoading ||
+          library.isValidating ||
+          (shelf === 'KAVITA' && unmatched.isLoading)
+        }
+        partial={Boolean(refreshFailed || library.error || (shelf === 'KAVITA' && unmatched.error))}
+      />
       {(activity.data?.hiddenAdult ?? 0) > 0 && (
         <p className="text-mid -mt-2 flex flex-wrap items-center gap-x-2 text-sm">
           {t('library.hiddenAdult', { count: activity.data!.hiddenAdult })}

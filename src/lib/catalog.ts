@@ -27,7 +27,13 @@ import { createHash } from 'node:crypto';
 import { getSettings } from './settings';
 import { AppError } from './errors';
 import { db, listTracked, trackedForMedia, sameMedia } from './db';
-import { cached, storedMetadata, saveMetadata } from './metadata-cache';
+import {
+  cached,
+  storedMetadata,
+  saveMetadata,
+  metadataStatus,
+  discoveryStatus,
+} from './metadata-cache';
 import { kavitaMedia } from './kavita-track';
 import { withKavita, kavitaMatcher } from './kavita-index';
 import { graphql } from './suwayomi';
@@ -138,6 +144,20 @@ async function discoverLane(
       items: deduplicate(pages.flatMap((p) => p.items)),
       page,
       hasNextPage: pages.some((p) => p.hasNextPage),
+      pending: pages.some((p) => p.pending),
+      warnings: [
+        ...pages.flatMap((p) => p.warnings ?? []),
+        ...outcomes.flatMap((r, i) =>
+          r.status === 'rejected'
+            ? [
+                {
+                  provider: i === 0 ? 'openlibrary' : 'hardcover',
+                  code: 'METADATA_UNAVAILABLE' as const,
+                },
+              ]
+            : [],
+        ),
+      ],
     };
     return {
       ...result,
@@ -165,6 +185,7 @@ export async function discoverAniList(
   q: DiscoverQuery,
   signal?: AbortSignal,
   raw = false,
+  waitForRefresh = false,
 ): Promise<DiscoverPage> {
   signal?.throwIfAborted();
   const kind = q.kind ?? 'all';
@@ -203,8 +224,9 @@ export async function discoverAniList(
     // 300 retains newly launched series; 2000 hid the entire recent live sample.
     variables.popularity = 300;
   }
+  const cacheKey = `discover:${JSON.stringify(variables)}`;
   const data = await cached(
-    `discover:${JSON.stringify(variables)}`,
+    cacheKey,
     10 * 60_000,
     async () => {
       const result = await anilist<{
@@ -223,9 +245,10 @@ export async function discoverAniList(
         throw new AppError('METADATA_UNAVAILABLE', 'Catalog is temporarily unavailable', 502);
       return result;
     },
-    { accept: (value) => value.Page.media.length > 0 },
+    { accept: (value) => value.Page.media.length > 0, waitForRefresh },
   );
   return {
+    ...discoveryStatus(cacheKey, 'anilist'),
     items: raw
       ? data.Page.media.map(fromAniList)
       : withTracking(data.Page.media.map(fromAniList)).filter(visibleMedia),
@@ -468,19 +491,22 @@ export async function mediaDetail(id: string, signal?: AbortSignal): Promise<Med
     void cached(key, 30 * 60_000, load).catch(() => {
       /* Stored followed metadata remains authoritative offline. */
     });
-    return enrichDetail({
-      ...detail,
-      ...followed.media,
-      // Library classification is a projection; the catalog sheet retains provider metadata.
-      format: providerMedia.format,
-      type: providerMedia.type,
-      tags: detail?.tags ?? [],
-      relations: detail?.relations ?? [],
-      recommendations: detail?.recommendations ?? [],
-    });
+    return {
+      ...enrichDetail({
+        ...detail,
+        ...followed.media,
+        // Library classification is a projection; the catalog sheet retains provider metadata.
+        format: providerMedia.format,
+        type: providerMedia.type,
+        tags: detail?.tags ?? [],
+        relations: detail?.relations ?? [],
+        recommendations: detail?.recommendations ?? [],
+      }),
+      ...metadataStatus(key),
+    };
   }
   signal?.throwIfAborted();
-  return enrichDetail(await cached(key, 30 * 60_000, load));
+  return { ...enrichDetail(await cached(key, 30 * 60_000, load)), ...metadataStatus(key) };
 }
 
 export async function suwayomiDetail(id: number, signal?: AbortSignal): Promise<MediaDetail> {

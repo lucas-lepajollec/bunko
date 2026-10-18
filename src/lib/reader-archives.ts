@@ -7,6 +7,7 @@ import type { UnifiedMedia } from '@/types/shared';
 import { statement } from './db';
 import { sourceServerKey } from './source-server';
 import { chapterNumber } from './suwayomi';
+import { importStockKey } from './owned-stock';
 import { chapterVolume } from './chapter-volume';
 import {
   inside,
@@ -148,10 +149,20 @@ async function legacyArchive(
 }
 
 /** Resolve an owned number without needing a live source or a Suwayomi chapter ID. */
-export async function localNumberArchive(media: UnifiedMedia, number: number) {
+export async function localNumberArchive(
+  media: UnifiedMedia,
+  number: number,
+  unit: 'chapter' | 'volume' = 'chapter',
+) {
   const { listTracked, trackedForMedia } = await import('./db');
-  const { ownedChapters } = await import('./owned-chapters');
-  const owned = ownedChapters(media).find((c) => c.number === number);
+  const { ownedStock } = await import('./owned-chapters');
+  const stock = ownedStock(media);
+  const owned =
+    unit === 'volume'
+      ? stock.volumes.includes(number)
+        ? { number, volume: number }
+        : null
+      : stock.chapters.find((c) => c.number === number);
   if (!owned) return null;
   const tracked = trackedForMedia(media, listTracked());
   const imports = statement(`SELECT chapter_id,namespace FROM imported_chapters
@@ -161,9 +172,12 @@ export async function localNumberArchive(media: UnifiedMedia, number: number) {
     number,
   ) as { chapter_id: number; namespace: string }[];
   for (const row of imports) {
+    if (stock.retypedImports.has(importStockKey(row)) !== (unit === 'volume')) continue;
     const archive = await readerArchive(row.chapter_id, `${row.namespace}:reader`);
     if (archive) return { filename: archive.filename, volume: owned.volume };
   }
+  // A missing future chapter must never fall back to the same-numbered declared tome.
+  if (unit === 'chapter' && stock.retyped.has(number)) return null;
   const series = matchKavita(media, tracked?.kavitaSeriesId);
   if (!series?.folder) return null;
   const mapped = mapKavitaPath(series.folder);
@@ -172,7 +186,9 @@ export async function localNumberArchive(media: UnifiedMedia, number: number) {
     const folder = await safeLibraryDirectory(mapped);
     const files =
       series.chapterFiles
-        ?.filter((c) => c.number === number && c.path)
+        ?.filter(
+          (c) => c.number === number && c.path && (unit === 'chapter' || stock.retyped.has(number)),
+        )
         .map((c) => mapKavitaPath(c.path!))
         .filter((p): p is string => !!p) ?? [];
     const candidates = files.length
@@ -181,7 +197,10 @@ export async function localNumberArchive(media: UnifiedMedia, number: number) {
           .filter(
             (name) =>
               /\.cbz$/i.test(name) &&
-              chapterNumber(path.basename(name, path.extname(name))) === number,
+              (unit === 'chapter' || stock.retyped.has(number)
+                ? chapterNumber(path.basename(name, path.extname(name))) === number
+                : chapterNumber(path.basename(name, path.extname(name))) === null &&
+                  chapterVolume(name) === number),
           )
           .map((name) => path.join(folder, name));
     if (candidates.length !== 1) return null;

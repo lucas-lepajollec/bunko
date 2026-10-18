@@ -329,6 +329,7 @@ export const trackPatch = z
     kavitaCoverSync: z.boolean().optional(),
     media: media.optional(),
     unit: z.enum(['chapter', 'volume']).optional(),
+    ownedAsVolumes: z.boolean().optional(),
     displayTitle: z.string().trim().min(1).max(300).nullable().optional(),
     offCatalog: z.literal(true).optional(),
     backdrop: z.enum(['auto', 'hidden']).optional(),
