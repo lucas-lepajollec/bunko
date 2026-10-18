@@ -15,6 +15,8 @@ const kinds: Record<Exclude<DiscoverKind, 'all'>, true> = {
 export function normalizeHome(value: unknown): HomeFeed {
   const feed = (value && typeof value === 'object' ? value : {}) as Partial<HomeFeed>;
   return {
+    ...(feed.pending === undefined ? {} : { pending: Boolean(feed.pending) }),
+    ...(feed.partial === undefined ? {} : { partial: Boolean(feed.partial) }),
     hero: Array.isArray(feed.hero) ? feed.hero : [],
     top: Array.isArray(feed.top) ? feed.top : [],
     latest: Object.fromEntries(

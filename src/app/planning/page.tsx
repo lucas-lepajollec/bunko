@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import type { DiscoverKind, PlanningItem, PlanningWeek } from '@/types/shared';
 import { mediaHref, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
+import { LoadNotice } from '@/components/load-notice';
 import { Page } from '@/components/shell';
 import { InfoBubble } from '@/components/notify';
 import { Cover, ErrorNote, PageTitle, Pill, Skeleton, cx } from '@/components/ui';
@@ -36,7 +37,10 @@ export default function PlanningPage() {
   const query = new URLSearchParams({ week });
   if (kind !== 'all') query.set('kind', kind);
   if (mine) query.set('library', '1');
-  const plan = useApi<PlanningWeek>(`/api/planning?${query}`, { keepPreviousData: true });
+  const plan = useApi<PlanningWeek>(`/api/planning?${query}`, {
+    keepPreviousData: true,
+    refreshInterval: (data) => (data?.pending ? 1500 : 0),
+  });
   const days = plan.data?.days ?? [];
   const isCurrent = days.some((d) => d.date === today);
   const [day, setDay] = useState<string | null>(null);
@@ -55,6 +59,10 @@ export default function PlanningPage() {
   return (
     <Page className="pb-16">
       <PageTitle title={t('planning.title')} aside={range} />
+      <LoadNotice
+        pending={plan.isLoading || plan.isValidating || plan.data?.pending}
+        partial={plan.data?.partial}
+      />
       <div className="flex flex-col gap-3 md:flex-row md:items-center">
         <div
           className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:px-0"

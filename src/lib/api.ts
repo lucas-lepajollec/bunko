@@ -6,6 +6,7 @@ import { authenticate, checkOrigin } from './auth';
 import { AppError } from './errors';
 import { startWorker } from './downloads';
 import { withSourceLanguage } from './source-preferences';
+import { sourceLanguage } from './source-language';
 export function json(value: unknown, status = 200) {
   return Response.json(value, {
     status,
@@ -42,10 +43,15 @@ export function route(handler: (r: Request) => Promise<Response> | Response, pro
       return await userContext.run(user?.id ? user : undefined, async () => {
         if (!protect) return await tenantContext.exit(() => handler(r));
         return await inTenant(user!.id, () =>
-          withSourceLanguage(r.headers.get('accept-language') ?? '', async () => {
-            if (new URL(r.url).pathname.replace(/\/$/, '') === '/api/users') requireAdmin();
-            return await handler(r);
-          }),
+          withSourceLanguage(
+            sourceLanguage(new URL(r.url).searchParams.get('uiLanguage') ?? '') ??
+              r.headers.get('accept-language') ??
+              '',
+            async () => {
+              if (new URL(r.url).pathname.replace(/\/$/, '') === '/api/users') requireAdmin();
+              return await handler(r);
+            },
+          ),
         );
       });
     } catch (e) {

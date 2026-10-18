@@ -2,7 +2,7 @@ import type { LibraryActivity } from '@/types/shared';
 import { activeSourceMatch, sourceMatchQueue } from './source-match-state';
 import { workerValue, refreshRunning } from './updates';
 import { getSettings } from './settings';
-import { listTracked } from './db';
+import { listTracked, writeVersion } from './db';
 import { visibleTracked } from './adult';
 
 export function libraryActivity(): LibraryActivity {
@@ -13,6 +13,7 @@ export function libraryActivity(): LibraryActivity {
   const current = active && ids.has(active.id) ? active : null;
   const lastAt = workerValue('last_check_at');
   return {
+    revision: writeVersion(),
     hiddenAdult: entries.length - visible.length,
     matching: {
       queued: sourceMatchQueue().filter((t) => ids.has(t.id) && t.id !== current?.id).length,

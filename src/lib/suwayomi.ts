@@ -1,4 +1,5 @@
-import { ownedChapters } from './owned-chapters';
+import { wakeWorker } from './worker-events';
+import { ownedChapters, ownedStock } from './owned-chapters';
 import { sourceServerKey } from './source-server';
 import { chapterVolume } from './chapter-volume';
 import { sourceUploadDate } from './source-chapters';
@@ -26,7 +27,14 @@ import { getSettings } from './settings';
 import { endpoint, requestJson } from './http';
 import { AppError, errorCode, errorDetail, sourceFailure } from './errors';
 import { db, indexCatalog, listTracked } from './db';
-import { getSourcePreferences, recordSourceHealth, sourceHealth } from './source-preferences';
+import {
+  getSourcePreferences,
+  orderedSourceLanguages,
+  preferredSourceLanguage,
+  recordSourceHealth,
+  sourceHealth,
+} from './source-preferences';
+import { compareSourceLanguage } from './source-language';
 import { proxyImage } from './images';
 import { sourceCall, isBackgroundSourceWork } from './source-gate';
 import { matchKavita } from './kavita-index';
@@ -125,12 +133,13 @@ export async function sourceInfos(signal?: AbortSignal): Promise<SourceInfo[]> {
 export async function sources(signal?: AbortSignal, all = false): Promise<Source[]> {
   return (await sourceInfos(signal))
     .filter((s) => all || s.enabled)
+    .sort((a, b) => compareSourceLanguage(a.lang, b.lang, preferredSourceLanguage()))
     .map(({ id, name, lang, nsfw }) => ({ id, name, lang, nsfw }));
 }
 export type MatchingSource = Source & { extensionId: string | null };
 /** Installed sources in selected languages, independent of global-search favourites. */
 export async function matchingSources(signal?: AbortSignal): Promise<MatchingSource[]> {
-  const languages = getSourcePreferences().languages;
+  const languages = orderedSourceLanguages(getSourcePreferences().languages);
   const seen = new Set<string>();
   return (await sourceInfos(signal))
     .filter(
@@ -268,6 +277,12 @@ export async function extensionAction(action: ExtensionAction) {
     { input: { id: action.id, patch } },
     120_000,
   );
+  db()
+    .prepare(
+      "UPDATE tracked_media SET source_match_at=NULL WHERE type='MANGA' AND json_array_length(sources_json)=0",
+    )
+    .run();
+  wakeWorker();
 }
 export async function configureRepos(repos: string[]) {
   await graphql(
@@ -442,6 +457,7 @@ export async function chaptersFor(
   return {
     chapters,
     inKavita,
+    ownedVolumes: owner ? ownedStock(owner).volumes : [],
     errors: settled.flatMap((r, i) =>
       r.status === 'rejected'
         ? [{ mangaId: selections[i].suwayomiMangaId, code: errorCode(r.reason) }]

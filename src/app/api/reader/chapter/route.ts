@@ -8,10 +8,14 @@ export const GET = route(async (r) => {
   const params = Object.fromEntries(new URL(r.url).searchParams);
   if ('local' in params) {
     const p = z
-      .object({ local: z.coerce.number().finite().nonnegative(), media: mediaId })
+      .object({
+        local: z.coerce.number().finite().nonnegative(),
+        media: mediaId,
+        unit: z.enum(['chapter', 'volume']).optional(),
+      })
       .strict()
       .parse(params);
-    return json(await localReaderChapter(p.local, p.media));
+    return json(await localReaderChapter(p.local, p.media, p.unit));
   }
   const p = z
     .object({

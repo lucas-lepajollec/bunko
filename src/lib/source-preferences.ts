@@ -1,8 +1,10 @@
+import { wakeWorker } from './worker-events';
 import type { SourceHealth, SourcePreferences } from '@/types/shared';
 import { db } from './db';
 import { getSettings } from './settings';
 import { sourcePreferences } from './validation';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { sourceLanguage } from './source-language';
 const runtime = globalThis as typeof globalThis & {
   __bunkoSourceLanguageContext?: AsyncLocalStorage<string>;
 };
@@ -11,14 +13,18 @@ const sourceLanguageContext = (runtime.__bunkoSourceLanguageContext ??=
 export function withSourceLanguage<T>(language: string, run: () => T): T {
   return sourceLanguageContext.run(language, run);
 }
+export function preferredSourceLanguage() {
+  return sourceLanguage(sourceLanguageContext.getStore());
+}
+export function orderedSourceLanguages(languages: string[]) {
+  const preferred = preferredSourceLanguage();
+  return preferred && languages.includes(preferred)
+    ? [preferred, ...languages.filter((lang) => lang !== preferred)]
+    : languages;
+}
 /** Match the interface's supported browser-language fallback; English is always available. */
 export function defaultSourceLanguages(acceptLanguage = ''): string[] {
-  const language =
-    acceptLanguage
-      .split(',')
-      .filter((tag) => !/;\s*q=0(?:\.0*)?\s*$/.test(tag))
-      .map((tag) => tag.trim().split(/[;-]/)[0].toLowerCase())
-      .find((tag) => ['en', 'fr', 'es', 'de', 'it'].includes(tag)) ?? 'en';
+  const language = sourceLanguage(acceptLanguage) ?? 'en';
   return [...new Set([language, 'en'])];
 }
 export function getSourcePreferences(
@@ -35,11 +41,25 @@ export function getSourcePreferences(
 }
 export function setSourcePreferences(value: SourcePreferences): SourcePreferences {
   const parsed = sourcePreferences.parse(value);
+  const previous = db()
+    .prepare("SELECT value FROM settings WHERE key='sourcePreferences'")
+    .get() as { value: string } | undefined;
+  const languagesChanged =
+    previous &&
+    JSON.stringify(JSON.parse(previous.value).languages) !== JSON.stringify(parsed.languages);
   db()
     .prepare(
       "INSERT INTO settings(key,value) VALUES('sourcePreferences',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
     )
     .run(JSON.stringify(parsed));
+  if (languagesChanged) {
+    db()
+      .prepare(
+        "UPDATE tracked_media SET source_match_at=NULL WHERE type='MANGA' AND json_array_length(sources_json)=0",
+      )
+      .run();
+    wakeWorker();
+  }
   return parsed;
 }
 export function sourceHealth(id: string): SourceHealth {

@@ -13,6 +13,7 @@ import type {
 } from '@/types/shared';
 import { libraryKeys, mediaHref, send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
+import { rankSourceCandidates } from '@/lib/client/source-ranking';
 import { useRelativeTime } from './time';
 import { CatalogPicker, KavitaPicker } from './relink';
 import { Cover, Dot, Segmented, Skeleton, Spinner, cx, errorText, smallButton } from './ui';
@@ -80,7 +81,12 @@ export function MatchesSummary({
       key: 'kavita',
       label: 'Kavita',
       value: media.kavita
-        ? t('match.kavitaShort', { library: media.kavita.libraryName, n: n(media.kavita.chapters) })
+        ? entry?.ownedAsVolumes
+          ? `${media.kavita.libraryName} · ${t('unit.volume')}`
+          : t('match.kavitaShort', {
+              library: media.kavita.libraryName,
+              n: n(media.kavita.chapters),
+            })
         : t('match.kavitaNone'),
       tone: media.kavita ? (entry?.kavitaCover?.state === 'failed' ? 'warn' : 'ok') : 'idle',
     },
@@ -452,7 +458,7 @@ function KavitaTab({
         title={media.kavita ? entry.title : undefined}
         detail={
           media.kavita
-            ? `${media.kavita.libraryName} · ${t('kavita.chapterCount', { n: n(media.kavita.chapters) })}`
+            ? `${media.kavita.libraryName} · ${entry.ownedAsVolumes ? t('unit.volume') : t('kavita.chapterCount', { n: n(media.kavita.chapters) })}`
             : undefined
         }
         empty={t('match.kavitaNone')}
@@ -529,7 +535,7 @@ function SourcesTab({
   onSources: (next: ChapterSelection[]) => void;
 }) {
   const [query, setQuery] = useState(entry?.title ?? '');
-  const { t, n } = useI18n();
+  const { t, n, language } = useI18n();
   const relative = useRelativeTime();
   const linked = new Set(sources.map((s) => `${s.sourceId}:${s.suwayomiMangaId}`));
   const status = (s: ChapterSelection) =>
@@ -543,7 +549,7 @@ function SourcesTab({
         .filter((c) => !linked.has(`${c.sourceId}:${c.suwayomiMangaId}`))
         .map((c) => ({ ...c, sourceName: l.source.name })),
     )
-    .sort((a, b) => b.score - a.score || (b.chapterCount ?? 0) - (a.chapterCount ?? 0));
+    .sort((a, b) => rankSourceCandidates(a, b, language));
   const move = (i: number, d: -1 | 1) => {
     const next = [...sources];
     [next[i], next[i + d]] = [next[i + d], next[i]];

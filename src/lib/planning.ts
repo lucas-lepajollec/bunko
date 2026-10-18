@@ -1,7 +1,13 @@
 import { tenantId } from './tenant-context';
 import { z } from 'zod';
 import type { ChapterRelease, PlanningItem, PlanningWeek } from '@/types/shared';
-import { feedQuery, filterReleases, releaseStore, refreshReleases } from './releases';
+import {
+  feedQuery,
+  filterReleases,
+  releaseStore,
+  refreshReleases,
+  releaseLoadingState,
+} from './releases';
 export function localDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
@@ -136,9 +142,9 @@ export function planning(q: z.infer<typeof planningQuery>): PlanningWeek {
     snapshots.set(userId, (snapshot = { items, day, values: new Map() }));
   const key = JSON.stringify(q);
   const old = snapshot.values.get(key);
-  if (old) return old;
+  if (old) return { ...old, ...releaseLoadingState() };
   const result = buildPlanning(filterReleases(items, q), q.week);
   if (snapshot.values.size >= 16) snapshot.values.clear();
   snapshot.values.set(key, result);
-  return result;
+  return { ...result, ...releaseLoadingState() };
 }

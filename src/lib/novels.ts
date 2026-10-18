@@ -1,6 +1,6 @@
 import type { DiscoverPage, DiscoverQuery } from '@/types/shared';
 import { mangaUpdates } from './mangaupdates';
-import { cached, storedMetadata, saveMetadata } from './metadata-cache';
+import { cached, storedMetadata, saveMetadata, discoveryStatus } from './metadata-cache';
 import { fromMangaUpdates, updatesNovelFormat, type UpdatesRecord } from './media';
 import { dataDir } from './db';
 import { tenantSignal } from './tenant-lifecycle';
@@ -73,7 +73,8 @@ export async function discoverWebNovels(q: DiscoverQuery): Promise<DiscoverPage>
     ...(q.year ? { year: String(q.year) } : {}),
     ...(q.status === 'FINISHED' ? { filter: 'completed' } : {}),
   };
-  const data = await cached(`discover:mu-novels:${JSON.stringify(body)}`, 30 * 60_000, () =>
+  const cacheKey = `discover:mu-novels:${JSON.stringify(body)}`;
+  const data = await cached(cacheKey, 30 * 60_000, () =>
     mangaUpdates<{ results: { record: UpdatesRecord }[]; total_hits: number }>('/series/search', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -103,5 +104,12 @@ export async function discoverWebNovels(q: DiscoverQuery): Promise<DiscoverPage>
       'Web novel classification is temporarily unavailable',
       502,
     );
-  return { items, page, hasNextPage: page * perPage < data.total_hits, pending };
+  const state = discoveryStatus(cacheKey, 'mangaupdates');
+  return {
+    ...state,
+    items,
+    page,
+    hasNextPage: page * perPage < data.total_hits,
+    pending: pending || state.pending,
+  };
 }

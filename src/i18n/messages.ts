@@ -31,6 +31,26 @@ export function interpolate(template: string, variables?: Record<string, string 
 type Dictionary = Record<string, string>;
 
 const en: Dictionary = {
+  'unit.correctVolumes': 'These are volumes',
+  'unit.undoVolumes': 'Undo correction',
+  'volumes.displayed': '{shown} of {total} volumes displayed',
+  'volumes.none': 'No volumes identified',
+  'volumes.noneMissing': 'No missing volumes',
+
+  'library.inventory': '{series} series · {chapters} owned chapters · {volumes} owned volumes',
+  'loading.more': 'More results are still loading. This list is not complete yet.',
+  'loading.partial': 'Some sources could not be checked. The results may be incomplete.',
+  'chapters.displayed': '{shown} of {total} chapters displayed',
+  'unit.inventory': 'My owned files',
+  'unit.detect': 'Automatic detection',
+  'unit.declareVolumes': 'These files are volumes',
+  'unit.inventoryHelp':
+    'Applies to the files you currently own. Future chapter downloads keep their detected unit. Choose automatic detection to undo this choice.',
+  'unit.ownedVolumes': 'Owned volumes',
+  'title.readVolume': 'Read volume {n}',
+  'reader.nextVolume': 'Next volume',
+  'reader.lastVolume': 'Last volume',
+
   'common.inLibrary': 'In library',
   'common.noCover': 'no cover',
   'common.quote': '“{text}”',
@@ -485,7 +505,7 @@ const en: Dictionary = {
   'extsearch.hint':
     'Finds what catalogs miss: exclusive series, alternative titles, fan translations.',
   'kavita.badge': 'Kavita · {n}',
-  'kavita.read': 'Read in Kavita · {n} ch.',
+  'kavita.read': 'Read in Kavita',
   'chapters.inKavita': 'in Kavita',
   'common.inKavita': 'in Kavita',
   'settings.section.kavita': 'Kavita libraries',
@@ -880,6 +900,27 @@ const en: Dictionary = {
 };
 
 const fr: Dictionary = {
+  'unit.correctVolumes': 'Ce sont des tomes',
+  'unit.undoVolumes': 'Annuler la correction',
+  'volumes.displayed': '{shown} tomes affichés sur {total}',
+  'volumes.none': 'Aucun tome identifié',
+  'volumes.noneMissing': 'Aucun tome manquant',
+
+  'library.inventory': '{series} séries · {chapters} chapitres possédés · {volumes} tomes possédés',
+  'loading.more': 'Les résultats continuent de se charger. Cette liste n’est pas encore complète.',
+  'loading.partial':
+    'Certaines sources n’ont pas pu être vérifiées. Les résultats peuvent être incomplets.',
+  'chapters.displayed': '{shown} chapitres affichés sur {total}',
+  'unit.inventory': 'Mes fichiers possédés',
+  'unit.detect': 'Détection automatique',
+  'unit.declareVolumes': 'Ces fichiers sont des tomes',
+  'unit.inventoryHelp':
+    'S’applique aux fichiers que tu possèdes actuellement. Les futurs téléchargements de chapitres gardent leur unité détectée. Choisis la détection automatique pour annuler ce choix.',
+  'unit.ownedVolumes': 'Tomes possédés',
+  'title.readVolume': 'Lire le tome {n}',
+  'reader.nextVolume': 'Tome suivant',
+  'reader.lastVolume': 'Dernier tome',
+
   'common.inLibrary': 'Dans la bibliothèque',
   'common.noCover': 'sans couverture',
   'common.quote': '« {text} »',
@@ -1338,7 +1379,7 @@ const fr: Dictionary = {
   'extsearch.hint':
     'Trouve ce que les catalogues ignorent : séries exclusives, autres titres, traductions de teams.',
   'kavita.badge': 'Kavita · {n}',
-  'kavita.read': 'Lire dans Kavita · {n} ch.',
+  'kavita.read': 'Lire dans Kavita',
   'chapters.inKavita': 'dans Kavita',
   'common.inKavita': 'dans Kavita',
   'settings.section.kavita': 'Bibliothèques Kavita',
@@ -1740,6 +1781,28 @@ const fr: Dictionary = {
 };
 
 const es: Dictionary = {
+  'unit.correctVolumes': 'Son tomos',
+  'unit.undoVolumes': 'Deshacer corrección',
+  'volumes.displayed': '{shown} de {total} tomos mostrados',
+  'volumes.none': 'Ningún tomo identificado',
+  'volumes.noneMissing': 'No faltan tomos',
+
+  'library.inventory':
+    '{series} series · {chapters} capítulos disponibles · {volumes} tomos disponibles',
+  'loading.more': 'Todavía se están cargando resultados. Esta lista aún no está completa.',
+  'loading.partial':
+    'No se pudieron consultar algunas fuentes. Los resultados pueden estar incompletos.',
+  'chapters.displayed': '{shown} de {total} capítulos mostrados',
+  'unit.inventory': 'Mis archivos disponibles',
+  'unit.detect': 'Detección automática',
+  'unit.declareVolumes': 'Estos archivos son tomos',
+  'unit.inventoryHelp':
+    'Se aplica a los archivos que tienes actualmente. Las futuras descargas de capítulos mantienen su unidad detectada. Elige la detección automática para deshacer esta elección.',
+  'unit.ownedVolumes': 'Tomos disponibles',
+  'title.readVolume': 'Leer el tomo {n}',
+  'reader.nextVolume': 'Tomo siguiente',
+  'reader.lastVolume': 'Último tomo',
+
   'common.inLibrary': 'En la biblioteca',
   'common.noCover': 'sin portada',
   'common.quote': '«{text}»',
@@ -2193,7 +2256,7 @@ const es: Dictionary = {
   'extsearch.hint':
     'Encuentra lo que los catálogos no tienen: series exclusivas, otros títulos, traducciones de fans.',
   'kavita.badge': 'Kavita · {n}',
-  'kavita.read': 'Leer en Kavita · {n} cap.',
+  'kavita.read': 'Leer en Kavita',
   'chapters.inKavita': 'en Kavita',
   'common.inKavita': 'en Kavita',
   'settings.section.kavita': 'Bibliotecas de Kavita',
@@ -2591,6 +2654,28 @@ const es: Dictionary = {
 };
 
 const de: Dictionary = {
+  'unit.correctVolumes': 'Das sind Bände',
+  'unit.undoVolumes': 'Korrektur rückgängig machen',
+  'volumes.displayed': '{shown} von {total} Bänden angezeigt',
+  'volumes.none': 'Keine Bände erkannt',
+  'volumes.noneMissing': 'Keine fehlenden Bände',
+
+  'library.inventory':
+    '{series} Serien · {chapters} vorhandene Kapitel · {volumes} vorhandene Bände',
+  'loading.more': 'Weitere Ergebnisse werden noch geladen. Diese Liste ist noch nicht vollständig.',
+  'loading.partial':
+    'Einige Quellen konnten nicht geprüft werden. Die Ergebnisse sind möglicherweise unvollständig.',
+  'chapters.displayed': '{shown} von {total} Kapiteln angezeigt',
+  'unit.inventory': 'Meine vorhandenen Dateien',
+  'unit.detect': 'Automatische Erkennung',
+  'unit.declareVolumes': 'Diese Dateien sind Bände',
+  'unit.inventoryHelp':
+    'Gilt für die derzeit vorhandenen Dateien. Künftige Kapitel-Downloads behalten ihre erkannte Einheit. Wähle die automatische Erkennung, um diese Auswahl rückgängig zu machen.',
+  'unit.ownedVolumes': 'Vorhandene Bände',
+  'title.readVolume': 'Band {n} lesen',
+  'reader.nextVolume': 'Nächster Band',
+  'reader.lastVolume': 'Letzter Band',
+
   'common.inLibrary': 'In der Bibliothek',
   'common.noCover': 'kein Cover',
   'common.quote': '„{text}“',
@@ -3048,7 +3133,7 @@ const de: Dictionary = {
   'extsearch.hint':
     'Findet, was Kataloge nicht kennen: exklusive Serien, andere Titel, Fan-Übersetzungen.',
   'kavita.badge': 'Kavita · {n}',
-  'kavita.read': 'In Kavita lesen · {n} Kap.',
+  'kavita.read': 'In Kavita lesen',
   'chapters.inKavita': 'in Kavita',
   'common.inKavita': 'in Kavita',
   'settings.section.kavita': 'Kavita-Bibliotheken',
@@ -3450,6 +3535,29 @@ const de: Dictionary = {
 };
 
 const it: Dictionary = {
+  'unit.correctVolumes': 'Sono volumi',
+  'unit.undoVolumes': 'Annulla correzione',
+  'volumes.displayed': '{shown} volumi visualizzati su {total}',
+  'volumes.none': 'Nessun volume identificato',
+  'volumes.noneMissing': 'Nessun volume mancante',
+
+  'library.inventory':
+    '{series} serie · {chapters} capitoli posseduti · {volumes} volumi posseduti',
+  'loading.more':
+    'Altri risultati sono ancora in caricamento. Questo elenco non è ancora completo.',
+  'loading.partial':
+    'Non è stato possibile verificare alcune fonti. I risultati potrebbero essere incompleti.',
+  'chapters.displayed': '{shown} capitoli visualizzati su {total}',
+  'unit.inventory': 'I miei file posseduti',
+  'unit.detect': 'Rilevamento automatico',
+  'unit.declareVolumes': 'Questi file sono volumi',
+  'unit.inventoryHelp':
+    'Si applica ai file che possiedi attualmente. I futuri download di capitoli mantengono la loro unità rilevata. Scegli il rilevamento automatico per annullare questa scelta.',
+  'unit.ownedVolumes': 'Volumi posseduti',
+  'title.readVolume': 'Leggi il volume {n}',
+  'reader.nextVolume': 'Volume successivo',
+  'reader.lastVolume': 'Ultimo volume',
+
   'common.inLibrary': 'In libreria',
   'common.noCover': 'senza copertina',
   'common.quote': '«{text}»',
@@ -3905,7 +4013,7 @@ const it: Dictionary = {
   'extsearch.hint':
     'Trova ciò che i cataloghi ignorano: serie esclusive, altri titoli, traduzioni dei fan.',
   'kavita.badge': 'Kavita · {n}',
-  'kavita.read': 'Leggi in Kavita · {n} cap.',
+  'kavita.read': 'Leggi in Kavita',
   'chapters.inKavita': 'in Kavita',
   'common.inKavita': 'in Kavita',
   'settings.section.kavita': 'Librerie Kavita',

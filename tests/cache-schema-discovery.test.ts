@@ -133,6 +133,7 @@ it.each(['http', 'timeout', 'invalid-json', 'old-shape', 'malformed-doc'])(
       items: [],
       page: 1,
       hasNextPage: false,
+      pending: false,
       warnings: [{ provider: 'openlibrary', code: 'METADATA_UNAVAILABLE' }],
     });
     expect(db().prepare('SELECT * FROM metadata_cache').all()).toEqual([]);

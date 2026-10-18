@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { mediaHref, useProgressiveSearch } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Cover, Skeleton, cx, useMediaMeta } from './ui';
+import { LoadNotice } from './load-notice';
 
 export const OPEN_SEARCH_EVENT = 'bunko:open-search';
 
@@ -114,6 +115,11 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
       <span className="text-muted px-4 pt-3 pb-1 text-[11px] tracking-[0.16em] uppercase">
         {t('search.catalog')}
       </span>
+      <LoadNotice
+        pending={results.isLoading || results.refining || q !== text.trim()}
+        partial={results.partial}
+        className="px-4 py-2"
+      />
       {results.isLoading && !results.data
         ? Array.from({ length: 3 }, (_, i) => (
             <Skeleton key={i} className="mx-4 my-2 h-14 rounded-lg" />
@@ -145,7 +151,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
               </span>
             </button>
           ))}
-      {results.data && items.length === 0 && (
+      {results.data && !results.refining && !results.partial && items.length === 0 && (
         <p className="text-muted px-4 py-3 font-serif text-lg italic">{t('quick.noCatalog')}</p>
       )}
       <div className="border-line mt-2 flex flex-col border-t py-1.5">

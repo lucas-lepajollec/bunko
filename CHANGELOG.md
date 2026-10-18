@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Persist reliable automatic source matches for followed works directly from title discovery, refresh library/chapter state after completed scans, and request release updates when sources change. Retry transient matching failures after five minutes; language or extension changes requeue source-less works. Manual choices and dismissals remain authoritative.
+
+- Show when search, title sheets and release feeds are still being completed, refresh pending data automatically and report partial source failures. Show the displayed/total chapter count and avoid premature empty or “complete series” claims.
+- Correct misclassified owned files from a small button beside the existing chapter/tome switch, in tome view. Reuse chapter-style rows and reader actions for owned tomes, without additional counting menus or stock pills. Keep future chapter downloads separate, provide owned-volume reading with the correct progress unit, and make the declaration reversible. Library totals now distinguish chapters and tomes.
+
+- Favor sources matching Bunko's interface language in live search and title source suggestions. Manual interface choices now reach fetch/SSE requests; matching title relevance still comes first, other selected languages remain available, and saved filters/links are preserved.
+
+- Show BD/comic covers in catalog and search cards by resolving Metron issue artwork on demand, including previously cached series. Keep provider pacing and reuse the issue cache.
+- Search Metron alternative names as well as primary names, and prevent a previous query's full results from masking the next query's fast results.
+
 - Preserve reader completion when moving immediately to the next chapter, and flush intermediate positions on navigation or exit.
 - Keep distinct catalog works with conflicting provider identities, creators or publication years instead of merging homonyms by title.
 - Discover all formats across AniList, Open Library, MangaUpdates and configured Hardcover/Metron catalogs. Results arrive progressively, retain provider pagination and report partial outages.

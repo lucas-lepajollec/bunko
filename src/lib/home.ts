@@ -1,10 +1,12 @@
 import { normalizeHome } from './home-shape';
 import { heroArtwork } from './hero-artwork';
 import type { ChapterRelease, HomeFeed } from '@/types/shared';
-import { releaseStore, refreshReleases, mediaKind } from './releases';
+import { releaseStore, refreshReleases, mediaKind, releaseLoadingState } from './releases';
 import { discoverAniList, withTracking } from './catalog';
-import { cached, storedMetadata } from './metadata-cache';
+import { cached, storedMetadata, metadataStatus } from './metadata-cache';
 import { mediaVisibility, includeProviderAdults } from './adult';
+import { tenantState } from './tenant-context';
+const rankingFailures = tenantState(() => new Set<string>());
 
 export function composeHome(releases: ChapterRelease[], top: HomeFeed['top']): HomeFeed {
   const visibleMedia = mediaVisibility();
@@ -49,10 +51,26 @@ export async function homeFeed(): Promise<HomeFeed> {
   void cached<HomeFeed['top']>(
     key,
     5 * 60_000,
-    async () =>
-      (await discoverAniList({ sort: 'trending', kind: 'all', perPage: 20 }, undefined, true))
-        .items,
-    { accept: (items) => Array.isArray(items) && items.length > 0 },
+    async () => {
+      const items = (
+        await discoverAniList({ sort: 'trending', kind: 'all', perPage: 20 }, undefined, true, true)
+      ).items;
+      if (items.length) rankingFailures().delete(key);
+      else rankingFailures().add(key);
+      return items;
+    },
+    {
+      accept: (items) => Array.isArray(items) && items.length > 0,
+      onError: () => {
+        rankingFailures().add(key);
+      },
+    },
   ).catch(() => {});
-  return normalizeHome(composeHome(heroArtwork(releaseStore()), top));
+  const releases = releaseLoadingState(),
+    ranking = metadataStatus(key);
+  return {
+    ...normalizeHome(composeHome(heroArtwork(releaseStore()), top)),
+    pending: releases.pending || ranking.pending,
+    partial: releases.partial || ranking.partial || rankingFailures().has(key),
+  };
 }

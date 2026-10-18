@@ -16,6 +16,19 @@ const parsedState = tenantState(() => ({
   parsedBytes: 0,
 }));
 const loads = (scope.__bunkoMetadataLoads ??= new Map());
+/** Report background refreshes instead of presenting a stale snapshot as a final answer. */
+export function metadataStatus(key: string) {
+  const pending = loads.has(`${dataDir()}:${key}`);
+  const hit = storedMetadata<unknown>(key);
+  return { pending, partial: !pending && Boolean(hit && hit.attempted > hit.at) };
+}
+export function discoveryStatus(key: string, provider: string) {
+  const state = metadataStatus(key);
+  return {
+    pending: state.pending,
+    ...(state.partial ? { warnings: [{ provider, code: 'METADATA_UNAVAILABLE' as const }] } : {}),
+  };
+}
 export function storedMetadata<T>(key: string): { value: T; at: number; attempted: number } | null {
   const state = parsedState();
   const parsed = state.parsed;

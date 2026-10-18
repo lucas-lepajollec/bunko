@@ -1,39 +1,14 @@
 'use client';
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { BCP47, interpolate, isUiLanguage, messages, type UiLanguage } from './messages';
-
-const STORAGE_KEY = 'bunko.language';
-const LEGACY_STORAGE_KEY = 'kaviseerr.language';
-const listeners = new Set<() => void>();
-let chosen: UiLanguage | null = null;
-
-function detect(): UiLanguage {
-  if (chosen) return chosen;
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (isUiLanguage(stored)) return (chosen = stored);
-  } catch {
-    /* Storage can be unavailable (private mode); fall back to the browser language. */
-  }
-  for (const tag of navigator.languages ?? [navigator.language]) {
-    const base = tag?.slice(0, 2).toLowerCase();
-    if (isUiLanguage(base)) return (chosen = base);
-  }
-  return (chosen = 'en');
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+import { BCP47, interpolate, messages, type UiLanguage } from './messages';
+import { getUiLanguage, setUiLanguage, subscribeLanguage } from './language';
 
 type Translate = (key: string, variables?: Record<string, string | number>) => string;
 interface I18nValue {
@@ -47,16 +22,8 @@ interface I18nValue {
 const I18nContext = createContext<I18nValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const language = useSyncExternalStore(subscribe, detect, () => 'en' as UiLanguage);
-  const setLanguage = useCallback((next: UiLanguage) => {
-    chosen = next;
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      /* The choice still applies for this session. */
-    }
-    listeners.forEach((l) => l());
-  }, []);
+  const language = useSyncExternalStore(subscribeLanguage, getUiLanguage, () => 'en' as UiLanguage);
+  const setLanguage = setUiLanguage;
   useEffect(() => {
     document.documentElement.lang = language;
   }, [language]);

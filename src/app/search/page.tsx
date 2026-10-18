@@ -4,7 +4,9 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { SearchResponse, Source, SourceResult } from '@/types/shared';
 import { openStream, useApi } from '@/lib/client/api';
+import { rankSourceLanes } from '@/lib/client/source-ranking';
 import { useI18n } from '@/i18n/I18nProvider';
+import { LoadNotice } from '@/components/load-notice';
 import { Page, SearchIcon } from '@/components/shell';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import { Cover, Dot, ErrorNote, PageTitle, Skeleton } from '@/components/ui';
@@ -33,7 +35,7 @@ const normalize = (s: string) =>
     .replace(/[^\p{L}\p{N}]/gu, '');
 
 function Search() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -84,7 +86,7 @@ function Search() {
       },
       () => setStreamFailed(true),
     );
-  }, [live]);
+  }, [live, language]);
   const known = useMemo(() => {
     const keys = new Set<string>();
     for (const m of catalog.data?.results ?? [])
@@ -142,25 +144,27 @@ function Search() {
         <p className="text-muted font-serif text-2xl italic">{t('extsearch.hint')}</p>
       )}
       {streamFailed && <ErrorNote error={null} />}
+      <LoadNotice
+        pending={
+          Boolean(live) &&
+          !streamFailed &&
+          (lanes?.length === 0 || Boolean(lanes?.some((l) => l.state === 'loading')))
+        }
+        partial={streamFailed || lanes?.some((l) => l.state === 'error')}
+      />
       {live && ready && lanes?.length === 0 && !streamFailed && (
         <Skeleton className="h-24 rounded-2xl" />
       )}
       <section className="flex flex-col">
         {[...(lanes ?? [])]
           // Sources with results first, then still searching, then empty, then failed.
-          .sort((a, b) => laneRank(a) - laneRank(b))
+          .sort((a, b) => rankSourceLanes(a, b, language))
           .map((lane) => (
             <SourceLane key={lane.source.id} lane={lane} known={known} />
           ))}
       </section>
     </Page>
   );
-}
-
-function laneRank(lane: Lane) {
-  if (lane.state === 'error') return 3;
-  if (lane.state === 'loading') return 1;
-  return lane.result?.results.length ? 0 : 2;
 }
 
 function SourceLane({ lane, known }: { lane: Lane; known: Set<string> }) {
@@ -172,6 +176,9 @@ function SourceLane({ lane, known }: { lane: Lane; known: Set<string> }) {
         <span className="flex items-center gap-2 text-[15px] font-semibold">
           <Dot tone={lane.state === 'error' ? 'bad' : lane.state === 'loading' ? 'idle' : 'ok'} />
           {lane.source.name}
+          <span className="text-muted text-[11px] font-normal">
+            {lane.source.lang.toUpperCase()}
+          </span>
         </span>
         <span className="text-muted text-xs">
           {lane.state === 'loading'

@@ -29,7 +29,7 @@ import {
 } from './media';
 import { indexedSeries } from './kavita-index';
 import { kavitaMedia } from './kavita-track';
-import { cached, storedMetadata } from './metadata-cache';
+import { cached, storedMetadata, metadataStatus } from './metadata-cache';
 export { emptyMedia, normalizeTitle };
 function identities(m: UnifiedMedia) {
   return [m.title, ...m.altTitles].map(normalizeTitle).filter(Boolean);
@@ -279,6 +279,11 @@ export async function search(
       ],
     });
   const timings: number[] = [];
+  const cacheKeys = jobs.map((j) =>
+    j.provider === 'local' && !j.cacheProvider
+      ? null
+      : `search:${j.cacheProvider ?? j.provider}:${key}`,
+  );
   const settled = await Promise.allSettled(
     jobs.map(async (j, i) => {
       const at = Date.now();
@@ -306,11 +311,16 @@ export async function search(
     .map(({ m }) => m);
   const value: SearchResponse = {
     results,
+    pending: !fast && cacheKeys.some((key) => key && metadataStatus(key).pending),
     providers: [...new Set(jobs.map((job) => job.provider))].map((provider) => {
       const indices = jobs.flatMap((job, i) => (job.provider === provider ? [i] : []));
       return {
         provider,
-        status: indices.some((i) => settled[i].status === 'rejected')
+        status: indices.some(
+          (i) =>
+            settled[i].status === 'rejected' ||
+            (cacheKeys[i] && metadataStatus(cacheKeys[i]!).partial),
+        )
           ? ('error' as const)
           : ('ok' as const),
         durationMs: Math.max(...indices.map((i) => timings[i])),

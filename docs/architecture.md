@@ -1,5 +1,29 @@
 # Architecture
 
+The active interface language is shared by React and browser request transport. Fetch sends
+that choice through `Accept-Language`; SSE adds the supported `uiLanguage` hint because
+EventSource cannot set headers. Foreground source searches schedule the interface language
+first within the user's allowed source languages. Result lanes keep useful hits before
+pending/empty/error lanes, then favor that language with stable source-priority ties. Title
+source suggestions rank title relevance, interface language, then chapter count. Interface
+changes restart active search/matching streams. Saved language filters, favourite IDs, manual
+source links and background matching preferences remain unchanged; an excluded language is
+never silently enabled.
+
+Catalog search without a `type` restriction fans out to AniList (including novels), MangaDex,
+MangaUpdates, Open Library, configured Metron/Hardcover, tracked works, the local Suwayomi FTS
+index and the Kavita index. Provider responses are bounded relevance pages (20–100 entries),
+not exhaustive exports of all upstream matches. Google Books, BnF, Rakuten and Royal Road RSS
+are publication-feed/detail integrations rather than additional global-search engines. Live
+extension search stays separate. Fast and full browser responses belong to their exact query;
+a previous full response must never mask the next query's fast answer.
+
+Metron series cards resolve artwork through an authenticated, on-demand issue-cover redirect.
+The issue cache remains private and credential-scoped, with provider-wide pacing and at most
+two queued cover lookups so browsing does not monopolize the provider queue. Covers can arrive
+progressively on a cold cache. Null covers in older cached/tracked series are repaired on output;
+retaining a cover for imports resolves the same route server-side without forwarding auth to the CDN.
+
 Bunko is a long-running Node 22 Next.js App Router service. All route handlers run in the Node runtime, dynamically, with private JSON responses marked no-store and a persistent private image cache. The root page renders a French React interface with a server layout, locally bundled Geist font, Tailwind CSS and Radix dialogs/tabs. `src/lib/client/api.ts` is the browser adapter over the shared contract; server integrations never enter the client bundle. Authentication gates the views, signed HttpOnly cookies authenticate SSE, and logout/expiry resets interface state.
 
 ## Data and execution
@@ -114,7 +138,7 @@ Tracked cover synchronization checks oldest-attempt entries first so its 60-seco
 
 ## Library activity and cover fallbacks
 
-`source-match-state.ts` derives the matching queue from SQLite and ties the persisted current entry to its worker lease owner. `TrackedMedia.sourceMatch` exposes linked/queued/searching/not-found. `/api/library/activity` reads only local state: waiting queue size/current title, release-refresh done/total counters, running state, and last/next scheduled timestamps. Lease expiry or replacement hides stale current work; the route is authenticated and included in container smoke coverage.
+`source-match-state.ts` derives the matching queue from SQLite and ties the persisted current entry to its worker lease owner. `TrackedMedia.sourceMatch` exposes linked/queued/searching/not-found. Foreground discovery for source-less followed works commits confident links through the same guarded transaction as the worker and emits `linked`; custom queries stay suggestions and manual edits/dismissals win. Source changes queue a durable refresh, failed matching retries in five minutes, and language/extension changes requeue source-less works. `/api/library/activity` reads only local state: waiting queue size/current title, release-refresh done/total counters, running state, and last/next scheduled timestamps. A tenant library write revision and matching/refresh progress drive shared client revalidation without dropping final updates or missing short scans between polls. Lease expiry or replacement hides stale current work; the route is authenticated and included in container smoke coverage.
 
 Before storage, automatic covers expose the remaining deduplicated catalog → linked-source → Kavita URLs as `coverFallbacks`; explicit choices have no fallbacks. A source cover PATCH can reference an unlinked Suwayomi manga: a gated detail lookup validates existence and exact string source identity before storing the canonical Suwayomi image proxy URL. Wrong/unknown pairs return NOT_FOUND, and PATCH returns the updated tracked entry. Kavita-origin bytes bypass upload back to Kavita.
 
@@ -209,6 +233,10 @@ Every persisted metadata/response entry written through `metadata-cache.ts` has 
 Open Library discovery fails softly: HTTP errors, timeouts and malformed JSON/search shapes return an empty HTTP 200 page with `warnings:[{provider:"openlibrary",code:"METADATA_UNAVAILABLE"}]`. Failures are never cached as successful empty responses. A stale good provider page returns immediately and survives failed revalidation; subsequent reads expose the warning until a successful refresh clears it. Warning state and all payloads remain tenant-local. Search/detail keep their existing provider-error handling. `tests/cache-schema-discovery.test.ts` covers old persisted home shapes through cache reads and the authenticated home route, cache schema compatibility, provider failures, stale recovery and isolation. Media-root coverage includes API claims/nesting/rollback, named/numeric/legacy migration and the renamed-folder regression, plus independent-worker SQLite contention in `tests/media-root-concurrency.test.ts`.
 
 ## Work units and additional public release providers
+
+Schema v15 adds a nullable per-work `volume_override_json`; migration preserves existing files, imports and progress. `owned-stock.ts` projects inventory independently of chapter/tome presentation. An explicit user declaration captures the current Kavita connection/series numbers and namespace-qualified import identities, retaining prior chapter progress for reversal. It never implies that later imports or partial volume groupings are whole tomes. Chapter and volume reader identities occupy separate local namespaces; server-verified volume completions update `volume_read`. Kavita refresh partitions declared numbered files from genuine chapters before updating the two counters. The sheet retains the existing chapter/tome switch. Tome view exposes a small correction/undo button beside it, with owned tomes in the same row style and reader action as chapters, even without linked source chapters. Unknown volume metadata never fabricates tomes.
+
+Background metadata cache loads now report pending versus failed refreshes. Search, followed sheets, home rankings, releases, planning and discovery propagate this state; the client retains usable data, announces incomplete results, and polls pending payloads until completion. Library on-demand progress refresh and source scans remain visibly active. A failed source cannot produce a “series complete” claim. Chapter tables state how many of the filtered chapters are currently rendered, with explicit expansion.
 
 Schema v12 adds tenant-local `tracked_media.unit` (default chapter, constrained chapter/volume), a separate `volume_read`, and numeric volume provenance on import/observation ledgers. Existing rows, chapter progress and unit choices survive restart and metadata edits. Reliable retained archive descriptors backfill import volumes; the Kavita migration requests a full index refresh. Indexed snapshots retain distinct positive volume numbers and completed-volume progress, excluding unassigned/special sentinels. The library chooses chapter or volume sets before computing ownership, released, unread and new detections. Volume release counters include dated editions; source checks exclude owned-volume variants before observations and automatic batch selection. Update group numbers use the selected unit. Changing a Kavita key or explicit series clears separate reading progress.
 

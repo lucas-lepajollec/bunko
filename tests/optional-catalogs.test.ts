@@ -3,13 +3,15 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import fixture from './fixtures/optional-catalogs.json';
+import books from './fixtures/openlibrary.json';
 import type { SettingsPatch } from '@/types/shared';
 const dir = mkdtempSync(path.join(tmpdir(), 'bunko-catalog-keys-'));
 process.env.BUNKO_DATA_DIR = dir;
 process.env.BUNKO_WORKER = 'false';
 const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant();
-const { db } = await import('@/lib/db');
+const { db, track, indexCatalog } = await import('@/lib/db');
+const { emptyMedia } = await import('@/lib/media');
 const { accountsDb } = await import('@/lib/accounts-store');
 const { userContext } = await import('@/lib/user-context');
 const { inTenant } = await import('@/lib/tenant-context');
@@ -30,6 +32,7 @@ const {
   discoverComics,
   fetchMetronReleases,
   searchComics,
+  metronCover,
 } = await import('@/lib/metron');
 const { searchHardcover, hardcoverDetail, discoverHardcover, hardcoverMedia } =
   await import('@/lib/hardcover');
@@ -39,7 +42,10 @@ const { rakutenDate, rakutenEdition, rakutenMedia, fetchRakutenReleases } =
   await import('@/lib/rakuten');
 const { buildPlanning } = await import('@/lib/planning');
 const { composeHome } = await import('@/lib/home');
-const { discover, mediaDetail } = await import('@/lib/catalog');
+const { discover, mediaDetail, withTracking } = await import('@/lib/catalog');
+const coverRoute = await import('@/app/api/metron/cover/route');
+const { selectedCover } = await import('@/lib/kavita-cover');
+const { localImageUrl } = await import('@/lib/images');
 const { search } = await import('@/lib/search-engine');
 const settingsRoute = await import('@/app/api/settings/route');
 const testRoute = await import('@/app/api/settings/test-provider/route');
@@ -184,7 +190,7 @@ it('maps documented Metron series/detail/issue shapes, collection units and stor
     chapters: 10,
   });
   expect(await discoverComics({ kind: 'comic' })).toMatchObject({
-    items: [{ id: 'metron:15' }],
+    items: [{ id: 'metron:15', coverUrl: '/api/metron/cover?seriesId=15' }],
     hasNextPage: false,
   });
   expect(await searchComics('Asgardians')).toHaveLength(1);
@@ -221,6 +227,204 @@ it('maps documented Metron series/detail/issue shapes, collection units and stor
       .some((r) => r.kind === 'expected'),
   ).toBe(true);
 }, 30000);
+it('loads comic artwork on demand with authentication, durable reuse and warm-cache repair', async () => {
+  updateSettings(secretPatch);
+  const fetcher = metronFixture();
+  vi.stubGlobal('fetch', fetcher);
+  const found = await searchComics('Asgardians');
+  expect(found[0].coverUrl).toBe('/api/metron/cover?seriesId=15');
+  expect(new URL(String(fetcher.mock.calls[0][0])).searchParams.get('q')).toBe('Asgardians');
+  expect(fetcher).toHaveBeenCalledTimes(1); // No eager per-series lookup on search/discovery.
+  const request = (id: string, authenticated = true) =>
+    new Request(`http://bunko.invalid/api/metron/cover?seriesId=${id}`, {
+      headers: authenticated
+        ? { Authorization: `Bearer ${persistentSecret('access.token', 32).toString('hex')}` }
+        : {},
+    });
+  expect((await coverRoute.GET(request('15', false))).status).toBe(401);
+  expect((await coverRoute.GET(request('-1'))).status).toBe(400);
+  const responses = await Promise.all([
+    coverRoute.GET(request('15')),
+    coverRoute.GET(request('15')),
+  ]);
+  for (const response of responses) {
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe(fixture.metronIssue.image);
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    expect([...response.headers.values()].join(' ')).not.toContain(secretPatch.metronPassword);
+  }
+  expect(fetcher).toHaveBeenCalledTimes(2); // Both consumers share the same cached issue page.
+  const old = { ...emptyMedia('metron:15', 'Asgardians', 'MANGA'), format: 'COMIC' as const };
+  expect(withTracking([old])[0].coverUrl).toBe('/api/metron/cover?seriesId=15');
+  expect(await metronCover(15)).toBe(fixture.metronIssue.image);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+}, 15000);
+it('never redirects comic artwork to untrusted URLs or another series and isolates credential changes', async () => {
+  updateSettings({ metronApiToken: 'fixture-old-token' });
+  const fetcher = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const auth = (init?.headers as Record<string, string>).Authorization;
+    return Response.json(
+      page(
+        auth === 'Bearer fixture-old-token'
+          ? [fixture.metronIssue]
+          : [
+              { ...fixture.metronIssue, image: 'https://evil.invalid/cover.jpg' },
+              {
+                ...fixture.metronIssue,
+                image: 'https://static.metron.cloud@evil.invalid/cover.jpg',
+              },
+              { ...fixture.metronIssue, series: { id: 16 } },
+            ],
+      ),
+    );
+  });
+  vi.stubGlobal('fetch', fetcher);
+  expect(await metronCover(15)).toBe(fixture.metronIssue.image);
+  updateSettings({ metronApiToken: 'fixture-new-token' });
+  expect(await metronCover(15)).toBeNull();
+  expect(await metronCover(15)).toBeNull();
+  const missing = await coverRoute.GET(
+    new Request('http://bunko.invalid/api/metron/cover?seriesId=15', {
+      headers: { Authorization: `Bearer ${persistentSecret('access.token', 32).toString('hex')}` },
+    }),
+  );
+  expect(missing.status).toBe(404);
+  expect(missing.headers.get('location')).toBeNull();
+  expect(fetcher).toHaveBeenCalledTimes(2);
+}, 15000);
+it('retains a selected comic card cover for imports without forwarding Metron auth to its CDN', async () => {
+  updateSettings(secretPatch);
+  const metadata = metronFixture();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL, init?: RequestInit) => {
+      if (new URL(String(input)).hostname === 'static.metron.cloud') {
+        expect(init?.headers).toBeUndefined();
+        return new Response('fixture-jpeg', { headers: { 'Content-Type': 'image/jpeg' } });
+      }
+      return metadata(input, init);
+    }),
+  );
+  const url = '/api/metron/cover?seriesId=15';
+  expect(localImageUrl(url)).toBe(true);
+  expect(localImageUrl(`${url}&url=https://evil.invalid`)).toBe(false);
+  expect(localImageUrl('/api/metron/cover?seriesId=-1')).toBe(false);
+  expect((await selectedCover(url))?.bytes.toString()).toBe('fixture-jpeg');
+  expect(metadata).toHaveBeenCalledTimes(1);
+});
+it('searches every enabled catalog and local titles without a format restriction', async () => {
+  updateSettings(secretPatch);
+  const wn = {
+    ...emptyMedia('local:web', 'Fixture Web Novel', 'NOVEL'),
+    format: 'WEB_NOVEL' as const,
+  };
+  track({ media: wn, autoDownload: false });
+  indexCatalog([
+    {
+      suwayomiMangaId: 501,
+      sourceId: '9007199254740993',
+      sourceName: 'Fixture FR',
+      thumbnailUrl: null,
+      lang: 'fr',
+      title: 'Fixture source manga',
+      mangaUrl: '/fixture',
+    },
+  ]);
+  const fetcher = vi.fn(async (input: string | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.hostname === 'metron.cloud') return Response.json(page([fixture.metronSeries]));
+    if (url.hostname === 'api.hardcover.app')
+      return Response.json({
+        data: { search: { results: { hits: [{ document: fixture.hardcoverBook }] } } },
+      });
+    if (url.hostname === 'openlibrary.org') return Response.json(books.search);
+    if (url.hostname === 'graphql.anilist.co') {
+      expect(JSON.parse(String(init?.body)).variables).toMatchObject({
+        search: 'Fixture',
+        type: 'MANGA',
+      });
+      return Response.json({
+        data: {
+          Page: {
+            media: [
+              {
+                id: 900,
+                title: { romaji: 'Fixture Manga' },
+                format: 'MANGA',
+                countryOfOrigin: 'JP',
+              },
+              {
+                id: 901,
+                title: { romaji: 'Fixture Manhwa' },
+                format: 'MANGA',
+                countryOfOrigin: 'KR',
+              },
+              {
+                id: 902,
+                title: { romaji: 'Fixture Light Novel' },
+                format: 'NOVEL',
+                countryOfOrigin: 'JP',
+              },
+            ].map((m) => ({ ...m, coverImage: { extraLarge: null } })),
+          },
+        },
+      });
+    }
+    if (url.hostname === 'api.mangadex.org')
+      return Response.json({
+        data: [
+          {
+            id: 'fixture-dex',
+            attributes: {
+              title: { en: 'Fixture Dex' },
+              altTitles: [],
+              description: {},
+              tags: [],
+              originalLanguage: 'ja',
+            },
+            relationships: [],
+          },
+        ],
+      });
+    if (url.hostname === 'api.mangaupdates.com')
+      return Response.json({
+        results: [{ record: { series_id: 903, title: 'Fixture Manhua', type: 'Manhua' } }],
+      });
+    throw new Error('Unexpected catalog request');
+  });
+  vi.stubGlobal('fetch', fetcher);
+  const result = await search('Fixture');
+  expect(result.results.map((m) => m.id)).toEqual(
+    expect.arrayContaining([
+      'anilist:900',
+      'anilist:901',
+      'anilist:902',
+      'mangadex:fixture-dex',
+      'mangaupdates:903',
+      'metron:15',
+      'hardcover:123',
+      'openlibrary:OL27448W',
+      'local:web',
+      'suwayomi:501',
+    ]),
+  );
+  expect(result.results.map((m) => m.format)).toEqual(
+    expect.arrayContaining([
+      'MANGA',
+      'MANHWA',
+      'MANHUA',
+      'COMIC',
+      'LIGHT_NOVEL',
+      'WEB_NOVEL',
+      'NOVEL',
+      'BOOK',
+    ]),
+  );
+  expect(result.providers.every((p) => p.status === 'ok')).toBe(true);
+  const requests = fetcher.mock.calls.length;
+  expect((await search('Fixture', undefined, undefined, true)).results).toEqual(result.results);
+  expect(fetcher).toHaveBeenCalledTimes(requests);
+}, 15000);
 it('connects comic discovery, search and detail to their API implementations', async () => {
   updateSettings(secretPatch);
   vi.stubGlobal('fetch', metronFixture());

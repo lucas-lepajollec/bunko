@@ -18,6 +18,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { PosterCard } from '@/components/media';
 import { ReleaseCard } from '@/components/releases';
+import { LoadNotice } from '@/components/load-notice';
 import { Empty, ErrorNote, PageTitle, PosterSkeletons, cx, smallButton } from '@/components/ui';
 
 const KINDS: DiscoverKind[] = [
@@ -120,6 +121,17 @@ function Catalog() {
     { revalidateFirstPage: false },
   );
   const releaseItems = (releases.data ?? []).flatMap((p) => p.items);
+  const releasesPending = releases.data?.some((p) => p.pending) ?? false;
+  const mutateReleases = releases.mutate;
+  useEffect(() => {
+    if (!releasesPending) return;
+    const timer = setInterval(() => {
+      void mutateReleases((data) => data, { revalidate: (page) => Boolean(page?.pending) }).catch(
+        () => {},
+      );
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [releasesPending, mutateReleases]);
   const releasesMore =
     releases.isLoading ||
     (releases.size > 0 && releases.data && typeof releases.data[releases.size - 1] === 'undefined');
@@ -377,6 +389,18 @@ function Catalog() {
         </p>
       )}
       {searched.error && <ErrorNote error={searched.error} />}
+      <LoadNotice
+        pending={
+          q
+            ? searched.isLoading || searched.refining
+            : view === 'chapters'
+              ? releasesMore || releasesPending
+              : loadingMore || enriching
+        }
+        partial={
+          q ? searched.partial : view === 'chapters' && releases.data?.some((p) => p.partial)
+        }
+      />
       {view === 'chapters' && !q ? (
         <>
           {releases.error && <ErrorNote error={releases.error} />}
@@ -386,9 +410,13 @@ function Catalog() {
             ))}
             {releasesMore && <PosterSkeletons count={16} />}
           </div>
-          {!releasesMore && !releases.error && releaseItems.length === 0 && (
-            <Empty title={t('catalog.noReleases')}>{t('home.noReleasesBody')}</Empty>
-          )}
+          {!releasesMore &&
+            !releasesPending &&
+            !releases.data?.some((p) => p.partial) &&
+            !releases.error &&
+            releaseItems.length === 0 && (
+              <Empty title={t('catalog.noReleases')}>{t('home.noReleasesBody')}</Empty>
+            )}
           {releases.data?.[releases.data.length - 1]?.nextCursor && !releasesMore && (
             <button
               type="button"
@@ -431,9 +459,13 @@ function Catalog() {
             ) : (
               <Empty title={t('catalog.empty')} />
             ))}
-          {q && searched.data && searchItems.length === 0 && (
-            <Empty title={t('search.noCatalog')}>{t('search.noCatalogBody')}</Empty>
-          )}
+          {q &&
+            searched.data &&
+            !searched.refining &&
+            !searched.partial &&
+            searchItems.length === 0 && (
+              <Empty title={t('search.noCatalog')}>{t('search.noCatalogBody')}</Empty>
+            )}
           {!q && last?.hasNextPage && !loadingMore && (
             <button
               type="button"

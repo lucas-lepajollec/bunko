@@ -23,6 +23,9 @@ import { AppError } from '@/lib/errors';
 import { kavitaMedia } from '@/lib/kavita-track';
 import { suwayomiDetail } from '@/lib/catalog';
 import { storedMedia, trackedCoverOptions, syncTrackedCover } from '@/lib/tracked-covers';
+import { ownedStock } from '@/lib/owned-chapters';
+import { declareVolumes, parseVolumeDeclaration, stockContext } from '@/lib/owned-stock';
+import { getSettings } from '@/lib/settings';
 import { replaceSources } from '@/lib/tracked-sources';
 export const GET = route(async (r) => {
   const { refresh } = z
@@ -132,6 +135,34 @@ export const PATCH = route(async (r) => {
         db().prepare('DELETE FROM resolved_covers WHERE tracked_id=?').run(input.id);
       if (input.media || input.offCatalog || input.kavitaSeriesId !== undefined)
         db().prepare('UPDATE tracked_media SET source_match_at=NULL WHERE id=?').run(input.id);
+      const identityChanged = Boolean(
+        input.media ||
+        input.offCatalog ||
+        (input.kavitaSeriesId !== undefined && input.kavitaSeriesId !== current.kavitaSeriesId),
+      );
+      let declaration = (
+        db()
+          .prepare('SELECT volume_override_json AS value FROM tracked_media WHERE id=?')
+          .get(input.id) as { value: string | null }
+      ).value;
+      const previousRead = parseVolumeDeclaration(declaration)?.previousRead ?? null;
+      if (identityChanged || input.ownedAsVolumes === false) declaration = null;
+      if (input.ownedAsVolumes === true) {
+        if (identityChanged)
+          throw new AppError(
+            'VALIDATION_ERROR',
+            'Choose the inventory unit after changing identity',
+          );
+        const stock = ownedStock(current.media);
+        if (!stock.chapters.length && !stock.volumes.length)
+          throw new AppError('VALIDATION_ERROR', 'No owned inventory is available');
+        declaration = declareVolumes(
+          stock.series,
+          stock.imports,
+          stockContext(getSettings().kavitaUrl),
+          current.chapterRead ?? previousRead,
+        );
+      }
       db()
         .prepare(
           `UPDATE tracked_media SET status=?,auto_download=?,sources_json=?,
@@ -142,7 +173,7 @@ export const PATCH = route(async (r) => {
       progress_checked=CASE WHEN ? THEN 0 ELSE progress_checked END,
       off_catalog=CASE WHEN ? THEN ? ELSE off_catalog END,
       display_title=CASE WHEN ? THEN ? ELSE display_title END,
-      cover_choice_json=?,backdrop=?,kavita_cover_sync=?,unit=?,volume_read=CASE WHEN ? THEN NULL ELSE volume_read END WHERE id=?`,
+      cover_choice_json=?,backdrop=?,kavita_cover_sync=?,unit=?,volume_override_json=?,volume_read=CASE WHEN ? THEN NULL ELSE volume_read END WHERE id=?`,
         )
         .run(
           input.status ?? current.status,
@@ -170,12 +201,17 @@ export const PATCH = route(async (r) => {
           ),
           input.media || input.offCatalog ? 'auto' : (input.backdrop ?? current.backdrop),
           Number(input.kavitaCoverSync ?? current.kavitaCoverSync),
-          input.unit ?? current.unit ?? 'chapter',
-          Number(
-            input.kavitaSeriesId !== undefined && input.kavitaSeriesId !== current.kavitaSeriesId,
-          ),
+          input.ownedAsVolumes === true ? 'volume' : (input.unit ?? current.unit ?? 'chapter'),
+          declaration,
+          Number(identityChanged || input.ownedAsVolumes !== undefined),
           input.id,
         );
+      if (input.ownedAsVolumes === true)
+        db().prepare('UPDATE tracked_media SET last_read=NULL WHERE id=?').run(input.id);
+      else if (input.ownedAsVolumes === false && previousRead !== null)
+        db()
+          .prepare('UPDATE tracked_media SET last_read=MAX(COALESCE(last_read,0),?) WHERE id=?')
+          .run(previousRead, input.id);
     })();
   } catch (error) {
     if ((error as { code?: string }).code?.startsWith('SQLITE_CONSTRAINT_UNIQUE'))
