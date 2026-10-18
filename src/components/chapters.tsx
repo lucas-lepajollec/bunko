@@ -50,9 +50,13 @@ export function ChapterTable({
   mediaId,
   defaultByVolume,
   ownedVolumes = new Set<number>(),
+  onViewChange,
+  inventoryCorrection,
 }: {
   /** Start in the volume view (works counted in volumes). */
   defaultByVolume?: boolean;
+  onViewChange?: (volume: boolean) => void;
+  inventoryCorrection?: { active: boolean; busy: boolean; onCorrect: () => void };
   ownedVolumes?: Set<number>;
   /** Opens chapters in the built-in reader with this work's progress. */
   mediaId: string;
@@ -74,8 +78,6 @@ export function ChapterTable({
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [rangeOpen, setRangeOpen] = useState(false);
-  // Volume view only when sources give volumes; chapters remain the unit underneath.
-  const hasVolumes = chapters.some((c) => c.volume !== null);
   const [byVolume, setByVolume] = useState(defaultByVolume ?? false);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const ordered = useMemo(
@@ -89,13 +91,27 @@ export function ChapterTable({
     if (filter === 'unread') return !chapterIsRead(c, read, volumeRead);
     return true;
   });
+  const groups = volumes(ordered);
+  for (const volume of ownedVolumes)
+    if (!groups.some(([v]) => v === volume)) groups.push([volume, []]);
+  groups.sort(([a], [b]) => (a === null ? 1 : b === null ? -1 : b - a));
+  const missingVolume = ([v, list]: [number | null, MergedChapter[]]) =>
+    !(v !== null && ownedVolumes.has(v)) && list.some((c) => isMissing(c, owned, ownedVolumes));
+  const unreadVolume = ([v, list]: [number | null, MergedChapter[]]) =>
+    !(v !== null && volumeRead !== null && v <= volumeRead) &&
+    (!list.length || list.some((c) => !chapterIsRead(c, read, volumeRead)));
+  const visibleGroups = groups.filter((g) =>
+    filter === 'missing' ? missingVolume(g) : filter === 'unread' ? unreadVolume(g) : true,
+  );
+  const selectable = byVolume ? visibleGroups.flatMap(([, list]) => list) : visible;
+  const total = byVolume ? visibleGroups.filter(([v]) => v !== null).length : visible.length;
   const toggle = (key: string) => {
     const next = new Set(selected);
     if (next.has(key)) next.delete(key);
     else next.add(key);
     setSelected(next);
   };
-  const allVisibleSelected = visible.length > 0 && visible.every((c) => selected.has(c.key));
+  const allVisibleSelected = selectable.length > 0 && selectable.every((c) => selected.has(c.key));
   const row = (c: MergedChapter) => {
     const variant = preferredVariant(c, priority, choice[c.key]);
     return (
@@ -135,11 +151,30 @@ export function ChapterTable({
   return (
     <div className="flex flex-col">
       <div className="border-line-strong flex flex-col gap-3 border-b pb-3.5">
-        <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:px-0">
-          {pill('missing', t('chapters.missing', { count: missing.length }))}
-          {pill('unread', t('chapters.unread', { count: unread.length }))}
-          {pill('all', t('chapters.all', { count: ordered.length }))}
-          {hasVolumes && (
+        <div className="flex flex-wrap items-center gap-2">
+          {pill(
+            'missing',
+            t('chapters.missing', {
+              count: byVolume
+                ? groups.filter((g) => g[0] !== null && missingVolume(g)).length
+                : missing.length,
+            }),
+          )}
+          {pill(
+            'unread',
+            t('chapters.unread', {
+              count: byVolume
+                ? groups.filter((g) => g[0] !== null && unreadVolume(g)).length
+                : unread.length,
+            }),
+          )}
+          {pill(
+            'all',
+            t('chapters.all', {
+              count: byVolume ? groups.filter(([v]) => v !== null).length : ordered.length,
+            }),
+          )}
+          <div className="ml-auto flex flex-wrap items-center gap-3">
             <div
               className="ml-auto flex shrink-0 rounded-full bg-white/[0.08] p-0.5"
               role="group"
@@ -150,7 +185,11 @@ export function ChapterTable({
                   key={String(v)}
                   type="button"
                   aria-pressed={byVolume === v}
-                  onClick={() => setByVolume(v)}
+                  onClick={() => {
+                    setByVolume(v);
+                    setLimit(FIRST);
+                    onViewChange?.(v);
+                  }}
                   className={cx(
                     'h-8 rounded-full px-3.5 text-sm',
                     byVolume === v ? 'bg-white text-bg font-semibold' : 'text-mid',
@@ -160,16 +199,27 @@ export function ChapterTable({
                 </button>
               ))}
             </div>
-          )}
+            {byVolume && inventoryCorrection && (
+              <button
+                type="button"
+                disabled={inventoryCorrection.busy}
+                onClick={inventoryCorrection.onCorrect}
+                className="text-mid min-h-9 text-xs underline decoration-white/30 underline-offset-4 hover:text-white disabled:opacity-50"
+              >
+                {t(inventoryCorrection.active ? 'unit.undoVolumes' : 'unit.correctVolumes')}
+              </button>
+            )}
+          </div>
         </div>
         <div className="text-mid flex flex-wrap items-center gap-2 text-sm">
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
               checked={allVisibleSelected}
+              disabled={!selectable.length}
               onChange={() => {
                 const next = new Set(selected);
-                for (const c of visible) {
+                for (const c of selectable) {
                   if (allVisibleSelected) next.delete(c.key);
                   else next.add(c.key);
                 }
@@ -177,7 +227,7 @@ export function ChapterTable({
               }}
               className="size-4 accent-[var(--accent)]"
             />
-            {t('chapters.selectAll', { count: n(visible.length) })}
+            {t('chapters.selectAll', { count: n(selectable.length) })}
           </label>
           {/* The range picker stays folded behind a chevron until asked for. */}
           <button
@@ -213,7 +263,12 @@ export function ChapterTable({
                 const [lo, hi] = a <= b ? [a, b] : [b, a];
                 const next = new Set(selected);
                 for (const c of ordered)
-                  if (c.number !== null && c.number >= lo && c.number <= hi) next.add(c.key);
+                  if (
+                    (byVolume ? c.volume : c.number) !== null &&
+                    (byVolume ? c.volume! : c.number!) >= lo &&
+                    (byVolume ? c.volume! : c.number!) <= hi
+                  )
+                    next.add(c.key);
                 setSelected(next);
               }}
             >
@@ -240,37 +295,52 @@ export function ChapterTable({
           )}
         </div>
       </div>
-      {!byVolume && visible.length > limit && (
+      {total > limit && (
         <p className="text-muted py-2 text-xs" role="status">
-          {t('chapters.displayed', {
-            shown: Math.min(limit, visible.length),
-            total: visible.length,
+          {t(byVolume ? 'volumes.displayed' : 'chapters.displayed', {
+            shown: Math.min(limit, total),
+            total,
           })}
         </p>
       )}
-      {visible.length === 0 && (
+      {total === 0 && (
         <p className="text-muted py-6 font-serif text-xl italic">
-          {filter === 'missing' ? t('chapters.noneMissing') : t('chapters.none')}
+          {t(
+            byVolume
+              ? filter === 'missing'
+                ? 'volumes.noneMissing'
+                : 'volumes.none'
+              : filter === 'missing'
+                ? 'chapters.noneMissing'
+                : 'chapters.none',
+          )}
         </p>
       )}
       {/* Desktop: the list scrolls inside the column so details stay in view. */}
       <ul className="md:max-h-[68vh] md:overflow-y-auto md:pr-2">
         {byVolume
-          ? volumes(visible).map(([vol, list]) => {
-              const key = vol === null ? 'none' : String(vol);
-              const expanded = open.has(key);
-              const all = list.every((c) => selected.has(c.key));
-              const nums = list.map((c) => c.number).filter((x): x is number => x !== null);
-              return (
-                <li key={key} className="border-line border-b">
-                  <div className="flex items-center gap-3 py-3">
-                    <input
-                      type="checkbox"
-                      checked={all}
-                      aria-label={t('chapters.selectVolume', {
-                        v: vol === null ? t('chapters.noVolume') : n(vol),
-                      })}
-                      onChange={() => {
+          ? visibleGroups
+              .filter(([vol], index) => vol === null || index < limit)
+              .map(([vol, list]) => {
+                const key = vol === null ? 'none' : String(vol);
+                const expanded = open.has(key);
+                const all = list.every((c) => selected.has(c.key));
+                const nums = list.map((c) => c.number).filter((x): x is number => x !== null);
+                if (vol !== null && ownedVolumes.has(vol))
+                  return (
+                    <ChapterRow
+                      key={`owned-volume:${vol}`}
+                      volumeNumber={vol}
+                      owned={owned}
+                      ownedVolumes={ownedVolumes}
+                      chapter={{ key: `volume:${vol}`, number: null, volume: vol, variants: [] }}
+                      variant={undefined}
+                      read={read}
+                      volumeRead={volumeRead}
+                      mediaId={mediaId}
+                      checked={list.length > 0 && all}
+                      disabled={!list.length}
+                      onToggle={() => {
                         const next = new Set(selected);
                         for (const c of list) {
                           if (all) next.delete(c.key);
@@ -278,53 +348,79 @@ export function ChapterTable({
                         }
                         setSelected(next);
                       }}
-                      className="size-5 shrink-0 accent-[var(--accent)] md:size-[17px]"
+                      onChoose={() => {}}
+                      queued={false}
                     />
-                    <button
-                      type="button"
-                      aria-expanded={expanded}
-                      onClick={() =>
-                        setOpen((o) => {
-                          const next = new Set(o);
-                          if (next.has(key)) next.delete(key);
-                          else next.add(key);
-                          return next;
-                        })
-                      }
-                      className="flex min-w-0 flex-1 items-baseline gap-3 text-left"
-                    >
-                      <span className="font-serif text-[22px] md:text-[24px]">
-                        {vol === null
-                          ? t('chapters.noVolume')
-                          : t('chapters.volume', { v: n(vol) })}
-                      </span>
-                      <span className="text-muted truncate text-xs md:text-[13px]">
-                        {nums.length
-                          ? t('chapters.volumeRange', {
-                              from: n(Math.min(...nums)),
-                              to: n(Math.max(...nums)),
-                              count: list.length,
-                            })
-                          : t('chapters.count', { count: list.length })}
-                      </span>
-                      <span aria-hidden className="text-muted ml-auto">
-                        {expanded ? '−' : '+'}
-                      </span>
-                    </button>
-                  </div>
-                  {expanded && <ul className="pb-2 pl-4 md:pl-8">{list.map((c) => row(c))}</ul>}
-                </li>
-              );
-            })
+                  );
+
+                return (
+                  <li key={key} className="border-line border-b">
+                    <div className="flex items-center gap-3 py-2.5 md:items-baseline md:gap-3.5 md:py-3">
+                      <input
+                        type="checkbox"
+                        checked={all}
+                        aria-label={t('chapters.selectVolume', {
+                          v: vol === null ? t('chapters.noVolume') : n(vol),
+                        })}
+                        onChange={() => {
+                          const next = new Set(selected);
+                          for (const c of list) {
+                            if (all) next.delete(c.key);
+                            else next.add(c.key);
+                          }
+                          setSelected(next);
+                        }}
+                        className="size-5 shrink-0 accent-[var(--accent)] md:size-[17px]"
+                      />
+                      <button
+                        type="button"
+                        aria-expanded={expanded}
+                        onClick={() =>
+                          setOpen((o) => {
+                            const next = new Set(o);
+                            if (next.has(key)) next.delete(key);
+                            else next.add(key);
+                            return next;
+                          })
+                        }
+                        className="flex min-w-0 flex-1 items-baseline gap-3 text-left"
+                      >
+                        <span className="shrink-0 font-serif text-[21px] md:w-[150px] md:text-[23px]">
+                          {vol === null
+                            ? t('chapters.noVolume')
+                            : t('chapters.volume', { v: n(vol) })}
+                        </span>
+                        <span
+                          aria-hidden
+                          className="border-line-strong hidden flex-1 -translate-y-[5px] border-b border-dotted md:block"
+                        />
+                        <span className="text-muted truncate text-xs md:text-[13px]">
+                          {nums.length
+                            ? t('chapters.volumeRange', {
+                                from: n(Math.min(...nums)),
+                                to: n(Math.max(...nums)),
+                                count: list.length,
+                              })
+                            : t('chapters.count', { count: list.length })}
+                        </span>
+                        <span aria-hidden className="text-muted ml-auto">
+                          {expanded ? '−' : '+'}
+                        </span>
+                      </button>
+                    </div>
+                    {expanded && <ul className="pb-2 pl-4 md:pl-8">{list.map((c) => row(c))}</ul>}
+                  </li>
+                );
+              })
           : visible.slice(0, limit).map((c) => row(c))}
-        {!byVolume && visible.length > limit && (
+        {total > limit && (
           <li className="flex justify-center py-4">
             <button
               type="button"
               onClick={() => setLimit((l) => l + MORE)}
               className="text-mid rounded-full bg-white/[0.06] px-5 py-2 text-sm hover:text-white"
             >
-              {t('chapters.seeMore', { count: n(visible.length - limit) })}
+              {t('chapters.seeMore', { count: n(total - limit) })}
             </button>
           </li>
         )}
@@ -345,7 +441,11 @@ function ChapterRow({
   queued,
   owned,
   ownedVolumes,
+  volumeNumber,
+  disabled = false,
 }: {
+  volumeNumber?: number;
+  disabled?: boolean;
   ownedVolumes: Set<number>;
   chapter: MergedChapter;
   variant: ChapterVariant | undefined;
@@ -374,9 +474,11 @@ function ChapterRow({
           ? t('chapters.read')
           : t('chapters.toDownload');
   const label =
-    chapter.number !== null
-      ? t('chapters.number', { n: n(chapter.number) })
-      : (variant?.name ?? t('chapters.special'));
+    volumeNumber !== undefined
+      ? t('chapters.volume', { v: n(volumeNumber) })
+      : chapter.number !== null
+        ? t('chapters.number', { n: n(chapter.number) })
+        : (variant?.name ?? t('chapters.special'));
   return (
     <li
       className={cx(
@@ -387,6 +489,7 @@ function ChapterRow({
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={onToggle}
         aria-label={label}
         className="size-5 shrink-0 accent-[var(--accent)] md:size-[17px] md:self-center"
@@ -424,12 +527,16 @@ function ChapterRow({
       >
         {state}
       </span>
-      {(variant || (chapter.localOnly && chapter.number !== null)) && (
+      {(volumeNumber !== undefined ||
+        variant ||
+        (chapter.localOnly && chapter.number !== null)) && (
         <Link
           href={
-            variant
-              ? `/read/${variant.id}?media=${encodeURIComponent(mediaId)}`
-              : `/read/local-${chapter.number}?media=${encodeURIComponent(mediaId)}`
+            volumeNumber !== undefined
+              ? `/read/local-volume-${volumeNumber}?media=${encodeURIComponent(mediaId)}`
+              : variant
+                ? `/read/${variant.id}?media=${encodeURIComponent(mediaId)}`
+                : `/read/local-${chapter.number}?media=${encodeURIComponent(mediaId)}`
           }
           aria-label={t('chapters.readLabel', { label })}
           title={t('chapters.read')}

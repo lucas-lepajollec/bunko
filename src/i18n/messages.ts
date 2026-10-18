@@ -31,6 +31,12 @@ export function interpolate(template: string, variables?: Record<string, string 
 type Dictionary = Record<string, string>;
 
 const en: Dictionary = {
+  'unit.correctVolumes': 'These are volumes',
+  'unit.undoVolumes': 'Undo correction',
+  'volumes.displayed': '{shown} of {total} volumes displayed',
+  'volumes.none': 'No volumes identified',
+  'volumes.noneMissing': 'No missing volumes',
+
   'library.inventory': '{series} series · {chapters} owned chapters · {volumes} owned volumes',
   'loading.more': 'More results are still loading. This list is not complete yet.',
   'loading.partial': 'Some sources could not be checked. The results may be incomplete.',
@@ -894,6 +900,12 @@ const en: Dictionary = {
 };
 
 const fr: Dictionary = {
+  'unit.correctVolumes': 'Ce sont des tomes',
+  'unit.undoVolumes': 'Annuler la correction',
+  'volumes.displayed': '{shown} tomes affichés sur {total}',
+  'volumes.none': 'Aucun tome identifié',
+  'volumes.noneMissing': 'Aucun tome manquant',
+
   'library.inventory': '{series} séries · {chapters} chapitres possédés · {volumes} tomes possédés',
   'loading.more': 'Les résultats continuent de se charger. Cette liste n’est pas encore complète.',
   'loading.partial':
@@ -1769,6 +1781,12 @@ const fr: Dictionary = {
 };
 
 const es: Dictionary = {
+  'unit.correctVolumes': 'Son tomos',
+  'unit.undoVolumes': 'Deshacer corrección',
+  'volumes.displayed': '{shown} de {total} tomos mostrados',
+  'volumes.none': 'Ningún tomo identificado',
+  'volumes.noneMissing': 'No faltan tomos',
+
   'library.inventory':
     '{series} series · {chapters} capítulos disponibles · {volumes} tomos disponibles',
   'loading.more': 'Todavía se están cargando resultados. Esta lista aún no está completa.',
@@ -2636,6 +2654,12 @@ const es: Dictionary = {
 };
 
 const de: Dictionary = {
+  'unit.correctVolumes': 'Das sind Bände',
+  'unit.undoVolumes': 'Korrektur rückgängig machen',
+  'volumes.displayed': '{shown} von {total} Bänden angezeigt',
+  'volumes.none': 'Keine Bände erkannt',
+  'volumes.noneMissing': 'Keine fehlenden Bände',
+
   'library.inventory':
     '{series} Serien · {chapters} vorhandene Kapitel · {volumes} vorhandene Bände',
   'loading.more': 'Weitere Ergebnisse werden noch geladen. Diese Liste ist noch nicht vollständig.',
@@ -3511,6 +3535,12 @@ const de: Dictionary = {
 };
 
 const it: Dictionary = {
+  'unit.correctVolumes': 'Sono volumi',
+  'unit.undoVolumes': 'Annulla correzione',
+  'volumes.displayed': '{shown} volumi visualizzati su {total}',
+  'volumes.none': 'Nessun volume identificato',
+  'volumes.noneMissing': 'Nessun volume mancante',
+
   'library.inventory':
     '{series} serie · {chapters} capitoli posseduti · {volumes} volumi posseduti',
   'loading.more':

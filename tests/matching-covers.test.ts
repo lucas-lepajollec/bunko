@@ -939,33 +939,37 @@ it('exposes authenticated local activity, searching and refresh progress; stale 
   };
   const matching = matchTrackedSources();
   await arrived;
-  expect(listTracked().find((v) => v.id === t.id)?.sourceMatch).toBe('searching');
-  setWorkerValue('refresh_owner', 'fixture');
-  setWorkerValue('checking', '1');
-  setWorkerValue('refresh_done', '2');
-  setWorkerValue('refresh_total', '5');
-  setWorkerValue('last_check_at', '2026-10-16T12:00:00.000Z');
-  const count = requests.length;
-  const response = await route.GET(request('GET', undefined, '/api/library/activity'));
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({
-    hiddenAdult: 0,
-    matching: { queued: 1, current: 'Owned Work' },
-    refresh: {
-      running: true,
-      done: 2,
-      total: 5,
-      lastAt: '2026-10-16T12:00:00.000Z',
-      nextAt: '2026-10-16T12:15:00.000Z',
-    },
-  });
-  expect(requests).toHaveLength(count);
-  db().prepare("UPDATE worker_lock SET owner='another-worker'").run();
-  expect(
-    await (await route.GET(request('GET', undefined, '/api/library/activity'))).json(),
-  ).toMatchObject({ matching: { queued: 2, current: null }, refresh: { running: false } });
-  release();
-  await matching;
+  try {
+    expect(listTracked().find((v) => v.id === t.id)?.sourceMatch).toBe('searching');
+    setWorkerValue('refresh_owner', 'fixture');
+    setWorkerValue('checking', '1');
+    setWorkerValue('refresh_done', '2');
+    setWorkerValue('refresh_total', '5');
+    setWorkerValue('last_check_at', '2026-10-16T12:00:00.000Z');
+    const count = requests.length;
+    const response = await route.GET(request('GET', undefined, '/api/library/activity'));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      hiddenAdult: 0,
+      revision: expect.any(Number),
+      matching: { queued: 1, current: 'Owned Work' },
+      refresh: {
+        running: true,
+        done: 2,
+        total: 5,
+        lastAt: '2026-10-16T12:00:00.000Z',
+        nextAt: '2026-10-16T12:15:00.000Z',
+      },
+    });
+    expect(requests).toHaveLength(count);
+    db().prepare("UPDATE worker_lock SET owner='another-worker'").run();
+    expect(
+      await (await route.GET(request('GET', undefined, '/api/library/activity'))).json(),
+    ).toMatchObject({ matching: { queued: 2, current: null }, refresh: { running: false } });
+  } finally {
+    release();
+    await matching;
+  }
 });
 
 it.each(['abort', 'lease', 'identity'] as const)(

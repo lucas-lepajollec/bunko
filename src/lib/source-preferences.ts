@@ -1,3 +1,4 @@
+import { wakeWorker } from './worker-events';
 import type { SourceHealth, SourcePreferences } from '@/types/shared';
 import { db } from './db';
 import { getSettings } from './settings';
@@ -40,11 +41,25 @@ export function getSourcePreferences(
 }
 export function setSourcePreferences(value: SourcePreferences): SourcePreferences {
   const parsed = sourcePreferences.parse(value);
+  const previous = db()
+    .prepare("SELECT value FROM settings WHERE key='sourcePreferences'")
+    .get() as { value: string } | undefined;
+  const languagesChanged =
+    previous &&
+    JSON.stringify(JSON.parse(previous.value).languages) !== JSON.stringify(parsed.languages);
   db()
     .prepare(
       "INSERT INTO settings(key,value) VALUES('sourcePreferences',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
     )
     .run(JSON.stringify(parsed));
+  if (languagesChanged) {
+    db()
+      .prepare(
+        "UPDATE tracked_media SET source_match_at=NULL WHERE type='MANGA' AND json_array_length(sources_json)=0",
+      )
+      .run();
+    wakeWorker();
+  }
   return parsed;
 }
 export function sourceHealth(id: string): SourceHealth {

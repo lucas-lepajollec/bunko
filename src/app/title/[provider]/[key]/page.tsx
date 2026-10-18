@@ -3,7 +3,7 @@ import { LoadNotice } from '@/components/load-notice';
 import { Select } from '@/components/select';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import type {
   ChapterSelection,
@@ -78,11 +78,13 @@ export default function TitlePage() {
         </div>
       </main>
     );
-  return <Title media={detail.data} />;
+  return <Title key={id} media={detail.data} />;
 }
 
 function Title({ media }: { media: MediaDetail }) {
   const { t, n, language } = useI18n();
+  const { mutate: mutateShared } = useSWRConfig();
+  const [inventoryBusy, setInventoryBusy] = useState(false);
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const batches = useApi<DownloadBatch[]>('/api/downloads/batches', {
     refreshInterval: batchesInterval,
@@ -112,8 +114,10 @@ function Title({ media }: { media: MediaDetail }) {
   const stored = entry?.sources.length ? entry.sources : null;
   const needsMatch = isComic && !stored && fromDetail.length === 0 && library.data !== undefined;
 
+  const shouldScan = useEffectEvent(() => needsMatch || matchRun > 0);
+  const libraryReady = library.data !== undefined;
   useEffect(() => {
-    if (!needsMatch && matchRun === 0) return;
+    if (!libraryReady || !shouldScan()) return;
     const failScan = () => {
       setScanFailed(true);
       setLanes((ls) =>
@@ -145,13 +149,18 @@ function Title({ media }: { media: MediaDetail }) {
             (ls ?? []).map((l) => (l.source.id === e.source.id ? { ...l, state: 'error' } : l)),
           );
         },
-        done: () => undefined,
+        linked: () => {
+          void mutateShared(libraryKeys);
+        },
+        done: () => {
+          void mutateShared(libraryKeys);
+        },
         error: failScan,
       },
       failScan,
     );
     return close;
-  }, [needsMatch, matchRun, media.id, scanQuery, language]);
+  }, [libraryReady, matchRun, media.id, scanQuery, language, mutateShared]);
 
   // A custom query (Matches → Sources search box) replaces the work's titles for the scan.
   const rescan = useCallback((q?: string) => {
@@ -511,43 +520,10 @@ function Title({ media }: { media: MediaDetail }) {
             </div>
           )}
 
-          {entry && <UnitToggle entry={entry} />}
           <LoadNotice
             pending={media.pending || checking || library.isLoading}
             partial={media.partial || incomplete}
           />
-          {ownedVolumes.size > 0 && (
-            <section
-              className="flex flex-col gap-2 rounded-2xl bg-white/[0.04] p-4"
-              aria-label={t('unit.ownedVolumes')}
-            >
-              <h2 className="text-sm font-semibold">
-                {t('unit.ownedVolumes')} · {n(ownedVolumes.size)}
-              </h2>
-              <div className="flex max-h-48 flex-wrap gap-2 overflow-y-auto">
-                {[...ownedVolumes]
-                  .sort((a, b) => a - b)
-                  .map((v) =>
-                    isComic ? (
-                      <Link
-                        key={v}
-                        className={cx(smallButton, 'text-sm')}
-                        href={`/read/local-volume-${v}?media=${encodeURIComponent(entry?.media.id ?? media.id)}`}
-                      >
-                        {t('chapters.volume', { v: n(v) })}
-                      </Link>
-                    ) : (
-                      <span
-                        key={v}
-                        className="text-mid rounded-full bg-white/[0.06] px-3 py-2 text-sm"
-                      >
-                        {t('chapters.volume', { v: n(v) })}
-                      </span>
-                    ),
-                  )}
-              </div>
-            </section>
-          )}
           <div className="mt-2 md:hidden">
             <Segmented
               value={tab}
@@ -632,7 +608,41 @@ function Title({ media }: { media: MediaDetail }) {
                   </div>
                 ) : (
                   <ChapterTable
-                    key={`${media.id}:${entry?.unit}`}
+                    key={`${media.id}:${entry?.id}`}
+                    onViewChange={async (volume) => {
+                      if (!entry || (entry.unit === 'volume') === volume) return;
+                      try {
+                        await send('/api/tracked', 'PATCH', {
+                          id: entry.id,
+                          unit: volume ? 'volume' : 'chapter',
+                        });
+                        await mutateShared(libraryKeys);
+                      } catch (e) {
+                        toast({ tone: 'bad', text: errorText(t, e) });
+                      }
+                    }}
+                    inventoryCorrection={
+                      entry && ((entry.ownedChapterCount ?? 0) > 0 || entry.ownedAsVolumes)
+                        ? {
+                            active: Boolean(entry.ownedAsVolumes),
+                            busy: inventoryBusy,
+                            onCorrect: async () => {
+                              setInventoryBusy(true);
+                              try {
+                                await send('/api/tracked', 'PATCH', {
+                                  id: entry.id,
+                                  ownedAsVolumes: !entry.ownedAsVolumes,
+                                });
+                                await mutateShared(libraryKeys);
+                              } catch (e) {
+                                toast({ tone: 'bad', text: errorText(t, e) });
+                              } finally {
+                                setInventoryBusy(false);
+                              }
+                            },
+                          }
+                        : undefined
+                    }
                     ownedVolumes={ownedVolumes}
                     mediaId={entry?.media.id ?? media.id}
                     defaultByVolume={entry?.unit === 'volume'}
@@ -918,77 +928,6 @@ function AdultMark({ media }: { media: MediaDetail }) {
           />
         </button>
       </span>
-    </div>
-  );
-}
-
-/** Counting unit and existing inventory classification are independent choices. */
-function UnitToggle({ entry }: { entry: TrackedMedia }) {
-  const { t } = useI18n();
-  const { mutate } = useSWRConfig();
-  const [busy, setBusy] = useState(false);
-  async function update(patch: { unit?: 'chapter' | 'volume'; ownedAsVolumes?: boolean }) {
-    setBusy(true);
-    try {
-      await send('/api/tracked', 'PATCH', { id: entry.id, ...patch });
-      await mutate(libraryKeys);
-    } catch (e) {
-      toast({ tone: 'bad', text: errorText(t, e) });
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div
-      className="border-line flex max-w-[680px] flex-col gap-3 border-t pt-4 text-sm"
-      aria-busy={busy}
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-muted">{t('unit.label')}</span>
-        <InfoBubble label={t('unit.label')}>{t('unit.info')}</InfoBubble>
-        <div
-          className="flex rounded-full bg-white/[0.06] p-0.5"
-          role="group"
-          aria-label={t('unit.label')}
-        >
-          {(['chapter', 'volume'] as const).map((unit) => (
-            <button
-              key={unit}
-              type="button"
-              disabled={busy}
-              aria-pressed={(entry.unit ?? 'chapter') === unit}
-              onClick={() => update({ unit })}
-              className={cx(
-                'h-9 rounded-full px-3.5 disabled:opacity-50',
-                (entry.unit ?? 'chapter') === unit
-                  ? 'bg-fg text-bg font-semibold'
-                  : 'text-mid hover:text-white',
-              )}
-            >
-              {t(`unit.${unit}`)}
-            </button>
-          ))}
-        </div>
-      </div>
-      {(entry.ownedAsVolumes ||
-        (entry.ownedChapterCount ?? 0) > 0 ||
-        (entry.ownedVolumes?.length ?? 0) > 0) && (
-        <>
-          <label className="flex flex-wrap items-center gap-3">
-            <span className="text-muted">{t('unit.inventory')}</span>
-            <select
-              disabled={busy}
-              value={entry.ownedAsVolumes ? 'volume' : 'auto'}
-              onChange={(e) => update({ ownedAsVolumes: e.target.value === 'volume' })}
-              className="bg-raised border-line min-h-10 max-w-full rounded-xl border px-3"
-            >
-              <option value="auto">{t('unit.detect')}</option>
-              <option value="volume">{t('unit.declareVolumes')}</option>
-            </select>
-          </label>
-          <p className="text-muted text-xs leading-relaxed">{t('unit.inventoryHelp')}</p>
-        </>
-      )}
     </div>
   );
 }

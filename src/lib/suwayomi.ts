@@ -1,3 +1,4 @@
+import { wakeWorker } from './worker-events';
 import { ownedChapters, ownedStock } from './owned-chapters';
 import { sourceServerKey } from './source-server';
 import { chapterVolume } from './chapter-volume';
@@ -276,6 +277,12 @@ export async function extensionAction(action: ExtensionAction) {
     { input: { id: action.id, patch } },
     120_000,
   );
+  db()
+    .prepare(
+      "UPDATE tracked_media SET source_match_at=NULL WHERE type='MANGA' AND json_array_length(sources_json)=0",
+    )
+    .run();
+  wakeWorker();
 }
 export async function configureRepos(repos: string[]) {
   await graphql(

@@ -190,6 +190,7 @@ export interface SourceCandidate extends SourceMatch {
   chapterCount?: number | null;
 }
 export type MatchEventMap = {
+  linked: { trackedId: number };
   sources: { sources: Source[] };
   match: { source: Source; candidates: SourceCandidate[]; durationMs: number };
   source_error: { source: Source; code: string; detail?: string | null };
@@ -518,6 +519,8 @@ export interface TrackedMedia {
 }
 /** GET /api/library/activity — what Bunko is doing in the background, for progress indicators. */
 export interface LibraryActivity {
+  /** Tenant library revision; clients invalidate stale sheets/lists when background writes land. */
+  revision?: number;
   /** Followed titles currently hidden because 18+ content is off (never hidden silently). */
   hiddenAdult: number;
   /** Followed comics waiting for automatic source matching, and the one being searched now. */

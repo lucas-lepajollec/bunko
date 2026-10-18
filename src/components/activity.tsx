@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { useSWRConfig } from 'swr';
 import type { LibraryActivity } from '@/types/shared';
-import { useApi } from '@/lib/client/api';
+import { useApi, libraryKeys } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { useRelativeTime } from './time';
 import { Spinner, cx } from './ui';
@@ -13,28 +13,28 @@ const busy = (a: LibraryActivity | undefined) =>
 
 /**
  * Background work (source matching, release refresh). Polls quickly while something runs and
- * refreshes the library list (only it, at most every 20 s) so results appear without reloading.
+ * refreshes library/title/chapter data after background changes so results appear without reloading.
  */
 export function useLibraryActivity({ sync = false }: { sync?: boolean } = {}) {
   const { mutate } = useSWRConfig();
   const activity = useApi<LibraryActivity>('/api/library/activity', {
     refreshInterval: (a) => (busy(a) ? 8000 : 60_000),
   });
-  const wasBusy = useRef(false);
-  const lastSync = useRef(0);
-  const isBusy = busy(activity.data);
-  // Changes only when a step completes, so polling alone never refetches the library.
+  const previous = useRef<string | null>(null);
   const progress = activity.data
-    ? `${activity.data.matching.queued}:${activity.data.matching.current}:${activity.data.refresh.done}:${activity.data.refresh.running}`
-    : '';
+    ? JSON.stringify([activity.data.revision, activity.data.matching, activity.data.refresh])
+    : null;
   useEffect(() => {
-    // Only one mounted caller (the header) refreshes, so the library is refetched once per step.
-    if (sync && wasBusy.current && Date.now() - lastSync.current > 20_000) {
-      lastSync.current = Date.now();
-      void mutate('/api/tracked');
-    }
-    wasBusy.current = isBusy;
-  }, [progress, isBusy, mutate, sync]);
+    if (!sync || progress === null || previous.current === progress) return;
+    previous.current = progress;
+    // Revision catches completed work even if the whole scan ran between two activity polls.
+    // Never throttle away the final update of a short scan.
+    void mutate(
+      (key) =>
+        (libraryKeys(key) && key !== '/api/library/activity') ||
+        (Array.isArray(key) && key[0] === 'chapters'),
+    );
+  }, [progress, mutate, sync]);
   return activity.data;
 }
 
