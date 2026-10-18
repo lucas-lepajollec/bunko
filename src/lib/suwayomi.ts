@@ -22,7 +22,8 @@ import type {
 } from '@/types/shared';
 import { saveChapterLabels } from './chapter-labels';
 import { createHash } from 'node:crypto';
-import { cached } from './metadata-cache';
+import { cached, metadataStatus } from './metadata-cache';
+import { tenantSignal } from './tenant-lifecycle';
 import { getSettings } from './settings';
 import { endpoint, requestJson } from './http';
 import { AppError, errorCode, errorDetail, sourceFailure } from './errors';
@@ -329,43 +330,65 @@ export async function chaptersFor(
   signal?: AbortSignal,
   media?: import('@/types/shared').UnifiedMedia,
   canWrite: () => boolean = () => true,
+  progressive = false,
 ): Promise<ChaptersResponse> {
-  const settled = await Promise.allSettled(
-    selections.map((s) =>
-      sourceCall(async () => {
-        const r = await graphql<{
-          fetchChapters: {
-            chapters: {
-              id: number;
-              name: string;
-              chapterNumber: number;
-              scanlator: string | null;
-              isDownloaded: boolean;
-              volume?: number | null;
-              uploadDate?: string | number | null;
-            }[];
-          };
-        }>(
-          'mutation($input: FetchChaptersInput!) { fetchChapters(input: $input) { chapters { id name chapterNumber scanlator isDownloaded uploadDate } } }',
-          { input: { mangaId: s.suwayomiMangaId } },
-          30_000,
-          signal,
-        );
-        return r.fetchChapters.chapters.map((c) => ({
-          id: c.id,
-          mangaId: s.suwayomiMangaId,
-          sourceId: s.sourceId,
-          sourceName: s.sourceName,
-          name: c.name,
-          number: chapterNumber(c.name, c.chapterNumber),
-          volume: chapterVolume(c.name, c.volume),
-          scanlator: c.scanlator,
-          isDownloaded: c.isDownloaded,
-          uploadDate: sourceUploadDate(c.uploadDate),
-        }));
-      }, signal),
-    ),
+  const namespace = sourceServerKey();
+  const cacheKeys = selections.map(
+    (s) => `chapters:v1:${namespace}:${s.sourceId}:${s.suwayomiMangaId}`,
   );
+  const settled = await Promise.allSettled(
+    selections.map((s, i) => {
+      const load = () =>
+        sourceCall(
+          async () => {
+            if (namespace !== sourceServerKey())
+              throw new AppError('SOURCE_CHANGED', 'Source server changed', 409);
+            const r = await graphql<{
+              fetchChapters: {
+                chapters: {
+                  id: number;
+                  name: string;
+                  chapterNumber: number;
+                  scanlator: string | null;
+                  isDownloaded: boolean;
+                  volume?: number | null;
+                  uploadDate?: string | number | null;
+                }[];
+              };
+            }>(
+              'mutation($input: FetchChaptersInput!) { fetchChapters(input: $input) { chapters { id name chapterNumber scanlator isDownloaded uploadDate } } }',
+              { input: { mangaId: s.suwayomiMangaId } },
+              30_000,
+              progressive ? tenantSignal() : signal,
+            );
+            if (namespace !== sourceServerKey())
+              throw new AppError('SOURCE_CHANGED', 'Source server changed', 409);
+            return r.fetchChapters.chapters.map((c) => ({
+              id: c.id,
+              mangaId: s.suwayomiMangaId,
+              sourceId: s.sourceId,
+              sourceName: s.sourceName,
+              name: c.name,
+              number: chapterNumber(c.name, c.chapterNumber),
+              volume: chapterVolume(c.name, c.volume),
+              scanlator: c.scanlator,
+              isDownloaded: c.isDownloaded,
+              uploadDate: sourceUploadDate(c.uploadDate),
+            }));
+          },
+          progressive ? tenantSignal() : signal,
+        );
+      return cached(
+        cacheKeys[i],
+        progressive ? 30_000 : 0,
+        load,
+        progressive ? { initial: () => [] } : { waitForRefresh: true },
+      );
+    }),
+  );
+  if (namespace !== sourceServerKey())
+    throw new AppError('SOURCE_CHANGED', 'Source server changed', 409);
+  const state = progressive ? cacheKeys.map(metadataStatus) : [];
   const chapters = mergeChapters(settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])));
   if (!signal?.aborted && canWrite()) {
     saveChapterLabels(chapters.flatMap((c) => c.variants));
@@ -458,9 +481,17 @@ export async function chaptersFor(
     chapters,
     inKavita,
     ownedVolumes: owner ? ownedStock(owner).volumes : [],
+    ...(progressive
+      ? { pending: state.some((s) => s.pending), partial: state.some((s) => s.partial) }
+      : {}),
     errors: settled.flatMap((r, i) =>
-      r.status === 'rejected'
-        ? [{ mangaId: selections[i].suwayomiMangaId, code: errorCode(r.reason) }]
+      r.status === 'rejected' || state[i]?.partial
+        ? [
+            {
+              mangaId: selections[i].suwayomiMangaId,
+              code: r.status === 'rejected' ? errorCode(r.reason) : 'UPSTREAM_ERROR',
+            },
+          ]
         : [],
     ),
   };

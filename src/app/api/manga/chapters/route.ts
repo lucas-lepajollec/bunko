@@ -32,10 +32,18 @@ export const GET = route(async (r) => {
   );
 });
 export const POST = route(async (r) => {
-  const { sources, mediaId: id } = await body(
+  const {
+    sources,
+    mediaId: id,
+    progressive,
+  } = await body(
     r,
     z
-      .object({ sources: z.array(selection).max(20), mediaId: mediaId.optional() })
+      .object({
+        sources: z.array(selection).max(20),
+        mediaId: mediaId.optional(),
+        progressive: z.boolean().optional(),
+      })
       .refine((v) => v.sources.length || v.mediaId, 'Provide sources or mediaId'),
   );
   let media: UnifiedMedia | undefined;
@@ -48,10 +56,10 @@ export const POST = route(async (r) => {
     )?.media;
     if (!media)
       try {
-        media = await mediaDetail(id, r.signal);
+        media = await mediaDetail(id, r.signal, progressive);
       } catch {
         r.signal.throwIfAborted();
       }
   }
-  return json(await chaptersFor(sources, r.signal, media));
+  return json(await chaptersFor(sources, r.signal, media, undefined, progressive));
 });

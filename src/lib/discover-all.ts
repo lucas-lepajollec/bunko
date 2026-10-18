@@ -20,6 +20,7 @@ export async function discoverAll(
   key: string,
   page: number,
   providers: Record<string, () => Promise<DiscoverPage>>,
+  nonfatalWarningPages = false,
 ): Promise<DiscoverPage> {
   const hit = storedMetadata<State>(key)?.value;
   const degraded =
@@ -30,7 +31,9 @@ export async function discoverAll(
     if (
       !state.pending &&
       !Object.entries(state.pages).some(
-        ([name, p]) => p.items.length || (!state.failures.includes(name) && !p.warnings?.length),
+        ([name, p]) =>
+          p.items.length ||
+          (!state.failures.includes(name) && (nonfatalWarningPages || !p.warnings?.length)),
       )
     )
       throw new AppError('METADATA_UNAVAILABLE', 'Catalog providers are unavailable', 502);

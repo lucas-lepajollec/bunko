@@ -298,7 +298,7 @@ export interface ReaderProgressUpdate {
   page: number;
   pageCount: number;
 }
-export interface ChaptersResponse {
+export interface ChaptersResponse extends LoadState {
   ownedVolumes?: number[];
   chapters: MergedChapter[];
   errors: { mangaId: number; code: string }[];

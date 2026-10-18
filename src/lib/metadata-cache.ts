@@ -1,3 +1,4 @@
+import { tenantSignal } from './tenant-lifecycle';
 import { normalizeHome } from './home-shape';
 import { tenantState } from './tenant-context';
 import { rememberAdultIdentities } from './adult';
@@ -128,6 +129,8 @@ export async function cached<T>(
   load: () => Promise<T>,
   options: {
     waitForRefresh?: boolean;
+    /** A cold interactive request returns this snapshot while its coalesced load continues. */
+    initial?: () => T;
     accept?: (value: T) => boolean;
     onError?: (error: unknown) => void;
   } = {},
@@ -143,10 +146,19 @@ export async function cached<T>(
       pending = Promise.resolve()
         .then(load)
         .then((value) => {
-          if (!options.accept || options.accept(value)) saveMetadata(key, value);
+          if (
+            (!options.initial || !tenantSignal().aborted) &&
+            (!options.accept || options.accept(value))
+          )
+            saveMetadata(key, value);
           return options.accept && !options.accept(value) && hit ? hit.value : value;
         })
         .catch((error) => {
+          if (!hit && options.initial && !tenantSignal().aborted) {
+            // Persist a short failed-attempt cooldown: polling must not restart a failing lane forever.
+            saveMetadata(key, options.initial(), 0);
+            statement('UPDATE metadata_cache SET attempted_at=? WHERE key=?').run(Date.now(), key);
+          }
           options.onError?.(error);
           throw error;
         })
@@ -163,6 +175,12 @@ export async function cached<T>(
       });
     }
     return hit.value;
+  }
+  if (options.initial) {
+    void refresh().catch(() => {
+      /* The next snapshot reports this lane's failed attempt. */
+    });
+    return options.initial();
   }
   return structuredClone(await refresh());
 }
