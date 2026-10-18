@@ -34,7 +34,9 @@ export const GET = route(async (r) => {
 export const POST = route(async (r) => {
   const { sources, mediaId: id } = await body(
     r,
-    z.object({ sources: z.array(selection).min(1).max(20), mediaId: mediaId.optional() }),
+    z
+      .object({ sources: z.array(selection).max(20), mediaId: mediaId.optional() })
+      .refine((v) => v.sources.length || v.mediaId, 'Provide sources or mediaId'),
   );
   let media: UnifiedMedia | undefined;
   if (id) {

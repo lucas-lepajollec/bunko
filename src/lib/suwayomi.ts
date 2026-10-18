@@ -1,3 +1,4 @@
+import { ownedChapters } from './owned-chapters';
 import { sourceServerKey } from './source-server';
 import { chapterVolume } from './chapter-volume';
 import { sourceUploadDate } from './source-chapters';
@@ -27,9 +28,9 @@ import { AppError, errorCode, errorDetail, sourceFailure } from './errors';
 import { db, indexCatalog, listTracked } from './db';
 import { getSourcePreferences, recordSourceHealth, sourceHealth } from './source-preferences';
 import { proxyImage } from './images';
-import { sharedConcurrencyGate } from './concurrency';
+import { sourceCall, isBackgroundSourceWork } from './source-gate';
 import { matchKavita } from './kavita-index';
-const sourceCall = sharedConcurrencyGate('sources', 6);
+
 export function suwayomiHeaders(): Record<string, string> {
   const s = getSettings();
   return s.suwayomiUsername
@@ -78,18 +79,22 @@ export async function graphql<T>(
   return response.data;
 }
 export async function sourceInfos(signal?: AbortSignal): Promise<SourceInfo[]> {
-  const response = await graphql<{
-    sources: {
-      nodes: (Source & {
-        isNsfw?: boolean;
-        iconUrl?: string;
-        extension?: { pkgName: string } | null;
-      })[];
-    };
-  }>(
-    'query { sources { nodes { id name lang isNsfw iconUrl extension { pkgName } } } }',
-    {},
-    4000,
+  const response = await sourceCall(
+    () =>
+      graphql<{
+        sources: {
+          nodes: (Source & {
+            isNsfw?: boolean;
+            iconUrl?: string;
+            extension?: { pkgName: string } | null;
+          })[];
+        };
+      }>(
+        'query { sources { nodes { id name lang isNsfw iconUrl extension { pkgName } } } }',
+        {},
+        4000,
+        signal,
+      ),
     signal,
   );
   recordSourceFlags(response.sources.nodes.map((s) => ({ ...s, nsfw: Boolean(s.isNsfw) })));
@@ -131,9 +136,10 @@ export async function matchingSources(signal?: AbortSignal): Promise<MatchingSou
     .filter(
       (s) =>
         !(
+          isBackgroundSourceWork() &&
           s.health.state === 'error' &&
           s.health.checkedAt &&
-          Date.now() - Date.parse(s.health.checkedAt) < 6 * 3600_000
+          Date.now() - Date.parse(s.health.checkedAt) < 60_000
         ),
     )
     .filter((s) => {
@@ -163,35 +169,41 @@ export async function searchSource(
   timeoutMs = 20_000,
   filters?: BrowseRequest['filters'],
 ): Promise<SourceResult> {
-  const start = Date.now();
+  let start: number | undefined;
   try {
-    const r = await sourceCall(
-      () =>
-        graphql<{
-          fetchSourceManga: {
-            mangas: { id: number; title: string; url: string; thumbnailUrl: string | null }[];
-            hasNextPage: boolean;
-          };
-        }>(
-          `
-            mutation ($input: FetchSourceMangaInput!) {
-              fetchSourceManga(input: $input) {
-                mangas {
-                  id
-                  title
-                  url
-                  thumbnailUrl
-                }
-                hasNextPage
+    const r = await sourceCall(() => {
+      start = Date.now();
+      return graphql<{
+        fetchSourceManga: {
+          mangas: { id: number; title: string; url: string; thumbnailUrl: string | null }[];
+          hasNextPage: boolean;
+        };
+      }>(
+        `
+          mutation ($input: FetchSourceMangaInput!) {
+            fetchSourceManga(input: $input) {
+              mangas {
+                id
+                title
+                url
+                thumbnailUrl
               }
+              hasNextPage
             }
-          `,
-          { input: { source: source.id, type, query, page, ...(filters ? { filters } : {}) } },
-          timeoutMs,
-          signal,
-        ),
-      signal,
-    );
+          }
+        `,
+        {
+          input: {
+            source: source.id,
+            type,
+            page,
+            ...(type === 'SEARCH' ? { query, filters: filters ?? [] } : {}),
+          },
+        },
+        timeoutMs,
+        signal,
+      );
+    }, signal);
     const visible = sourceResultVisibility();
     const rows = r.fetchSourceManga.mangas
       .filter((m) => visible(m.id, m.title))
@@ -205,7 +217,7 @@ export async function searchSource(
         title: m.title,
       }));
     indexCatalog(rows);
-    recordSourceHealth(source.id, Date.now() - start);
+    recordSourceHealth(source.id, Date.now() - start!);
     return {
       source,
       results: rows.map((row) => ({
@@ -218,10 +230,11 @@ export async function searchSource(
       })),
       titles: rows.map((r) => r.title),
       hasNextPage: r.fetchSourceManga.hasNextPage,
-      durationMs: Date.now() - start,
+      durationMs: Date.now() - start!,
     };
   } catch (e) {
-    recordSourceHealth(source.id, Date.now() - start, errorCode(e), errorDetail(e));
+    if (start !== undefined && !signal?.aborted)
+      recordSourceHealth(source.id, Date.now() - start, errorCode(e), errorDetail(e));
     throw e;
   }
 }
@@ -376,36 +389,59 @@ export async function chaptersFor(
           .prepare('UPDATE tracked_media SET released=MAX(COALESCE(released,0),?) WHERE id=?')
           .run(Math.max(...ownNumbers), tracked.id);
     }
-  return {
-    chapters,
-    inKavita: (() => {
-      if (media) return matchKavita(media)?.numbers ?? [];
-      const tracked = listTracked().filter((t) =>
+  const tracked = media
+    ? []
+    : listTracked().filter((t) =>
         [...t.sources, ...(t.media.sources ?? [])].some((s) =>
           selections.some(
             (v) => v.sourceId === s.sourceId && v.suwayomiMangaId === s.suwayomiMangaId,
           ),
         ),
       );
-      const matches = tracked.flatMap((t) => {
-        const match = matchKavita(t.media, t.kavitaSeriesId);
-        return match ? [match] : [];
-      });
-      if (!matches.length && !tracked.length)
-        for (const selection of selections) {
-          const row = db()
-            .prepare(
-              'SELECT title FROM catalog_fts WHERE source_id=? AND source_manga_id=? LIMIT 1',
-            )
-            .get(selection.sourceId, String(selection.suwayomiMangaId)) as
-            { title: string } | undefined;
-          if (row) {
-            const match = matchKavita({ title: row.title, altTitles: [], kavitaSeriesId: null });
-            if (match) matches.push(match);
+  const owner = media ?? (tracked.length === 1 ? tracked[0].media : undefined);
+  const owned = owner ? ownedChapters(owner) : [];
+  const inKavita = owner
+    ? owned.map((c) => c.number)
+    : (() => {
+        if (media) return matchKavita(media)?.numbers ?? [];
+        const tracked = listTracked().filter((t) =>
+          [...t.sources, ...(t.media.sources ?? [])].some((s) =>
+            selections.some(
+              (v) => v.sourceId === s.sourceId && v.suwayomiMangaId === s.suwayomiMangaId,
+            ),
+          ),
+        );
+        const matches = tracked.flatMap((t) => {
+          const match = matchKavita(t.media, t.kavitaSeriesId);
+          return match ? [match] : [];
+        });
+        if (!matches.length && !tracked.length)
+          for (const selection of selections) {
+            const row = db()
+              .prepare(
+                'SELECT title FROM catalog_fts WHERE source_id=? AND source_manga_id=? LIMIT 1',
+              )
+              .get(selection.sourceId, String(selection.suwayomiMangaId)) as
+              { title: string } | undefined;
+            if (row) {
+              const match = matchKavita({ title: row.title, altTitles: [], kavitaSeriesId: null });
+              if (match) matches.push(match);
+            }
           }
-        }
-      return new Set(matches.map((s) => s.seriesId)).size === 1 ? matches[0].numbers : [];
-    })(),
+        return new Set(matches.map((s) => s.seriesId)).size === 1 ? matches[0].numbers : [];
+      })();
+  const ownedVolumes = new Map(owned.map((c) => [c.number, c.volume]));
+  const byNumber = new Map(chapters.map((c) => [c.number, c]));
+  for (const number of inKavita) {
+    const volume = ownedVolumes.get(number) ?? null;
+    const source = byNumber.get(number);
+    if (source) source.volume ??= volume;
+    else chapters.push({ key: String(number), number, volume, localOnly: true, variants: [] });
+  }
+  chapters.sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity));
+  return {
+    chapters,
+    inKavita,
     errors: settled.flatMap((r, i) =>
       r.status === 'rejected'
         ? [{ mangaId: selections[i].suwayomiMangaId, code: errorCode(r.reason) }]

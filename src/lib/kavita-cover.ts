@@ -18,6 +18,13 @@ import { sharedConcurrencyGate } from './concurrency';
 import { AppError } from './errors';
 import { invalidateKavitaImage, type CachedImage } from './image-cache';
 const limit = 15 * 1024 * 1024;
+function coverSyncAllowed(seriesId: number) {
+  return !listTracked().some(
+    (t) =>
+      (t.kavitaSeriesId === seriesId || t.media.kavitaSeriesId === seriesId) &&
+      t.kavitaCoverSync === false,
+  );
+}
 export function allowedCoverUrl(value: string) {
   try {
     const url = new URL(value);
@@ -58,6 +65,7 @@ export async function downloadCover(url: string, parentSignal?: AbortSignal) {
 async function post(suffix: string, payload: unknown, parentSignal?: AbortSignal) {
   if ((await kavitaAdmin(parentSignal)) === false)
     throw new AppError('KAVITA_NOT_ADMIN', 'Kavita requires an administrator key', 502);
+  if (suffix === '/api/Upload/series' && !coverSyncAllowed((payload as { id: number }).id)) return;
   const response = await fetch(endpoint(getSettings().kavitaUrl, suffix), {
     method: 'POST',
     headers: await kavitaHeaders(parentSignal),
@@ -111,6 +119,7 @@ export async function ensureKavitaCover(series: IndexedSeries, media: UnifiedMed
 }
 async function bootstrapKavitaCover(series: IndexedSeries, media: UnifiedMedia) {
   if (
+    !coverSyncAllowed(series.seriesId) ||
     !series.folder ||
     !media.coverUrl ||
     (!allowedCoverUrl(media.coverUrl) && !localImageUrl(media.coverUrl))
@@ -157,6 +166,7 @@ async function bootstrapKavitaCover(series: IndexedSeries, media: UnifiedMedia) 
     db()
       .prepare('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)')
       .run(key, JSON.stringify({ folder, mime: cover.mime, digest: digest(cover.bytes) }));
+    if (!coverSyncAllowed(series.seriesId)) return;
     if (!(await writeCoverFile(local, cover.bytes))) {
       clearPending();
       return;
@@ -194,6 +204,7 @@ async function bootstrapKavitaCover(series: IndexedSeries, media: UnifiedMedia) 
     )
       return;
   }
+  if (!coverSyncAllowed(series.seriesId)) return;
   const uploaded = db()
     .prepare('SELECT value FROM worker_state WHERE key=?')
     .get(`kavita_cover_hash:${series.seriesId}`) as { value: string } | undefined;
@@ -256,8 +267,9 @@ export async function syncSeriesCover(
   fetchedCover?: CachedImage,
 ) {
   return coverGate(async () => {
+    if (!coverSyncAllowed(series.seriesId)) return;
     const cover = fetchedCover ?? (await selectedCover(url, signal));
-    if (!cover || (current && !current())) return;
+    if (!cover || !coverSyncAllowed(series.seriesId) || (current && !current())) return;
     const hash = digest(cover.bytes);
     // The sidecar is optional when the series folder is not mounted; API upload still works.
     const local = series.folder ? mapKavitaPath(series.folder) : null;
@@ -289,7 +301,7 @@ export async function syncSeriesCover(
           } finally {
             await file.close();
           }
-          if (current && !current()) return;
+          if (!coverSyncAllowed(series.seriesId) || (current && !current())) return;
           await rename(temporary, target);
         } finally {
           await unlink(temporary).catch((e) => {
@@ -301,7 +313,7 @@ export async function syncSeriesCover(
     const key = `kavita_cover_hash:${series.seriesId}`;
     const previous = db().prepare('SELECT value FROM worker_state WHERE key=?').get(key) as
       { value: string } | undefined;
-    if (current && !current()) return;
+    if (!coverSyncAllowed(series.seriesId) || (current && !current())) return;
     if (previous?.value === hash) {
       if (series.folder) await scanKavitaFolder(series.folder, signal);
       return;

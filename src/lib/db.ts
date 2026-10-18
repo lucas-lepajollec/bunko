@@ -185,6 +185,7 @@ export function db(): Database.Database {
     migrateV10(connection);
     migrateV11(connection);
     migrateV12(connection);
+    migrateV13(connection);
     connections.set(folder, connection);
     return connection;
   } catch (error) {
@@ -770,8 +771,9 @@ function snapshotTracked(id?: number) {
         type: media.type,
         coverUrl,
         coverChoice,
+        kavitaCoverSync: Boolean(r.kavita_cover_sync),
         kavitaCover:
-          !kavita || !coverUrl
+          !r.kavita_cover_sync || !kavita || !coverUrl
             ? { state: 'none', error: null }
             : (() => {
                 const status = coverStatuses.get(id);
@@ -1162,4 +1164,25 @@ export function ownedVolumeNumbers(tracked: TrackedMedia): Set<number> {
       ).all(tracked.id) as { volume: number }[]
     ).map((r) => r.volume),
   ]);
+}
+
+export function migrateV13(database: Database.Database) {
+  database.transaction(() => {
+    const columns = database.pragma('table_info(tracked_media)') as { name: string }[];
+    if (!columns.some((c) => c.name === 'kavita_cover_sync'))
+      database.exec(
+        'ALTER TABLE tracked_media ADD COLUMN kavita_cover_sync INTEGER NOT NULL DEFAULT 1 CHECK(kavita_cover_sync IN (0,1))',
+      );
+    database.exec(`CREATE TABLE IF NOT EXISTS local_reader_chapters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, media_id TEXT NOT NULL, number REAL NOT NULL,
+      UNIQUE(media_id,number));`);
+    if (Number(database.pragma('user_version', { simple: true })) < 13) {
+      database
+        .prepare(
+          "DELETE FROM worker_state WHERE key IN ('kavita_full_sync','kavita_index_context')",
+        )
+        .run();
+      database.pragma('user_version = 13');
+    }
+  })();
 }

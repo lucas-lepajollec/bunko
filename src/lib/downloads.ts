@@ -1,3 +1,4 @@
+import { withBackgroundSources } from './source-gate';
 import { isTextKind } from './library-kinds';
 import { tenantSignal } from './tenant-lifecycle';
 import { accountsDb, accountIdentities } from './accounts-store';
@@ -433,7 +434,10 @@ const owner = randomUUID();
 let timer: ReturnType<typeof setTimeout> | undefined;
 let initialized = false;
 
-export async function workerTick() {
+export function workerTick() {
+  return withBackgroundSources(() => workerTickBackground());
+}
+async function workerTickBackground() {
   const state = downloadState();
   if (state.running || !acquireWorker(owner)) return;
   state.running = true;

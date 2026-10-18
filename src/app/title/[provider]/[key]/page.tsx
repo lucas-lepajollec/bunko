@@ -2,7 +2,7 @@
 import { Select } from '@/components/select';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import type {
   ChapterSelection,
@@ -94,6 +94,7 @@ function Title({ media }: { media: MediaDetail }) {
   const [override, setOverride] = useState<ChapterSelection[] | null>(null);
   const [lanes, setLanes] = useState<Lane[] | null>(null);
   const [matchRun, setMatchRun] = useState(0);
+  const [scanQuery, setScanQuery] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [choice, setChoice] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
@@ -109,7 +110,7 @@ function Title({ media }: { media: MediaDetail }) {
   useEffect(() => {
     if (!needsMatch && matchRun === 0) return;
     const close = openStream(
-      `/api/media/sources?id=${encodeURIComponent(media.id)}`,
+      `/api/media/sources?id=${encodeURIComponent(media.id)}${scanQuery ? `&q=${encodeURIComponent(scanQuery)}` : ''}`,
       {
         sources: (d) =>
           setLanes(
@@ -141,9 +142,11 @@ function Title({ media }: { media: MediaDetail }) {
         ),
     );
     return close;
-  }, [needsMatch, matchRun, media.id]);
+  }, [needsMatch, matchRun, media.id, scanQuery]);
 
-  const rescan = useCallback(() => {
+  // A custom query (Matches → Sources search box) replaces the work's titles for the scan.
+  const rescan = useCallback((q?: string) => {
+    setScanQuery(q?.trim() || null);
     setLanes(null);
     setMatchRun((r) => r + 1);
   }, []);
@@ -427,23 +430,19 @@ function Title({ media }: { media: MediaDetail }) {
                 ...STATUSES.map((x) => ({ value: x, label: t(`status.${x}`) })),
               ]}
               size="lg"
-              className="h-12 bg-white/[0.14] px-5"
+              className="h-12 justify-center gap-3 bg-white/[0.14] px-5 sm:justify-between"
             />
-            {readTarget && (
-              <Link href={readTarget.href} className={cx(ghostButton, 'gap-2')}>
-                {readTarget.label}
-              </Link>
-            )}
-            {media.kavita?.url && (
-              <a
-                href={media.kavita.url}
-                target="_blank"
-                rel="noreferrer"
-                className={cx(ghostButton, 'bg-transparent ring-1 ring-white/25')}
-              >
-                {t('kavita.read', { n: media.kavita.chapters })} ↗
-              </a>
-            )}
+            <ReadButton
+              bunko={readTarget}
+              kavita={
+                media.kavita?.url
+                  ? {
+                      href: media.kavita.url,
+                      label: t('kavita.read', { n: media.kavita.chapters }),
+                    }
+                  : null
+              }
+            />
           </div>
           {entry && (
             <div className="flex max-w-[560px] flex-col gap-2">
@@ -864,6 +863,94 @@ function UnitToggle({ entry }: { entry: TrackedMedia }) {
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** One "Read" action: the built-in reader first, Kavita in the attached menu (or alone). */
+function ReadButton({
+  bunko,
+  kavita,
+}: {
+  bunko: { href: string; label: string } | null;
+  kavita: { href: string; label: string } | null;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (
+        e instanceof KeyboardEvent ? e.key === 'Escape' : !box.current?.contains(e.target as Node)
+      )
+        setOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', close);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('keydown', close);
+    };
+  }, [open]);
+  if (!bunko && !kavita) return null;
+  if (!bunko)
+    return (
+      <a href={kavita!.href} target="_blank" rel="noreferrer" className={cx(ghostButton, 'gap-2')}>
+        {kavita!.label} ↗
+      </a>
+    );
+  return (
+    <div ref={box} className="relative flex">
+      <Link
+        href={bunko.href}
+        className={cx(ghostButton, 'flex-1 gap-2', kavita && 'rounded-r-none pr-4')}
+      >
+        {bunko.label}
+      </Link>
+      {kavita && (
+        <>
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={t('title.readOptions')}
+            onClick={() => setOpen((o) => !o)}
+            className={cx(ghostButton, 'rounded-l-none border-l border-white/10 px-3.5')}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              aria-hidden
+              className={cx('transition-transform', open && 'rotate-180')}
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          {open && (
+            <div className="absolute top-[calc(100%+6px)] right-0 z-30 flex min-w-full flex-col rounded-2xl bg-[#1c1a17] p-1 text-sm shadow-[0_18px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10">
+              <Link
+                href={bunko.href}
+                className="rounded-xl px-3 py-2.5 whitespace-nowrap hover:bg-white/[0.08]"
+              >
+                {t('title.readInBunko')}
+              </Link>
+              <a
+                href={kavita.href}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-xl px-3 py-2.5 whitespace-nowrap hover:bg-white/[0.08]"
+              >
+                {kavita.label} ↗
+              </a>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

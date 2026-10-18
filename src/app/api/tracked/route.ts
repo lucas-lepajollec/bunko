@@ -18,7 +18,7 @@ import {
 } from '@/lib/db';
 import { trackBody, trackPatch } from '@/lib/validation';
 import { refreshProgressOnDemand } from '@/lib/progress-refresh';
-import { indexedSeriesById } from '@/lib/kavita-index';
+import { indexedSeriesById, matchKavita } from '@/lib/kavita-index';
 import { AppError } from '@/lib/errors';
 import { kavitaMedia } from '@/lib/kavita-track';
 import { suwayomiDetail } from '@/lib/catalog';
@@ -108,6 +108,14 @@ export const PATCH = route(async (r) => {
       if (!latest || latest.media.id !== originalIdentity)
         throw new AppError('CONCURRENT_EDIT', 'Tracked identity changed; retry the edit', 409);
       current = latest;
+      if (input.kavitaCoverSync === true && !current.kavitaCoverSync) {
+        const series = matchKavita(current.media, current.kavitaSeriesId);
+        if (series)
+          db()
+            .prepare('DELETE FROM worker_state WHERE key=?')
+            .run(`kavita_cover_hash:${series.seriesId}`);
+        db().prepare('DELETE FROM kavita_cover_status WHERE tracked_id=?').run(input.id);
+      }
       auto = input.autoDownload ?? current.autoDownload;
       sources = input.sources ?? current.sources;
       if (auto && (!sources.length || media.type === 'ANIME'))
@@ -134,7 +142,7 @@ export const PATCH = route(async (r) => {
       progress_checked=CASE WHEN ? THEN 0 ELSE progress_checked END,
       off_catalog=CASE WHEN ? THEN ? ELSE off_catalog END,
       display_title=CASE WHEN ? THEN ? ELSE display_title END,
-      cover_choice_json=?,backdrop=?,unit=?,volume_read=CASE WHEN ? THEN NULL ELSE volume_read END WHERE id=?`,
+      cover_choice_json=?,backdrop=?,kavita_cover_sync=?,unit=?,volume_read=CASE WHEN ? THEN NULL ELSE volume_read END WHERE id=?`,
         )
         .run(
           input.status ?? current.status,
@@ -161,6 +169,7 @@ export const PATCH = route(async (r) => {
             input.cover ?? (input.media || input.offCatalog ? 'auto' : current.coverChoice),
           ),
           input.media || input.offCatalog ? 'auto' : (input.backdrop ?? current.backdrop),
+          Number(input.kavitaCoverSync ?? current.kavitaCoverSync),
           input.unit ?? current.unit ?? 'chapter',
           Number(
             input.kavitaSeriesId !== undefined && input.kavitaSeriesId !== current.kavitaSeriesId,
@@ -174,7 +183,11 @@ export const PATCH = route(async (r) => {
     throw error;
   }
   wakeWorker();
-  await syncTrackedCover(input.id, undefined, Boolean(input.cover)).catch(() => {
+  await syncTrackedCover(
+    input.id,
+    undefined,
+    Boolean(input.cover || input.kavitaCoverSync === true),
+  ).catch(() => {
     /* Retry chosen cover on the next update cycle. */
   });
   return json(getTracked(input.id));

@@ -39,6 +39,7 @@ export async function scanMatchingSources(
     durationMs: number,
   ) => void = () => {},
   onError: (source: MatchingSource, error: unknown) => void = () => {},
+  queryOverride?: string,
 ) {
   const groups = new Map<string, MatchingSource[]>();
   for (const source of sources) {
@@ -55,7 +56,7 @@ export async function scanMatchingSources(
       const pending = group.map(async (source) => {
         const start = Date.now();
         try {
-          const candidates = await matchOnSource(source, media, signal);
+          const candidates = await matchOnSource(source, media, signal, queryOverride);
           return { source, candidates, durationMs: Date.now() - start };
         } catch (error) {
           onError(source, error);
@@ -67,9 +68,11 @@ export async function scanMatchingSources(
         const result = await promise;
         signal?.throwIfAborted();
         if (!result) continue;
-        const kept = deduplicateCandidates([...accepted, ...result.candidates], group).filter(
-          (c) => c.sourceId === result.source.id,
-        );
+        const kept = (
+          queryOverride !== undefined
+            ? result.candidates
+            : deduplicateCandidates([...accepted, ...result.candidates], group)
+        ).filter((c) => c.sourceId === result.source.id);
         accepted.push(...kept);
         onMatch(result.source, kept, result.durationMs);
       }
@@ -77,5 +80,5 @@ export async function scanMatchingSources(
     },
     signal,
   );
-  return deduplicateCandidates(found, sources);
+  return queryOverride !== undefined ? found : deduplicateCandidates(found, sources);
 }

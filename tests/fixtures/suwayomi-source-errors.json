@@ -1,0 +1,11 @@
+{
+  "provenance": "Real extension messages reported in Suwayomi-Server #2181 and standard graphql-java ExceptionWhileDataFetching envelopes. Envelopes reconstructed as local fixtures; no private server capture.",
+  "cloudflare": {
+    "errors": [{"message": "Exception while fetching data (/fetchSourceManga) : Cloudflare bypass currently disabled", "locations": [{"line": 2, "column": 3}], "path": ["fetchSourceManga"], "extensions": {"classification": "DataFetchingException"}}],
+    "data": {"fetchSourceManga": null}
+  },
+  "http": {
+    "errors": [{"message": "Exception while fetching data (/fetchSourceManga) : HTTP error 403", "path": ["fetchSourceManga"], "extensions": {"classification": "DataFetchingException"}}],
+    "data": {"fetchSourceManga": null}
+  }
+}

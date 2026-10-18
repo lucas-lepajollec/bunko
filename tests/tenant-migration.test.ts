@@ -205,7 +205,7 @@ for (const v9 of [false, true])
       'encrypted-fixture-key',
     );
     expect(state.tenant.inTenant(1, () => state.lib.listTracked())).toHaveLength(1200);
-    expect(state.first.pragma('user_version', { simple: true })).toBe(12);
+    expect(state.first.pragma('user_version', { simple: true })).toBe(13);
     expect(
       state.first
         .prepare(

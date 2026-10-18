@@ -853,6 +853,9 @@ it('drains the matching queue without an update cycle and immediately refreshes 
   setWorkerValue('last_check_at', new Date().toISOString());
   updateSettings({ updateIntervalMinutes: 1440 });
   await workerTick();
+  // Each tenant yields after two matches so other accounts can use the scheduler.
+  expect(listTracked().filter((t) => t.sourceMatch === 'linked')).toHaveLength(2);
+  await workerTick();
   expect(listTracked().every((t) => t.sourceMatch === 'linked')).toBe(true);
   expect(listTracked().find((t) => t.id === first.id)).toMatchObject({
     coverUrl: stableCover(),
@@ -1410,7 +1413,7 @@ it('scans healthy installed sources in selected languages beyond favourites with
     ...sources
       .filter((s) => s.lang === 'fr')
       .map((s) => s.id)
-      .filter((id) => !['7', '3', '1', '33'].includes(id)),
+      .filter((id) => !['7', '3', '1'].includes(id)),
   ];
   expect((await matchingSources()).map((s) => s.id)).toEqual(expected);
   const t = track({ media: catalog() });
@@ -1423,8 +1426,8 @@ it('scans healthy installed sources in selected languages beyond favourites with
     }),
   );
   const stream = await response.text();
-  expect(stream.match(/event: match\n/g)).toHaveLength(16);
-  expect(stream).toContain('event: done\ndata: {"completed":16}');
+  expect(stream.match(/event: match\n/g)).toHaveLength(17);
+  expect(stream).toContain('event: done\ndata: {"completed":17}');
   expect(
     JSON.parse(stream.split('data: ')[1].split('\n')[0]).sources.map((s: Source) => s.id),
   ).toEqual(expected);
@@ -1436,7 +1439,7 @@ it('scans healthy installed sources in selected languages beyond favourites with
         .filter((r) => r.query.includes('fetchSourceManga'))
         .map((r) => (r.variables.input as { source: string }).source),
     ).size,
-  ).toBe(16);
+  ).toBe(17);
   expect(listTracked()[0].sources).toHaveLength(3);
   expect(peak).toBeLessThanOrEqual(6);
   expect(peak).toBeGreaterThan(1);
@@ -1594,7 +1597,7 @@ it('keeps selected matching languages and health isolated between tenants', asyn
     updateSettings({ suwayomiUrl: base });
     setSourcePreferences({ enabledSourceIds: [], languages: ['en'] });
     recordSourceHealth('3', 1, 'HTTP_ERROR');
-    expect((await matchingSources()).map((s) => s.id)).toEqual(['2']);
+    expect((await matchingSources()).map((s) => s.id)).toEqual(['2', '3']);
   });
   expect((await matchingSources()).map((s) => s.id)).toEqual(['1', '3']);
 });

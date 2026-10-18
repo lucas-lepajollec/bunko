@@ -850,6 +850,11 @@ const en: Dictionary = {
   'catalogs.field.hardcoverToken': 'Hardcover API token',
   'catalogs.field.rakutenAccessKey': 'Rakuten access key',
   'error.PROVIDER_ACCESS_KEY_REQUIRED': 'This provider also needs its access key.',
+  'title.readOptions': 'More ways to read',
+  'title.readInBunko': 'Read in Bunko',
+  'match.sourcesSearch': 'Search the sources with another name…',
+  'match.kavitaCoverSync': 'Use Bunko’s cover in Kavita',
+  'match.kavitaCoverSyncHint': 'Off: Kavita keeps its own cover.',
 };
 
 const fr: Dictionary = {
@@ -1680,6 +1685,11 @@ const fr: Dictionary = {
   'catalogs.field.hardcoverToken': 'Jeton API Hardcover',
   'catalogs.field.rakutenAccessKey': 'Clé d’accès Rakuten',
   'error.PROVIDER_ACCESS_KEY_REQUIRED': 'Ce fournisseur demande aussi sa clé d’accès.',
+  'title.readOptions': 'Autres façons de lire',
+  'title.readInBunko': 'Lire dans Bunko',
+  'match.sourcesSearch': 'Chercher dans les sources avec un autre nom…',
+  'match.kavitaCoverSync': 'Utiliser la couverture de Bunko dans Kavita',
+  'match.kavitaCoverSyncHint': 'Désactivé : Kavita garde sa propre couverture.',
 };
 
 const es: Dictionary = {
@@ -2503,6 +2513,11 @@ const es: Dictionary = {
   'catalogs.field.hardcoverToken': 'Token API de Hardcover',
   'catalogs.field.rakutenAccessKey': 'Clave de acceso de Rakuten',
   'error.PROVIDER_ACCESS_KEY_REQUIRED': 'Este proveedor también necesita su clave de acceso.',
+  'title.readOptions': 'Otras formas de leer',
+  'title.readInBunko': 'Leer en Bunko',
+  'match.sourcesSearch': 'Buscar en las fuentes con otro nombre…',
+  'match.kavitaCoverSync': 'Usar la portada de Bunko en Kavita',
+  'match.kavitaCoverSyncHint': 'Desactivado: Kavita conserva su portada.',
 };
 
 const de: Dictionary = {
@@ -3331,6 +3346,11 @@ const de: Dictionary = {
   'catalogs.field.hardcoverToken': 'Hardcover-API-Token',
   'catalogs.field.rakutenAccessKey': 'Rakuten-Zugriffsschlüssel',
   'error.PROVIDER_ACCESS_KEY_REQUIRED': 'Dieser Anbieter braucht auch seinen Zugriffsschlüssel.',
+  'title.readOptions': 'Weitere Leseoptionen',
+  'title.readInBunko': 'In Bunko lesen',
+  'match.sourcesSearch': 'Quellen mit anderem Namen durchsuchen…',
+  'match.kavitaCoverSync': 'Bunko-Cover in Kavita verwenden',
+  'match.kavitaCoverSyncHint': 'Aus: Kavita behält sein eigenes Cover.',
 };
 
 const it: Dictionary = {
@@ -4153,6 +4173,11 @@ const it: Dictionary = {
   'catalogs.field.hardcoverToken': 'Token API Hardcover',
   'catalogs.field.rakutenAccessKey': 'Chiave di accesso Rakuten',
   'error.PROVIDER_ACCESS_KEY_REQUIRED': 'Questo fornitore richiede anche la chiave di accesso.',
+  'title.readOptions': 'Altri modi di leggere',
+  'title.readInBunko': 'Leggi in Bunko',
+  'match.sourcesSearch': 'Cerca nelle fonti con un altro nome…',
+  'match.kavitaCoverSync': 'Usa la copertina di Bunko in Kavita',
+  'match.kavitaCoverSyncHint': 'Disattivato: Kavita mantiene la sua copertina.',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

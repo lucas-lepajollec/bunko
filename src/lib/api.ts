@@ -23,7 +23,11 @@ export function failure(e: unknown) {
       },
       400,
     );
-  if (e instanceof AppError) return json({ error: { code: e.code, message: e.message } }, e.status);
+  if (e instanceof AppError)
+    return json(
+      { error: { code: e.code, message: e.message, ...(e.detail ? { detail: e.detail } : {}) } },
+      e.status,
+    );
   return json(
     { error: { code: 'INTERNAL_ERROR', message: 'Request could not be completed' } },
     500,

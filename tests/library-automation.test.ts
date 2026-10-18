@@ -234,7 +234,9 @@ describe('automatic mapping and target selection', () => {
       path.join(tenantLibraryRoot, 'Mangas', names[0]),
     );
     await scanLibrary(catalogMedia());
-    expect(calls.at(-1)?.body.folderPath).toBe(rows[0].folderPath);
+    expect(calls.findLast((c) => c.url === '/api/Library/scan-folder')?.body.folderPath).toBe(
+      rows[0].folderPath,
+    );
   });
   it('guesses explicit library kinds without cross-kind fallback', () => {
     const libs = index.suggestLibraries(
@@ -616,7 +618,9 @@ it('uses the same resolver for a library mounted directly at the root and its sc
   expect(targetFor(catalogMedia()).local).toBe(tenantLibraryRoot);
   expect(await seriesDirectory(catalogMedia())).toBe(path.join(tenantLibraryRoot, names[0]));
   await scanLibrary(catalogMedia());
-  expect(calls.at(-1)?.body.folderPath).toBe(rows[0].folderPath);
+  expect(calls.findLast((c) => c.url === '/api/Library/scan-folder')?.body.folderPath).toBe(
+    rows[0].folderPath,
+  );
 });
 it('retains manual unlink and dismissed series after loading fresh server modules', async () => {
   await index.syncKavitaIndex();

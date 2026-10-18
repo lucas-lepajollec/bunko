@@ -221,7 +221,12 @@ export const settingsPatch = z
       .max(2000)
       .regex(/^[^\s\x00-\x1f]*$/)
       .optional(),
-    rakutenAccessKey: z.string().trim().max(4000).regex(/^[^\s\x00-\x1f\x7f]*$/).optional(),
+    rakutenAccessKey: z
+      .string()
+      .trim()
+      .max(4000)
+      .regex(/^[^\s\x00-\x1f\x7f]*$/)
+      .optional(),
     hardcoverToken: z
       .string()
       .trim()
@@ -315,6 +320,7 @@ export const trackBody = z
 export const trackPatch = z
   .object({
     id,
+    kavitaCoverSync: z.boolean().optional(),
     media: media.optional(),
     unit: z.enum(['chapter', 'volume']).optional(),
     displayTitle: z.string().trim().min(1).max(300).nullable().optional(),

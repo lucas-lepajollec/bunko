@@ -1,3 +1,4 @@
+import { withBackgroundSources } from './source-gate';
 import type { ChapterSelection, SourceCandidate, TrackedMedia } from '@/types/shared';
 import { statement, db, getTracked, saveSourceStatus } from './db';
 import { matchingSources, chaptersFor } from './suwayomi';
@@ -7,6 +8,7 @@ import { suwayomiDetail } from './catalog';
 import { errorCode } from './errors';
 import { sourceMatchQueue } from './source-match-state';
 import { sharedConcurrencyGate } from './concurrency';
+import { tenantPath, tenantId } from './tenant-context';
 import { setTimeout as pause } from 'node:timers/promises';
 
 export function sameSource(
@@ -47,7 +49,8 @@ export function replaceSources(t: TrackedMedia, sources: ChapterSelection[]) {
     });
   }
 }
-const matchingGate = sharedConcurrencyGate('source-matching-entry', 1);
+const matchingGate = () =>
+  sharedConcurrencyGate(`source-matching-entry:${tenantPath(tenantId())}`, 1);
 const identity = (t: TrackedMedia) =>
   JSON.stringify([t.media.id, t.title, t.media.altTitles, t.identity, t.kavitaSeriesId]);
 /** Process one entry; the worker continuously drains this queue independently of release checks. */
@@ -55,88 +58,90 @@ export async function matchTrackedSources(
   signal?: AbortSignal,
   ownsLease: () => boolean = () => true,
 ) {
-  return matchingGate(async () => {
-    signal?.throwIfAborted();
-    if (!ownsLease()) return false;
-    const next = sourceMatchQueue()[0];
-    if (!next) return false;
-    const t = getTracked(next.id);
-    if (!t || t.sources.length) return false;
-    const available = await matchingSources(signal);
-    if (!available.length || signal?.aborted || !ownsLease()) return false;
-    const lease = statement('SELECT owner FROM worker_lock WHERE id=1').get() as
-      { owner: string } | undefined;
-    const state = JSON.stringify({ id: t.id, title: t.title, owner: lease?.owner ?? null });
-    statement("INSERT OR REPLACE INTO worker_state VALUES('source_matching',?)").run(state);
-    try {
-      const results = await scanMatchingSources(available, t.media, signal);
-      const candidates = available.flatMap((source) => {
-        const candidate = results.find(
-          (c) =>
-            c.sourceId === source.id &&
-            c.score >= 0.9 &&
-            !statement(
-              'SELECT 1 FROM source_dismissals WHERE tracked_id=? AND source_id=? AND manga_id=?',
-            ).get(t.id, c.sourceId, c.suwayomiMangaId),
-        );
-        return candidate ? [candidate] : [];
-      });
-      if (signal?.aborted || !ownsLease()) return false;
-      let linked = false;
-      db().transaction(() => {
-        const current = getTracked(t.id);
-        if (!current || current.sources.length || identity(current) !== identity(t)) return;
-        const selected: SourceCandidate[] = candidates
-          .filter(
+  return withBackgroundSources(() =>
+    matchingGate()(async () => {
+      signal?.throwIfAborted();
+      if (!ownsLease()) return false;
+      const next = sourceMatchQueue()[0];
+      if (!next) return false;
+      const t = getTracked(next.id);
+      if (!t || t.sources.length) return false;
+      const available = await matchingSources(signal);
+      if (!available.length || signal?.aborted || !ownsLease()) return false;
+      const lease = statement('SELECT owner FROM worker_lock WHERE id=1').get() as
+        { owner: string } | undefined;
+      const state = JSON.stringify({ id: t.id, title: t.title, owner: lease?.owner ?? null });
+      statement("INSERT OR REPLACE INTO worker_state VALUES('source_matching',?)").run(state);
+      try {
+        const results = await scanMatchingSources(available, t.media, signal);
+        const candidates = available.flatMap((source) => {
+          const candidate = results.find(
             (c) =>
+              c.sourceId === source.id &&
+              c.score >= 0.9 &&
               !statement(
                 'SELECT 1 FROM source_dismissals WHERE tracked_id=? AND source_id=? AND manga_id=?',
               ).get(t.id, c.sourceId, c.suwayomiMangaId),
-          )
-          .sort(rankCandidates)
-          .slice(0, 3);
-        statement('UPDATE tracked_media SET sources_json=?,source_match_at=? WHERE id=?').run(
-          JSON.stringify(
-            selected.map((c) => ({
+          );
+          return candidate ? [candidate] : [];
+        });
+        if (signal?.aborted || !ownsLease()) return false;
+        let linked = false;
+        db().transaction(() => {
+          const current = getTracked(t.id);
+          if (!current || current.sources.length || identity(current) !== identity(t)) return;
+          const selected: SourceCandidate[] = candidates
+            .filter(
+              (c) =>
+                !statement(
+                  'SELECT 1 FROM source_dismissals WHERE tracked_id=? AND source_id=? AND manga_id=?',
+                ).get(t.id, c.sourceId, c.suwayomiMangaId),
+            )
+            .sort(rankCandidates)
+            .slice(0, 3);
+          statement('UPDATE tracked_media SET sources_json=?,source_match_at=? WHERE id=?').run(
+            JSON.stringify(
+              selected.map((c) => ({
+                sourceId: c.sourceId,
+                sourceName: c.sourceName,
+                suwayomiMangaId: c.suwayomiMangaId,
+              })),
+            ),
+            new Date().toISOString(),
+            t.id,
+          );
+          for (const c of selected)
+            saveSourceStatus(t.id, {
               sourceId: c.sourceId,
-              sourceName: c.sourceName,
               suwayomiMangaId: c.suwayomiMangaId,
-            })),
-          ),
-          new Date().toISOString(),
-          t.id,
-        );
-        for (const c of selected)
-          saveSourceStatus(t.id, {
-            sourceId: c.sourceId,
-            suwayomiMangaId: c.suwayomiMangaId,
-            title: c.title,
-            thumbnailUrl: c.thumbnailUrl,
-            latestChapter: null,
-            chapterCount: c.chapterCount ?? null,
-            checkedAt: null,
-            auto: true,
-            error: null,
-          });
-        linked = selected.length > 0;
-      })();
-      if (linked && !signal?.aborted && ownsLease()) {
-        const current = getTracked(t.id)!;
-        const result = await chaptersFor(current.sources, signal, undefined, ownsLease);
-        if (!signal?.aborted && ownsLease())
-          await refreshSourceStatuses(current, result, signal, ownsLease);
+              title: c.title,
+              thumbnailUrl: c.thumbnailUrl,
+              latestChapter: null,
+              chapterCount: c.chapterCount ?? null,
+              checkedAt: null,
+              auto: true,
+              error: null,
+            });
+          linked = selected.length > 0;
+        })();
+        if (linked && !signal?.aborted && ownsLease()) {
+          const current = getTracked(t.id)!;
+          const result = await chaptersFor(current.sources, signal, undefined, ownsLease);
+          if (!signal?.aborted && ownsLease())
+            await refreshSourceStatuses(current, result, signal, ownsLease);
+        }
+        return true;
+      } catch (error) {
+        if (signal?.aborted || !ownsLease()) return false;
+        throw error;
+      } finally {
+        statement("DELETE FROM worker_state WHERE key='source_matching' AND value=?").run(state);
       }
-      return true;
-    } catch (error) {
-      if (signal?.aborted || !ownsLease()) return false;
-      throw error;
-    } finally {
-      statement("DELETE FROM worker_state WHERE key='source_matching' AND value=?").run(state);
-    }
-  }, signal);
+    }, signal),
+  );
 }
 export async function drainSourceMatches(signal: AbortSignal, ownsLease: () => boolean) {
-  while (!signal.aborted && ownsLease()) {
+  for (let count = 0; count < 2 && !signal.aborted && ownsLease(); count++) {
     if (!(await matchTrackedSources(signal, ownsLease))) return;
     await pause(250, undefined, { signal });
   }

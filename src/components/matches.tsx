@@ -143,7 +143,7 @@ export function MatchesDrawer({
   media: MediaDetail;
   sources: ChapterSelection[];
   lanes: Lane[] | null;
-  onScan: () => void;
+  onScan: (q?: string) => void;
   onSources: (next: ChapterSelection[]) => Promise<void>;
 }) {
   const { t } = useI18n();
@@ -257,6 +257,7 @@ export function MatchesDrawer({
                 entry={entry!}
                 media={media}
                 onPick={(id) => run(() => patch({ kavitaSeriesId: id }))}
+                onCoverSync={(kavitaCoverSync) => run(() => patch({ kavitaCoverSync }))}
               />
             ) : (
               <CoverTab
@@ -436,10 +437,12 @@ function KavitaTab({
   entry,
   media,
   onPick,
+  onCoverSync,
 }: {
   entry: TrackedMedia;
   media: MediaDetail;
   onPick: (id: number | null) => void;
+  onCoverSync: (on: boolean) => void;
 }) {
   const { t, n } = useI18n();
   return (
@@ -455,6 +458,20 @@ function KavitaTab({
         empty={t('match.kavitaNone')}
       />
       <Hint>{t('match.kavitaHint')}</Hint>
+      {media.kavita && (
+        <label className="flex items-center justify-between gap-4 rounded-2xl bg-white/[0.04] p-3 text-sm">
+          <span className="flex flex-col gap-0.5">
+            <span>{t('match.kavitaCoverSync')}</span>
+            <span className="text-muted text-xs">{t('match.kavitaCoverSyncHint')}</span>
+          </span>
+          <input
+            type="checkbox"
+            checked={entry.kavitaCoverSync ?? true}
+            onChange={(e) => onCoverSync(e.target.checked)}
+            className="accent-fg size-[18px] shrink-0"
+          />
+        </label>
+      )}
       <KavitaPicker initial={entry.title} onPick={onPick} onNone={() => onPick(null)} />
     </div>
   );
@@ -508,9 +525,10 @@ function SourcesTab({
   entry: TrackedMedia | undefined;
   sources: ChapterSelection[];
   lanes: Lane[] | null;
-  onScan: () => void;
+  onScan: (q?: string) => void;
   onSources: (next: ChapterSelection[]) => void;
 }) {
+  const [query, setQuery] = useState(entry?.title ?? '');
   const { t, n } = useI18n();
   const relative = useRelativeTime();
   const linked = new Set(sources.map((s) => `${s.sourceId}:${s.suwayomiMangaId}`));
@@ -593,7 +611,26 @@ function SourcesTab({
       <span className="text-muted mt-2 text-xs tracking-[0.14em] uppercase">
         {t('match.addSource')}
       </span>
-      <ScanProgress lanes={lanes} onScan={onScan} />
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onScan(query);
+        }}
+        className="flex gap-2"
+      >
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('match.sourcesSearch')}
+          aria-label={t('match.sourcesSearch')}
+          maxLength={200}
+          className="border-line bg-raised h-10 min-w-0 flex-1 rounded-full border px-4 text-sm"
+        />
+        <button type="submit" disabled={!query.trim()} className={smallButton}>
+          {t('extsearch.run')}
+        </button>
+      </form>
+      <ScanProgress lanes={lanes} onScan={() => onScan(query)} />
       <div className="flex flex-col gap-1">
         {candidates.slice(0, 20).map((c) => (
           <button

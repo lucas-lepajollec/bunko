@@ -35,7 +35,9 @@ function Reader() {
   const { chapter } = useParams<{ chapter: string }>();
   const params = useSearchParams();
   const media = params.get('media');
-  const query = `/api/reader/chapter?id=${encodeURIComponent(chapter)}${media ? `&media=${encodeURIComponent(media)}` : ''}`;
+  // `local-<n>`: a chapter only present in the library files (no source chapter id).
+  const local = /^local-(\d+(?:\.\d+)?)$/.exec(chapter)?.[1];
+  const query = `/api/reader/chapter?${local ? `local=${local}` : `id=${encodeURIComponent(chapter)}`}${media ? `&media=${encodeURIComponent(media)}` : ''}`;
   const data = useApi<ReaderChapter>(query);
   const next = useApi<ReaderChapter>(
     data.data?.nextId
@@ -94,10 +96,14 @@ function Reader() {
       const target = current + delta;
       if (target >= pages.length) {
         if (data.data.nextId) router.push(chapterHref(data.data.nextId, media));
+        else if (data.data.nextLocal != null)
+          router.push(chapterHref(`local-${data.data.nextLocal}`, media));
         return;
       }
       if (target < 0) {
         if (data.data.prevId) router.push(chapterHref(data.data.prevId, media));
+        else if (data.data.prevLocal != null)
+          router.push(chapterHref(`local-${data.data.prevLocal}`, media));
         return;
       }
       setPage(target);
@@ -250,7 +256,7 @@ function readMode(key: string): Mode | null {
   }
 }
 
-function chapterHref(id: number, media: string | null) {
+function chapterHref(id: number | string, media: string | null) {
   return `/read/${id}${media ? `?media=${encodeURIComponent(media)}` : ''}`;
 }
 
@@ -258,9 +264,9 @@ function ChapterEnd({ d, media, back }: { d: ReaderChapter; media: string | null
   const { t } = useI18n();
   return (
     <div className="flex gap-2 p-4">
-      {d.nextId ? (
+      {d.nextId || d.nextLocal != null ? (
         <Link
-          href={chapterHref(d.nextId, media)}
+          href={chapterHref(d.nextId ?? `local-${d.nextLocal}`, media)}
           className="flex h-11 items-center rounded-full bg-white px-5 text-sm font-semibold text-black"
         >
           {t('reader.nextChapter')} →

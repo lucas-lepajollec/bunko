@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Downloaded chapters show up right after Kavita's scan; chapters you own only as files appear in the table and open in the reader; the table shows all chapters by default and folds the range picker.
+- Sources: one shared request budget per Suwayomi server across accounts (interactive first), health no longer counts Bunko's own queue, stale "slow" states clear quickly; popular/latest requests match Suwayomi's own web UI and extension errors are reported in full.
+- Matches: search sources with another name; choose whether Bunko's cover is pushed to Kavita. One "Read" button (Bunko reader, Kavita in its menu); status centered on phones; sign out in the phone menu.
+- Downloads refresh their Kavita series immediately after scanning, including newly created series, with bounded polling and durable retry.
+- Chapter lists include owned chapters missing from linked sources; the reader can open their local CBZs and retain page progress without Suwayomi.
+- Accounts sharing a Suwayomi server share its request budget, with fair background scheduling and reserved interactive capacity. Slow/error health expires quickly and never blocks an interactive retry.
+- Source browse follows the official WebUI request shape; sanitized extension errors retain their full explanation.
+- Source matching accepts a custom search query and returns all scored hits. Kavita cover synchronization can be disabled per work and restored promptly.
+
 - Matching scans your installed sources in your chosen source languages only (not every language variant), merges duplicates, and shows each result's language.
 - Fixed: many sources showed "not found" and were skipped by search and matching because their extension carries a mature-content flag; sources are never hidden by the content filter anymore (it applies to works only).
 - Settings → Catalogs: optional free keys for Google Books (new novels, books, comics, LN volumes), Metron (comics catalog and weekly issues), Rakuten Books (new Japanese LN volumes) and Hardcover (novel catalog), each with a Test button. Nothing changes without keys.

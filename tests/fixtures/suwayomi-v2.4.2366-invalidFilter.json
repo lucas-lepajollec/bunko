@@ -1,0 +1,7 @@
+{
+  "errors": [
+    {
+      "message": "The variables input contains a field name 'state' that is not defined for input object type 'FilterChangeInput' "
+    }
+  ]
+}

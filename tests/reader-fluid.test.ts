@@ -180,7 +180,7 @@ it('protects and validates all reader routes', async () => {
     expect(
       (await handler(new Request(`http://fixture.test/api/reader/${url}`, { method }))).status,
     ).toBe(401);
-  expect((await chapterRoute.GET(req('/api/reader/chapter?id=-1'))).status).toBe(400);
+  expect((await chapterRoute.GET(req('/api/reader/chapter?id=-1'))).status).toBe(404);
   expect((await pageRoute.GET(req('/api/reader/page?chapter=1&index=-1'))).status).toBe(400);
   expect(
     (

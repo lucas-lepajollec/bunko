@@ -45,8 +45,11 @@ export function setSourcePreferences(value: SourcePreferences): SourcePreference
 export function sourceHealth(id: string): SourceHealth {
   const row = db().prepare('SELECT payload FROM source_health WHERE source_id=?').get(id) as
     { payload: string } | undefined;
-  return row
-    ? JSON.parse(row.payload)
+  const health: SourceHealth | undefined = row ? JSON.parse(row.payload) : undefined;
+  return health &&
+    (!(health.state === 'slow' || health.state === 'error') ||
+      (health.checkedAt && Date.now() - Date.parse(health.checkedAt) < 60_000))
+    ? health
     : { state: 'unknown', latencyMs: null, error: null, detail: null, checkedAt: null };
 }
 export function recordSourceHealth(

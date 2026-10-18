@@ -286,7 +286,7 @@ afterAll(async () => {
 });
 // First assertion deliberately runs before destructive fixture resets, on an actual v1 database.
 it('migrates an existing v1 database transactionally and idempotently without losing tracked data', () => {
-  expect(db().pragma('user_version', { simple: true })).toBe(12);
+  expect(db().pragma('user_version', { simple: true })).toBe(13);
   expect(listTracked()[0]).toMatchObject({
     id: 1,
     title: 'Legacy',
@@ -443,7 +443,12 @@ describe('v2 protocol fixtures', () => {
       expect(
         calls.findLast((c) => String(c.body.query).includes('fetchSourceManga'))?.body.variables,
       ).toEqual({
-        input: { source: sourceA.id, type: mode, page: 2, query: 'Fixture', filters: [filter] },
+        input: {
+          source: sourceA.id,
+          type: mode,
+          page: 2,
+          ...(mode === 'SEARCH' ? { query: 'Fixture', filters: [filter] } : {}),
+        },
       });
     }
     expect((await import('@/lib/db')).searchCatalog('Fixture')[0].sourceId).toBe(sourceA.id);

@@ -130,3 +130,55 @@ async function legacyArchive(
     return null;
   }
 }
+
+/** Resolve an owned number without needing a live source or a Suwayomi chapter ID. */
+export async function localNumberArchive(media: UnifiedMedia, number: number) {
+  const { listTracked, trackedForMedia } = await import('./db');
+  const { ownedChapters } = await import('./owned-chapters');
+  const owned = ownedChapters(media).find((c) => c.number === number);
+  if (!owned) return null;
+  const tracked = trackedForMedia(media, listTracked());
+  const imports = statement(`SELECT chapter_id FROM imported_chapters
+    WHERE (tracked_id=? OR media_json ->> '$.id'=?) AND number=?`).all(
+    tracked?.id ?? null,
+    media.id,
+    number,
+  ) as { chapter_id: number }[];
+  for (const row of imports) {
+    const archive = await readerArchive(row.chapter_id);
+    if (archive) return { filename: archive.filename, volume: owned.volume };
+  }
+  const series = matchKavita(media, tracked?.kavitaSeriesId);
+  if (!series?.folder) return null;
+  const mapped = mapKavitaPath(series.folder);
+  if (!mapped) return null;
+  try {
+    const folder = await safeLibraryDirectory(mapped);
+    const files =
+      series.chapterFiles
+        ?.filter((c) => c.number === number && c.path)
+        .map((c) => mapKavitaPath(c.path!))
+        .filter((p): p is string => !!p) ?? [];
+    const candidates = files.length
+      ? [...new Set(files)]
+      : (await readdir(folder))
+          .filter(
+            (name) =>
+              /\.cbz$/i.test(name) &&
+              chapterNumber(path.basename(name, path.extname(name))) === number,
+          )
+          .map((name) => path.join(folder, name));
+    if (candidates.length !== 1) return null;
+    const actual = await realpath(candidates[0]);
+    if (
+      !inside(folder, actual) ||
+      !inside(await realpath(libraryRoot()), actual) ||
+      !(await stat(actual)).isFile()
+    )
+      return null;
+    await safeLibraryDirectory(path.dirname(actual));
+    return { filename: actual, volume: owned.volume };
+  } catch {
+    return null;
+  }
+}

@@ -55,10 +55,11 @@ export function ChapterTable({
   owned: Set<number>;
 }) {
   const { t, n } = useI18n();
-  const [filter, setFilter] = useState<ChapterFilter>('missing');
+  const [filter, setFilter] = useState<ChapterFilter>('all');
   const [limit, setLimit] = useState(FIRST);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [rangeOpen, setRangeOpen] = useState(false);
   // Volume view only when sources give volumes; chapters remain the unit underneath.
   const hasVolumes = chapters.some((c) => c.volume !== null);
   const [byVolume, setByVolume] = useState(defaultByVolume ?? false);
@@ -162,40 +163,65 @@ export function ChapterTable({
             />
             {t('chapters.selectAll', { count: n(visible.length) })}
           </label>
-          <form
-            className="ml-auto flex items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const a = Number(from.replace(',', '.'));
-              const b = Number((to || from).replace(',', '.'));
-              if (!Number.isFinite(a) || !Number.isFinite(b)) return;
-              const [lo, hi] = a <= b ? [a, b] : [b, a];
-              const next = new Set(selected);
-              for (const c of ordered)
-                if (c.number !== null && c.number >= lo && c.number <= hi) next.add(c.key);
-              setSelected(next);
-            }}
+          {/* The range picker stays folded behind a chevron until asked for. */}
+          <button
+            type="button"
+            aria-expanded={rangeOpen}
+            aria-label={t('chapters.range')}
+            title={t('chapters.range')}
+            onClick={() => setRangeOpen((o) => !o)}
+            className="text-mid flex size-8 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
           >
-            <span>{t('chapters.range')}</span>
-            <input
-              aria-label={t('chapters.rangeFrom')}
-              inputMode="decimal"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="border-line bg-raised h-9 w-16 rounded-full border px-3 text-center"
-            />
-            <span aria-hidden>→</span>
-            <input
-              aria-label={t('chapters.rangeTo')}
-              inputMode="decimal"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="border-line bg-raised h-9 w-16 rounded-full border px-3 text-center"
-            />
-            <button type="submit" className="h-9 rounded-full bg-white/[0.1] px-3">
-              {t('chapters.rangeSelect')}
-            </button>
-          </form>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              aria-hidden
+              className={cx('transition-transform', rangeOpen && 'rotate-180')}
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          {rangeOpen && (
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const a = Number(from.replace(',', '.'));
+                const b = Number((to || from).replace(',', '.'));
+                if (!Number.isFinite(a) || !Number.isFinite(b)) return;
+                const [lo, hi] = a <= b ? [a, b] : [b, a];
+                const next = new Set(selected);
+                for (const c of ordered)
+                  if (c.number !== null && c.number >= lo && c.number <= hi) next.add(c.key);
+                setSelected(next);
+              }}
+            >
+              <span>{t('chapters.range')}</span>
+              <input
+                aria-label={t('chapters.rangeFrom')}
+                inputMode="decimal"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                className="border-line bg-raised h-9 w-16 rounded-full border px-3 text-center"
+              />
+              <span aria-hidden>→</span>
+              <input
+                aria-label={t('chapters.rangeTo')}
+                inputMode="decimal"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                className="border-line bg-raised h-9 w-16 rounded-full border px-3 text-center"
+              />
+              <button type="submit" className="h-9 rounded-full bg-white/[0.1] px-3">
+                {t('chapters.rangeSelect')}
+              </button>
+            </form>
+          )}
         </div>
       </div>
       {visible.length === 0 && (
@@ -368,9 +394,13 @@ function ChapterRow({
       >
         {state}
       </span>
-      {variant && (
+      {(variant || (chapter.localOnly && chapter.number !== null)) && (
         <Link
-          href={`/read/${variant.id}?media=${encodeURIComponent(mediaId)}`}
+          href={
+            variant
+              ? `/read/${variant.id}?media=${encodeURIComponent(mediaId)}`
+              : `/read/local-${chapter.number}?media=${encodeURIComponent(mediaId)}`
+          }
           aria-label={t('chapters.readLabel', { label })}
           title={t('chapters.read')}
           className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"

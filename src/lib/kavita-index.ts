@@ -52,6 +52,7 @@ export interface IndexedSeries {
   names: string[];
   folder: string | null;
   numbers: number[];
+  chapterFiles?: { number: number; volume: number | null; path: string | null }[];
   volumes?: number[];
   volumeRead?: number | null;
   summary?: string | null;
@@ -446,6 +447,7 @@ export async function syncKavitaIndex() {
               ],
               folder: row.folderPath || row.lowestFolderPath || null,
               numbers: kavitaChapterNumbers(volumes),
+              chapterFiles: kavitaChapterFiles(volumes),
               ...kavitaVolumeProgress(volumes),
               adult:
                 typeof metadata.ageRating === 'number'
@@ -483,12 +485,23 @@ export async function syncKavitaIndex() {
         )
           throw new Error('Connection changed');
         const found = new Set(result.map((s) => s.seriesId));
-        for (const id of previous.keys())
-          if (!found.has(id)) db().prepare('DELETE FROM kavita_series WHERE series_id=?').run(id);
+        for (const [id, old] of previous)
+          if (!found.has(id))
+            statement('DELETE FROM kavita_series WHERE series_id=? AND payload=?').run(
+              id,
+              JSON.stringify(old),
+            );
         const insert = db().prepare(
           'INSERT INTO kavita_series(series_id,payload) VALUES(?,?) ON CONFLICT(series_id) DO UPDATE SET payload=excluded.payload WHERE payload<>excluded.payload',
         );
-        for (const series of result) insert.run(series.seriesId, JSON.stringify(series));
+        for (const series of result) {
+          const live = statement('SELECT payload FROM kavita_series WHERE series_id=?').get(
+            series.seriesId,
+          ) as { payload: string } | undefined;
+          // A targeted post-scan refresh may have published while this snapshot was fetching.
+          if (live && live.payload !== JSON.stringify(previous.get(series.seriesId))) continue;
+          insert.run(series.seriesId, JSON.stringify(series));
+        }
         if (full) stateSet('kavita_full_sync', String(Date.now()));
         stateSet('kavita_index_context', context);
         stateSet('kavita_synced_at', new Date().toISOString());
@@ -566,4 +579,180 @@ export function kavitaVolumeProgress(input: unknown): {
     volumes: [...owned].sort((a, b) => a - b),
     volumeRead: owned.size ? Math.max(0, ...read) : null,
   };
+}
+
+/** Kavita chapter file paths let imported and pre-existing archives use the same safe reader. */
+export function kavitaChapterFiles(input: unknown): NonNullable<IndexedSeries['chapterFiles']> {
+  const rows = z
+    .array(
+      z
+        .object({
+          number: z.union([z.string(), z.number()]).nullable().optional(),
+          minNumber: z.number().optional(),
+          maxNumber: z.number().optional(),
+          chapters: z
+            .array(
+              z
+                .object({
+                  files: z
+                    .array(z.object({ filePath: z.string() }))
+                    .nullable()
+                    .optional(),
+                })
+                .passthrough(),
+            )
+            .nullable(),
+        })
+        .passthrough(),
+    )
+    .parse(input);
+  return rows.flatMap((v) => {
+    const n =
+      v.number == null ? (v.minNumber === v.maxNumber ? v.minNumber : NaN) : Number(v.number);
+    const volume = n != null && Number.isFinite(n) && n > 0 ? n : null;
+    return (v.chapters ?? []).flatMap((c) =>
+      kavitaChapterNumbers([{ chapters: [c] }]).map((number) => ({
+        number,
+        volume,
+        path: c.files?.length === 1 ? c.files[0].filePath : null,
+      })),
+    );
+  });
+}
+
+/** A scan is asynchronous in Kavita: poll just its series, bounded to ten seconds. */
+export async function refreshScannedSeries(
+  media: UnifiedMedia,
+  folder: string,
+  parentSignal?: AbortSignal,
+) {
+  const settings = getSettings();
+  const signal = AbortSignal.any([
+    tenantSignal(),
+    ...(parentSignal ? [parentSignal] : []),
+    AbortSignal.timeout(10_000),
+  ]);
+  const { trackedForMedia, listTracked } = await import('./db');
+  const tracked = trackedForMedia(media, listTracked());
+  const imports = statement(
+    "SELECT number,volume FROM imported_chapters WHERE tracked_id=? OR media_json ->> '$.id'=?",
+  ).all(tracked?.id ?? null, media.id) as { number: number | null; volume: number | null }[];
+  const expected = new Set(imports.flatMap((c) => c.number ?? []));
+  const expectedVolumes = new Set(imports.flatMap((c) => c.volume ?? []));
+  const sameConnection = () => {
+    const s = getSettings();
+    return (
+      s.kavitaUrl === settings.kavitaUrl &&
+      s.kavitaApiKey === settings.kavitaApiKey &&
+      s.kavitaAuthMode === settings.kavitaAuthMode &&
+      s.mediaRoot === settings.mediaRoot
+    );
+  };
+  let id = matchKavita(media)?.seriesId;
+  try {
+    const { setTimeout: pause } = await import('node:timers/promises');
+    for (const delay of [0, 250, 500, 1000, 2000, 3000]) {
+      if (delay) await pause(delay, undefined, { signal });
+      signal.throwIfAborted();
+      if (!id) {
+        const hits = z
+          .object({
+            series: z.array(z.object({ seriesId: z.number().int().positive() })).nullable(),
+          })
+          .parse(
+            await kavitaJson(
+              `/api/Search/search?queryString=${encodeURIComponent(media.title)}&includeChapterAndFiles=false`,
+              { signal },
+            ),
+          );
+        const candidates = [];
+        for (const hit of (hits.series ?? []).slice(0, 20)) {
+          const row = seriesSchema.parse(
+            await kavitaJson(`/api/Series/${hit.seriesId}`, { signal }),
+          );
+          if (
+            [row.folderPath, row.lowestFolderPath].some(
+              (p) => p?.replace(/\\/g, '/').replace(/\/+$/, '') === folder.replace(/\/+$/, ''),
+            )
+          )
+            candidates.push(row);
+        }
+        if (candidates.length === 1) id = candidates[0].id;
+      }
+      if (!id) continue;
+      const row = seriesSchema.parse(await kavitaJson(`/api/Series/${id}`, { signal }));
+      // Never attach a similarly named series from a different folder/library.
+      if (
+        ![row.folderPath, row.lowestFolderPath].some(
+          (p) => p?.replace(/\/+$/, '') === folder.replace(/\/+$/, ''),
+        )
+      ) {
+        id = undefined;
+        continue;
+      }
+      const volumes = await kavitaJson(`/api/Series/volumes?seriesId=${id}`, { signal });
+      const old = indexedSeriesById(id);
+      const library = (await kavitaLibraries(signal)).find((l) => l.id === row.libraryId);
+      if (!library) continue;
+      const metadata = old
+        ? null
+        : await kavitaJson<{
+            ageRating?: number | string;
+            summary?: string | null;
+            genres?: { title: string }[] | null;
+          }>(`/api/Series/metadata?seriesId=${id}`, { signal });
+      const series: IndexedSeries = {
+        ...old,
+        ...(metadata
+          ? {
+              summary: metadata.summary ?? null,
+              genres: metadata.genres?.map((g) => g.title) ?? [],
+              adult:
+                typeof metadata.ageRating === 'number'
+                  ? metadata.ageRating >= 14
+                  : /^(x18\+?|x18plus|explicit)$/i.test(metadata.ageRating ?? ''),
+            }
+          : {}),
+        revision: null,
+        seriesId: id,
+        libraryId: row.libraryId,
+        libraryName: library.name,
+        name: row.name ?? '',
+        names: [
+          ...new Set(
+            [row.name, row.localizedName, row.originalName, row.sortName].filter(
+              (n): n is string => !!n,
+            ),
+          ),
+        ],
+        folder: row.folderPath || row.lowestFolderPath || folder,
+        numbers: kavitaChapterNumbers(volumes),
+        chapterFiles: kavitaChapterFiles(volumes),
+        ...kavitaVolumeProgress(volumes),
+        completed: allKavitaRead(volumes),
+        kind: old?.kind ?? guessLibraryKind(library.name, library.type),
+      };
+      signal.throwIfAborted();
+      if (!sameConnection()) return;
+      db().transaction(() => {
+        statement(
+          'INSERT INTO kavita_series(series_id,payload) VALUES(?,?) ON CONFLICT(series_id) DO UPDATE SET payload=excluded.payload',
+        ).run(id, JSON.stringify(series));
+        if (tracked)
+          statement(
+            `UPDATE tracked_media SET kavita_series_id=? WHERE id=? AND media_json ->> '$.id'=? AND kavita_manual=0 AND (kavita_series_id IS NULL OR kavita_series_id=?)`,
+          ).run(id, tracked.id, tracked.media.id, id);
+      })();
+      if (
+        [...expected].every((n) => series.numbers.includes(n)) &&
+        [...expectedVolumes].every((n) => series.volumes?.includes(n))
+      )
+        return;
+    }
+  } catch {
+    parentSignal?.throwIfAborted();
+    tenantSignal().throwIfAborted();
+  }
+  // The scan succeeded but indexing is late/unavailable; retain imports and retry durably.
+  if (sameConnection()) requestKavitaSync();
 }

@@ -13,7 +13,7 @@ import { chapterNumber } from './suwayomi';
 import { AppError } from './errors';
 import { kavitaHeaders, scanKavitaFolder } from './kavita-client';
 import { selectedCover, hasCoverImage, writeCoverFile } from './kavita-cover';
-import { matchKavita, kavitaVolumeProgress } from './kavita-index';
+import { matchKavita, kavitaVolumeProgress, refreshScannedSeries } from './kavita-index';
 import {
   libraryRoot,
   inside,
@@ -122,9 +122,15 @@ async function atomicWrite(folder: string, name: string, contents: string | Buff
 export async function writeMetadata(media: UnifiedMedia) {
   const folder = await seriesDirectory(media);
   await atomicWrite(folder, 'ComicInfo.xml', comicInfo(media, null, media.title));
-  if (!media.coverUrl || (await hasCoverImage(folder))) return;
+  if (
+    trackedForMedia(media, listTracked())?.kavitaCoverSync === false ||
+    !media.coverUrl ||
+    (await hasCoverImage(folder))
+  )
+    return;
   const cover = await selectedCover(media.coverUrl);
-  if (cover) await writeCoverFile(folder, cover.bytes);
+  if (cover && trackedForMedia(media, listTracked())?.kavitaCoverSync !== false)
+    await writeCoverFile(folder, cover.bytes);
 }
 export function addComicInfo(archive: Buffer, xml: string): Buffer {
   const zip = new AdmZip(archive);
@@ -194,6 +200,7 @@ export async function scanLibrary(media: UnifiedMedia, signal?: AbortSignal) {
   const folder = await seriesDirectory(media);
   const kavitaFolder = kavitaPathForLocal(folder, targetFor(media));
   await scanKavitaFolder(kavitaFolder, signal);
+  await refreshScannedSeries(media, kavitaFolder, signal);
 }
 const seriesSchema = z.object({
   id: z.number().int().positive(),

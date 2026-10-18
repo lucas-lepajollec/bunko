@@ -246,6 +246,11 @@ export interface MergedChapter {
   /** Volume shared by the variants when known (first variant with one wins). */
   volume: number | null;
   variants: ChapterVariant[];
+  /**
+   * Chapter present in the library files (Kavita/imported) but on no linked source; `variants` is
+   * empty and it opens in the reader with `/api/reader/chapter?local=<number>&media=<id>`.
+   */
+  localOnly?: boolean;
 }
 
 /* ---- Built-in reader (contract for /api/reader/*) ---- */
@@ -267,6 +272,11 @@ export interface ReaderChapter {
   direction: 'rtl' | 'ltr' | 'vertical';
   /** Saved position for this chapter (0-based page), if any. */
   resumePage: number | null;
+  /** Set for chapters read from library files only (no source chapter id). */
+  local?: number;
+  /** Neighbouring local-only chapters by number (when the current one is local). */
+  prevLocal?: number | null;
+  nextLocal?: number | null;
 }
 /** PUT /api/reader/progress — saved while reading; finishing a chapter raises `progress.read`. */
 export interface ReaderProgressUpdate {
@@ -459,6 +469,8 @@ export interface TrackedMedia {
   identity: 'catalog' | 'off-catalog';
   /** Other covers to try, in automatic order, when `coverUrl` fails to load (empty for a manual choice). */
   coverFallbacks: string[];
+  /** Bunko's cover is pushed to Kavita for this work (user choice, default true). */
+  kavitaCoverSync?: boolean;
   /** Whether the displayed cover reached Kavita (upload needs an admin API key). */
   kavitaCover: { state: 'synced' | 'pending' | 'failed' | 'none'; error: string | null };
   /** Hero background: the catalog work's banner (`auto`) or none (`hidden`, chosen by the user). */
@@ -529,6 +541,8 @@ export interface TrackPatch {
   displayTitle?: string | null;
   /** Count this work in volumes (tomes) or chapters. */
   unit?: 'chapter' | 'volume';
+  /** Push Bunko's cover for this work to Kavita (default true). */
+  kavitaCoverSync?: boolean;
   /** Show the catalog banner behind the title (`auto`) or hide it (`hidden`). */
   backdrop?: 'auto' | 'hidden';
   /** Detach from the catalog (wrong match, title not catalogued): identity becomes the Kavita series or the first source. */

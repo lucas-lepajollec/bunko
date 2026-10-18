@@ -178,7 +178,7 @@ export async function syncTrackedCover(id: number, signal?: AbortSignal, force =
       const persisted = storeCover(id, context, url, cover, () => Boolean(current()));
       if (!persisted) return;
     }
-    if (!cover || !series || !current()) return;
+    if (!cover || !series || !current() || getTracked(id)?.kavitaCoverSync === false) return;
     if (
       !force &&
       t.kavitaCover.state === 'synced' &&
@@ -188,7 +188,13 @@ export async function syncTrackedCover(id: number, signal?: AbortSignal, force =
       return;
     status('pending');
     try {
-      await syncSeriesCover(series, url, () => Boolean(current()), signal, cover);
+      await syncSeriesCover(
+        series,
+        url,
+        () => Boolean(current() && getTracked(id)?.kavitaCoverSync !== false),
+        signal,
+        cover,
+      );
       status('synced');
     } catch (error) {
       status('failed', errorCode(error));

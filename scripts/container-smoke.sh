@@ -131,3 +131,30 @@ for format in LIGHT_NOVEL WEB_NOVEL NOVEL BOOK; do
 done
 echo "ok   all home kinds, display title and unsupported text formats"
 echo "container smoke passed"
+
+# L6 uses only this container's disposable tenant DB and media root.
+check 400 "empty source query override rejected" -H "Authorization: Bearer $token" "$base/api/media/sources?id=suwayomi:7&q="
+check 400 "local reader number validated" -H "Authorization: Bearer $token" "$base/api/reader/chapter?local=-1&media=suwayomi:7"
+check 404 "unowned local chapter rejected" -H "Authorization: Bearer $token" "$base/api/reader/chapter?local=1&media=suwayomi:7"
+check 200 "Kavita cover sync disabled" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":1,"kavitaCoverSync":false}' "$base/api/tracked"
+curl -fsS -H "Authorization: Bearer $token" "$base/api/tracked" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b)[0];if(v.kavitaCoverSync!==false||v.kavitaCover.state!=="none")process.exit(1)})'
+check 200 "Kavita cover sync enabled" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":1,"kavitaCoverSync":true}' "$base/api/tracked"
+docker exec -i "$name" node <<'JS'
+const fs = require('node:fs');
+const Database = require('better-sqlite3');
+const AdmZip = require('adm-zip');
+const folder = '/library/second-folder/Manga/Smoke work';
+fs.mkdirSync(folder, { recursive: true });
+const zip = new AdmZip(); zip.addFile('001.png', Buffer.from('smoke-local-page')); zip.writeZip(folder + '/Smoke work Ch. 1.cbz');
+const database = new Database('/data/users/1/bunko.db');
+database.prepare('INSERT INTO kavita_series(series_id,payload) VALUES(77,?)').run(JSON.stringify({ seriesId:77,libraryId:1,libraryName:'Manga',name:'Smoke work',names:['Smoke work'],folder:'/library/Manga/Smoke work',numbers:[1],volumes:[1],chapterFiles:[{number:1,volume:1,path:'/library/Manga/Smoke work/Smoke work Ch. 1.cbz'}] }));
+database.close();
+JS
+curl -fsS -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"mediaId":"suwayomi:7","sources":[]}' "$base/api/manga/chapters" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const v=JSON.parse(b);if(v.inKavita[0]!==1||!v.chapters[0].localOnly||v.chapters[0].volume!==1||v.chapters[0].variants.length)process.exit(1)})'
+local_chapter="$(curl -fsS -H "Authorization: Bearer $token" "$base/api/reader/chapter?local=1&media=suwayomi:7")"
+local_id="$(node -e 'const v=JSON.parse(process.argv[1]);if(v.local!==1||v.chapterId>=0||v.pages.length!==1||v.prevLocal!==null||v.nextLocal!==null)process.exit(1);process.stdout.write(String(v.chapterId))' "$local_chapter")"
+curl -fsS -H "Authorization: Bearer $token" "$base/api/reader/page?chapter=$local_id&index=0" | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{if(b!=="smoke-local-page")process.exit(1)})'
+check 200 "local progress saved" -X PUT -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "{\"mediaId\":\"suwayomi:7\",\"chapterId\":$local_id,\"number\":1,\"page\":0,\"pageCount\":1}" "$base/api/reader/progress"
+check 404 "member cannot read another tenant local chapter" -H "Cookie: $member_cookie" "$base/api/reader/page?chapter=$local_id&index=0"
+echo "ok   owned chapters, local archive pages/progress and cover sync contract"
+echo "L6 container smoke passed"

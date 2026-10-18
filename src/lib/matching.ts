@@ -58,15 +58,16 @@ export async function matchOnSource(
   source: Source,
   media: Pick<MediaDetail, 'title' | 'altTitles'>,
   signal?: AbortSignal,
+  queryOverride?: string,
 ): Promise<SourceCandidate[]> {
   const titles = [media.title, ...media.altTitles];
   const found = new Map<number, SourceCandidate>();
-  for (const query of searchQueries(media)) {
+  for (const query of queryOverride === undefined ? searchQueries(media) : [queryOverride]) {
     const result = await searchSource(source, query, signal, 1, 'SEARCH', 20_000);
     result.results.forEach((hit, i) => {
       const score = titleScore(result.titles[i], titles);
       const previous = found.get(hit.suwayomiMangaId);
-      if (score >= 0.45 && (!previous || previous.score < score))
+      if ((queryOverride !== undefined || score >= 0.45) && (!previous || previous.score < score))
         found.set(hit.suwayomiMangaId, { ...hit, title: result.titles[i], score });
     });
     if ([...found.values()].some((c) => c.score >= 0.9)) break;
@@ -79,7 +80,9 @@ export async function matchOnSource(
         c.chapterCount = await sourceChapterCount(c.sourceId, c.suwayomiMangaId, signal);
       }),
   );
-  return candidates.sort(rankCandidates).slice(0, 3);
+  return queryOverride === undefined
+    ? candidates.sort(rankCandidates).slice(0, 3)
+    : candidates.sort(rankCandidates);
 }
 
 /** Stable sort preserves source preference only after relevance and completeness tie. */

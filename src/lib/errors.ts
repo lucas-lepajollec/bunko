@@ -16,9 +16,9 @@ export function errorCode(error: unknown): string {
       : 'UPSTREAM_ERROR';
 }
 
-/** Never retain/log an upstream body. Redact before truncating (a URL may exceed the limit). */
+/** Keep the complete sanitized extension message; never retain/log an upstream body. */
 export function sanitizeDetail(message: string, secrets: string[] = []): string | null {
-  let line = message.split(/[\r\n]/, 1)[0];
+  let line = message.replace(/[\r\n]/g, ' ');
   for (const secret of secrets.filter(Boolean)) line = line.split(secret).join('[redacted]');
   line = line
     .replace(/(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>"']+/gi, '[url]')
@@ -34,7 +34,7 @@ export function sanitizeDetail(message: string, secrets: string[] = []): string 
     .replace(/[\u0000-\u001f\u007f<>]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return line.slice(0, 140) || null;
+  return line || null;
 }
 export function sourceFailure(message: string, secrets: string[] = []) {
   const code = /cloudflare|cf-chl|challenge|403.*\bcf\b|\bcf\b.*403/i.test(message)

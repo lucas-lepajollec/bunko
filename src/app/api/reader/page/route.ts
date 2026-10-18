@@ -6,7 +6,11 @@ import { readerPage } from '@/lib/reader';
 export const GET = route(async (r) => {
   const p = z
     .object({
-      chapter: z.coerce.number().int().positive(),
+      chapter: z.coerce
+        .number()
+        .int()
+        .safe()
+        .refine((id) => id !== 0),
       index: z.coerce.number().int().min(0).max(1999),
     })
     .parse(Object.fromEntries(new URL(r.url).searchParams));

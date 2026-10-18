@@ -1,3 +1,4 @@
+import { sourceCall } from './source-gate';
 import { z } from 'zod';
 import type { SourceFilter } from '@/types/shared';
 import { graphql, sourceInfo } from './suwayomi';
@@ -83,10 +84,14 @@ function normalizeDefaults(items: Record<string, unknown>[]): unknown[] {
 }
 export async function sourceFilters(id: string, signal?: AbortSignal): Promise<SourceFilter[]> {
   await sourceInfo(id, signal);
-  const result = await graphql<{ source: { filters: Record<string, unknown>[] } }>(
-    `query($id: LongString!) { source(id:$id) { filters { ${filterFields(8)} } } }`,
-    { id },
-    10_000,
+  const result = await sourceCall(
+    () =>
+      graphql<{ source: { filters: Record<string, unknown>[] } }>(
+        `query($id: LongString!) { source(id:$id) { filters { ${filterFields(8)} } } }`,
+        { id },
+        10_000,
+        signal,
+      ),
     signal,
   );
   return mapFilters(normalizeDefaults(result.source.filters));

@@ -14,7 +14,7 @@ import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
 import { ActivityPill } from './activity';
 import { Toaster } from './notify';
 import { Select } from './select';
-import { persistentCache } from '@/lib/client/cache';
+import { clearPersistentCache, persistentCache } from '@/lib/client/cache';
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
@@ -320,6 +320,7 @@ function MobileMenu() {
   const { t } = useI18n();
   const pathname = usePathname();
   const auth = useApi<AuthState>('/api/auth');
+  const { mutate } = useSWRConfig();
   const [open, setOpen] = useState(false);
   // Navigating closes the menu.
   const [lastPath, setLastPath] = useState(pathname);
@@ -386,6 +387,18 @@ function MobileMenu() {
               </Link>
             ))}
           </nav>
+          <button
+            type="button"
+            onClick={async () => {
+              await send('/api/auth', 'DELETE').catch(() => undefined);
+              clearPersistentCache();
+              setOpen(false);
+              await mutate('/api/auth');
+            }}
+            className="text-bad mt-auto flex min-h-14 items-center text-[17px]"
+          >
+            {t('settings.signOut')}
+          </button>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

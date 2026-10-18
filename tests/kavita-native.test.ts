@@ -348,7 +348,7 @@ describe('source errors and bounded search', () => {
     });
     expect(health.detail).not.toMatch(/site\.invalid|leak|example\.org|abc123/);
   });
-  it('redacts before truncation, drops following lines and configured credentials', () => {
+  it('redacts multiline credentials before exposing complete extension details', () => {
     const result = sanitizeDetail(
       'HTTP error 500 https://example.org/' +
         'x'.repeat(200) +
@@ -496,7 +496,7 @@ describe('Kavita index, paths and presence', () => {
     recordImport(media, { id: 200, chapterNumber: 2, name: 'Chapter 2' });
     recordImport(media, { id: 201, chapterNumber: 4, name: 'Chapter 4' });
     expect(listTracked()[0].progress).toMatchObject({ owned: 5, unread: 5 });
-    expect((await chaptersFor([selection])).inKavita).toEqual([1, 2, 3, 12.5]);
+    expect((await chaptersFor([selection])).inKavita).toEqual([1, 2, 3, 4, 12.5]);
     db().prepare('DELETE FROM tracked_media WHERE id=?').run(tracked.id);
     indexCatalog([
       {
@@ -509,7 +509,7 @@ describe('Kavita index, paths and presence', () => {
       },
     ]);
     expect((await chaptersFor([selection])).inKavita).toEqual([1, 2, 3, 12.5]);
-    expect((await chaptersFor([selection], undefined, media)).inKavita).toEqual([1, 2, 3, 12.5]);
+    expect((await chaptersFor([selection], undefined, media)).inKavita).toEqual([1, 2, 3, 4, 12.5]);
   });
   it('returns unmatched summaries, a safe cover proxy, status and authenticated library routes', async () => {
     await index.syncKavitaIndex();

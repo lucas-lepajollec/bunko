@@ -24,8 +24,7 @@ import { kavitaMedia } from './kavita-track';
 import { withKavita, kavitaMatcher } from './kavita-index';
 import { graphql } from './suwayomi';
 import { proxyImage } from './images';
-import { sharedConcurrencyGate } from './concurrency';
-const sourceCall = sharedConcurrencyGate('sources', 6);
+import { sourceCall } from './source-gate';
 import {
   aniFields,
   cleanSynopsis,

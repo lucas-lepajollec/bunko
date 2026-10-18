@@ -1,3 +1,4 @@
+import { ownedChapters } from './owned-chapters';
 import { mediaId as mediaIdentifier } from './validation';
 import { mediaDetail } from './catalog';
 import { sourceFormat } from './library-kinds';
@@ -19,6 +20,7 @@ import { endpoint } from './http';
 import { AppError } from './errors';
 import {
   readerArchive,
+  localNumberArchive,
   readerNeighbours,
   readerNamespace,
   type ReaderSourceChapter,
@@ -79,11 +81,33 @@ function work(id: string | undefined, mangaId: number) {
       )
     : entries.find((t) => t.sources.some((s) => s.suwayomiMangaId === mangaId));
 }
+/** Resolve local identities from existing tenant records; local reading never needs metadata HTTP. */
+async function localReadingWork(id: string) {
+  const tracked =
+    work(id, 0) ?? listTracked().find((t) => id === `kavita:${t.media.kavitaSeriesId}`);
+  if (tracked) return tracked;
+  if (/^kavita:[1-9]\d*$/.test(id)) {
+    const { kavitaMedia } = await import('./kavita-track');
+    return { id: 0, media: kavitaMedia(Number(id.slice(7))) };
+  }
+  const imported = statement(
+    "SELECT media_json FROM imported_chapters WHERE media_json ->> '$.id'=? LIMIT 1",
+  ).get(id) as { media_json: string } | undefined;
+  return imported ? { id: 0, media: JSON.parse(imported.media_json) as UnifiedMedia } : undefined;
+}
 export async function readerChapter(
   id: number,
   mediaId?: string,
   signal?: AbortSignal,
 ): Promise<ReaderChapter> {
+  if (id < 0) {
+    const row = statement('SELECT media_id,number FROM local_reader_chapters WHERE id=?').get(
+      -id,
+    ) as { media_id: string; number: number } | undefined;
+    if (!row || (mediaId && (await localReadingWork(mediaId))?.media.id !== row.media_id))
+      throw new AppError('NOT_FOUND', 'Local chapter not found', 404);
+    return localReaderChapter(row.number, row.media_id);
+  }
   const local = await readerArchive(id);
   const data = local
     ? {
@@ -132,6 +156,13 @@ export async function readerChapter(
   };
 }
 export async function readerPage(request: Request, id: number, index: number) {
+  if (id < 0) {
+    const row = statement('SELECT media_id,number FROM local_reader_chapters WHERE id=?').get(
+      -id,
+    ) as { media_id: string; number: number } | undefined;
+    if (!row) throw new AppError('NOT_FOUND', 'Local chapter not found', 404);
+    return localReaderPage(request, row.number, row.media_id, index);
+  }
   const local = await readerArchive(id);
   if (local) {
     const pages = await cbzPages(local.filename);
@@ -163,7 +194,11 @@ export async function readerPage(request: Request, id: number, index: number) {
 export const readerProgressBody = z
   .object({
     mediaId: mediaIdentifier,
-    chapterId: z.number().int().positive(),
+    chapterId: z
+      .number()
+      .int()
+      .safe()
+      .refine((id) => id !== 0),
     number: z.number().finite().nonnegative().nullable(),
     page: z.number().int().min(0).max(1999),
     pageCount: z.number().int().min(1).max(2000),
@@ -208,17 +243,26 @@ function persistProgress(value: ReaderProgressUpdate) {
 }
 export async function saveReaderProgress(value: ReaderProgressUpdate, signal?: AbortSignal) {
   const entry = work(value.mediaId, 0);
-  const chapter = await readerChapter(value.chapterId, entry ? value.mediaId : undefined, signal);
+  const localWork = value.chapterId < 0 ? await localReadingWork(value.mediaId) : undefined;
+  if (value.chapterId < 0 && !localWork)
+    throw new AppError('NOT_FOUND', 'Local reading work not found', 404);
+  const chapter = await readerChapter(
+    value.chapterId,
+    entry || localWork ? value.mediaId : undefined,
+    signal,
+  );
   const tracked = entry;
   if (
     !entry &&
+    chapter.local === undefined &&
     value.mediaId.startsWith('suwayomi:') &&
     value.mediaId !== `suwayomi:${chapter.mangaId}`
   )
     throw new AppError('NOT_FOUND', 'Reading work does not match this chapter', 404);
-  value = { ...value, mediaId: entry?.media.id ?? value.mediaId };
+  value = { ...value, mediaId: entry?.media.id ?? localWork?.media.id ?? value.mediaId };
   if (
     tracked &&
+    chapter.local === undefined &&
     !(
       tracked.sources.some((s) => s.suwayomiMangaId === chapter.mangaId) ||
       tracked.media.sources.some((s) => s.suwayomiMangaId === chapter.mangaId) ||
@@ -267,4 +311,61 @@ export async function saveReaderProgress(value: ReaderProgressUpdate, signal?: A
     );
     state.timer.unref();
   }
+}
+
+export async function localReaderChapter(number: number, mediaId: string): Promise<ReaderChapter> {
+  const tracked = await localReadingWork(mediaId);
+  if (!tracked) throw new AppError('NOT_FOUND', 'Local reading work not found', 404);
+  const archive = await localNumberArchive(tracked.media, number);
+  if (!archive) throw new AppError('NOT_FOUND', 'Owned chapter archive not found', 404);
+  const pages = await cbzPages(archive.filename);
+  statement('INSERT OR IGNORE INTO local_reader_chapters(media_id,number) VALUES(?,?)').run(
+    tracked.media.id,
+    number,
+  );
+  const row = statement('SELECT id FROM local_reader_chapters WHERE media_id=? AND number=?').get(
+    tracked.media.id,
+    number,
+  ) as { id: number };
+  const chapterId = -row.id;
+  const position = statement(
+    'SELECT page FROM reader_progress WHERE media_id=? AND chapter_id=?',
+  ).get(tracked.media.id, chapterId) as { page: number } | undefined;
+  const neighbours = ownedChapters(tracked.media).map((c) => c.number);
+  return {
+    chapterId,
+    mangaId: 0,
+    sourceName: '',
+    label: `Chapter ${number}`,
+    number,
+    volume: archive.volume,
+    local: number,
+    prevId: null,
+    nextId: null,
+    prevLocal: neighbours.filter((n) => n < number).at(-1) ?? null,
+    nextLocal: neighbours.find((n) => n > number) ?? null,
+    pages: pages.map((_, index) => `/api/reader/page?chapter=${chapterId}&index=${index}`),
+    direction: readerDirection(tracked.media),
+    resumePage: position ? Math.min(position.page, pages.length - 1) : null,
+  };
+}
+export async function localReaderPage(
+  request: Request,
+  number: number,
+  mediaId: string,
+  index: number,
+) {
+  const tracked = await localReadingWork(mediaId);
+  if (!tracked) throw new AppError('NOT_FOUND', 'Local reading work not found', 404);
+  const archive = await localNumberArchive(tracked.media, number);
+  if (!archive) throw new AppError('NOT_FOUND', 'Owned chapter archive not found', 404);
+  const pages = await cbzPages(archive.filename);
+  if (!pages[index]) throw new AppError('NOT_FOUND', 'Page not found', 404);
+  const { stat } = await import('node:fs/promises');
+  const info = await stat(archive.filename);
+  return cachedImageResponse(
+    request,
+    `reader:owned:${tracked.id}:${number}:${index}:${archive.filename}:${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}`,
+    () => cbzPage(archive.filename, pages[index]),
+  );
 }
