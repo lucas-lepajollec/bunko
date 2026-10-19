@@ -31,21 +31,29 @@ export default function ReaderPage() {
 }
 
 function Reader() {
-  const { t, n } = useI18n();
-  const router = useRouter();
   const { chapter } = useParams<{ chapter: string }>();
   const params = useSearchParams();
   const media = params.get('media');
+  // Each chapter owns its page/scroll/progress lifetime, including soft next/back navigation.
+  return <ChapterReader key={`${chapter}:${media ?? ''}`} chapter={chapter} media={media} />;
+}
+
+function ChapterReader({ chapter, media }: { chapter: string; media: string | null }) {
+  const { t, n } = useI18n();
+  const router = useRouter();
   // `local-<n>`: a chapter only present in the library files (no source chapter id).
   const local = /^local-(?:volume-)?(\d+(?:\.\d+)?)$/.exec(chapter)?.[1];
   const localUnit = chapter.startsWith('local-volume-') ? 'volume' : 'chapter';
   const query = `/api/reader/chapter?${local ? `local=${local}&unit=${localUnit}` : `id=${encodeURIComponent(chapter)}`}${media ? `&media=${encodeURIComponent(media)}` : ''}`;
-  const data = useApi<ReaderChapter>(query);
-  const next = useApi<ReaderChapter>(
-    data.data?.nextId
-      ? `/api/reader/chapter?id=${data.data.nextId}${media ? `&media=${encodeURIComponent(media)}` : ''}`
-      : null,
-  );
+  const data = useApi<ReaderChapter>(query, {
+    revalidateOnMount: true,
+    revalidateOnFocus: true,
+    refreshInterval: 5000,
+    dedupingInterval: 1000,
+    shouldRetryOnError: (error) => error.status === 0 || error.status >= 500,
+    errorRetryInterval: 5000,
+    errorRetryCount: 3,
+  });
   // The reader's own choice wins over the format's suggestion, per work.
   const modeKey = `${MODE_KEY}:${media ?? ''}`;
   const stored = useSyncExternalStore(
@@ -66,6 +74,12 @@ function Reader() {
   const [page, setPage] = useState<number | null>(null);
   const current = page ?? data.data?.resumePage ?? 0;
   const [chrome, setChrome] = useState(true);
+  // Do not resolve the next source chapter until its first pages can actually be prefetched.
+  const next = useApi<ReaderChapter>(
+    current >= pages.length - 3 && data.data?.nextId
+      ? `/api/reader/chapter?id=${data.data.nextId}${media ? `&media=${encodeURIComponent(media)}` : ''}`
+      : null,
+  );
 
   const progress = useMemo(
     () =>
@@ -79,17 +93,20 @@ function Reader() {
     [],
   );
   // Completion is immediate. Leaving the chapter flushes any intermediate position too.
+  const activeChapterId = data.data?.chapterId;
+  const activeNumber = data.data?.number;
   useEffect(() => {
-    if (!data.data || !media || !pages.length) return;
+    if (activeChapterId === undefined || activeNumber === undefined || !media || !pages.length)
+      return;
     const body: ReaderProgressUpdate = {
       mediaId: media,
-      chapterId: data.data!.chapterId,
-      number: data.data!.number,
+      chapterId: activeChapterId,
+      number: activeNumber,
       page: current,
       pageCount: pages.length,
     };
     progress.update(body);
-  }, [current, data.data, media, pages.length, progress]);
+  }, [current, activeChapterId, activeNumber, media, pages.length, progress]);
   useEffect(() => {
     const flush = () => {
       void progress.flush();
@@ -217,7 +234,7 @@ function Reader() {
         </div>
       </header>
 
-      {data.error ? (
+      {data.error && !d ? (
         <div className="m-auto max-w-md p-6">
           <ErrorNote error={data.error} />
         </div>

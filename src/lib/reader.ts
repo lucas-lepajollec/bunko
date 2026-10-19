@@ -34,7 +34,6 @@ import { tenantSignal } from './tenant-lifecycle';
 interface ChapterData {
   chapter: ReaderSourceChapter;
   urls: string[];
-  neighbours: { id: number; number: number | null }[];
 }
 export function readerDirection(
   media?: Pick<UnifiedMedia, 'format' | 'genres'>,
@@ -55,20 +54,14 @@ async function chapterData(id: number, signal?: AbortSignal): Promise<ChapterDat
     const manga = chapter.manga;
     if (!manga?.id || !manga.source)
       throw new AppError('INVALID_CHAPTER', 'Chapter source is unavailable', 502);
-    const [urls, siblings] = await Promise.all([
+    const [urls] = await Promise.all([
       fetchChapterPages(id, signal),
       chaptersFor(
         [{ suwayomiMangaId: manga.id, sourceId: manga.source.id, sourceName: manga.source.name }],
         signal,
       ),
     ]);
-    return {
-      chapter,
-      urls,
-      neighbours: siblings.chapters.flatMap((c) =>
-        c.variants.map((v) => ({ id: v.id, number: v.number })),
-      ),
-    };
+    return { chapter, urls };
   });
 }
 function work(id: string | undefined, mangaId: number) {
@@ -137,16 +130,14 @@ export async function readerChapter(
     ? {
         chapter: local.chapter,
         urls: (await cbzPages(local.filename)).map(() => ''),
-        neighbours: readerNeighbours(
-          local.chapter.manga?.id ?? 0,
-          chapterNumber(local.chapter.name, local.chapter.chapterNumber),
-        ),
       }
     : await chapterData(id, signal);
   const chapter = data.chapter;
   const mangaId = chapter.manga?.id ?? 0;
   const number = chapterNumber(chapter.name, chapter.chapterNumber);
-  const neighbours = data.neighbours
+  // Pages can stay cached; navigation must use today's persisted source inventory/imports.
+  // This also ignores neighbours embedded in older five-minute chapter cache records.
+  const neighbours = readerNeighbours(mangaId, number)
     .filter((c) => c.id !== id && c.number !== null)
     .sort((a, b) => a.number! - b.number! || a.id - b.id);
   const tracked = work(mediaId, mangaId);
@@ -365,14 +356,16 @@ export async function localReaderChapter(
   if (!archive) throw new AppError('NOT_FOUND', 'Owned chapter archive not found', 404);
   const pages = await cbzPages(archive.filename);
   const localKey = unit === 'volume' ? `@volume:${tracked.media.id}` : tracked.media.id;
-  statement('INSERT OR IGNORE INTO local_reader_chapters(media_id,number) VALUES(?,?)').run(
-    localKey,
-    number,
-  );
-  const row = statement('SELECT id FROM local_reader_chapters WHERE media_id=? AND number=?').get(
-    localKey,
-    number,
-  ) as { id: number };
+  const identity = statement('SELECT id FROM local_reader_chapters WHERE media_id=? AND number=?');
+  let row = identity.get(localKey, number) as { id: number } | undefined;
+  if (!row) {
+    // An ignored AUTOINCREMENT insert still writes sqlite_sequence. Refreshing is read-only.
+    statement('INSERT OR IGNORE INTO local_reader_chapters(media_id,number) VALUES(?,?)').run(
+      localKey,
+      number,
+    );
+    row = identity.get(localKey, number) as { id: number };
+  }
   const chapterId = -row.id;
   const position = statement(
     'SELECT page FROM reader_progress WHERE media_id=? AND chapter_id=?',
