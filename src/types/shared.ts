@@ -277,7 +277,7 @@ export interface ReaderChapter {
   volume: number | null;
   /** Page image URLs in order (`/api/reader/page?chapter=&index=`), cached by Bunko. */
   pages: string[];
-  /** Neighbouring chapters on the same source, by number. */
+  /** Current persisted neighbours on the same source, by number; independent of cached pages. */
   prevId: number | null;
   nextId: number | null;
   /** Suggested layout from the work's format (manhwa/manhua → vertical, manga → rtl, comic → ltr). */

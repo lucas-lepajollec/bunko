@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refresh reader neighbours independently of cached pages, so newly downloaded chapters become available during reading; keep each chapter's own page, scroll and resume state when navigating. Avoid redundant progress/identity writes and defer next-chapter prefetch until the last three pages.
+
 - Display search/catalog results and source chapters incrementally as each provider responds. Show owned rows immediately and retain selection/read/download actions while slower work continues. Open known-card sheets from their available metadata while details load; preserve content on errors and avoid perpetual failed-provider loading loops.
 
 - Persist reliable automatic source matches for followed works directly from title discovery, refresh library/chapter state after completed scans, and request release updates when sources change. Retry transient matching failures after five minutes; language or extension changes requeue source-less works. Manual choices and dismissals remain authoritative.

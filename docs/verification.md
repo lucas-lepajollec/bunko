@@ -1,5 +1,19 @@
 # Verification — current and historical evidence
 
+## Reader optimization and publication candidate — 2026-10-19
+
+- Final `npm run check` exits 0 (`.project-local/reader-optimized-check.{log,exit}`): zero-warning lint, strict TypeScript, **586 tests / 46 files**, optimized build. Two added regressions guard read-only repeated local identities and authenticated warm source refreshes at the retained 20,000-chapter limit.
+- Twelve local authenticated chapter responses with full source-metadata fixtures measure **24.69 ms median / 34.21 ms p95**. Refreshes make zero upstream calls and zero tenant SQLite writes. This is a workstation fixture measurement, not a NAS latency promise. Local CBZ validation remains in place; no stale filesystem cache was introduced.
+- Progress effects depend on the actual position/identity, not the changing neighbour/resume response. Local identities SELECT before creating a missing row, avoiding ignored AUTOINCREMENT writes. The next source chapter is resolved only in the last three pages. Hidden/offline polling remains paused and transient retries bounded.
+- Final standalone browser QA with a disposable 12-page chapter confirms three current-chapter GETs (entry plus two polls), exactly one progress PUT, and zero next-chapter metadata GETs while staying on page 1 even after a new import. Reaching page 10 triggers exactly one next-chapter metadata GET; page 12 exposes Next, and chapter 2 starts on page 1. No console warnings/errors. Ignored `.project-local/reader-optimized-browser-counts.json` and `reader-optimized-proof.png` retain local evidence; temporary server/tab/storage are removed.
+
+## Reader navigation refresh — 2026-10-19
+
+- `npm run check` exits 0: zero-warning lint, strict TypeScript, **584 tests / 46 files**, optimized production build. Three new regressions cover newly imported neighbours through a warm/older combined cache without upstream page refetches, source-inventory updates excluding another manga, and offline local neighbour updates preserving page URLs/resume.
+- Final transient-network retry configuration also passes lint, strict TypeScript and a fresh production build (`.project-local/reader-refresh-final-frontend.{log,exit}`, exit 0). The standalone final build recovers after deliberately stopping/restarting the disposable server: chapter 5 remains on page 3, the newly added chapter 6 becomes Next without navigation/reload, and opening it starts on page 1. Network/server failures retry at most three times with backoff; ordinary 4xx failures wait for focus/entry revalidation.
+- Optimized production-server browser QA uses only a disposable account and synthetic three-page CBZs. Starting with one imported chapter, adding chapters 2/3 makes Next appear while chapter 1 remains on page 3; soft navigation opens chapter 2 on page 1. Repeated for local chapter 3→4 and Webtoon 4→5, retaining the current page/scroll until the user navigates. Revisits restore each chapter's own saved position. A deliberately unavailable local archive makes background metadata refresh fail while the already displayed page remains readable; the fixture archive is then restored. No console warnings/errors before this intentional failure.
+- No layout, schema, dependency or packaging change. No new published image, real NAS/provider acceptance or deployment is implied. Test server/tab and temporary fixture storage are removed after QA.
+
 ## Incremental provider results without display gates — 2026-10-18
 
 - Final frozen `npm run check` explicitly exits0: strict zero-warning lint, TypeScript, **581 tests/46 files**, optimized production build. Final Docker `bunko:progressive-results` builds (configcc573886…, wrappere375ea4…); **111 container smoke checks pass**. No dependency/schema change.

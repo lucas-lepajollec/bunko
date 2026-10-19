@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, expect, it, vi } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, readFileSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import AdmZip from 'adm-zip';
@@ -241,6 +241,137 @@ it('fetches only the requested page with source auth and serves streamed disk hi
   expect(await conditional.text()).toBe('');
   expect((await pageRoute.GET(req('/api/reader/page?chapter=10&index=3'))).status).toBe(404);
   expect(calls.filter((c) => c.includes('/page/'))).toHaveLength(1);
+});
+it('recomputes neighbours after a new download without expiring cached reader pages', async () => {
+  const t = track({ media: media(), sources: [selection] });
+  const url = '/api/reader/chapter?id=10&media=suwayomi:7';
+  const first = await (await chapterRoute.GET(req(url))).json();
+  expect(first).toMatchObject({ prevId: 9, nextId: 12 });
+  // The old combined cache format may survive an application update.
+  const { readerNamespace } = await import('@/lib/reader-archives');
+  saveMetadata(`reader:chapter:${readerNamespace()}:10`, {
+    chapter: chapter(),
+    urls: first.pages,
+    neighbours: [{ id: 12, number: 12 }],
+  });
+  await importChapter(t.media, {
+    ...chapter(101),
+    chapterNumber: 10.5,
+    name: 'Chapter 10.5',
+  });
+  const before = calls.length;
+  expect(await (await chapterRoute.GET(req(url))).json()).toMatchObject({
+    prevId: 9,
+    nextId: 101,
+    pages: first.pages,
+  });
+  expect(calls).toHaveLength(before);
+});
+it('uses refreshed source inventory for a warm reader and excludes other manga neighbours', async () => {
+  track({ media: media(), sources: [selection] });
+  const url = '/api/reader/chapter?id=10&media=suwayomi:7';
+  expect(await (await chapterRoute.GET(req(url))).json()).toMatchObject({ nextId: 12 });
+  const { readerNamespace } = await import('@/lib/reader-archives');
+  const insert = db().prepare(
+    'INSERT INTO reader_chapters(namespace,chapter_id,payload,at) VALUES(?,?,?,?)',
+  );
+  for (const [id, mangaId, number] of [
+    [102, 7, 10.25],
+    [103, 99, 10.1],
+  ])
+    insert.run(readerNamespace(), id, JSON.stringify({ id, mangaId, number }), Date.now());
+  const before = calls.length;
+  expect(await (await chapterRoute.GET(req(url))).json()).toMatchObject({ nextId: 102 });
+  expect(calls).toHaveLength(before);
+});
+it('updates local reader neighbours after imports while preserving pages and saved position offline', async () => {
+  const t = track({ media: media(), sources: [selection] });
+  await importChapter(t.media, chapter(10));
+  const url = '/api/reader/chapter?local=10&media=suwayomi:7';
+  const first = await (await chapterRoute.GET(req(url))).json();
+  expect(first).toMatchObject({ nextLocal: null });
+  await saveReaderProgress({
+    mediaId: t.media.id,
+    chapterId: first.chapterId,
+    number: 10,
+    page: 1,
+    pageCount: 3,
+  });
+  await importChapter(t.media, chapter(12));
+  await importChapter(t.media, chapter(11));
+  vi.stubGlobal('fetch', () => {
+    throw new Error('Local reader must stay offline');
+  });
+  expect(await (await chapterRoute.GET(req(url))).json()).toMatchObject({
+    chapterId: first.chapterId,
+    pages: first.pages,
+    resumePage: 1,
+    nextLocal: 11,
+  });
+  expect(
+    await (await chapterRoute.GET(req('/api/reader/chapter?local=11&media=suwayomi:7'))).json(),
+  ).toMatchObject({ prevLocal: 10, nextLocal: 12 });
+});
+it('keeps repeated local reader refreshes read-only with a stable identity', async () => {
+  const t = track({ media: media(), sources: [selection] });
+  await importChapter(t.media, chapter(10));
+  const url = '/api/reader/chapter?local=10&media=suwayomi:7';
+  const first = await (await chapterRoute.GET(req(url))).json();
+  const changed = () => db().prepare('SELECT total_changes() AS n').get() as { n: number };
+  const before = changed();
+  const requests = calls.length;
+  for (let i = 0; i < 12; i++)
+    expect(await (await chapterRoute.GET(req(url))).json()).toMatchObject({
+      chapterId: first.chapterId,
+      pages: first.pages,
+    });
+  expect(changed()).toEqual(before);
+  expect(calls).toHaveLength(requests);
+});
+it('bounds warm reader refreshes at the 20k source-inventory limit without upstream calls or writes', async () => {
+  track({ media: media(), sources: [selection] });
+  const url = '/api/reader/chapter?id=10&media=suwayomi:7';
+  await chapterRoute.GET(req(url));
+  const { readerNamespace } = await import('@/lib/reader-archives');
+  db().transaction(() => {
+    db().exec('DELETE FROM reader_chapters');
+    const insert = db().prepare('INSERT INTO reader_chapters VALUES(?,?,?,?)');
+    for (let n = 1; n <= 20000; n++)
+      insert.run(
+        readerNamespace(),
+        100000 + n,
+        JSON.stringify({
+          id: 100000 + n,
+          mangaId: 7,
+          number: n,
+          name: `Volume ${Math.ceil(n / 10)} Chapter ${n}`,
+          volume: Math.ceil(n / 10),
+          sourceId: selection.sourceId,
+          sourceName: selection.sourceName,
+          scanlator: 'Synthetic reader performance fixture',
+          isDownloaded: false,
+          uploadDate: '2026-10-19T00:00:00Z',
+        }),
+        Date.now(),
+      );
+  })();
+  await chapterRoute.GET(req(url));
+  const requests = calls.length;
+  const before = db().prepare('SELECT total_changes() AS n').get();
+  const samples: number[] = [];
+  for (let i = 0; i < 12; i++) {
+    const at = performance.now();
+    const response = await chapterRoute.GET(req(url));
+    expect(await response.json()).toMatchObject({ prevId: 100009, nextId: 100011 });
+    samples.push(performance.now() - at);
+  }
+  expect(calls).toHaveLength(requests);
+  expect(db().prepare('SELECT total_changes() AS n').get()).toEqual(before);
+  const sorted = samples.toSorted((a, b) => a - b);
+  const profile = { inventory: 20000, samples: 12, medianMs: sorted[6], p95Ms: sorted[11] };
+  if (process.env.BUNKO_READER_PROFILE)
+    writeFileSync(process.env.BUNKO_READER_PROFILE, JSON.stringify(profile, null, 2));
+  expect(profile.p95Ms).toBeLessThan(250);
 });
 it('prefers imported local CBZ, reads a single ZIP entry, and recovers legacy imports offline', async () => {
   const t = track({ media: media(), sources: [selection] });
