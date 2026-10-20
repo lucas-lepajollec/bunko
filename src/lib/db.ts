@@ -170,6 +170,21 @@ export function db(): Database.Database {
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
+      versionConnection.exec(
+        "INSERT OR IGNORE INTO write_versions VALUES('content',0),('progress',0)",
+      );
+      const progressColumns = new Set([
+        'last_read',
+        'last_read_at',
+        'volume_read',
+        'progress_checked',
+      ]);
+      const contentChanged = (
+        versionConnection.pragma('table_info(tracked_media)') as { name: string }[]
+      )
+        .filter((c) => !progressColumns.has(c.name))
+        .map((c) => `OLD."${c.name}" IS NOT NEW."${c.name}"`)
+        .join(' OR ');
       for (const table of [
         'tracked_media',
         'reader_progress',
@@ -205,6 +220,16 @@ export function db(): Database.Database {
         AFTER ${operation} ON ${table} BEGIN
         ${['download_batches'].includes(table) ? '' : "UPDATE write_versions SET version=version+1 WHERE domain='library';"}
         ${domain ? `UPDATE write_versions SET version=version+1 WHERE domain='${domain}' ${table === 'tracked_media' && operation === 'UPDATE' ? "AND (OLD.anilist_id IS NOT NEW.anilist_id OR OLD.mangadex_id IS NOT NEW.mangadex_id OR OLD.kavita_series_id IS NOT NEW.kavita_series_id OR OLD.kavita_manual IS NOT NEW.kavita_manual OR json_extract(OLD.media_json,'$.id') IS NOT json_extract(NEW.media_json,'$.id'))" : ''};` : ''}
+        ${
+          !['chapter_releases', 'reader_progress', 'download_batches'].includes(table)
+            ? `UPDATE write_versions SET version=version+1 WHERE domain='content' ${table === 'tracked_media' && operation === 'UPDATE' ? `AND (${contentChanged})` : ''};`
+            : ''
+        }
+        ${
+          table === 'reader_progress' || (table === 'tracked_media' && operation === 'UPDATE')
+            ? `UPDATE write_versions SET version=version+1 WHERE domain='progress' ${table === 'tracked_media' ? 'AND (OLD.last_read IS NOT NEW.last_read OR OLD.last_read_at IS NOT NEW.last_read_at OR OLD.volume_read IS NOT NEW.volume_read)' : ''};`
+            : ''
+        }
         END;`);
         }
       }

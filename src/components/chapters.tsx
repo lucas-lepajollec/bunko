@@ -536,9 +536,11 @@ function ChapterRow({
           href={
             volumeNumber !== undefined
               ? `/read/local-volume-${volumeNumber}?media=${encodeURIComponent(mediaId)}`
-              : variant
-                ? `/read/${variant.id}?media=${encodeURIComponent(mediaId)}`
-                : `/read/local-${chapter.number}?media=${encodeURIComponent(mediaId)}`
+              : chapter.number !== null && owned.has(chapter.number)
+                ? `/read/local-${chapter.number}?media=${encodeURIComponent(mediaId)}`
+                : variant
+                  ? `/read/${variant.id}?media=${encodeURIComponent(mediaId)}`
+                  : `/read/local-${chapter.number}?media=${encodeURIComponent(mediaId)}`
           }
           aria-label={t('chapters.readLabel', { label })}
           title={t('chapters.read')}

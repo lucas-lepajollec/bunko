@@ -57,7 +57,7 @@ it('sleeps 30 seconds when idle, wakes immediately on enqueue/request/identity e
   expect(syncTrackedCovers).toHaveBeenCalledTimes(10);
   requestUpdateCheck();
   await vi.advanceTimersByTimeAsync(10);
-  expect(syncTrackedCovers).toHaveBeenCalledTimes(13); // initial/final backfill plus requested refresh
+  await vi.waitFor(() => expect(syncTrackedCovers).toHaveBeenCalledTimes(13)); // initial/final backfill plus requested refresh
   expect(vi.getTimerCount()).toBe(1);
   let release!: () => void;
   vi.mocked(importChapter).mockImplementation(async () => {

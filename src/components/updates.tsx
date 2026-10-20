@@ -1,4 +1,5 @@
 'use client';
+import { MediaLink } from '@/components/media-link';
 import Link from 'next/link';
 import { useState } from 'react';
 import type {
@@ -8,7 +9,7 @@ import type {
   UpdateEntry,
   UpdatesFeed,
 } from '@/types/shared';
-import { mediaHref, send, useApi } from '@/lib/client/api';
+import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from './load-notice';
 import { useRelativeTime } from './time';
@@ -166,12 +167,12 @@ function UpdateRow({
       <Cover src={entry.coverUrl} className="w-10 shrink-0 md:w-11" />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         {tracked ? (
-          <Link
-            href={mediaHref(tracked.media.id)}
+          <MediaLink
+            media={tracked.media}
             className="truncate text-[15px] font-semibold hover:underline md:text-base"
           >
             {entry.title}
-          </Link>
+          </MediaLink>
         ) : (
           <span className="truncate text-[15px] font-semibold md:text-base">{entry.title}</span>
         )}

@@ -1,4 +1,5 @@
 'use client';
+import { MediaLink } from '@/components/media-link';
 import { LoadNotice } from '@/components/load-notice';
 import { Select } from '@/components/select';
 import Link from 'next/link';
@@ -15,14 +16,7 @@ import type {
   SourceCandidate,
   TrackedMedia,
 } from '@/types/shared';
-import {
-  batchesInterval,
-  libraryKeys,
-  mediaHref,
-  openStream,
-  send,
-  useApi,
-} from '@/lib/client/api';
+import { batchesInterval, libraryKeys, openStream, send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { rankSourceCandidates } from '@/lib/client/source-ranking';
 import { Backdrop } from '@/components/backdrop';
@@ -57,6 +51,8 @@ export default function TitlePage() {
   const id = `${provider}:${decodeURIComponent(key)}`;
   const { t } = useI18n();
   const detail = useApi<MediaDetail>(`/api/media?id=${encodeURIComponent(id)}`, {
+    revalidateOnMount: true,
+    dedupingInterval: 1000,
     refreshInterval: (data) => (data?.pending ? 1500 : 0),
   });
   if (detail.error && !detail.data)
@@ -81,7 +77,11 @@ export default function TitlePage() {
   return (
     <Title
       key={id}
-      media={{ ...detail.data, partial: detail.data.partial || Boolean(detail.error) }}
+      media={{
+        ...detail.data,
+        pending: !detail.error && (detail.isValidating || detail.data.pending),
+        partial: detail.data.partial || Boolean(detail.error),
+      }}
     />
   );
 }
@@ -288,6 +288,11 @@ function Title({ media }: { media: MediaDetail }) {
       )
       .sort((a, b) => (a.number ?? 0) - (b.number ?? 0))[0];
     const v = firstUnread && preferredVariant(firstUnread, priority, choice[firstUnread.key]);
+    if (firstUnread?.number != null && owned.has(firstUnread.number))
+      return {
+        href: `/read/local-${firstUnread.number}?media=${mediaId}`,
+        label: t('title.readFrom', { n: n(firstUnread.number) }),
+      };
     return v
       ? {
           href: `/read/${v.id}?media=${mediaId}`,
@@ -684,9 +689,9 @@ function Title({ media }: { media: MediaDetail }) {
           <SectionHeading num={2} title={t('title.universe')} />
           <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 md:mx-0 md:px-0">
             {media.relations.map((r) => (
-              <Link
+              <MediaLink
                 key={r.media.id}
-                href={mediaHref(r.media.id)}
+                media={r.media}
                 className="flex w-[300px] shrink-0 items-center gap-4 rounded-2xl bg-white/[0.04] p-3 hover:bg-white/[0.07]"
               >
                 <Cover src={r.media.coverUrl} className="w-[64px] shrink-0" />
@@ -699,7 +704,7 @@ function Title({ media }: { media: MediaDetail }) {
                     {r.media.format ? ` · ${t(`format.${r.media.format}`)}` : ''}
                   </span>
                 </span>
-              </Link>
+              </MediaLink>
             ))}
           </div>
         </section>

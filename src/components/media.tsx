@@ -1,8 +1,7 @@
 'use client';
-import Link from 'next/link';
+import { MediaLink } from '@/components/media-link';
 import { useRef, useState, type ReactNode } from 'react';
 import type { UnifiedMedia } from '@/types/shared';
-import { mediaHref } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { formatStartDate } from '@/lib/client/season';
 import { Cover, PosterSkeletons, cx, useMediaMeta } from './ui';
@@ -24,10 +23,7 @@ export function PosterCard({
   const meta = useMediaMeta();
   const { t } = useI18n();
   return (
-    <Link
-      href={mediaHref(media.id)}
-      className={cx('group flex min-w-0 flex-col gap-2.5', className)}
-    >
+    <MediaLink media={media} className={cx('group flex min-w-0 flex-col gap-2.5', className)}>
       <span className="relative block">
         <Cover
           src={media.coverUrl}
@@ -60,7 +56,7 @@ export function PosterCard({
       </span>
       <span className="line-clamp-2 text-[13px] leading-snug font-medium">{media.title}</span>
       <span className="text-muted -mt-1.5 truncate text-xs">{subtitle ?? meta(media)}</span>
-    </Link>
+    </MediaLink>
   );
 }
 
@@ -140,11 +136,10 @@ export function Row({
       {!items ? (
         <PosterSkeletons count={8} className={CARD} />
       ) : (
-        items.map((m, i) => (
+        items.map((m) => (
           <PosterCard
             key={m.id}
             media={m}
-            priority={i < 6}
             className={CARD}
             subtitle={dated ? formatStartDate(m.startDate, locale) : undefined}
           />
@@ -158,9 +153,9 @@ export function TopRow({ items }: { items: UnifiedMedia[] | undefined }) {
   return (
     <ScrollRow>
       {(items ?? []).slice(0, 10).map((m, i) => (
-        <Link
+        <MediaLink
           key={m.id}
-          href={mediaHref(m.id)}
+          media={m}
           className="group flex shrink-0 snap-start flex-col gap-2.5 md:-mr-2"
         >
           <span className="flex items-end">
@@ -180,7 +175,7 @@ export function TopRow({ items }: { items: UnifiedMedia[] | undefined }) {
           <span className="ml-[54px] line-clamp-2 w-[92px] text-xs leading-snug font-medium md:ml-[82px] md:w-[128px] md:text-[13px]">
             {m.title}
           </span>
-        </Link>
+        </MediaLink>
       ))}
       {!items && <PosterSkeletons count={6} className="w-[150px] shrink-0 md:w-[210px]" />}
     </ScrollRow>

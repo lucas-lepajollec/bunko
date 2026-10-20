@@ -1,8 +1,8 @@
 'use client';
-import Link from 'next/link';
+import { MediaLink } from '@/components/media-link';
 import { useMemo, useState } from 'react';
 import type { DiscoverKind, PlanningItem, PlanningWeek } from '@/types/shared';
-import { mediaHref, useApi } from '@/lib/client/api';
+import { useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from '@/components/load-notice';
 import { Page } from '@/components/shell';
@@ -166,7 +166,13 @@ export default function PlanningPage() {
               </h2>
               {d.items.length === 0 ? (
                 <p className="text-faint px-1 py-6 text-center font-serif text-sm italic">
-                  {t('planning.empty')}
+                  {t(
+                    plan.data?.pending
+                      ? 'loading.more'
+                      : plan.data?.partial
+                        ? 'loading.partial'
+                        : 'planning.empty',
+                  )}
                 </p>
               ) : (
                 <ul className="flex flex-col gap-1">
@@ -188,8 +194,8 @@ function PlanningRow({ item }: { item: PlanningItem }) {
   const expected = item.kind === 'expected';
   return (
     <li>
-      <Link
-        href={mediaHref(item.media.id)}
+      <MediaLink
+        media={item.media}
         className={cx(
           'flex items-center gap-2.5 rounded-xl p-1.5 hover:bg-white/[0.06]',
           expected && 'opacity-70',
@@ -214,7 +220,7 @@ function PlanningRow({ item }: { item: PlanningItem }) {
                 : t('planning.released')}
           </span>
         </span>
-      </Link>
+      </MediaLink>
     </li>
   );
 }

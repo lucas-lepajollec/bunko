@@ -74,3 +74,40 @@ it('keeps a manual interface choice when browser storage is blocked and notifies
   setUiLanguage('es');
   expect(listener).toHaveBeenCalledTimes(1);
 });
+
+it('reconnects continuous snapshots after transport loss but closes finite streams and disposed subscriptions', async () => {
+  const instances: FakeStream[] = [];
+  class FakeStream {
+    static CONNECTING = 0;
+    readyState = 0;
+    closed = false;
+    onerror?: (e: Event) => void;
+    handlers = new Map<string, (e: MessageEvent) => void>();
+    constructor() {
+      instances.push(this);
+    }
+    addEventListener(event: string, handler: (e: MessageEvent) => void) {
+      this.handlers.set(event, handler);
+    }
+    close() {
+      this.closed = true;
+    }
+  }
+  vi.stubGlobal('EventSource', FakeStream);
+  const { openStream } = await import('@/lib/client/api');
+  const snapshot = vi.fn(),
+    failure = vi.fn();
+  const close = openStream('/api/downloads/stream', { snapshot }, failure, { reconnect: true });
+  instances[0].onerror?.(new Event('error'));
+  expect(failure).toHaveBeenCalledOnce();
+  expect(instances[0].closed).toBe(false);
+  instances[0].handlers.get('snapshot')?.(
+    new MessageEvent('snapshot', { data: '{"complete":true}' }),
+  );
+  expect(snapshot).toHaveBeenCalledWith({ complete: true });
+  close();
+  expect(instances[0].closed).toBe(true);
+  openStream('/api/search/stream', {});
+  instances[1].onerror?.(new Event('error'));
+  expect(instances[1].closed).toBe(true);
+});

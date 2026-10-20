@@ -174,7 +174,7 @@ export async function runUpdateCheck(
   setWorkerValue('refresh_done', '0');
   setWorkerValue('refresh_total', '0');
   try {
-    await syncKavitaIndex();
+    await syncKavitaIndex(parentSignal);
     const { saveReleases } = await import('./releases');
     const { refreshRoyalRoad } = await import('./royalroad');
     if (!parentSignal?.aborted && ownsLease())

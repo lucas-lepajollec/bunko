@@ -2,7 +2,7 @@ import type { LibraryActivity } from '@/types/shared';
 import { activeSourceMatch, sourceMatchQueue } from './source-match-state';
 import { workerValue, refreshRunning } from './updates';
 import { getSettings } from './settings';
-import { listTracked, writeVersion } from './db';
+import { listTracked, listBatches, writeVersion } from './db';
 import { visibleTracked } from './adult';
 
 export function libraryActivity(): LibraryActivity {
@@ -14,6 +14,13 @@ export function libraryActivity(): LibraryActivity {
   const lastAt = workerValue('last_check_at');
   return {
     revision: writeVersion(),
+    activeDownloads: listBatches().filter((b) => b.state !== 'completed' && b.state !== 'error')
+      .length,
+    revisions: {
+      content: writeVersion('content'),
+      progress: writeVersion('progress'),
+      releases: writeVersion('releases'),
+    },
     hiddenAdult: entries.length - visible.length,
     matching: {
       queued: sourceMatchQueue().filter((t) => ids.has(t.id) && t.id !== current?.id).length,

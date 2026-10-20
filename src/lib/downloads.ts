@@ -301,13 +301,20 @@ function cancelBatch(batch: DownloadBatch) {
   }
   update(batch, { state: batch.importedIds.length ? 'completed' : 'error', error: 'CANCELLED' });
 }
-export async function processBatch(batch: DownloadBatch) {
+export async function processBatch(batch: DownloadBatch, workerSignal?: AbortSignal) {
+  // The worker may hold an older queue snapshot while another request cancels this lot.
+  // Never overwrite that terminal state with the stale object's "downloading" transition.
+  const current = listBatches().find((b) => b.id === batch.id);
   if (
+    !current ||
     downloadState().activeBatches.has(batch.id) ||
     paused() ||
-    ['completed', 'error'].includes(batch.state)
+    ['completed', 'error'].includes(current.state) ||
+    workerSignal?.aborted ||
+    tenantSignal().aborted
   )
     return;
+  Object.assign(batch, current);
   if (batch.sourceKey !== sourceServerKey()) {
     update(batch, { state: 'error', error: 'SOURCE_CHANGED' });
     return;
@@ -343,7 +350,12 @@ export async function processBatch(batch: DownloadBatch) {
   };
   const controlPoll = setInterval(checkControl, 100);
   controlPoll.unref();
-  const signal = AbortSignal.any([downloadState().transfer.signal, controller.signal]);
+  const signal = AbortSignal.any([
+    downloadState().transfer.signal,
+    controller.signal,
+    tenantSignal(),
+    ...(workerSignal ? [workerSignal] : []),
+  ]);
   const persist = () => {
     checkControl();
     signal.throwIfAborted();
@@ -516,39 +528,76 @@ async function workerTickBackground() {
     if (!ownsLease() || !acquireWorker(owner)) controller.abort();
   }, 10_000);
   lease.unref();
-  // Covers must not wait for a large matching queue or a long chapter transfer to finish.
-  const covers = syncTrackedCovers(signal, true).catch(() => {
-    /* Retry after a later wake. */
-  });
-  let matchingRunning = true;
-  const matchingDone = new AbortController();
-  const matching = drainSourceMatches(signal, ownsLease)
-    .catch(() => {
-      /* An aborted/failed lookup remains queued for a subsequent tick. */
-    })
-    .finally(() => {
-      matchingRunning = false;
-      matchingDone.abort();
+  // Keep the queue pump alive while maintenance is running. Enqueue/control wakes it
+  // independently of slow index, cover or source work; each job still shares this lease.
+  const background = (run: () => Promise<void>) => {
+    const task = { running: true, done: new AbortController(), promise: Promise.resolve() };
+    task.promise = run().finally(() => {
+      task.running = false;
+      task.done.abort();
     });
+    return task;
+  };
+  const covers = background(() =>
+    syncTrackedCovers(signal, true).catch(() => {
+      /* Retry after a later wake. */
+    }),
+  );
+  const matching = background(() =>
+    drainSourceMatches(signal, ownsLease).catch(() => {
+      /* An aborted/failed lookup remains queued for a subsequent tick. */
+    }),
+  );
+  let maintenance: ReturnType<typeof background> | undefined;
+  let finalCovers: ReturnType<typeof background> | undefined;
+  let maintenanceError: unknown;
   try {
     do {
       for (const batch of listBatches().filter((b) => !['completed', 'error'].includes(b.state))) {
         if (!ownsLease()) return;
-        await processBatch(batch);
+        await processBatch(batch, signal);
       }
       if (!ownsLease()) return;
-      if (kavitaSyncRequested()) await syncKavitaIndex();
-      if (ownsLease() && updateCheckDue()) await runUpdateCheck(createBatch, signal, ownsLease);
-      if (matchingRunning && !signal.aborted)
-        await waitForWorker(workerIdleMs(), AbortSignal.any([signal, matchingDone.signal]));
-    } while (matchingRunning && !signal.aborted);
-    await matching;
-    await covers;
-    if (ownsLease()) await syncTrackedCovers(signal, true);
+      maintenance ??= background(async () => {
+        try {
+          if (kavitaSyncRequested()) await syncKavitaIndex(signal);
+          if (ownsLease() && updateCheckDue()) await runUpdateCheck(createBatch, signal, ownsLease);
+        } catch (error) {
+          maintenanceError = error;
+        }
+      });
+      // Check again before sleeping: maintenance can enqueue automatic lots itself.
+      if (
+        !paused() &&
+        listBatches().some(
+          (b) => !['completed', 'error'].includes(b.state) && !state.activeBatches.has(b.id),
+        )
+      )
+        continue;
+      let pending = [matching, covers, maintenance, finalCovers].filter((task) => task?.running);
+      if (!pending.length) {
+        if (finalCovers) break;
+        finalCovers = background(() =>
+          syncTrackedCovers(signal, true).catch((error) => {
+            maintenanceError ??= error;
+          }),
+        );
+        pending = [finalCovers];
+      }
+      await waitForWorker(
+        workerIdleMs(),
+        AbortSignal.any([signal, ...pending.map((task) => task!.done.signal)]),
+      );
+    } while (!signal.aborted);
+    await matching.promise;
+    await covers.promise;
+    if (maintenanceError) throw maintenanceError;
   } finally {
     controller.abort();
-    await matching;
-    await covers;
+    await matching.promise;
+    await covers.promise;
+    await maintenance?.promise;
+    await finalCovers?.promise;
     clearInterval(lease);
     state.running = false;
   }

@@ -3,13 +3,15 @@ import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { useSWRConfig } from 'swr';
 import type { LibraryActivity } from '@/types/shared';
-import { useApi, libraryKeys } from '@/lib/client/api';
+import { useApi, libraryKeys, releaseViewKey, progressViewKey } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { useRelativeTime } from './time';
 import { Spinner, cx } from './ui';
 
 const busy = (a: LibraryActivity | undefined) =>
-  Boolean(a && (a.matching.queued > 0 || a.matching.current || a.refresh.running));
+  Boolean(
+    a && (a.activeDownloads || a.matching.queued > 0 || a.matching.current || a.refresh.running),
+  );
 
 /**
  * Background work (source matching, release refresh). Polls quickly while something runs and
@@ -18,21 +20,29 @@ const busy = (a: LibraryActivity | undefined) =>
 export function useLibraryActivity({ sync = false }: { sync?: boolean } = {}) {
   const { mutate } = useSWRConfig();
   const activity = useApi<LibraryActivity>('/api/library/activity', {
-    refreshInterval: (a) => (busy(a) ? 8000 : 60_000),
+    refreshInterval: (a) => (busy(a) ? 5000 : 30_000),
+    revalidateOnFocus: true,
   });
   const previous = useRef<string | null>(null);
   const progress = activity.data
-    ? JSON.stringify([activity.data.revision, activity.data.matching, activity.data.refresh])
+    ? JSON.stringify(activity.data.revisions ?? { content: activity.data.revision })
     : null;
   useEffect(() => {
     if (!sync || progress === null || previous.current === progress) return;
+    const before = previous.current
+      ? (JSON.parse(previous.current) as LibraryActivity['revisions'])
+      : null;
     previous.current = progress;
+    if (!before) return;
+    const after = JSON.parse(progress) as NonNullable<LibraryActivity['revisions']>;
     // Revision catches completed work even if the whole scan ran between two activity polls.
     // Never throttle away the final update of a short scan.
     void mutate(
       (key) =>
-        (libraryKeys(key) && key !== '/api/library/activity') ||
-        (Array.isArray(key) && key[0] === 'chapters'),
+        key !== '/api/library/activity' &&
+        ((before.content !== after.content && libraryKeys(key)) ||
+          (before.progress !== after.progress && progressViewKey(key)) ||
+          (before.releases !== after.releases && releaseViewKey(key))),
     );
   }, [progress, mutate, sync]);
   return activity.data;

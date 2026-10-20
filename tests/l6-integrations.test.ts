@@ -243,6 +243,8 @@ it('reads indexed CBZs offline with stable local progress, owned neighbours, res
   seedSeries();
   const t = track({ media: media() });
   archive(2);
+  archive(1);
+  archive(3);
   const response = await chapterRoute.GET(req('/api/reader/chapter?local=2&media=anilist:123'));
   expect(response.status).toBe(200);
   const chapter = await response.json();

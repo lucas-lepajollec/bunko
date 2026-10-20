@@ -369,14 +369,14 @@ export function kavitaSyncRequested() {
   );
 }
 const syncState = tenantState(() => ({ syncing: undefined as Promise<void> | undefined }));
-export async function syncKavitaIndex() {
+export async function syncKavitaIndex(parentSignal?: AbortSignal) {
   const state = syncState();
   if (state.syncing) return state.syncing;
   state.syncing = (async () => {
     const settings = getSettings();
     if (!settings.kavitaUrl || !settings.kavitaApiKey) return;
     try {
-      const signal = tenantSignal();
+      const signal = AbortSignal.any([tenantSignal(), ...(parentSignal ? [parentSignal] : [])]);
       const context = createHash('sha256')
         .update(
           JSON.stringify([settings.kavitaUrl, settings.kavitaApiKey, settings.kavitaAuthMode]),
