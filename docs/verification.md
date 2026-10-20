@@ -18,6 +18,18 @@
   smoke checks pass. Final descriptor-equality strengthening also passes the nine promotion
   cases. The first accepted native publication establishes actual timing.
 
+- First accepted native run39488949397 completes in **3m56s**, versus19m13s on the preceding
+  successful run (-79.5%,15m17s saved). ARM and amd64 jobs take2m09/2m45 alongside3m32 source
+  validation. The published multi-platform image passes111 smoke checks after an anonymous
+  pull; both native manifests retain their bound SPDX SBOM and SLSA provenance.
+- The separate main CI exposes the preceding20k reader fixture's intermittent5s setup
+  timeout again. Its fixed tenant namespace and insertion timestamp are now resolved once
+  before the20k insert loop. A targeted workstation run falls from2064ms to581ms, with the
+  same20k rows,12 measured requests, p95<250ms, zero upstream calls/writes and global5s limit.
+  Full `npm run check` again passes623 tests/52 files, lint, TypeScript and production build;
+  the final local Docker image passes111 smoke checks. This changes benchmark preparation
+  only; native publication validation already passed.
+
 ## HTTP/1 catalog recovery — 2026-10-20
 
 - A disposable standalone production browser with100 same-origin cover requests delayed12s

@@ -333,12 +333,16 @@ it('bounds warm reader refreshes at the 20k source-inventory limit without upstr
   const url = '/api/reader/chapter?id=10&media=suwayomi:7';
   await chapterRoute.GET(req(url));
   const { readerNamespace } = await import('@/lib/reader-archives');
+  // The tenant/connection stays fixed while constructing this inventory. Resolve
+  // its settings once, outside the measured requests and the 20k insert loop.
+  const namespace = readerNamespace();
+  const indexedAt = Date.now();
   db().transaction(() => {
     db().exec('DELETE FROM reader_chapters');
     const insert = db().prepare('INSERT INTO reader_chapters VALUES(?,?,?,?)');
     for (let n = 1; n <= 20000; n++)
       insert.run(
-        readerNamespace(),
+        namespace,
         100000 + n,
         JSON.stringify({
           id: 100000 + n,
@@ -352,7 +356,7 @@ it('bounds warm reader refreshes at the 20k source-inventory limit without upstr
           isDownloaded: false,
           uploadDate: '2026-10-19T00:00:00Z',
         }),
-        Date.now(),
+        indexedAt,
       );
   })();
   await chapterRoute.GET(req(url));
