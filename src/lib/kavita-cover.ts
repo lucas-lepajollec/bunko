@@ -178,13 +178,7 @@ async function bootstrapKavitaCover(series: IndexedSeries, media: UnifiedMedia) 
     (t) => t.media.id === media.id && t.coverChoice === 'auto' && t.coverUrl === media.coverUrl,
   );
   if (tracked) {
-    const context = coverContext(
-      tracked.media.id,
-      tracked.identity,
-      tracked.coverChoice,
-      tracked.sources,
-      series.seriesId,
-    );
+    const context = coverContext(tracked.media.id, tracked.identity, tracked.coverChoice);
     const previous = storedCover(tracked.id);
     const origin = media.coverUrl.startsWith('/api/covers/')
       ? (previous?.origin_url ?? media.coverUrl)
@@ -194,13 +188,7 @@ async function bootstrapKavitaCover(series: IndexedSeries, media: UnifiedMedia) 
         const current = getTracked(tracked.id);
         return Boolean(
           current &&
-          coverContext(
-            current.media.id,
-            current.identity,
-            current.coverChoice,
-            current.sources,
-            series.seriesId,
-          ) === context,
+          coverContext(current.media.id, current.identity, current.coverChoice) === context,
         );
       })
     )

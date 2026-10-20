@@ -26,6 +26,7 @@ import { InfoBubble, Notice, toast } from '@/components/notify';
 import { clearPersistentCache } from '@/lib/client/cache';
 import { MatchesDrawer, MatchesSummary, type Lane, type Section } from '@/components/matches';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
+import { FavoriteButton } from '@/components/favorite';
 import {
   Cover,
   Dot,
@@ -212,6 +213,7 @@ function Title({ media }: { media: MediaDetail }) {
         progressive: true,
       }),
     {
+      keepPreviousData: true,
       revalidateOnFocus: false,
       refreshInterval: (data) => (data?.pending ? 750 : 0),
       dedupingInterval: 500,
@@ -474,6 +476,7 @@ function Title({ media }: { media: MediaDetail }) {
             </div>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <FavoriteButton media={media} entry={entry} className="self-start sm:self-auto" />
             {isComic && (
               <button
                 type="button"
@@ -601,7 +604,7 @@ function Title({ media }: { media: MediaDetail }) {
                   ) : (
                     <NoSource lanes={lanes} onSearch={() => setDrawer('sources')} />
                   )
-                ) : chapters.error ? (
+                ) : chapters.error && !chapters.data ? (
                   <Notice
                     tone="bad"
                     title={t('chapters.loadFailed')}
@@ -625,7 +628,7 @@ function Title({ media }: { media: MediaDetail }) {
                   </div>
                 ) : (
                   <ChapterTable
-                    key={`${media.id}:${entry?.id}`}
+                    key={media.id}
                     onViewChange={async (volume) => {
                       if (!entry || (entry.unit === 'volume') === volume) return;
                       try {

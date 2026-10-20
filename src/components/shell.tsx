@@ -14,6 +14,7 @@ import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
 import { ActivityPill } from './activity';
 import { Toaster } from './notify';
 import { Select } from './select';
+import { Heart, UserRound } from 'lucide-react';
 import { clearPersistentCache, persistentCache } from '@/lib/client/cache';
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -241,7 +242,7 @@ function Header() {
     <header
       className={cx(
         // Content aligns with the 1760px page column on wide screens; no hard edge under the bar.
-        'fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-6 px-4 transition-[background-color,backdrop-filter] duration-300 md:h-20 md:gap-11 md:px-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))]',
+        'fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-6 px-4 transition-[background-color,backdrop-filter] duration-300 md:h-20 md:gap-5 xl:gap-11 md:px-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))]',
         solid ? 'bg-bg/90 backdrop-blur-md' : 'bg-gradient-to-b from-black/45 to-transparent',
       )}
     >
@@ -251,7 +252,10 @@ function Header() {
           {PRODUCT_NAME}
         </span>
       </Link>
-      <nav aria-label={t('nav.label')} className="hidden gap-7 text-[15px] md:flex">
+      <nav
+        aria-label={t('nav.label')}
+        className="hidden gap-4 text-[13px] md:flex xl:gap-7 xl:text-[15px]"
+      >
         {NAV.map((n) => (
           <Link
             key={n.href}
@@ -272,7 +276,7 @@ function Header() {
           type="button"
           aria-label={t('nav.search')}
           onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
-          className="relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08] lg:hidden"
+          className="relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08] xl:hidden"
         >
           <SearchIcon size={20} />
         </button>
@@ -306,6 +310,12 @@ function Header() {
             <span className="bg-warn absolute top-2.5 right-2.5 size-2 rounded-full" />
           )}
         </IconLink>
+        <IconLink href="/profile" label={t('profile.title')} className="hidden md:flex">
+          <UserRound className="size-[19px]" aria-hidden />
+        </IconLink>
+        <IconLink href="/favorites" label={t('favorites.title')} className="hidden xl:flex">
+          <Heart className="size-[19px]" aria-hidden />
+        </IconLink>
         <IconLink href="/settings" label={t('nav.settings')} className="hidden md:flex">
           <SlidersIcon />
         </IconLink>
@@ -329,6 +339,8 @@ function MobileMenu() {
     setOpen(false);
   }
   const links = [
+    { href: '/profile', label: t('profile.title') },
+    { href: '/favorites', label: t('favorites.title') },
     { href: '/downloads', label: t('nav.downloads') },
     { href: '/sources', label: t('nav.sources') },
     { href: '/settings', label: t('nav.settings') },

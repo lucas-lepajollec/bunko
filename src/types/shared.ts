@@ -458,6 +458,8 @@ export type CatalogSetting = (typeof catalogSettingKeys)[number];
 export type SettingsPatch = Partial<Settings>;
 export interface TrackedMedia {
   id: number;
+  /** Personal like, independent of reading status and owning/downloading the work. */
+  favorite?: boolean;
   anilistId: number | null;
   mangadexId: string | null;
   title: string;
@@ -500,6 +502,9 @@ export interface TrackedMedia {
     chapterId: number;
     number: number | null;
     page: number;
+    pageCount?: number;
+    unit?: 'chapter' | 'volume';
+    volume?: number | null;
     updatedAt: string;
   } | null;
   /** Where the displayed cover comes from; `auto` = best available (catalog, then sources, then Kavita). */
@@ -579,6 +584,7 @@ export interface LibraryProgress {
 }
 export interface TrackPatch {
   id: number;
+  favorite?: boolean;
   /** Replace a wrong catalog match; status, sources and history are kept. */
   media?: UnifiedMedia;
   /** Title shown in Bunko for this work (any string; `null` = the catalog/Kavita title). */

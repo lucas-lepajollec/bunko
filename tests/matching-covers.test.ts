@@ -569,7 +569,7 @@ it('uses catalog then source then Kavita in auto mode and exposes choices everyw
   // A validated automatic cover survives a metadata thumbnail disappearing.
   expect(listTracked()[0].coverUrl).toBe(stableCover());
   await patch({ id: t.id, sources: [] });
-  expect(listTracked()[0].coverUrl).toBeNull(); // No Kavita key: no successful bytes to store.
+  expect(listTracked()[0].coverUrl).toBe(stableCover()); // Removing a source does not erase already validated artwork for this work.
   const bad = await patch({ id: t.id, cover: { origin: 'catalog', id: 'wrong' } });
   expect(bad.status).toBe(400);
   expect(await bad.json()).toMatchObject({ error: { code: 'INVALID_COVER' } });

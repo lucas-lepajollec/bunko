@@ -15,11 +15,15 @@ import { KavitaUnmatched } from '@/components/kavita';
 import { ActivityLine } from '@/components/activity';
 import { LibraryUpdates } from '@/components/updates';
 import { api, useApi } from '@/lib/client/api';
+import { send } from '@/lib/client/api';
+import { hasOwnedFiles } from '@/lib/client/reading';
+import { toast } from '@/components/notify';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from '@/components/load-notice';
 import { Page } from '@/components/shell';
 import {
   Cover,
+  Dot,
   Empty,
   ErrorNote,
   PageTitle,
@@ -28,11 +32,12 @@ import {
   Spinner,
   Tabs,
   cx,
+  errorText,
   smallButton,
 } from '@/components/ui';
 
 type Shelf = 'READING' | 'CAUGHT_UP' | 'PLANNING' | 'PAUSED' | 'COMPLETED' | 'DROPPED';
-type View = 'ALL' | 'KAVITA' | 'UPDATES';
+type View = 'ALL' | 'KAVITA' | 'UPDATES' | 'UNOWNED';
 type Kind =
   'all' | 'manga' | 'manhwa' | 'manhua' | 'comic' | 'lightnovel' | 'webnovel' | 'novel' | 'book';
 /** Needs a look: no source could be found automatically. */
@@ -70,6 +75,7 @@ function Library() {
   const { mutate: mutateList } = library;
   const [refreshing, setRefreshing] = useState(true);
   const [refreshFailed, setRefreshFailed] = useState(false);
+  const [matchingBusy, setMatchingBusy] = useState(false);
   useEffect(() => {
     // Reading progress comes from Kavita; refresh it once per visit without blanking the shelf.
     const controller = new AbortController();
@@ -85,7 +91,13 @@ function Library() {
   }, [mutateList]);
   // Links to library updates (old Updates page, home) open that tab: /library?view=updates.
   const params = useSearchParams();
-  const [shelf, setShelf] = useState<View>(params.get('view') === 'updates' ? 'UPDATES' : 'ALL');
+  const [shelf, setShelf] = useState<View>(
+    params.get('view') === 'updates'
+      ? 'UPDATES'
+      : params.get('view') === 'unowned'
+        ? 'UNOWNED'
+        : 'ALL',
+  );
   // Reading statuses live in a dropdown next to the sort instead of a row of tabs.
   const [status, setStatus] = useState<Shelf | ''>('');
   const unmatched = useApi<KavitaSeriesSummary[]>('/api/kavita/series?unmatched=1');
@@ -115,7 +127,10 @@ function Library() {
   );
   const ownedVolumes = entries.reduce((sum, e) => sum + (e.ownedVolumes?.length ?? 0), 0);
   const toReview = entries.filter(needsReview).length;
+  const withoutSources = entries.filter((entry) => entry.type === 'MANGA' && !entry.sources.length);
+  const unownedCount = entries.filter((entry) => !hasOwnedFiles(entry)).length;
   const shown = entries
+    .filter((entry) => shelf !== 'UNOWNED' || !hasOwnedFiles(entry))
     .filter((e) => (review ? needsReview(e) : !status || shelfOf(e) === status))
     .filter(
       (e) =>
@@ -149,6 +164,7 @@ function Library() {
       />
       <ActivityLine className="-mt-4" />
       <LoadNotice
+        quiet
         pending={
           refreshing ||
           library.isLoading ||
@@ -174,6 +190,7 @@ function Library() {
         label={t('library.statusLabel')}
         items={[
           { id: 'ALL' as View, label: t('library.all'), count: entries.length },
+          { id: 'UNOWNED' as View, label: t('library.unowned'), count: unownedCount },
           {
             id: 'UPDATES' as View,
             label: t('library.updates'),
@@ -193,76 +210,123 @@ function Library() {
         />
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            {(
-              [
-                'all',
-                'manga',
-                'manhwa',
-                'manhua',
-                'comic',
-                'lightnovel',
-                'webnovel',
-                'novel',
-                'book',
-              ] as Kind[]
-            ).map((k) => (
-              <button
-                key={k}
-                type="button"
-                aria-pressed={kind === k}
-                onClick={() => setKind(k)}
-                className={cx(
-                  'h-[34px] rounded-full px-3.5',
-                  kind === k ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
-                )}
-              >
-                {t(`kind.${k}`)}
-              </button>
-            ))}
-            {toReview > 0 && (
-              <button
-                type="button"
-                aria-pressed={review}
-                onClick={() => setReview(!review)}
-                className={cx(
-                  'text-warn h-[34px] rounded-full px-3.5',
-                  review ? 'bg-warn/15' : 'hover:bg-white/[0.06]',
-                )}
-              >
-                {t('library.review', { count: toReview })}
-              </button>
-            )}
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Select
-                label={t('library.statusLabel')}
-                value={status}
-                onChange={(v) => setStatus(v as Shelf | '')}
-                options={[
-                  { value: '', label: t('library.allStatuses') },
-                  ...(
-                    [
-                      'READING',
-                      'CAUGHT_UP',
-                      'PLANNING',
-                      'PAUSED',
-                      'COMPLETED',
-                      'DROPPED',
-                    ] as Shelf[]
-                  ).map((x) => ({ value: x, label: `${t(`shelf.${x}`)} · ${n(counts[x])}` })),
-                ]}
-              />
-              <div className="text-muted flex items-center gap-2">
-                {t('catalog.sort')}
+          {shelf === 'UNOWNED' && (
+            <p className="text-muted text-sm">
+              {t('library.unownedHint')}{' '}
+              <Link href="/catalog" className="underline hover:text-white">
+                {t('library.browse')}
+              </Link>
+            </p>
+          )}
+          <div className="flex flex-col gap-3 text-sm">
+            <div
+              className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0"
+              role="group"
+              aria-label={t('catalog.kind')}
+            >
+              {(
+                [
+                  'all',
+                  'manga',
+                  'manhwa',
+                  'manhua',
+                  'comic',
+                  'lightnovel',
+                  'webnovel',
+                  'novel',
+                  'book',
+                ] as Kind[]
+              ).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={kind === k}
+                  onClick={() => setKind(k)}
+                  className={cx(
+                    'h-[34px] shrink-0 rounded-full px-3.5',
+                    kind === k ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
+                  )}
+                >
+                  {t(`kind.${k}`)}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {toReview > 0 && (
+                <button
+                  type="button"
+                  aria-pressed={review}
+                  onClick={() => {
+                    setReview(!review);
+                    setShelf('ALL');
+                  }}
+                  className={cx(
+                    'text-mid flex h-[34px] items-center gap-2 rounded-full px-3.5',
+                    review ? 'bg-white/10 text-white' : 'hover:bg-white/[0.06]',
+                  )}
+                >
+                  {t('library.review', { count: toReview })}
+                  <Dot tone="warn" className="size-1.5" />
+                </button>
+              )}
+              {withoutSources.length > 0 && (
+                <button
+                  type="button"
+                  disabled={matchingBusy}
+                  className={smallButton}
+                  onClick={async () => {
+                    setMatchingBusy(true);
+                    try {
+                      const result = await send<{ queued: number }>('/api/library/match', 'POST', {
+                        ids: withoutSources.map((entry) => entry.id),
+                      });
+                      toast({
+                        tone: 'info',
+                        text: t('library.matchQueued', { count: n(result.queued) }),
+                      });
+                      await Promise.all([library.mutate(), activity.mutate()]);
+                    } catch (error) {
+                      toast({ tone: 'bad', text: errorText(t, error) });
+                    } finally {
+                      setMatchingBusy(false);
+                    }
+                  }}
+                >
+                  {matchingBusy && <Spinner />}
+                  {t('library.matchAll', { count: n(withoutSources.length) })}
+                </button>
+              )}
+              <div className="ml-auto flex flex-wrap items-center gap-2">
                 <Select
-                  label={t('catalog.sort')}
-                  value={sort}
-                  onChange={(v) => setSort(v as Sort)}
-                  options={(['news', 'recent', 'title', 'added'] as Sort[]).map((x) => ({
-                    value: x,
-                    label: t(`library.sort.${x}`),
-                  }))}
+                  label={t('library.statusLabel')}
+                  value={status}
+                  onChange={(v) => setStatus(v as Shelf | '')}
+                  options={[
+                    { value: '', label: t('library.allStatuses') },
+                    ...(
+                      [
+                        'READING',
+                        'CAUGHT_UP',
+                        'PLANNING',
+                        'PAUSED',
+                        'COMPLETED',
+                        'DROPPED',
+                      ] as Shelf[]
+                    ).map((x) => ({ value: x, label: `${t(`shelf.${x}`)} · ${n(counts[x])}` })),
+                  ]}
                 />
+                <div className="text-muted flex items-center gap-2">
+                  {t('catalog.sort')}
+                  <Select
+                    label={t('catalog.sort')}
+                    value={sort}
+                    onChange={(v) => setSort(v as Sort)}
+                    options={(['news', 'recent', 'title', 'added'] as Sort[]).map((x) => ({
+                      value: x,
+                      label: t(`library.sort.${x}`),
+                    }))}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -297,10 +361,11 @@ function Library() {
                     <span
                       className={cx(
                         'absolute inset-x-2 bottom-2 flex items-center gap-1.5 rounded-full bg-black/80 px-2 py-1 text-[11px]',
-                        e.sourceMatch === 'not-found' ? 'text-warn' : 'text-mid',
+                        'text-mid',
                       )}
                     >
                       {e.sourceMatch === 'searching' && <Spinner className="size-3" />}
+                      {e.sourceMatch === 'not-found' && <Dot tone="warn" className="size-1.5" />}
                       <span className="truncate">{t(`library.match.${e.sourceMatch}`)}</span>
                     </span>
                   )}

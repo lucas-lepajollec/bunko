@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { ReaderChapter, ReaderProgressUpdate } from '@/types/shared';
+import { useSWRConfig } from 'swr';
 import { api, mediaHref, useApi } from '@/lib/client/api';
 import { ReaderProgressWriter } from '@/lib/client/reader-progress';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -39,6 +40,7 @@ function Reader() {
 }
 
 function ChapterReader({ chapter, media }: { chapter: string; media: string | null }) {
+  const { mutate } = useSWRConfig();
   const { t, n } = useI18n();
   const router = useRouter();
   // `local-<n>`: a chapter only present in the library files (no source chapter id).
@@ -88,14 +90,17 @@ function ChapterReader({ chapter, media }: { chapter: string; media: string | nu
 
   const progress = useMemo(
     () =>
-      new ReaderProgressWriter((value) =>
-        api('/api/reader/progress', {
+      new ReaderProgressWriter(async (value) => {
+        await api('/api/reader/progress', {
           method: 'PUT',
-          body: JSON.stringify(value),
+          // The writer already coalesces page turns. Commit before acknowledging
+          // the exit so Home cannot revalidate ahead of a second server debounce.
+          body: JSON.stringify({ ...value, commit: true }),
           keepalive: true,
-        }),
-      ),
-    [],
+        });
+        void mutate('/api/tracked');
+      }),
+    [mutate],
   );
   // Completion is immediate. Leaving the chapter flushes any intermediate position too.
   const activeChapterId = data.data?.chapterId;

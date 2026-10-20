@@ -167,6 +167,7 @@ export function db(): Database.Database {
       });
     });
     migrateV15(connection);
+    migrateV16(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -643,7 +644,7 @@ function snapshotTracked(id?: number) {
         ...(id === undefined ? [] : [id]),
       );
     const rows = select(
-      `SELECT *, (SELECT json_object('chapterId',chapter_id,'number',number,'page',page,'updatedAt',updated_at) FROM reader_progress WHERE media_id=tracked_media.media_json ->> '$.id' ORDER BY updated_at DESC,rowid DESC LIMIT 1) AS reader_position_json FROM tracked_media`,
+      `SELECT *, (SELECT json_object('chapterId',chapter_id,'number',number,'page',page,'pageCount',page_count,'volume',(SELECT number FROM local_reader_chapters WHERE id=-reader_progress.chapter_id AND media_id LIKE '@volume:%'),'unit',COALESCE((SELECT CASE WHEN media_id LIKE '@volume:%' THEN 'volume' ELSE 'chapter' END FROM local_reader_chapters WHERE id=-reader_progress.chapter_id),'chapter'),'updatedAt',updated_at) FROM reader_progress WHERE media_id=tracked_media.media_json ->> '$.id' ORDER BY updated_at DESC,rowid DESC LIMIT 1) AS reader_position_json FROM tracked_media`,
       'id',
       ' ORDER BY id DESC',
     ) as Record<string, unknown>[];
@@ -757,13 +758,7 @@ function snapshotTracked(id?: number) {
           ].filter((v): v is string => Boolean(v)),
         ),
       ];
-      const context = coverContext(
-        rawMedia.id,
-        identity,
-        coverChoice,
-        sources,
-        kavita?.seriesId ?? null,
-      );
+      const context = coverContext(rawMedia.id, identity, coverChoice);
       const stored = covers.get(id);
       const saved = resolved.get(id);
       const stable = stored?.context === context;
@@ -903,6 +898,7 @@ function snapshotTracked(id?: number) {
         identity,
         kavitaSeriesId: r.kavita_series_id as number | null,
         autoDownload: Boolean(r.auto_download),
+        favorite: Boolean(r.favorite),
         createdAt: String(r.created_at),
         media,
         sources,
@@ -1284,6 +1280,24 @@ export function migrateV15(database: Database.Database) {
       database.exec('ALTER TABLE tracked_media ADD COLUMN volume_override_json TEXT');
     if (Number(database.pragma('user_version', { simple: true })) < 15)
       database.pragma('user_version = 15');
+  })();
+}
+
+/** Retain previously stored cover bytes while removing enrichment from their identity. */
+export function migrateV16(database: Database.Database) {
+  database.transaction(() => {
+    const columns = database.pragma('table_info(tracked_media)') as { name: string }[];
+    if (!columns.some((c) => c.name === 'favorite'))
+      database.exec(
+        'ALTER TABLE tracked_media ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0 CHECK(favorite IN (0,1))',
+      );
+    if (Number(database.pragma('user_version', { simple: true })) < 16) {
+      for (const table of ['stored_covers', 'resolved_covers', 'kavita_cover_status'])
+        database.exec(`UPDATE ${table} SET context=json_array(
+          json_extract(context,'$[0]'),json_extract(context,'$[1]'),json_extract(context,'$[2]'))
+          WHERE CASE WHEN json_valid(context) THEN json_array_length(context)>3 ELSE 0 END`);
+      database.pragma('user_version=16');
+    }
   })();
 }
 

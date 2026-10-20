@@ -38,6 +38,15 @@ export const POST = route(async (r) => json(track(await body(r, trackBody)), 201
 export const PATCH = route(async (r) => {
   const input = await body(r, trackPatch);
   requireFollowed(input.id);
+  if (
+    input.favorite !== undefined &&
+    Object.keys(input).every((key) => key === 'id' || key === 'favorite')
+  ) {
+    db()
+      .prepare('UPDATE tracked_media SET favorite=? WHERE id=?')
+      .run(Number(input.favorite), input.id);
+    return json(getTracked(input.id));
+  }
   let current = getTracked(input.id);
   if (!current) throw new AppError('NOT_FOUND', 'Tracked media not found', 404);
   if (input.kavitaSeriesId != null && !indexedSeriesById(input.kavitaSeriesId))
@@ -212,6 +221,10 @@ export const PATCH = route(async (r) => {
         db()
           .prepare('UPDATE tracked_media SET last_read=MAX(COALESCE(last_read,0),?) WHERE id=?')
           .run(previousRead, input.id);
+      if (input.favorite !== undefined)
+        db()
+          .prepare('UPDATE tracked_media SET favorite=? WHERE id=?')
+          .run(Number(input.favorite), input.id);
     })();
   } catch (error) {
     if ((error as { code?: string }).code?.startsWith('SQLITE_CONSTRAINT_UNIQUE'))
@@ -223,6 +236,7 @@ export const PATCH = route(async (r) => {
     input.id,
     undefined,
     Boolean(input.cover || input.kavitaCoverSync === true),
+    Boolean(input.cover),
   ).catch(() => {
     /* Retry chosen cover on the next update cycle. */
   });

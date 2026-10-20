@@ -37,6 +37,7 @@ export function Select({
   // Controlled so a second tap on the trigger closes the menu (Radix reopens it on touch otherwise).
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
+  const closingTap = useRef(false);
   return (
     <RS.Root
       open={open}
@@ -47,13 +48,31 @@ export function Select({
       <RS.Trigger
         ref={trigger}
         onPointerDown={(e) => {
-          if (!open) return;
+          if (!open) {
+            closingTap.current = false;
+            return;
+          }
+          closingTap.current = true;
           e.preventDefault();
           setOpen(false);
         }}
+        onClick={(e) => {
+          // Touch opens Radix on click, after pointerdown. Consume the same tap
+          // which just closed it so that the internal click cannot reopen it.
+          if (closingTap.current) {
+            e.preventDefault();
+            closingTap.current = false;
+          }
+        }}
+        onPointerCancel={() => {
+          closingTap.current = false;
+        }}
+        onKeyDown={() => {
+          closingTap.current = false;
+        }}
         aria-label={label}
         className={cx(
-          'text-fg inline-flex min-w-0 items-center justify-between gap-2 rounded-full bg-white/[0.08] pr-3 pl-3.5 text-left outline-none hover:bg-white/[0.12] focus-visible:ring-2 focus-visible:ring-white/70 data-[state=open]:bg-white/[0.12]',
+          'pointer-events-auto text-fg inline-flex min-w-0 items-center justify-between gap-2 rounded-full bg-white/[0.08] pr-3 pl-3.5 text-left outline-none hover:bg-white/[0.12] focus-visible:ring-2 focus-visible:ring-white/70 data-[state=open]:bg-white/[0.12]',
           size === 'sm' ? 'h-8 text-[13px]' : size === 'lg' ? 'h-11 text-[15px]' : 'h-9 text-sm',
           className,
         )}
@@ -83,7 +102,11 @@ export function Select({
           sideOffset={6}
           onPointerDownOutside={(e) => {
             // Let the trigger's own handler close it instead of close-then-reopen.
-            if (trigger.current?.contains(e.target as Node)) e.preventDefault();
+            if (trigger.current?.contains(e.target as Node)) {
+              e.preventDefault();
+              closingTap.current = true;
+              setOpen(false);
+            }
           }}
           className="z-[70] max-h-[min(360px,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl bg-[#1c1a17] p-1 text-sm shadow-[0_18px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10"
         >
