@@ -1,5 +1,23 @@
 # Verification — current and historical evidence
 
+## Native image publication — 2026-10-20
+
+- The successful preceding release run39482910545/attempt2 took19m13s: source validation3m56,
+  amd64 build/smoke52s, emulated arm64 build/smoke7m16, then another6m07 building/pushing
+  the multi-platform image. This is an observed single-run baseline, not an SLA.
+- Release source validation and native amd64/arm64 build/smoke now run in parallel. Each native
+  image is uploaded by digest, pulled back, checked for architecture and exact OCI revision,
+  and smoke-tested before its digest becomes a job output. Tags wait for all three gates.
+  The final job only assembles those immutable objects; its dry-run must retain all native
+  image and attestation descriptors. No QEMU or publication rebuild remains in this workflow.
+- `actionlint`1.7.11 and shell syntax validation pass. Nine isolated CLI-boundary regressions
+  exercise valid promotion and refusal before tag writes for malformed inputs/metadata,
+  a wrong architecture, missing attestations and a lossy merge. `npm run check` passes
+  **623 tests/52 files**, lint, strict TypeScript and the production build. No runtime/dependency,
+  database or interface change. Local Docker `bunko:native-publication` builds and all111 isolated
+  smoke checks pass. Final descriptor-equality strengthening also passes the nine promotion
+  cases. The first accepted native publication establishes actual timing.
+
 ## HTTP/1 catalog recovery — 2026-10-20
 
 - A disposable standalone production browser with100 same-origin cover requests delayed12s

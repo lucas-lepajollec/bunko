@@ -44,8 +44,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
       - name: Build local image
-        run: docker build --tag bunko:ci .
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          pull: true
+          tags: bunko:ci
+          # Main publication and PRs can reuse trusted default-branch layers.
+          # PR caches remain isolated by GitHub's ref-scoped cache permissions.
+          cache-from: type=gha,scope=bunko-amd64,timeout=2m
+          cache-to: type=gha,scope=bunko-amd64,mode=max,timeout=2m,ignore-error=true
 
       - name: Smoke-test the image
         run: scripts/container-smoke.sh bunko:ci

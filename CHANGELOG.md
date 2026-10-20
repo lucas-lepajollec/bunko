@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Build release images once per architecture on parallel native amd64/arm64 runners, reuse
+  architecture-specific CI caches and publish the exact smoke-tested digests without rebuilding.
+  Preserve source checks, both native SQLite smoke tests, provenance/SBOM and recoverable tags.
+
 - Keep catalog, library, planning and title navigation responsive on HTTP/1 LAN installs by
   limiting private artwork transfers to two, loading near the viewport and cancelling obsolete
   images on scroll/navigation. Cache Metron artwork privately on Bunko's origin, bound cover
