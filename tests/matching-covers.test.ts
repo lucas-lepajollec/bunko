@@ -952,6 +952,12 @@ it('exposes authenticated local activity, searching and refresh progress; stale 
     expect(await response.json()).toEqual({
       hiddenAdult: 0,
       revision: expect.any(Number),
+      revisions: {
+        content: expect.any(Number),
+        progress: expect.any(Number),
+        releases: expect.any(Number),
+      },
+      activeDownloads: 0,
       matching: { queued: 1, current: 'Owned Work' },
       refresh: {
         running: true,

@@ -1,8 +1,9 @@
 'use client';
+import { MediaLink } from '@/components/media-link';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import type { ChapterRelease, HomeFeed, TrackedMedia } from '@/types/shared';
-import { mediaHref, useApi } from '@/lib/client/api';
+import { useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from '@/components/load-notice';
 import { Backdrop } from '@/components/backdrop';
@@ -190,9 +191,9 @@ function Hero({
           )}
         </p>
         <div className="mt-2 flex gap-3">
-          <Link href={mediaHref(m.id)} className={cx(primaryButton, 'flex-1 md:flex-none')}>
+          <MediaLink media={m} className={cx(primaryButton, 'flex-1 md:flex-none')}>
             {t('home.openSheet')}
-          </Link>
+          </MediaLink>
           <Link href="/catalog?view=chapters" className={cx(ghostButton, 'flex-1 md:flex-none')}>
             {t('home.allReleases')}
           </Link>
@@ -234,8 +235,8 @@ function ResumeCard({ entry }: { entry: TrackedMedia }) {
   const { t } = useI18n();
   const p = entry.progress;
   return (
-    <Link
-      href={mediaHref(entry.media.id)}
+    <MediaLink
+      media={entry.media}
       className="flex w-[270px] shrink-0 snap-start gap-3.5 rounded-2xl bg-white/[0.045] p-3 hover:bg-white/[0.07] md:w-[320px] md:gap-4 md:p-3.5"
     >
       <Cover
@@ -259,6 +260,6 @@ function ResumeCard({ entry }: { entry: TrackedMedia }) {
         </span>
         <ProgressBar progress={p} color={entry.media.color} />
       </span>
-    </Link>
+    </MediaLink>
   );
 }

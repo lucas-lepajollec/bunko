@@ -1,5 +1,7 @@
 'use client';
 import Link from 'next/link';
+import { MediaLink } from '@/components/media-link';
+import { emptyMedia } from '@/lib/media';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { SearchResponse, Source, SourceResult } from '@/types/shared';
@@ -54,6 +56,7 @@ function Search() {
   // Catalog results only mark which source hits are unknown to the catalogs.
   const catalog = useApi<SearchResponse>(
     live ? `/api/search?q=${encodeURIComponent(live.q)}` : null,
+    { refreshInterval: (data) => (data?.pending ? 750 : 0), dedupingInterval: 500 },
   );
   useEffect(() => {
     if (!live) return;
@@ -160,14 +163,32 @@ function Search() {
           // Sources with results first, then still searching, then empty, then failed.
           .sort((a, b) => rankSourceLanes(a, b, language))
           .map((lane) => (
-            <SourceLane key={lane.source.id} lane={lane} known={known} />
+            <SourceLane
+              key={lane.source.id}
+              lane={lane}
+              known={known}
+              catalogComplete={Boolean(
+                catalog.data &&
+                !catalog.data.pending &&
+                !catalog.error &&
+                catalog.data.providers.every((p) => p.status !== 'error'),
+              )}
+            />
           ))}
       </section>
     </Page>
   );
 }
 
-function SourceLane({ lane, known }: { lane: Lane; known: Set<string> }) {
+function SourceLane({
+  lane,
+  known,
+  catalogComplete,
+}: {
+  lane: Lane;
+  known: Set<string>;
+  catalogComplete: boolean;
+}) {
   const { t, n } = useI18n();
   const hits = lane.result?.results.map((r, i) => ({ ...r, title: lane.result!.titles[i] })) ?? [];
   return (
@@ -215,19 +236,23 @@ function SourceLane({ lane, known }: { lane: Lane; known: Set<string> }) {
           </span>
         )}
         {hits.map((h) => (
-          <Link
+          <MediaLink
             key={h.suwayomiMangaId}
-            href={`/title/suwayomi/${h.suwayomiMangaId}`}
+            media={{
+              ...emptyMedia(`suwayomi:${h.suwayomiMangaId}`, h.title, 'MANGA'),
+              coverUrl: h.thumbnailUrl,
+              sources: [h],
+            }}
             className="flex w-[84px] shrink-0 flex-col gap-1.5 md:w-[104px]"
           >
             <Cover src={h.thumbnailUrl} />
             <span className="line-clamp-2 text-[11px] leading-snug md:text-xs">{h.title}</span>
-            {!known.has(normalize(h.title)) && (
+            {catalogComplete && !known.has(normalize(h.title)) && (
               <span className="text-warn -mt-0.5 text-[10px] md:text-[11px]">
                 {t('search.offCatalog')}
               </span>
             )}
-          </Link>
+          </MediaLink>
         ))}
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { sourceServerKey } from './source-server';
 import { importStockKey } from './owned-stock';
-import { ownedChapters, ownedStock } from './owned-chapters';
+import { ownedStock } from './owned-chapters';
 import { mediaId as mediaIdentifier } from './validation';
 import { mediaDetail } from './catalog';
 import { sourceFormat } from './library-kinds';
@@ -95,6 +95,65 @@ const localIdentity = (key: string) => ({
   unit: key.startsWith('@volume:') ? ('volume' as const) : ('chapter' as const),
 });
 
+/** One numeric order for the sheet's owned stock and the reader. Source variants stay in
+ * the selected reading lane; owned files from any historical connection fill its gaps.
+ * Chapter and volume numbers are never compared to each other. No upstream call is needed. */
+async function navigation(
+  number: number | null,
+  media: UnifiedMedia | undefined,
+  mangaId: number,
+  unit: 'chapter' | 'volume' = 'chapter',
+) {
+  const result = { prevId: null, nextId: null, prevLocal: null, nextLocal: null } as Pick<
+    ReaderChapter,
+    'prevId' | 'nextId' | 'prevLocal' | 'nextLocal'
+  >;
+  if (number === null) return result;
+  const candidates = new Map<number, { id: number | null; owned: boolean }>();
+  if (unit === 'chapter' && mangaId)
+    for (const c of readerNeighbours(mangaId, number).sort((a, b) => b.id - a.id))
+      if (c.number !== null) candidates.set(c.number, { id: c.id, owned: false });
+  if (media) {
+    const stock = ownedStock(media);
+    const namespace = sourceServerKey();
+    const numbers = unit === 'volume' ? stock.volumes : stock.chapters.map((c) => c.number);
+    for (const n of numbers) candidates.set(n, { id: candidates.get(n)?.id ?? null, owned: true });
+    // Explicitly retyped imports must not reappear as remote chapter neighbours.
+    if (unit === 'chapter')
+      for (const [n, candidate] of candidates)
+        if (
+          candidate.id &&
+          stock.retypedImports.has(
+            importStockKey({
+              namespace,
+              chapter_id: candidate.id,
+            }),
+          )
+        )
+          candidates.delete(n);
+  }
+  const ordered = [...candidates.keys()].sort((a, b) => a - b);
+  for (const direction of ['prev', 'next'] as const) {
+    const numbers =
+      direction === 'prev'
+        ? ordered.filter((n) => n < number).reverse()
+        : ordered.filter((n) => n > number);
+    for (const n of numbers) {
+      const candidate = candidates.get(n)!;
+      // Existing source URLs retain progress identity and use their archive when present.
+      if (candidate.id) {
+        result[`${direction}Id`] = candidate.id;
+        break;
+      }
+      if (candidate.owned && media && (await localNumberArchive(media, n, unit))) {
+        result[`${direction}Local`] = n;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
 export async function readerChapter(
   id: number,
   mediaId?: string,
@@ -114,6 +173,31 @@ export async function readerChapter(
     return localReaderChapter(row.number, local.mediaId, local.unit);
   }
   const local = await readerArchive(id);
+  if (!local) {
+    // A pre-Bunko Kavita file has no source archive pointer. The sheet's persisted
+    // variant lets old positive URLs resolve it even while Suwayomi is unavailable.
+    const stored = statement(
+      'SELECT payload FROM reader_chapters WHERE namespace=? AND chapter_id=?',
+    ).get(readerNamespace(), id) as { payload: string } | undefined;
+    const variant = stored
+      ? (JSON.parse(stored.payload) as { mangaId: number; number: number | null })
+      : null;
+    const entry = variant && work(mediaId, variant.mangaId);
+    if (
+      entry &&
+      variant?.number != null &&
+      [...entry.sources, ...entry.media.sources].some((s) => s.suwayomiMangaId === variant.mangaId)
+    ) {
+      const stock = ownedStock(entry.media);
+      const unit = stock.retypedImports.has(
+        importStockKey({ namespace: sourceServerKey(), chapter_id: id }),
+      )
+        ? 'volume'
+        : 'chapter';
+      if (await localNumberArchive(entry.media, variant.number, unit))
+        return localReaderChapter(variant.number, entry.media.id, unit, id);
+    }
+  }
   if (local) {
     const tracked = work(mediaId, local.chapter.manga?.id ?? 0);
     const number = chapterNumber(local.chapter.name, local.chapter.chapterNumber);
@@ -137,9 +221,6 @@ export async function readerChapter(
   const number = chapterNumber(chapter.name, chapter.chapterNumber);
   // Pages can stay cached; navigation must use today's persisted source inventory/imports.
   // This also ignores neighbours embedded in older five-minute chapter cache records.
-  const neighbours = readerNeighbours(mangaId, number)
-    .filter((c) => c.id !== id && c.number !== null)
-    .sort((a, b) => a.number! - b.number! || a.id - b.id);
   const tracked = work(mediaId, mangaId);
   const imported = local
     ? (statement('SELECT media_json FROM imported_chapters WHERE chapter_id=? AND namespace=?').get(
@@ -165,9 +246,7 @@ export async function readerChapter(
     number,
     volume: chapterVolume(chapter.name, chapter.volume),
     pages: data.urls.map((_, index) => `/api/reader/page?chapter=${id}&index=${index}`),
-    prevId:
-      number === null ? null : (neighbours.filter((c) => c.number! < number).at(-1)?.id ?? null),
-    nextId: number === null ? null : (neighbours.find((c) => c.number! > number)?.id ?? null),
+    ...(await navigation(number, tracked?.media ?? importedMedia, mangaId)),
     direction: readerDirection(formatMedia),
     resumePage: position ? Math.min(position.page, data.urls.length - 1) : null,
   };
@@ -349,6 +428,7 @@ export async function localReaderChapter(
   number: number,
   mediaId: string,
   unit: 'chapter' | 'volume' = 'chapter',
+  previousSourceId?: number,
 ): Promise<ReaderChapter> {
   const tracked = await localReadingWork(mediaId);
   if (!tracked) throw new AppError('NOT_FOUND', 'Local reading work not found', 404);
@@ -370,10 +450,12 @@ export async function localReaderChapter(
   const position = statement(
     'SELECT page FROM reader_progress WHERE media_id=? AND chapter_id=?',
   ).get(tracked.media.id, chapterId) as { page: number } | undefined;
-  const neighbours =
-    unit === 'volume'
-      ? ownedStock(tracked.media).volumes
-      : ownedChapters(tracked.media).map((c) => c.number);
+  const previousPosition =
+    !position && previousSourceId && unit === 'chapter'
+      ? (statement(
+          'SELECT page FROM reader_progress WHERE media_id=? AND chapter_id=? AND number=?',
+        ).get(tracked.media.id, previousSourceId, number) as { page: number } | undefined)
+      : undefined;
   return {
     chapterId,
     mangaId: 0,
@@ -383,13 +465,13 @@ export async function localReaderChapter(
     unit,
     volume: archive.volume,
     local: number,
-    prevId: null,
-    nextId: null,
-    prevLocal: neighbours.filter((n) => n < number).at(-1) ?? null,
-    nextLocal: neighbours.find((n) => n > number) ?? null,
+    ...(await navigation(number, tracked.media, 0, unit)),
     pages: pages.map((_, index) => `/api/reader/page?chapter=${chapterId}&index=${index}`),
     direction: readerDirection(tracked.media),
-    resumePage: position ? Math.min(position.page, pages.length - 1) : null,
+    resumePage:
+      position || previousPosition
+        ? Math.min((position ?? previousPosition)!.page, pages.length - 1)
+        : null,
   };
 }
 export async function localReaderPage(

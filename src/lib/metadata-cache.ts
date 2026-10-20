@@ -37,11 +37,17 @@ export function storedMetadata<T>(key: string): { value: T; at: number; attempte
     'SELECT payload,updated_at,attempted_at FROM metadata_cache WHERE key=?',
   ).get(key) as { payload: string; updated_at: number; attempted_at: number } | undefined;
   if (!row) {
+    const old = parsed.get(key);
+    if (old) state.parsedBytes -= Buffer.byteLength(old.payload);
     parsed.delete(key);
     return null;
   }
   let hit = parsed.get(key);
   if (hit?.payload !== row.payload) {
+    if (hit) {
+      state.parsedBytes -= Buffer.byteLength(hit.payload);
+      parsed.delete(key);
+    }
     const decoded = decodeMetadata(key, row.payload);
     if (!decoded) return null;
     hit = { payload: row.payload, value: decoded.value };

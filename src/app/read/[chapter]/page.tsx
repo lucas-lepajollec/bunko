@@ -74,10 +74,15 @@ function ChapterReader({ chapter, media }: { chapter: string; media: string | nu
   const [page, setPage] = useState<number | null>(null);
   const current = page ?? data.data?.resumePage ?? 0;
   const [chrome, setChrome] = useState(true);
+  const nextQuery = data.data?.nextId
+    ? `id=${data.data.nextId}`
+    : data.data?.nextLocal != null
+      ? `local=${data.data.nextLocal}&unit=${data.data.unit ?? 'chapter'}`
+      : null;
   // Do not resolve the next source chapter until its first pages can actually be prefetched.
   const next = useApi<ReaderChapter>(
-    current >= pages.length - 3 && data.data?.nextId
-      ? `/api/reader/chapter?id=${data.data.nextId}${media ? `&media=${encodeURIComponent(media)}` : ''}`
+    current >= pages.length - 3 && nextQuery
+      ? `/api/reader/chapter?${nextQuery}${media ? `&media=${encodeURIComponent(media)}` : ''}`
       : null,
   );
 

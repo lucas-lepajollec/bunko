@@ -1,7 +1,6 @@
 'use client';
-import Link from 'next/link';
+import { MediaLink } from '@/components/media-link';
 import type { ChapterRelease } from '@/types/shared';
-import { mediaHref } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { ScrollRow } from './media';
 import { useRelativeTime } from './time';
@@ -34,10 +33,7 @@ export function ReleaseCard({
   const label = useChapterLabel();
   const relative = useRelativeTime();
   return (
-    <Link
-      href={mediaHref(release.media.id)}
-      className={cx('group flex min-w-0 flex-col gap-2', className)}
-    >
+    <MediaLink media={release.media} className={cx('group flex min-w-0 flex-col gap-2', className)}>
       <span className="relative block">
         <Cover
           src={release.media.coverUrl}
@@ -75,7 +71,7 @@ export function ReleaseCard({
         {relative(release.releasedAt)}
         {release.group ? ` · ${release.group}` : ''}
       </span>
-    </Link>
+    </MediaLink>
   );
 }
 
@@ -93,9 +89,7 @@ export function ReleaseRow({
       {!items ? (
         <PosterSkeletons count={8} className={CARD} />
       ) : (
-        items.map((r, i) => (
-          <ReleaseCard key={r.id} release={r} className={CARD} priority={i < 6} />
-        ))
+        items.map((r) => <ReleaseCard key={r.id} release={r} className={CARD} />)
       )}
     </ScrollRow>
   );

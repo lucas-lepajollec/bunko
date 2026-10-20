@@ -453,3 +453,28 @@ All optional provider requests are serialized per provider across route bundles/
 - `PATCH /api/tracked {id,kavitaCoverSync:false}` disables cover uploads/sidecar writes for that series and returns `kavitaCover.state:none`. Existing/new entries default to true. Switching back to true promptly pushes the current cover and retries failures through the worker. Bunko's own cover selection/cache remains usable while pushes are disabled.
 - Source browse follows Suwayomi-WebUI's `FetchSourceMangaInput`: one-based `page`, string `source`, explicit `POPULAR`/`LATEST` without search fields, or `SEARCH` with `query` and a filter-change array. Nested filters use `groupChange`, preserving the extension's positional indices. Both clients use GraphQL, so the server's existing extension preferences/cookies apply; Bunko does not replace those preferences, add undocumented query flags or fall back to REST. Comparison: [official RequestManager](https://github.com/Suwayomi/Suwayomi-WebUI/blob/master/src/lib/requests/RequestManager.ts), [filter mapping](https://github.com/Suwayomi/Suwayomi-WebUI/blob/master/src/features/source/browse/screens/SourceMangas.tsx).
 - `SourceHealth.detail`, source SSE errors and HTTP `{error:{code,message,detail}}` expose complete sanitized extension messages, without a server-side character cutoff. Credentials, URLs, email addresses, query strings and token-like material are removed; sensitive assignments conservatively redact their remaining text. Details are never logged. Fixtures also include two unmodified error payloads captured from a disposable Suwayomi v2.4.2366 instance (missing source and invalid filter input), plus the real Cloudflare-disabled message from [Suwayomi-Server #2181](https://github.com/Suwayomi/Suwayomi-Server/issues/2181) in a reconstructed graphql-java envelope. This is protocol/diagnostic coverage, not a claim that every third-party extension works: the reported private extension failure still needs acceptance against its actual full message.
+
+
+## Reader and view reconciliation (October 2026)
+
+`ReaderChapter.prevLocal` / `nextLocal` may supplement a source reader with an accessible owned
+number from the same work/unit, including older Kavita files or historical imports from another
+connection. Owned rows/main Read prefer `/read/local-<number>` (or local-volume). Existing positive
+URLs remain accepted; when resolved locally, the response carries the stable negative chapter ID
+and local page URLs. Clients must persist progress with the verified response ID and number.
+An existing source position may seed the first local response. A local sequence never mixes
+volume and chapter numbers, nor silently selects unowned variants from another source.
+Next-local metadata is prefetched near the end using the same timing as source-next metadata.
+
+`GET /api/library/activity` additionally returns
+`revisions:{content:number,progress:number,releases:number}` and `activeDownloads:number`.
+The original `revision` remains available. Compare domain revisions between snapshots;
+matching/job counters alone are informational and do not invalidate source data. A content
+change invalidates mounted library, media, chapter, reader, search, discover, home and publication
+views. Progress changes invalidate tracked/media/Kavita-presence/home views; release changes
+invalidate home/planning/releases. Revision counters use the same tenant transaction as the write.
+
+The browser's `openStream(...,{reconnect:true})` option is used only for continuous download
+snapshots. Transport interruption in CONNECTING state retains EventSource's reconnect; a resumed
+stream starts with the current full snapshot. Finite search streams do not automatically replay.
+Closed streams expose the existing localized Retry action.

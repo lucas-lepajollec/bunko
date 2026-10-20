@@ -1,4 +1,5 @@
 'use client';
+import { MediaLink } from '@/components/media-link';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import type {
@@ -7,7 +8,7 @@ import type {
   DownloadsSnapshot,
   PublicSettings,
 } from '@/types/shared';
-import { ApiFailure, mediaHref, openStream, send, useApi } from '@/lib/client/api';
+import { ApiFailure, openStream, send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
@@ -31,6 +32,7 @@ export default function DownloadsPage() {
   const { t } = useI18n();
   const [snapshot, setSnapshot] = useState<DownloadsSnapshot | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [streamRun, setStreamRun] = useState(0);
   const [view, setView] = useState<View>('active');
   const settings = useApi<PublicSettings>('/api/settings');
   const engine = useSuwayomi();
@@ -46,8 +48,9 @@ export default function DownloadsPage() {
           error: (d) => setStreamError((d as { code?: string }).code ?? 'STREAM_ERROR'),
         },
         () => setStreamError('NETWORK_ERROR'),
+        { reconnect: true },
       ),
-    [],
+    [streamRun],
   );
   const batches = snapshot?.batches ?? [];
   const active = batches.filter((b) => b.state !== 'completed' && b.state !== 'error');
@@ -96,7 +99,18 @@ export default function DownloadsPage() {
         {engine.state && engine.state !== 'ok' ? (
           <SuwayomiNotice />
         ) : (
-          streamError && <ErrorNote error={new ApiFailure(streamError, 0)} />
+          streamError && (
+            <div className="flex items-center gap-3">
+              <ErrorNote error={new ApiFailure(streamError, 0)} />
+              <button
+                type="button"
+                className={smallButton}
+                onClick={() => setStreamRun((run) => run + 1)}
+              >
+                {t('common.retry')}
+              </button>
+            </div>
+          )
         )}
         {snapshot && shown.length === 0 && (
           <Empty title={t(`downloads.empty.${view}`)}>
@@ -208,12 +222,12 @@ function BatchCard({ batch }: { batch: DownloadBatch }) {
       <div className="flex items-center gap-3.5">
         <Cover src={batch.media.coverUrl} className="w-11 shrink-0 md:w-[52px]" />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <Link
-            href={mediaHref(batch.media.id)}
+          <MediaLink
+            media={batch.media}
             className="truncate text-base font-semibold hover:underline md:text-lg"
           >
             {batch.media.title}
-          </Link>
+          </MediaLink>
           <span className="text-muted flex flex-wrap items-center gap-x-2 text-xs md:text-[13px]">
             <span>{t('downloads.doneOf', { done: n(done), total: n(total) })}</span>
             {failed.length > 0 && (

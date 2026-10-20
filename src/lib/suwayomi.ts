@@ -394,7 +394,9 @@ export async function chaptersFor(
     saveChapterLabels(chapters.flatMap((c) => c.variants));
     db().transaction(() => {
       const save = db().prepare(
-        'INSERT INTO reader_chapters(namespace,chapter_id,payload,at) VALUES(?,?,?,?) ON CONFLICT(namespace,chapter_id) DO UPDATE SET payload=excluded.payload,at=excluded.at',
+        `INSERT INTO reader_chapters(namespace,chapter_id,payload,at) VALUES(?,?,?,?)
+         ON CONFLICT(namespace,chapter_id) DO UPDATE SET payload=excluded.payload,at=excluded.at
+         WHERE reader_chapters.payload IS NOT excluded.payload`,
       );
       for (const c of chapters.flatMap((c) => c.variants))
         save.run(`${sourceServerKey()}:reader`, c.id, JSON.stringify(c), Date.now());
@@ -424,8 +426,8 @@ export async function chaptersFor(
       );
       if (ownNumbers.length)
         db()
-          .prepare('UPDATE tracked_media SET released=MAX(COALESCE(released,0),?) WHERE id=?')
-          .run(Math.max(...ownNumbers), tracked.id);
+          .prepare('UPDATE tracked_media SET released=? WHERE id=? AND COALESCE(released,0)<?')
+          .run(Math.max(...ownNumbers), tracked.id, Math.max(...ownNumbers));
     }
   const tracked = media
     ? []

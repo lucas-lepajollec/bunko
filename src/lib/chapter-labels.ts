@@ -15,7 +15,9 @@ export function saveChapterLabels(
   const server = namespace();
   db().transaction(() => {
     const save = statement(
-      'INSERT OR REPLACE INTO chapter_labels(namespace,chapter_id,payload,at) VALUES(?,?,?,?)',
+      `INSERT INTO chapter_labels(namespace,chapter_id,payload,at) VALUES(?,?,?,?)
+       ON CONFLICT(namespace,chapter_id) DO UPDATE SET payload=excluded.payload,at=excluded.at
+       WHERE chapter_labels.payload IS NOT excluded.payload`,
     );
     const at = Date.now();
     for (const c of chapters)

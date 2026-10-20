@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { getSettings } from './settings';
 import { tenantPath, tenantId } from './tenant-context';
+import { AppError } from './errors';
 
 const runtime = globalThis as typeof globalThis & {
   __bunkoSourceBackground?: AsyncLocalStorage<boolean>;
@@ -42,21 +43,24 @@ function createBudget() {
     bg: boolean,
   ) => {
     signal?.throwIfAborted();
+    if (queue.length >= 256) throw new AppError('UPSTREAM_TIMEOUT', 'Source queue is full', 503);
+    // Bound queue residence independently of the provider's own network timeout.
+    const waiting = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(30_000)]);
     await new Promise<void>((resolve, reject) => {
       const abort = () => {
         const index = queue.indexOf(waiter);
         if (index >= 0) queue.splice(index, 1);
-        reject(signal?.reason);
+        reject(waiting.reason);
       };
       const waiter: Waiter = {
         tenant,
         background: bg,
         start: () => {
-          signal?.removeEventListener('abort', abort);
+          waiting.removeEventListener('abort', abort);
           resolve();
         },
       };
-      signal?.addEventListener('abort', abort, { once: true });
+      waiting.addEventListener('abort', abort, { once: true });
       queue.push(waiter);
       drain();
     });

@@ -1,6 +1,7 @@
 'use client';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { useMediaPreview } from '@/lib/client/media-navigation';
 import { mediaHref, useProgressiveSearch } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Cover, Skeleton, cx, useMediaMeta } from './ui';
@@ -25,6 +26,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
   const { t } = useI18n();
   const meta = useMediaMeta();
   const router = useRouter();
+  const preview = useMediaPreview();
   const pathname = usePathname();
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
@@ -78,6 +80,8 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
   }
 
   const go = (href: string) => {
+    const media = items.find((m) => mediaHref(m.id) === href);
+    if (media) preview(media);
     setOpen(false);
     input.current?.blur();
     router.push(href);

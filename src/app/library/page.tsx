@@ -1,4 +1,5 @@
 'use client';
+import { MediaLink } from '@/components/media-link';
 import { Select } from '@/components/select';
 import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState } from 'react';
@@ -13,7 +14,7 @@ import type {
 import { KavitaUnmatched } from '@/components/kavita';
 import { ActivityLine } from '@/components/activity';
 import { LibraryUpdates } from '@/components/updates';
-import { api, mediaHref, useApi } from '@/lib/client/api';
+import { api, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from '@/components/load-notice';
 import { Page } from '@/components/shell';
@@ -284,11 +285,7 @@ function Library() {
           <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] md:gap-y-9 xl:grid-cols-7">
             {!library.data && !library.error && <PosterSkeletons count={14} />}
             {shown.map((e) => (
-              <Link
-                key={e.id}
-                href={mediaHref(e.media.id)}
-                className="group flex min-w-0 flex-col gap-2.5"
-              >
+              <MediaLink key={e.id} media={e.media} className="group flex min-w-0 flex-col gap-2.5">
                 <span className="relative block">
                   <Cover
                     src={e.coverUrl ?? e.media.coverUrl}
@@ -336,7 +333,7 @@ function Library() {
                     .filter(Boolean)
                     .join(' · ')}
                 </span>
-              </Link>
+              </MediaLink>
             ))}
           </div>
         </>

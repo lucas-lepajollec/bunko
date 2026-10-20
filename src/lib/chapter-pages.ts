@@ -47,27 +47,34 @@ export async function pageImage(
   url: string,
   headers: Record<string, string>,
   signal?: AbortSignal,
+  background = false,
 ) {
-  return sharedConcurrencyGate(`pages:${dataDir()}`, 3)(async () => {
-    const response = await fetch(url, {
-      headers,
-      redirect: 'error',
-      signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(20_000)]),
-    });
-    const type = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? '';
-    const extension = imageExtensions[type];
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new AppError('IMPORT_HTTP_ERROR', `Page returned HTTP ${response.status}`, 502);
-    }
-    if (!extension) {
-      await response.body?.cancel();
-      throw new AppError('INVALID_IMAGE', 'Page is not a supported image', 502);
-    }
-    const bytes = await boundedBuffer(response, MAX_PAGE_BYTES);
-    if (!bytes.length) throw new AppError('INVALID_IMAGE', 'Page image is empty', 502);
-    return { extension, bytes };
-  }, signal);
+  const deadline = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(20_000)]);
+  const transfer = () =>
+    sharedConcurrencyGate(`pages:${dataDir()}`, 3)(async () => {
+      const response = await fetch(url, {
+        headers,
+        redirect: 'error',
+        signal: deadline,
+      });
+      const type = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? '';
+      const extension = imageExtensions[type];
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new AppError('IMPORT_HTTP_ERROR', `Page returned HTTP ${response.status}`, 502);
+      }
+      if (!extension) {
+        await response.body?.cancel();
+        throw new AppError('INVALID_IMAGE', 'Page is not a supported image', 502);
+      }
+      const bytes = await boundedBuffer(response, MAX_PAGE_BYTES);
+      if (!bytes.length) throw new AppError('INVALID_IMAGE', 'Page image is empty', 502);
+      return { extension, bytes };
+    }, deadline);
+  // Imports use at most two slots: a visible reader can always enter the third.
+  return background
+    ? sharedConcurrencyGate(`pages:imports:${dataDir()}`, 2)(transfer, deadline)
+    : transfer();
 }
 export async function chapterPages(
   id: number,
@@ -95,6 +102,7 @@ export async function chapterPages(
               endpoint(getSettings().suwayomiUrl, url),
               suwayomiHeaders(),
               signal,
+              true,
             );
             return {
               bytes: loaded.bytes,

@@ -64,6 +64,7 @@ export function openStream(
   path: string,
   handlers: Record<string, (data: unknown) => void>,
   onFailure?: () => void,
+  options: { reconnect?: boolean } = {},
 ): () => void {
   // EventSource cannot set Accept-Language; carry the same explicit interface choice in the URL.
   const [pathname, query] = path.split('?');
@@ -88,6 +89,9 @@ export function openStream(
     if (event instanceof MessageEvent) return;
     // Finite streams close server-side after "done"; anything else is a real interruption.
     if (!finished) onFailure?.();
+    // Continuous snapshot streams resume with a full current snapshot. Let EventSource
+    // reconnect on transport loss; finite searches still terminate instead of duplicating lanes.
+    if (!finished && options.reconnect && source.readyState === EventSource.CONNECTING) return;
     source.close();
   };
   return () => {
@@ -125,11 +129,27 @@ export const batchesInterval = (batches: { state: string }[] | undefined) =>
 
 /** SWR keys showing followed titles; revalidate them all after any change to an entry. */
 export const libraryKeys = (key: unknown) =>
+  (Array.isArray(key) && key[0] === 'chapters') ||
+  (typeof key === 'string' &&
+    (key.startsWith('/api/tracked') ||
+      key.startsWith('/api/media?') ||
+      key.startsWith('/api/kavita/series') ||
+      key.startsWith('/api/reader/chapter?') ||
+      key.startsWith('/api/search?') ||
+      key.startsWith('/api/discover?') ||
+      key.startsWith('/api/catalog?') ||
+      releaseViewKey(key) ||
+      key === '/api/library/activity'));
+
+export const releaseViewKey = (key: unknown) =>
+  typeof key === 'string' &&
+  (key === '/api/home' || key.startsWith('/api/releases') || key.startsWith('/api/planning'));
+export const progressViewKey = (key: unknown) =>
   typeof key === 'string' &&
   (key.startsWith('/api/tracked') ||
     key.startsWith('/api/media?') ||
-    key.startsWith('/api/kavita/series') ||
-    key === '/api/library/activity');
+    key === '/api/home' ||
+    key.startsWith('/api/kavita/series'));
 
 export function mediaHref(id: string) {
   const at = id.indexOf(':');

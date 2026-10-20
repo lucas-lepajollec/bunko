@@ -291,3 +291,48 @@ The home Top 10 retains AniList's ranking through `discoverAniList`; only catalo
 Reader navigation is projected from the current tenant/source-qualified persisted inventory and archive pointers on each response, independently of cached source page metadata. Local chapter/tome navigation reads current owned stock. The active reader revalidates every five visible seconds, on focus and on entry, so completed imports update the next/previous controls without a sheet round trip or discarding the displayed page. Chapter/work-keyed reader lifetimes reset page/vertical restoration and flush the outgoing progress writer on soft navigation.
 
 Warm navigation refreshes do not write local identities or unchanged reading progress: the identity SELECT precedes any creation, and progress effects depend only on the verified chapter ID/number, page/count and work. This avoids AUTOINCREMENT sequence writes and library invalidation from neighbour-only updates. Next-chapter metadata is requested only in the last three pages, matching image prefetch timing. Source page metadata stays cached; local reads still validate the mount/archive before access.
+
+
+## Coherent reading and loading (October 2026)
+
+Owned chapter rows and the main Read action prefer a local archive. A historical positive
+source URL can resolve a pre-Bunko Kavita file through the current namespace-qualified
+`reader_chapters` record, without a source request. Its previous source position is used
+until a local position exists. The reader merges current-lane source neighbours with the
+work's owned numbers, including imports from other source connections. Pure local reading
+uses accessible owned archives; missing files do not produce dead next/previous links.
+Chapter and volume sequences remain separate, including manually retyped imports.
+This does not automatically select an unowned chapter from another source or infer edition
+identity from matching numbers. Existing source and local IDs remain valid.
+
+`MediaLink` seeds the destination browser detail cache from the selected card before
+navigation. The sheet revalidates on entry, shows that preview during loading and preserves
+it on failure with the partial-data notice. It does not submit a preview as server metadata.
+A route loading boundary and a pending link indicator cover navigation/chunk delays.
+Quick search, posters, releases, planning, library, related titles and download/update links
+use the same transport. A direct cold URL still needs the provider if no stored detail exists.
+
+The existing tenant `write_versions` table now also tracks `content` and `progress`.
+Triggers advance these domains transactionally; page-position writes do not advance content,
+and release ingestion advances its existing release domain. Activity returns all three
+revisions and active-download count. Mounted views revalidate by domain: content affects
+library, sheets, chapters, reader and catalog projections; progress affects library/sheets/home;
+releases affect home/planning/releases. Activity polls at five seconds while busy, thirty
+seconds while idle, and on focus; the reader independently refreshes every five visible seconds.
+This is reconciliation from durable versions, not a new distributed event bus.
+
+Unchanged chapter labels, reader inventories and released maxima no longer perform SQL
+updates. The parsed-metadata cache subtracts replaced/removed payload sizes from its budget.
+Download SSE retains native EventSource reconnection for continuous snapshots, while finite
+search/matching streams still terminate after failure/done; a retry action covers closed streams.
+The auxiliary catalog search in live extension results polls pending snapshots and only reports
+no catalog match after a complete, nonfailed response. Empty calendar days retain the loading
+or partial status while relevant data is incomplete.
+
+Page transfers keep three tenant slots, with imports using at most two; the remaining slot
+is available for reading. Their twenty-second deadline includes queue residence and transfer.
+The Suwayomi queue admits at most 256 waiting calls and bounds each wait at thirty seconds,
+independently of the upstream network timeout. Optional catalog loads have a thirty-second
+queue/pacing/network deadline, a twelve-second network cap and tenant revocation. Existing
+provider pacing and account boundaries remain in force. Noncritical poster shelves use lazy
+image loading. These bounds do not prove CPU, RSS or disk performance on a real NAS.

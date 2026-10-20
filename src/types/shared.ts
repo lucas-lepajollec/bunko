@@ -277,7 +277,7 @@ export interface ReaderChapter {
   volume: number | null;
   /** Page image URLs in order (`/api/reader/page?chapter=&index=`), cached by Bunko. */
   pages: string[];
-  /** Current persisted neighbours on the same source, by number; independent of cached pages. */
+  /** Current source-lane neighbours, merged with owned stock independently of cached pages. */
   prevId: number | null;
   nextId: number | null;
   /** Suggested layout from the work's format (manhwa/manhua → vertical, manga → rtl, comic → ltr). */
@@ -286,7 +286,7 @@ export interface ReaderChapter {
   resumePage: number | null;
   /** Set for chapters read from library files only (no source chapter id). */
   local?: number;
-  /** Neighbouring local-only chapters by number (when the current one is local). */
+  /** Owned neighbours by number, including older Kavita files and imports from other sources. */
   prevLocal?: number | null;
   nextLocal?: number | null;
 }
@@ -521,6 +521,9 @@ export interface TrackedMedia {
 export interface LibraryActivity {
   /** Tenant library revision; clients invalidate stale sheets/lists when background writes land. */
   revision?: number;
+  /** Separate durable domains avoid reloading source lists after page turns or release ingestion. */
+  revisions?: { content: number; progress: number; releases: number };
+  activeDownloads?: number;
   /** Followed titles currently hidden because 18+ content is off (never hidden silently). */
   hiddenAdult: number;
   /** Followed comics waiting for automatic source matching, and the one being searched now. */

@@ -4,6 +4,7 @@ import { sharedConcurrencyGate } from './concurrency';
 import { cached, saveMetadata, storedMetadata } from './metadata-cache';
 import { AppError } from './errors';
 import { BUNKO_USER_AGENT } from './mangaupdates';
+import { tenantSignal } from './tenant-lifecycle';
 
 const scope = globalThis as typeof globalThis & { __bunkoCatalogBudgets?: Map<string, number> };
 export function credentialScope(...values: string[]) {
@@ -19,18 +20,16 @@ export function providerJson<T>(
   interval: number,
 ): Promise<T> {
   const key = `optional:${provider}:${identity}`;
-  return cached(key, ttl, () =>
-    sharedConcurrencyGate(
-      `optional:${provider}`,
-      1,
-    )(async () => {
+  return cached(key, ttl, () => {
+    const deadline = AbortSignal.any([tenantSignal(), AbortSignal.timeout(30_000)]);
+    return sharedConcurrencyGate(`optional:${provider}`, 1)(async () => {
       const attempt = storedMetadata<number>(`attempt:${key}`);
       if (attempt && Date.now() - attempt.value < Math.min(ttl, 60_000))
         throw new AppError('RATE_LIMITED', 'Metadata provider is cooling down', 502);
       const budgets = (scope.__bunkoCatalogBudgets ??= new Map());
       const wait = Math.max(0, (budgets.get(provider) ?? 0) - Date.now());
       if (wait > 5000) throw new AppError('RATE_LIMITED', 'Metadata provider is cooling down', 502);
-      if (wait) await delay(wait);
+      if (wait) await delay(wait, undefined, { signal: deadline });
       budgets.set(provider, Date.now() + interval);
       saveMetadata(`attempt:${key}`, Date.now());
       let response: Response;
@@ -40,7 +39,7 @@ export function providerJson<T>(
           headers: { Accept: 'application/json', 'User-Agent': BUNKO_USER_AGENT, ...init.headers },
           cache: 'no-store',
           redirect: 'error',
-          signal: AbortSignal.timeout(12_000),
+          signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]),
         });
       } catch {
         throw new AppError('PROVIDER_UNAVAILABLE', 'Metadata provider unavailable', 502);
@@ -87,6 +86,6 @@ export function providerJson<T>(
       } finally {
         await reader.cancel();
       }
-    }),
-  );
+    }, deadline);
+  });
 }
