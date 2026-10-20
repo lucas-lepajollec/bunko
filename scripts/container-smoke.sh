@@ -29,6 +29,7 @@ check 401 "password route exists" -X POST "$base/api/auth/password"
 for route in releases planning home discover genres reader/chapter reader/page media media/sources search search/stream manga/chapters users me tracked tracked/covers library/activity updates sources downloads extensions settings status kavita/status kavita/libraries kavita/series kavita/image suwayomi/image covers/1; do
   check 401 "route /api/$route exists" "$base/api/$route"
 done
+check 401 "bulk source matching route exists" -X POST "$base/api/library/match"
 check 401 "reader progress route exists" -X PUT "$base/api/reader/progress"
 check 401 "provider test route exists" -X POST "$base/api/settings/test-provider"
 check 401 "content filter override route exists" -X PATCH "$base/api/media/adult"
@@ -45,6 +46,8 @@ check 200 "releases store responds" -H "Authorization: Bearer $token" "$base/api
 check 200 "home feed responds" -H "Authorization: Bearer $token" "$base/api/home"
 check 200 "weekly planning responds" -H "Authorization: Bearer $token" "$base/api/planning"
 check 400 "planning date validated" -H "Authorization: Bearer $token" "$base/api/planning?week=2026-02-30"
+check 202 "empty bulk source matching accepted" -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"ids":[]}' "$base/api/library/match"
+check 400 "bulk source matching IDs validated" -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"ids":[0]}' "$base/api/library/match"
 check 200 "bearer API access" -H "Authorization: Bearer $token" "$base/api/settings"
 check 409 "optional provider unconfigured" -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"provider":"metron"}' "$base/api/settings/test-provider"
 check 400 "optional provider input validated" -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"provider":"other"}' "$base/api/settings/test-provider"

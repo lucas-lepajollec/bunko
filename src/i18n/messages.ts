@@ -31,6 +31,41 @@ export function interpolate(template: string, variables?: Record<string, string 
 type Dictionary = Record<string, string>;
 
 const en: Dictionary = {
+  'profile.title': 'Profile',
+  'profile.account': 'Account settings',
+  'profile.allReading': 'All current reading',
+  'profile.followed': '{count} followed titles',
+  'profile.recent': 'your most recent reading',
+  'profile.empty': 'Your reading starts here',
+  'profile.emptyBody': 'Start reading a title to find your place here.',
+  'profile.page': 'Page {page} of {total}',
+  'profile.resume': 'Continue reading',
+  'favorites.title': 'Likes',
+  'favorites.count': '{count} liked titles',
+  'favorites.add': 'Like this title',
+  'favorites.remove': 'Remove like',
+  'favorites.empty': 'Keep your favourites here',
+  'favorites.emptyBody':
+    'Tap the heart on a title sheet. It stays in your library without downloading.',
+  'library.unowned': 'Not owned',
+  'library.unownedHint': 'Follow titles without downloading them.',
+  'library.matchAll': 'Find sources · {count}',
+  'library.matchQueued':
+    'Source matching queued for {count} titles. Ambiguous matches remain for review.',
+  'loading.pendingShort': 'Updating',
+  'loading.partialShort': 'Partial verification',
+  'updates.view.recent': 'Recent releases',
+  'updates.view.missing': 'All missing',
+  'updates.recentHint': 'Your followed titles, release by release, in publication order.',
+  'updates.missingHint':
+    'Everything found on your sources that you do not own yet, including older releases.',
+  'updates.missingEmpty': 'No known missing releases',
+  'updates.missingChapters': '{count} missing chapters',
+  'updates.missingVolumes': '{count} missing volumes',
+  'updates.complete': 'Complete',
+  'updates.nothingToFetch':
+    'No available missing files found. Open the sheet to check the sources.',
+
   'unit.correctVolumes': 'These are volumes',
   'unit.undoVolumes': 'Undo correction',
   'volumes.displayed': '{shown} of {total} volumes displayed',
@@ -900,6 +935,41 @@ const en: Dictionary = {
 };
 
 const fr: Dictionary = {
+  'profile.title': 'Profil',
+  'profile.account': 'Paramètres du compte',
+  'profile.allReading': 'Toutes mes lectures',
+  'profile.followed': '{count} œuvres suivies',
+  'profile.recent': 'tes dernières lectures',
+  'profile.empty': 'Tes lectures commencent ici',
+  'profile.emptyBody': 'Commence une lecture pour retrouver ta position ici.',
+  'profile.page': 'Page {page} sur {total}',
+  'profile.resume': 'Reprendre la lecture',
+  'favorites.title': 'J’aime',
+  'favorites.count': '{count} œuvres aimées',
+  'favorites.add': 'Aimer cette œuvre',
+  'favorites.remove': 'Retirer mon j’aime',
+  'favorites.empty': 'Garde tes coups de cœur ici',
+  'favorites.emptyBody':
+    'Touche le cœur sur une fiche. L’œuvre reste dans ta bibliothèque sans être téléchargée.',
+  'library.unowned': 'Non possédés',
+  'library.unownedHint': 'Suis des œuvres sans forcément les télécharger.',
+  'library.matchAll': 'Associer les sans source · {count}',
+  'library.matchQueued':
+    'Recherche lancée pour {count} œuvres. Les correspondances ambiguës restent à vérifier.',
+  'loading.pendingShort': 'Actualisation',
+  'loading.partialShort': 'Vérification partielle',
+  'updates.view.recent': 'Sorties récentes',
+  'updates.view.missing': 'Tous les manquants',
+  'updates.recentHint': 'Tes œuvres suivies, sortie par sortie, par date de parution.',
+  'updates.missingHint':
+    'Tout ce qui a été trouvé sur tes sources et que tu ne possèdes pas encore, anciennes sorties comprises.',
+  'updates.missingEmpty': 'Aucune sortie manquante connue',
+  'updates.missingChapters': '{count} chapitres manquants',
+  'updates.missingVolumes': '{count} tomes manquants',
+  'updates.complete': 'Compléter',
+  'updates.nothingToFetch':
+    'Aucun fichier manquant disponible trouvé. Ouvre la fiche pour vérifier les sources.',
+
   'unit.correctVolumes': 'Ce sont des tomes',
   'unit.undoVolumes': 'Annuler la correction',
   'volumes.displayed': '{shown} tomes affichés sur {total}',
@@ -1781,6 +1851,41 @@ const fr: Dictionary = {
 };
 
 const es: Dictionary = {
+  'profile.title': 'Perfil',
+  'profile.account': 'Ajustes de la cuenta',
+  'profile.allReading': 'Todas mis lecturas',
+  'profile.followed': '{count} obras seguidas',
+  'profile.recent': 'tus lecturas más recientes',
+  'profile.empty': 'Tus lecturas empiezan aquí',
+  'profile.emptyBody': 'Empieza a leer una obra para encontrar tu posición aquí.',
+  'profile.page': 'Página {page} de {total}',
+  'profile.resume': 'Seguir leyendo',
+  'favorites.title': 'Me gusta',
+  'favorites.count': '{count} obras que te gustan',
+  'favorites.add': 'Me gusta esta obra',
+  'favorites.remove': 'Quitar me gusta',
+  'favorites.empty': 'Guarda aquí tus favoritos',
+  'favorites.emptyBody':
+    'Toca el corazón de una ficha. La obra se guarda en tu biblioteca sin descargarla.',
+  'library.unowned': 'No poseídos',
+  'library.unownedHint': 'Sigue obras sin tener que descargarlas.',
+  'library.matchAll': 'Buscar fuentes · {count}',
+  'library.matchQueued':
+    'Búsqueda programada para {count} obras. Las coincidencias ambiguas quedan pendientes de revisión.',
+  'loading.pendingShort': 'Actualizando',
+  'loading.partialShort': 'Comprobación parcial',
+  'updates.view.recent': 'Lanzamientos recientes',
+  'updates.view.missing': 'Todos los pendientes',
+  'updates.recentHint': 'Tus obras seguidas, salida por salida, por fecha de publicación.',
+  'updates.missingHint':
+    'Todo lo encontrado en tus fuentes que aún no posees, incluidas las publicaciones antiguas.',
+  'updates.missingEmpty': 'No faltan publicaciones conocidas',
+  'updates.missingChapters': '{count} capítulos pendientes',
+  'updates.missingVolumes': '{count} tomos pendientes',
+  'updates.complete': 'Completar',
+  'updates.nothingToFetch':
+    'No se encontraron archivos pendientes disponibles. Abre la ficha para comprobar las fuentes.',
+
   'unit.correctVolumes': 'Son tomos',
   'unit.undoVolumes': 'Deshacer corrección',
   'volumes.displayed': '{shown} de {total} tomos mostrados',
@@ -2654,6 +2759,41 @@ const es: Dictionary = {
 };
 
 const de: Dictionary = {
+  'profile.title': 'Profil',
+  'profile.account': 'Kontoeinstellungen',
+  'profile.allReading': 'Alle aktuellen Lektüren',
+  'profile.followed': '{count} verfolgte Titel',
+  'profile.recent': 'deine letzten Lektüren',
+  'profile.empty': 'Hier beginnt deine Lektüre',
+  'profile.emptyBody': 'Beginne einen Titel zu lesen, um hier weiterzumachen.',
+  'profile.page': 'Seite {page} von {total}',
+  'profile.resume': 'Weiterlesen',
+  'favorites.title': 'Gefällt mir',
+  'favorites.count': '{count} Titel gefallen dir',
+  'favorites.add': 'Diesen Titel mögen',
+  'favorites.remove': 'Gefällt mir entfernen',
+  'favorites.empty': 'Hier ist Platz für deine Lieblinge',
+  'favorites.emptyBody':
+    'Tippe auf das Herz eines Titels. Er bleibt ohne Download in deiner Bibliothek.',
+  'library.unowned': 'Nicht vorhanden',
+  'library.unownedHint': 'Verfolge Titel, ohne sie herunterzuladen.',
+  'library.matchAll': 'Quellen finden · {count}',
+  'library.matchQueued':
+    'Quellensuche für {count} Titel vorgemerkt. Mehrdeutige Treffer bleiben zur Prüfung.',
+  'loading.pendingShort': 'Aktualisierung',
+  'loading.partialShort': 'Teilweise geprüft',
+  'updates.view.recent': 'Neue Veröffentlichungen',
+  'updates.view.missing': 'Alles Fehlende',
+  'updates.recentHint': 'Deine verfolgten Titel, nach Veröffentlichungsdatum.',
+  'updates.missingHint':
+    'Alles auf deinen Quellen Gefundene, das dir noch fehlt, auch ältere Veröffentlichungen.',
+  'updates.missingEmpty': 'Keine bekannten fehlenden Veröffentlichungen',
+  'updates.missingChapters': '{count} fehlende Kapitel',
+  'updates.missingVolumes': '{count} fehlende Bände',
+  'updates.complete': 'Vervollständigen',
+  'updates.nothingToFetch':
+    'Keine verfügbaren fehlenden Dateien gefunden. Prüfe die Quellen in der Titelseite.',
+
   'unit.correctVolumes': 'Das sind Bände',
   'unit.undoVolumes': 'Korrektur rückgängig machen',
   'volumes.displayed': '{shown} von {total} Bänden angezeigt',
@@ -3535,6 +3675,41 @@ const de: Dictionary = {
 };
 
 const it: Dictionary = {
+  'profile.title': 'Profilo',
+  'profile.account': 'Impostazioni account',
+  'profile.allReading': 'Tutte le mie letture',
+  'profile.followed': '{count} opere seguite',
+  'profile.recent': 'le tue letture più recenti',
+  'profile.empty': 'Le tue letture iniziano qui',
+  'profile.emptyBody': 'Inizia a leggere un’opera per ritrovare qui la tua posizione.',
+  'profile.page': 'Pagina {page} di {total}',
+  'profile.resume': 'Continua a leggere',
+  'favorites.title': 'Mi piace',
+  'favorites.count': '{count} opere che ti piacciono',
+  'favorites.add': 'Mi piace quest’opera',
+  'favorites.remove': 'Rimuovi mi piace',
+  'favorites.empty': 'Conserva qui le tue opere preferite',
+  'favorites.emptyBody':
+    'Tocca il cuore nella scheda. L’opera resta nella tua biblioteca senza scaricarla.',
+  'library.unowned': 'Non posseduti',
+  'library.unownedHint': 'Segui opere senza doverle scaricare.',
+  'library.matchAll': 'Trova fonti · {count}',
+  'library.matchQueued':
+    'Ricerca avviata per {count} opere. Le corrispondenze ambigue restano da verificare.',
+  'loading.pendingShort': 'Aggiornamento',
+  'loading.partialShort': 'Verifica parziale',
+  'updates.view.recent': 'Uscite recenti',
+  'updates.view.missing': 'Tutti i mancanti',
+  'updates.recentHint': 'Le opere che segui, uscita per uscita, per data di pubblicazione.',
+  'updates.missingHint':
+    'Tutto ciò che è stato trovato nelle tue fonti e che non possiedi ancora, comprese le vecchie uscite.',
+  'updates.missingEmpty': 'Nessuna uscita mancante conosciuta',
+  'updates.missingChapters': '{count} capitoli mancanti',
+  'updates.missingVolumes': '{count} volumi mancanti',
+  'updates.complete': 'Completa',
+  'updates.nothingToFetch':
+    'Nessun file mancante disponibile trovato. Apri la scheda per verificare le fonti.',
+
   'unit.correctVolumes': 'Sono volumi',
   'unit.undoVolumes': 'Annulla correzione',
   'volumes.displayed': '{shown} volumi visualizzati su {total}',

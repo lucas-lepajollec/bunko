@@ -673,3 +673,31 @@ it('accounts image bytes incrementally and prunes asynchronously in batches with
   };
   expect(imageCacheBytes()).toBe(actual.bytes ?? 0);
 });
+
+it('commits a coalesced navigation update before replying and exposes the new resume position immediately', async () => {
+  const t = track({ media: media(), sources: [selection], status: 'PLANNING' });
+  const value = {
+    mediaId: media().id,
+    chapterId: 10,
+    number: 10,
+    page: 0,
+    pageCount: 3,
+    commit: true,
+  };
+  expect((await progressRoute.PUT(req('/api/reader/progress', 'PUT', value))).status).toBe(200);
+  await saveReaderProgress({
+    mediaId: value.mediaId,
+    chapterId: value.chapterId,
+    number: value.number,
+    page: 1,
+    pageCount: value.pageCount,
+  });
+  expect(getTracked(t.id)?.readerPosition?.page).toBe(0);
+  expect(
+    (await progressRoute.PUT(req('/api/reader/progress', 'PUT', { ...value, page: 1 }))).status,
+  ).toBe(200);
+  expect(getTracked(t.id)).toMatchObject({
+    status: 'READING',
+    readerPosition: { chapterId: 10, page: 1, pageCount: 3, unit: 'chapter' },
+  });
+});

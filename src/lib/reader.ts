@@ -72,7 +72,8 @@ function work(id: string | undefined, mangaId: number) {
           t.media.id === id ||
           (t.anilistId !== null && id === `anilist:${t.anilistId}`) ||
           (t.mangadexId !== null && id === `mangadex:${t.mangadexId}`) ||
-          (t.media.mangaUpdatesId !== null && id === `mangaupdates:${t.media.mangaUpdatesId}`),
+          (t.media.mangaUpdatesId !== null && id === `mangaupdates:${t.media.mangaUpdatesId}`) ||
+          id === `kavita:${t.kavitaSeriesId ?? t.media.kavitaSeriesId}`,
       )
     : entries.find((t) => t.sources.some((s) => s.suwayomiMangaId === mangaId));
 }
@@ -299,6 +300,7 @@ export const readerProgressBody = z
     number: z.number().finite().nonnegative().nullable(),
     page: z.number().int().min(0).max(1999),
     pageCount: z.number().int().min(1).max(2000),
+    commit: z.boolean().optional(),
   })
   .strict()
   .refine((v) => v.page < v.pageCount, 'Page exceeds chapter');
@@ -338,7 +340,7 @@ function persistProgress(value: ReaderProgressUpdate) {
       `UPDATE tracked_media SET volume_read=CASE WHEN ? AND ? IS NOT NULL THEN MAX(COALESCE(volume_read,0),?) ELSE volume_read END WHERE media_json ->> '$.id'=?`,
     ).run(Number(value.page === value.pageCount - 1), volume, volume, value.mediaId);
     statement(
-      `UPDATE tracked_media SET last_read_at=?,last_read=CASE WHEN ? AND ? IS NOT NULL THEN MAX(COALESCE(last_read,0),?) ELSE last_read END WHERE media_json ->> '$.id'=?`,
+      `UPDATE tracked_media SET status=CASE WHEN status='PLANNING' THEN 'READING' ELSE status END,last_read_at=?,last_read=CASE WHEN ? AND ? IS NOT NULL THEN MAX(COALESCE(last_read,0),?) ELSE last_read END WHERE media_json ->> '$.id'=?`,
     ).run(
       now,
       value.page === value.pageCount - 1 ? 1 : 0,
@@ -348,7 +350,11 @@ function persistProgress(value: ReaderProgressUpdate) {
     );
   })();
 }
-export async function saveReaderProgress(value: ReaderProgressUpdate, signal?: AbortSignal) {
+export async function saveReaderProgress(
+  value: ReaderProgressUpdate,
+  signal?: AbortSignal,
+  commit = false,
+) {
   const entry = work(value.mediaId, 0);
   const localWork = value.chapterId < 0 ? await localReadingWork(value.mediaId) : undefined;
   if (value.chapterId < 0 && !localWork)
@@ -397,10 +403,10 @@ export async function saveReaderProgress(value: ReaderProgressUpdate, signal?: A
   }
   if (!state) states.set(value.mediaId, (state = { at: 0 }));
   const signature = JSON.stringify(value);
-  if (state.last === signature && Date.now() - state.at < 1000) return;
+  if (!commit && state.last === signature && Date.now() - state.at < 1000) return;
   state.last = signature;
   state.pending = value;
-  if (value.page === value.pageCount - 1 || Date.now() - state.at >= 1000) {
+  if (commit || value.page === value.pageCount - 1 || Date.now() - state.at >= 1000) {
     clearTimeout(state.timer);
     persistProgress(value);
     state.at = Date.now();

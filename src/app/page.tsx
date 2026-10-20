@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import type { ChapterRelease, HomeFeed, TrackedMedia } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
+import { continueReading } from '@/lib/client/reading';
+import { ReadingCard } from '@/components/reading';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from '@/components/load-notice';
 import { Backdrop } from '@/components/backdrop';
@@ -14,7 +16,6 @@ import {
   Cover,
   Empty,
   ErrorNote,
-  ProgressBar,
   SectionHeading,
   Skeleton,
   cx,
@@ -32,20 +33,11 @@ export default function HomePage() {
   const feed = useApi<HomeFeed>('/api/home', {
     refreshInterval: (d) => (d?.pending ? 1500 : 300_000),
   });
-  const library = useApi<TrackedMedia[]>('/api/tracked');
-  const resume = useMemo(
-    () =>
-      (library.data ?? [])
-        .filter(
-          (e) =>
-            e.status !== 'DROPPED' &&
-            e.status !== 'COMPLETED' &&
-            (e.newChapters > 0 || e.progress?.unread > 0),
-        )
-        .sort((a, b) => b.newChapters - a.newChapters)
-        .slice(0, 8),
-    [library.data],
-  );
+  const library = useApi<TrackedMedia[]>('/api/tracked', {
+    revalidateOnMount: true,
+    dedupingInterval: 0,
+  });
+  const resume = useMemo(() => continueReading(library.data ?? []).slice(0, 8), [library.data]);
   let n = 0;
   return (
     <main className="relative">
@@ -61,13 +53,13 @@ export default function HomePage() {
             <SectionHeading
               num={++n}
               title={t('home.resume')}
-              aside={t('home.resumeAside')}
-              href="/library?view=updates"
-              linkLabel={t('home.allUpdates')}
+              aside={t('profile.recent')}
+              href="/profile#continue"
+              linkLabel={t('profile.allReading')}
             />
             <ScrollRow>
               {resume.map((e) => (
-                <ResumeCard key={e.id} entry={e} />
+                <ReadingCard key={e.id} entry={e} />
               ))}
             </ScrollRow>
           </section>
@@ -228,38 +220,5 @@ function Hero({
         </div>
       )}
     </section>
-  );
-}
-
-function ResumeCard({ entry }: { entry: TrackedMedia }) {
-  const { t } = useI18n();
-  const p = entry.progress;
-  return (
-    <MediaLink
-      media={entry.media}
-      className="flex w-[270px] shrink-0 snap-start gap-3.5 rounded-2xl bg-white/[0.045] p-3 hover:bg-white/[0.07] md:w-[320px] md:gap-4 md:p-3.5"
-    >
-      <Cover
-        src={entry.coverUrl ?? entry.media.coverUrl}
-        fallbacks={entry.coverFallbacks}
-        className="w-[58px] shrink-0 md:w-[72px]"
-      />
-      <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <span className="line-clamp-2 text-[15px] leading-tight font-semibold">{entry.title}</span>
-        <span className="text-soft font-serif text-[17px] italic">
-          {entry.newChapters > 0
-            ? t(entry.unit === 'volume' ? 'home.newVolumes' : 'home.newChapters', {
-                count: entry.newChapters,
-              })
-            : t('home.unreadChapters', { count: p.unread })}
-        </span>
-        <span className="text-muted mt-auto text-xs">
-          {p.read !== null
-            ? t(entry.unit === 'volume' ? 'library.readUpToVol' : 'library.readUpTo', { n: p.read })
-            : t('library.owned', { n: p.owned })}
-        </span>
-        <ProgressBar progress={p} color={entry.media.color} />
-      </span>
-    </MediaLink>
   );
 }

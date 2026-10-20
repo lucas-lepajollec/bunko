@@ -75,7 +75,6 @@ export function Cover({
     );
   return (
     <ManagedImage
-      key={current}
       src={current}
       alt={alt}
       loading={priority ? 'eager' : 'lazy'}

@@ -1,5 +1,41 @@
 # Verification — current and historical evidence
 
+## Personal library and stable artwork — 2026-10-20
+
+- Automatic artwork still comes from the linked catalog, then source thumbnails, then Kavita.
+  Its successful bytes/hash and source URL survive source enrichment, reordering, upstream changes
+  and reloads. The additive v16 migration preserves files/manual choices and defaults likes false.
+  Work/explicit cover changes still select again; Kavita sync reuses the chosen bytes and checks
+  that its target link is still current after asynchronous work.
+- New isolated fixtures exercise migration/idempotence, authenticated likes without network or
+  download side effects, tenant isolation, actual recent-reading order, safe bulk matching with
+  concurrent/manual/collision/lease guards, local reading identity preservation, source-cover
+  provenance and reader commit-before-response (including a previously debounced identical write).
+  Final `npm run check` passes634 tests/53 files, including the asynchronous Kavita-link
+  regression, with zero-warning lint, strict TypeScript and the production build.
+- Zero-warning ESLint, strict TypeScript and optimized production builds pass. The final local
+  Docker image builds; all114 isolated container checks pass, including the new matching route's
+  authentication/input validation. No real service, queue, catalog key or media was changed.
+- Production Chromium QA used a disposable account, generated artwork and synthetic chapter files
+  at1440×1000,1280×800 (busy header),1024×768,768×400 and390×844. Checked real touch second-tap close,
+  reopen/Escape/keyboard selection, mobile profile/likes menu links, scrollable format filters,
+  individual-release cursor pagination, all-known-missing counts, likes/unlike persistence, empty
+  likes and retained library data under a simulated503. No horizontal overflow or uncaught page
+  error occurred; expected503 resource failures were injected deliberately.
+- A real local CBZ and real progress handler verify reader→profile immediate reading-history
+  refresh. A controlled source addition and delayed image replacement retain the chapter table,
+  checkboxes and current artwork throughout the wait. Hover lift stays inside the row's padding;
+  edge fades follow horizontal scroll and disappear at the end. Offscreen images remain lazy.
+- Screenshots below contain fictional titles and deterministic geometric test covers only.
+  They show the existing cinema/bookshop style, not replacement product artwork:
+  [mobile profile](assets/personal-profile-mobile.png),
+  [mobile library](assets/personal-library-mobile.png),
+  [home hover and edge fade](assets/personal-home-hover.png).
+- Scope remains local source/UI validation. NAS acceptance, real upstream availability and
+  release/publication of this bundle are not claimed. Missing-stock counts cover observed source
+  inventory; unobserved provider releases cannot be claimed exhaustive. SWR-memory/ZIP work from
+  the earlier audit remains separate.
+
 ## Native image publication — 2026-10-20
 
 - The successful preceding release run39482910545/attempt2 took19m13s: source validation3m56,

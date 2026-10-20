@@ -676,3 +676,42 @@ it('invalidates snapshots across connections and never caches rolled-back librar
     other.close();
   }
 });
+
+it('selects source artwork off catalog and retains its provenance and bytes through added/reordered sources and refreshed thumbnails', async () => {
+  const t = track({ media: { ...media(), id: 'suwayomi:10', anilistId: null }, sources: [source] });
+  await syncTrackedCover(t.id);
+  const original = listTracked()[0].coverUrl;
+  const provenance = db()
+    .prepare('SELECT origin_url,hash FROM stored_covers WHERE tracked_id=?')
+    .get(t.id);
+  expect(provenance).toMatchObject({ origin_url: thumbnail });
+  const count = calls.length;
+  const other = { ...source, sourceId: '9007199254740993', suwayomiMangaId: 11 };
+  db()
+    .prepare('UPDATE tracked_media SET sources_json=? WHERE id=?')
+    .run(JSON.stringify([other, source]), t.id);
+  sourceBytes = 'changed-upstream-image';
+  await syncTrackedCover(t.id);
+  expect(listTracked()[0].coverUrl).toBe(original);
+  expect(
+    db().prepare('SELECT origin_url,hash FROM stored_covers WHERE tracked_id=?').get(t.id),
+  ).toEqual(provenance);
+  expect(calls).toHaveLength(count);
+});
+
+it('keeps validated pixels but cancels the old Kavita upload when its correspondence changes during resolution', async () => {
+  db().prepare('INSERT INTO kavita_series VALUES(?,?)').run(77, JSON.stringify(series));
+  const t = track({ media: media(), sources: [source], kavitaSeriesId: 77 });
+  const blocked = deferred();
+  hold = blocked.promise;
+  const pending = syncTrackedCover(t.id);
+  await flush();
+  db()
+    .prepare('UPDATE tracked_media SET kavita_series_id=NULL,kavita_manual=1 WHERE id=?')
+    .run(t.id);
+  blocked.resolve();
+  await pending;
+  expect(listTracked()[0].coverUrl).toMatch(/^\/api\/covers\//);
+  expect(listTracked()[0].kavitaCover.state).toBe('none');
+  expect(uploads).toBe(0);
+});

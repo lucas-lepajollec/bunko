@@ -15,6 +15,7 @@ import { sourceMatchQueue } from './source-match-state';
 import { sharedConcurrencyGate } from './concurrency';
 import { tenantPath, tenantId } from './tenant-context';
 import { setTimeout as pause } from 'node:timers/promises';
+import { resolveQueuedCatalog } from './library-matching';
 
 export function sameSource(
   a: Pick<ChapterSelection, 'sourceId' | 'suwayomiMangaId'>,
@@ -164,8 +165,14 @@ export async function matchTrackedSources(
       if (!ownsLease()) return false;
       const next = sourceMatchQueue()[0];
       if (!next) return false;
-      const t = getTracked(next.id);
+      let t = getTracked(next.id);
       if (!t || t.sources.length) return false;
+      try {
+        t = await resolveQueuedCatalog(t, signal, ownsLease);
+      } catch {
+        signal?.throwIfAborted();
+        // A metadata provider failure must not prevent source discovery for the same work.
+      }
       const namespace = sourceServerKey();
       const available = await matchingSources(signal);
       if (!available.length || signal?.aborted || !ownsLease()) return false;

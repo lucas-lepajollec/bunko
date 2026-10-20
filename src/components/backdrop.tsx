@@ -51,7 +51,6 @@ export function Backdrop({
       >
         {src && (
           <ManagedImage
-            key={src}
             src={src}
             alt=""
             onLoadError={() => setFailed({ key, count: attempt + 1 })}
@@ -65,7 +64,6 @@ export function Backdrop({
         )}
         {mobileImage && (
           <ManagedImage
-            key={`m:${mobileImage}`}
             src={mobileImage}
             alt=""
             referrerPolicy="no-referrer"

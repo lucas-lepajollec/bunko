@@ -95,33 +95,31 @@ export async function trackedCoverOptions(
 }
 
 const resolutionGate = sharedConcurrencyGate('cover-resolution', 1);
-export async function syncTrackedCover(id: number, signal?: AbortSignal, force = false) {
+export async function syncTrackedCover(
+  id: number,
+  signal?: AbortSignal,
+  force = false,
+  refreshCover = force,
+) {
   return resolutionGate(async () => {
     const t = getTracked(id);
     if (!t) return;
     const series = matchKavita(storedMedia(id), t.kavitaSeriesId);
-    const context = coverContext(
-      t.media.id,
-      t.identity,
-      t.coverChoice,
-      t.sources,
-      series?.seriesId ?? null,
-    );
+    const context = coverContext(t.media.id, t.identity, t.coverChoice);
     const current = () => {
       const entry = getTracked(id);
-      return (
+      return entry && coverContext(entry.media.id, entry.identity, entry.coverChoice) === context;
+    };
+    const linked = () => {
+      const entry = getTracked(id);
+      return Boolean(
         entry &&
-        coverContext(
-          entry.media.id,
-          entry.identity,
-          entry.coverChoice,
-          entry.sources,
-          matchKavita(storedMedia(id), entry.kavitaSeriesId)?.seriesId ?? null,
-        ) === context
+        current() &&
+        matchKavita(storedMedia(id), entry.kavitaSeriesId)?.seriesId === series?.seriesId,
       );
     };
     const status = (state: 'pending' | 'synced' | 'failed', error: string | null = null) => {
-      if (!series || !current()) return;
+      if (!series || !linked()) return;
       const saved = storedCover(id);
       statement(`INSERT OR REPLACE INTO kavita_cover_status
         (tracked_id,context,hash,series_id,state,error) VALUES(?,?,?,?,?,?)`).run(
@@ -135,9 +133,9 @@ export async function syncTrackedCover(id: number, signal?: AbortSignal, force =
     };
     const saved = storedCover(id);
     let url = saved?.context === context ? saved.origin_url : (t.coverUrl ?? '');
-    let cover = !force && saved?.context === context ? readStoredCover(saved) : null;
+    let cover = !refreshCover && saved?.context === context ? readStoredCover(saved) : null;
     if (!cover) {
-      if (saved?.context === context)
+      if (!refreshCover && saved?.context === context)
         statement('DELETE FROM stored_covers WHERE tracked_id=? AND hash=?').run(id, saved.hash);
       const manual = (
         statement('SELECT cover_url FROM tracked_media WHERE id=?').get(id) as {
@@ -147,7 +145,7 @@ export async function syncTrackedCover(id: number, signal?: AbortSignal, force =
       const candidates = [
         ...new Set(
           (t.coverChoice === 'auto'
-            ? force
+            ? refreshCover
               ? localCoverOptions(t).map((c) => c.url)
               : [saved?.context === context ? saved.origin_url : t.coverUrl, ...t.coverFallbacks]
             : [manual]
@@ -178,7 +176,7 @@ export async function syncTrackedCover(id: number, signal?: AbortSignal, force =
       const persisted = storeCover(id, context, url, cover, () => Boolean(current()));
       if (!persisted) return;
     }
-    if (!cover || !series || !current() || getTracked(id)?.kavitaCoverSync === false) return;
+    if (!cover || !series || !linked() || getTracked(id)?.kavitaCoverSync === false) return;
     if (
       !force &&
       t.kavitaCover.state === 'synced' &&
@@ -191,7 +189,7 @@ export async function syncTrackedCover(id: number, signal?: AbortSignal, force =
       await syncSeriesCover(
         series,
         url,
-        () => Boolean(current() && getTracked(id)?.kavitaCoverSync !== false),
+        () => Boolean(linked() && getTracked(id)?.kavitaCoverSync !== false),
         signal,
         cover,
       );
@@ -207,8 +205,7 @@ export async function syncTrackedCovers(parentSignal?: AbortSignal, backfillOnly
     ...(parentSignal ? [parentSignal] : []),
     AbortSignal.timeout(60_000),
   ]);
-  const context = (t: TrackedMedia) =>
-    coverContext(t.media.id, t.identity, t.coverChoice, t.sources, t.media.kavitaSeriesId);
+  const context = (t: TrackedMedia) => coverContext(t.media.id, t.identity, t.coverChoice);
   const checked = new Map(
     (
       statement(

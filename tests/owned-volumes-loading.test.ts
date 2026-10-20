@@ -180,7 +180,11 @@ it('reads declared local volumes with separate IDs, neighbours, page access and 
     page: 0,
     pageCount: 1,
   });
-  expect(getTracked(t.id)).toMatchObject({ chapterRead: null, progress: { read: 2, owned: 13 } });
+  expect(getTracked(t.id)).toMatchObject({
+    chapterRead: null,
+    progress: { read: 2, owned: 13 },
+    readerPosition: { unit: 'volume', volume: 2, number: null, pageCount: 1 },
+  });
   const other = track({ media: { ...work(), id: 'anilist:302', anilistId: 302, title: 'Other' } });
   await expect(readerChapter(volume.chapterId, other.media.id)).rejects.toMatchObject({
     code: 'NOT_FOUND',

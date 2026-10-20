@@ -13,14 +13,30 @@ export function ManagedImage({
 }) {
   const ref = useRef<HTMLImageElement>(null);
   const failure = useRef(onLoadError);
-  const [loaded, setLoaded] = useState({ source: '', url: '' });
+  const [loaded, setLoaded] = useState('');
+  const urls = useRef(new Set<string>());
+  const displayed = useRef('');
+  useEffect(
+    () => () => {
+      for (const url of urls.current) URL.revokeObjectURL(url);
+      urls.current.clear();
+    },
+    [],
+  );
+  useEffect(() => {
+    for (const url of urls.current)
+      if (url !== loaded) {
+        URL.revokeObjectURL(url);
+        urls.current.delete(url);
+      }
+  }, [loaded]);
   const local = src.startsWith('/api/');
   const priority = props.fetchPriority === 'high';
   useEffect(() => {
     failure.current = onLoadError;
   }, [onLoadError]);
   useEffect(() => {
-    if (!local) return;
+    const ownedUrls = urls.current;
     let request: AbortController | undefined;
     let objectUrl: string | undefined;
     let disposed = false;
@@ -28,12 +44,33 @@ export function ManagedImage({
       if (disposed || request || objectUrl) return;
       const transfer = new AbortController();
       request = transfer;
-      void loadCover(src, transfer.signal)
-        .then((blob) => {
-          if (disposed || transfer.signal.aborted) return;
-          objectUrl = URL.createObjectURL(blob);
+      const replacement = local
+        ? loadCover(src, transfer.signal).then((blob) => {
+            const url = URL.createObjectURL(blob);
+            if (disposed || transfer.signal.aborted) {
+              URL.revokeObjectURL(url);
+              return '';
+            }
+            urls.current.add(url);
+            return url;
+          })
+        : Promise.resolve(src);
+      void replacement
+        .then(async (url) => {
+          if (!url || disposed || transfer.signal.aborted) return;
+          const image = new Image();
+          image.referrerPolicy = 'no-referrer';
+          image.fetchPriority = priority ? 'high' : 'auto';
+          image.src = url;
+          await image.decode();
+          return url;
+        })
+        .then((url) => {
+          if (!url || disposed || transfer.signal.aborted) return;
+          objectUrl = url;
+          displayed.current = url;
           observer?.disconnect();
-          setLoaded({ source: src, url: objectUrl });
+          setLoaded(url);
         })
         .catch(() => {
           if (!disposed && !transfer.signal.aborted) failure.current?.();
@@ -60,7 +97,13 @@ export function ManagedImage({
       disposed = true;
       observer?.disconnect();
       request?.abort();
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      // The displayed image belongs to the component, not this request.
+      // Keep it through source discovery and failed replacement attempts.
+      for (const url of ownedUrls)
+        if (url !== displayed.current) {
+          URL.revokeObjectURL(url);
+          ownedUrls.delete(url);
+        }
     };
   }, [src, local, priority]);
   return (
@@ -68,7 +111,8 @@ export function ManagedImage({
     <img
       {...props}
       ref={ref}
-      src={local ? (loaded.source === src ? loaded.url : undefined) : src}
+      src={loaded || undefined}
+      style={{ ...props.style, visibility: loaded ? props.style?.visibility : 'hidden' }}
       onError={() => failure.current?.()}
       alt={props.alt ?? ''}
     />

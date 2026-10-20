@@ -53,8 +53,8 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
 
   useEffect(() => {
     const onOpen = () => {
-      if (variant === 'overlay' && window.matchMedia('(min-width: 1024px)').matches) return;
-      if (variant === 'inline' && !window.matchMedia('(min-width: 1024px)').matches) return;
+      if (variant === 'overlay' && window.matchMedia('(min-width: 1280px)').matches) return;
+      if (variant === 'inline' && !window.matchMedia('(min-width: 1280px)').matches) return;
       setOpen(true);
       // The inline field is always mounted: focus now so the first typed key is not lost.
       if (input.current) input.current.focus();
@@ -187,7 +187,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
       className={cx(
         'flex items-center gap-2.5 rounded-full px-4 text-sm transition-colors',
         variant === 'inline'
-          ? 'h-[42px] w-[300px] bg-white/[0.09] backdrop-blur-md'
+          ? 'h-[42px] w-[240px] 2xl:w-[300px] bg-white/[0.09] backdrop-blur-md'
           : 'h-12 bg-white/[0.09]',
         open && 'bg-white/[0.13]',
       )}
@@ -231,7 +231,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
 
   if (variant === 'inline')
     return (
-      <div ref={root} className="relative mr-2 hidden lg:block">
+      <div ref={root} className="relative mr-2 hidden xl:block">
         {field}
         {panel}
       </div>

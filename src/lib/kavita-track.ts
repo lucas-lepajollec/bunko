@@ -32,7 +32,11 @@ export function kavitaMedia(seriesId: number): UnifiedMedia {
     kavitaSeriesId: seriesId,
   };
 }
-async function catalogMatch(series: IndexedSeries, signal?: AbortSignal) {
+export async function catalogMatch(
+  series: IndexedSeries,
+  signal?: AbortSignal,
+  minimumScore = 0.85,
+) {
   const classified = kavitaMedia(series.seriesId);
   if (classified.format === 'COMIC') return null;
   const results: UnifiedMedia[] = [];
@@ -46,7 +50,9 @@ async function catalogMatch(series: IndexedSeries, signal?: AbortSignal) {
     }))
     .sort((a, b) => b.score - a.score);
   const best = candidates[0];
-  return !best || best.score < 0.85 || (candidates[1] && best.score - candidates[1].score < 0.1)
+  return !best ||
+    best.score < minimumScore ||
+    (candidates[1] && best.score - candidates[1].score < 0.1)
     ? null
     : best.media;
 }

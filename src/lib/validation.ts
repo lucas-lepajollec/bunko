@@ -326,6 +326,7 @@ export const trackBody = z
 export const trackPatch = z
   .object({
     id,
+    favorite: z.boolean().optional(),
     kavitaCoverSync: z.boolean().optional(),
     media: media.optional(),
     unit: z.enum(['chapter', 'volume']).optional(),

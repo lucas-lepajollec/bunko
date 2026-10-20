@@ -1,6 +1,6 @@
 'use client';
 import { MediaLink } from '@/components/media-link';
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { UnifiedMedia } from '@/types/shared';
 import { useI18n } from '@/i18n/I18nProvider';
 import { formatStartDate } from '@/lib/client/season';
@@ -75,8 +75,28 @@ export function ScrollRow({ children, label }: { children: ReactNode; label?: st
         end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 8,
       });
   };
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const next = {
+        start: el.scrollLeft < 8,
+        end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 8,
+      };
+      setEdges((old) => (old.start === next.start && old.end === next.end ? old : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [children]);
   const scroll = (d: 1 | -1) =>
-    ref.current?.scrollBy({ left: d * ref.current.clientWidth * 0.85, behavior: 'smooth' });
+    ref.current?.scrollBy({
+      left: d * ref.current.clientWidth * 0.85,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'instant'
+        : 'smooth',
+    });
   const arrow = (d: 1 | -1) => (
     <button
       type="button"
@@ -109,10 +129,22 @@ export function ScrollRow({ children, label }: { children: ReactNode; label?: st
         role={label ? 'region' : undefined}
         aria-label={label}
         onScroll={update}
-        className="no-scrollbar -mx-4 flex snap-x gap-3.5 overflow-x-auto scroll-smooth px-4 md:mx-0 md:gap-6 md:px-0"
+        className="no-scrollbar -mx-4 -my-2 flex snap-x gap-3.5 overflow-x-auto scroll-smooth px-4 py-2 motion-reduce:scroll-auto md:mx-0 md:gap-6 md:px-0"
       >
         {children}
       </div>
+      {!edges.start && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-bg to-transparent md:w-10"
+        />
+      )}
+      {!edges.end && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-bg to-transparent md:w-10"
+        />
+      )}
       {arrow(1)}
     </div>
   );

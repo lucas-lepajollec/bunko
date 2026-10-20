@@ -16,6 +16,37 @@ source-language defaults, without changing saved allowed-language filters or sou
 
 Types below refer to **the complete browser-safe definitions in `src/types/shared.ts`**. Responses are the named value directly, not an extra `{data: ...}` envelope. Failures use `ApiError`: `{ "error": { "code": "...", "message": "..." } }`. Do not display raw HTML from upstream synopses.
 
+## Personal library and stable artwork
+
+`TrackedMedia.favorite` is a tenant-local persistent like (default false). `PATCH /api/tracked`
+accepts `favorite:boolean`; a favorite-only edit performs no upstream work or download. The UI can
+follow an unowned title as `PLANNING` with `autoDownload:false` before liking it. Removing a like
+keeps the title followed. `/profile` and `/favorites` use the existing private tracked/auth APIs.
+
+Automatic covers still resolve the linked catalog first, then selected source thumbnails, then
+owned-library artwork. Once complete bytes have been validated, the stored source URL and hash
+remain pinned through metadata refreshes, added/reordered sources and reloads. Changing the work
+correspondence or explicitly choosing a different cover re-resolves it. Enabling Kavita cover sync
+uploads the retained bytes without selecting another image. Schema v16 preserves existing cover
+files and provenance while removing source-list enrichment from cover invalidation.
+
+`POST /api/library/match` accepts `{ids?:number[]}` (maximum5000) and returns202 `{queued:number}`.
+It requeues visible source-less manga works in the existing durable, paced matching worker; it
+does not download files. Explicitly requested off-catalog Kavita works can receive a catalog
+identity only from an unambiguous very high confidence match (score≥0.98 and margin≥0.1).
+Manual identity/source choices, concurrent edits, collisions, tenant and lease boundaries win.
+Reading positions, local chapter IDs and validated cover bytes remain attached to the same work.
+
+`PUT /api/reader/progress` accepts optional `commit:true` to persist a client-coalesced position
+before responding. Reader exit/completion flushes the client writer and revalidates the tracked
+snapshot. `readerPosition` also exposes `pageCount` and `unit`; profile/home order actual reading
+history by timestamp, independent of new-release counts. Starting a planned work marks it reading.
+
+Library updates expose publication history through `/api/releases?library=1` (individual releases,
+cursor pagination) and current missing inventory through `TrackedMedia.newChapters` in the selected
+chapter/volume unit. Missing inventory includes older observed gaps. Both retain partial data;
+unknown upstream releases are not claimed exhaustive. Download actions recheck current ownership.
+
 ## Durable source discovery
 
 `GET /api/media/sources?id=<id>` also persists confident automatic matches for a followed work that had no source when the scan began. Optional SSE `linked:{trackedId}` signals a committed link; clients revalidate library/detail/chapter data. Remaining lanes continue after the first link. Custom `q` searches remain suggestions. The shared foreground/background transaction rechecks work and source-server identity, current languages, manual changes and dismissals; at most three sources are linked. Changes queue a durable release refresh. Transient all-miss scans retry in five minutes; normal misses retry after seven days. Language changes and successful extension install/update/uninstall requeue source-less works.
