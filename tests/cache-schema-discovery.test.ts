@@ -136,7 +136,27 @@ it.each(['http', 'timeout', 'invalid-json', 'old-shape', 'malformed-doc'])(
       pending: false,
       warnings: [{ provider: 'openlibrary', code: 'METADATA_UNAVAILABLE' }],
     });
-    expect(db().prepare('SELECT * FROM metadata_cache').all()).toEqual([]);
+    // A short aggregate failure marker prevents polling from restarting a dead provider.
+    // No failed provider payload may become a successful durable catalog cache entry.
+    expect(
+      db()
+        .prepare("SELECT * FROM metadata_cache WHERE key NOT LIKE 'discover:progressive:%'")
+        .all(),
+    ).toEqual([]);
+    const fetcher = vi.mocked(globalThis.fetch);
+    expect((await discovery.GET(req('/api/discover?kind=book'))).status).toBe(200);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(Date.now() + 31_000);
+    expect((await discovery.GET(req('/api/discover?kind=book'))).status).toBe(200);
+    await flush();
+    if (mode === 'http') {
+      // A503 also imposes the provider's60-second cooldown, beyond the aggregate's30 seconds.
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      vi.setSystemTime(Date.now() + 31_000);
+      expect((await discovery.GET(req('/api/discover?kind=book'))).status).toBe(200);
+      await flush();
+    }
+    expect(fetcher).toHaveBeenCalledTimes(2);
   },
 );
 it('retains a stale good Open Library page on failure, reports degradation, then recovers', async () => {

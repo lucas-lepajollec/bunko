@@ -46,6 +46,7 @@ const { discover, mediaDetail, withTracking } = await import('@/lib/catalog');
 const coverRoute = await import('@/app/api/metron/cover/route');
 const { selectedCover } = await import('@/lib/kavita-cover');
 const { localImageUrl } = await import('@/lib/images');
+const { sharedConcurrencyGate } = await import('@/lib/concurrency');
 const { search } = await import('@/lib/search-engine');
 const settingsRoute = await import('@/app/api/settings/route');
 const testRoute = await import('@/app/api/settings/test-provider/route');
@@ -169,6 +170,10 @@ it('adds the Google key to all six edition lanes and detail calls without persis
 function metronFixture() {
   return vi.fn(async (input: string | URL, init?: RequestInit) => {
     const url = new URL(String(input));
+    if (String(input) === fixture.metronIssue.image) {
+      expect((init?.headers as Record<string, string>).Authorization).toBeUndefined();
+      return new Response(new Uint8Array([1, 2, 3]), { headers: { 'Content-Type': 'image/png' } });
+    }
     if (url.hostname !== 'metron.cloud')
       return Response.json({ data: { Page: { media: [] } }, results: [] });
     expect((init?.headers as Record<string, string>).Authorization).toBe(
@@ -248,17 +253,52 @@ it('loads comic artwork on demand with authentication, durable reuse and warm-ca
     coverRoute.GET(request('15')),
   ]);
   for (const response of responses) {
-    expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe(fixture.metronIssue.image);
-    expect(response.headers.get('cache-control')).toContain('no-store');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('image/png');
+    expect(response.headers.get('cache-control')).toContain('private');
+    expect(response.headers.get('location')).toBeNull();
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
     expect([...response.headers.values()].join(' ')).not.toContain(secretPatch.metronPassword);
   }
-  expect(fetcher).toHaveBeenCalledTimes(2); // Both consumers share the same cached issue page.
+  expect(fetcher).toHaveBeenCalledTimes(3); // Shared issue lookup and image download.
   const old = { ...emptyMedia('metron:15', 'Asgardians', 'MANGA'), format: 'COMIC' as const };
   expect(withTracking([old])[0].coverUrl).toBe('/api/metron/cover?seriesId=15');
   expect(await metronCover(15)).toBe(fixture.metronIssue.image);
-  expect(fetcher).toHaveBeenCalledTimes(2);
+  const conditional = new Request(request('15'), {
+    headers: {
+      ...Object.fromEntries(request('15').headers),
+      'If-None-Match': responses[0].headers.get('etag')!,
+    },
+  });
+  expect((await coverRoute.GET(conditional)).status).toBe(304);
+  expect(fetcher).toHaveBeenCalledTimes(3);
 }, 15000);
+it('bounds a cover wait before it enters the slow provider queue', async () => {
+  updateSettings(secretPatch);
+  const fetcher = metronFixture();
+  vi.stubGlobal('fetch', fetcher);
+  let finish!: () => void;
+  const held = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const gate = sharedConcurrencyGate('metron:covers', 2);
+  const occupied = [gate(() => held), gate(() => held)];
+  const deadline = new AbortController();
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  const spy = vi
+    .spyOn(AbortSignal, 'timeout')
+    .mockImplementation((ms) => (ms === 15_000 ? deadline.signal : timeout(ms)));
+  try {
+    const pending = metronCover(15);
+    deadline.abort(new DOMException('Fixture deadline', 'TimeoutError'));
+    await expect(pending).rejects.toThrow();
+    expect(fetcher).not.toHaveBeenCalled();
+  } finally {
+    finish();
+    await Promise.all(occupied);
+    spy.mockRestore();
+  }
+});
 it('never redirects comic artwork to untrusted URLs or another series and isolates credential changes', async () => {
   updateSettings({ metronApiToken: 'fixture-old-token' });
   const fetcher = vi.fn(async (_input: unknown, init?: RequestInit) => {

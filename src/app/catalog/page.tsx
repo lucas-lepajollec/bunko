@@ -14,6 +14,7 @@ import type {
 } from '@/types/shared';
 import { SEASONS, formatStartDate, seasonOf } from '@/lib/client/season';
 import { api, useApi, useProgressiveSearch } from '@/lib/client/api';
+import { catalogLoading } from '@/lib/client/catalog-loading';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { PosterCard } from '@/components/media';
@@ -136,26 +137,46 @@ function Catalog() {
     releases.isLoading ||
     (releases.size > 0 && releases.data && typeof releases.data[releases.size - 1] === 'undefined');
   const items = (pages.data ?? []).flatMap((p) => p.items);
-  const enriching = pages.data?.some((p) => p.pending) ?? false;
+  const catalogState = catalogLoading(pages.data, Boolean(pages.error));
+  const enriching = catalogState.pending;
+  const refreshInterval = catalogState.interval;
   const mutatePages = pages.mutate;
   useEffect(() => {
-    if (!enriching) return;
+    if (q || view === 'chapters' || !refreshInterval) return;
     let stopped = false;
+    let running = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
+      if (stopped || running) return;
+      if (document.visibilityState === 'hidden' || !navigator.onLine) {
+        timer = setTimeout(poll, refreshInterval);
+        return;
+      }
+      running = true;
       // SWR Infinite's generic refresh interval skips cached pages when revalidateFirstPage=false.
       // Explicitly select pending pages while retaining every completed page in the browser cache.
-      await mutatePages((data) => data, { revalidate: (page) => Boolean(page?.pending) }).catch(
-        () => {},
-      );
-      if (!stopped) timer = setTimeout(poll, 1500);
+      await mutatePages((data) => data, {
+        revalidate: (page) => Boolean(pages.error || page?.pending || page?.warnings?.length),
+      }).catch(() => {});
+      running = false;
+      if (!stopped) timer = setTimeout(poll, refreshInterval);
     };
-    timer = setTimeout(poll, 1500);
+    const resume = () => {
+      clearTimeout(timer);
+      void poll();
+    };
+    timer = setTimeout(poll, refreshInterval);
+    document.addEventListener('visibilitychange', resume);
+    window.addEventListener('online', resume);
+    window.addEventListener('focus', resume);
     return () => {
       stopped = true;
       clearTimeout(timer);
+      document.removeEventListener('visibilitychange', resume);
+      window.removeEventListener('online', resume);
+      window.removeEventListener('focus', resume);
     };
-  }, [enriching, mutatePages]);
+  }, [refreshInterval, mutatePages, pages.error, q, view]);
   const last = pages.data?.[pages.data.length - 1];
   const loadingMore =
     pages.isLoading ||
@@ -383,11 +404,6 @@ function Catalog() {
         </>
       )}
       {pages.error && <ErrorNote error={pages.error} />}
-      {!q && view !== 'chapters' && pages.data?.some((p) => p.warnings?.length) && (
-        <p role="status" className="text-muted text-sm">
-          {t('catalog.partial')}
-        </p>
-      )}
       {searched.error && <ErrorNote error={searched.error} />}
       <LoadNotice
         pending={
@@ -398,7 +414,11 @@ function Catalog() {
               : loadingMore || enriching
         }
         partial={
-          q ? searched.partial : view === 'chapters' && releases.data?.some((p) => p.partial)
+          q
+            ? searched.partial
+            : view === 'chapters'
+              ? releases.data?.some((p) => p.partial)
+              : catalogState.partial
         }
       />
       {view === 'chapters' && !q ? (
@@ -443,6 +463,7 @@ function Catalog() {
           {!q &&
             !loadingMore &&
             !enriching &&
+            !catalogState.partial &&
             !pages.error &&
             items.length === 0 &&
             (kind === 'comic' ? (

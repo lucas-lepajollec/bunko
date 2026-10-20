@@ -1,4 +1,5 @@
 'use client';
+import { ManagedImage } from '@/components/managed-image';
 import { useState } from 'react';
 import { cx } from './ui';
 
@@ -49,12 +50,11 @@ export function Backdrop({
         }}
       >
         {src && (
-          // eslint-disable-next-line @next/next/no-img-element -- remote artwork
-          <img
+          <ManagedImage
             key={src}
             src={src}
             alt=""
-            onError={() => setFailed({ key, count: attempt + 1 })}
+            onLoadError={() => setFailed({ key, count: attempt + 1 })}
             referrerPolicy="no-referrer"
             className={cx(
               'absolute inset-0 size-full object-cover object-[70%_center] md:object-[center_25%]',
@@ -64,8 +64,7 @@ export function Backdrop({
           />
         )}
         {mobileImage && (
-          // eslint-disable-next-line @next/next/no-img-element -- remote artwork
-          <img
+          <ManagedImage
             key={`m:${mobileImage}`}
             src={mobileImage}
             alt=""

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Keep catalog, library, planning and title navigation responsive on HTTP/1 LAN installs by
+  limiting private artwork transfers to two, loading near the viewport and cancelling obsolete
+  images on scroll/navigation. Cache Metron artwork privately on Bunko's origin, bound cover
+  and JSON waits, and make every configured catalog category progressive. Failed catalog
+  snapshots become partial results with paced recovery instead of endless loading placeholders.
+
 - Refresh reader neighbours independently of cached pages, so newly downloaded chapters become available during reading; keep each chapter's own page, scroll and resume state when navigating. Avoid redundant progress/identity writes and defer next-chapter prefetch until the last three pages.
 
 - Display search/catalog results and source chapters incrementally as each provider responds. Show owned rows immediately and retain selection/read/download actions while slower work continues. Open known-card sheets from their available metadata while details load; preserve content on errors and avoid perpetual failed-provider loading loops.

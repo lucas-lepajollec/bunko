@@ -132,10 +132,16 @@ export async function progressiveDiscover(
   signal?: AbortSignal,
 ): Promise<DiscoverPage> {
   signal?.throwIfAborted();
-  if ((q.kind !== 'novel' && q.kind !== 'book') || !hardcoverConfigured())
+  if (!q.kind || q.kind === 'all' || (q.kind === 'comic' && !metronConfigured()))
     return discover(q, signal);
-  const providers = { openlibrary: () => discoverBooks(q), hardcover: () => discoverHardcover(q) };
-  const key = `discover:progressive:v1:${JSON.stringify(q)}:${includeProviderAdults()}:${credentialScope(getSettings().hardcoverToken)}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}`;
+  const providers =
+    q.kind === 'novel' || q.kind === 'book'
+      ? {
+          openlibrary: () => discoverBooks(q),
+          ...(hardcoverConfigured() ? { hardcover: () => discoverHardcover(q) } : {}),
+        }
+      : { [q.kind]: () => discover(q, undefined, true) };
+  const key = `discover:progressive:v2:${JSON.stringify(q)}:${includeProviderAdults()}:${metronScope()}:${credentialScope(getSettings().hardcoverToken)}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}`;
   const page = await discoverAll(key, q.page ?? 1, providers, true);
   return { ...page, items: withTracking(page.items).filter(visibleMedia) };
 }

@@ -115,7 +115,10 @@ beforeEach(() => {
       });
     }
     if (lane === 'detail') return Response.json({ data: { Media: ani('Enriched Needle') } });
-    if (lane === 'anilist') return Response.json({ data: { Page: { media: [ani()] } } });
+    if (lane === 'anilist')
+      return Response.json({
+        data: { Page: { media: [ani()], pageInfo: { hasNextPage: false } } },
+      });
     if (lane === 'dex') return Response.json({ data: [] });
     return Response.json({ results: [] });
   });
@@ -142,6 +145,25 @@ const watch = (key: string) => {
   pendingKeys.add(key);
   return key;
 };
+
+it.each(['manga', 'manhwa', 'manhua', 'lightnovel'] as const)(
+  'returns a cold %s snapshot without holding an HTTP connection until AniList completes',
+  async (kind) => {
+    gates.set('anilist', deferred());
+    const first = await progressiveDiscover({ kind });
+    expect(first).toMatchObject({ pending: true, items: [] });
+    expect(requests).toEqual(['anilist']);
+    await progressiveDiscover({ kind });
+    expect(requests).toEqual(['anilist']);
+    gates.get('anilist')!.resolve();
+    await vi.waitFor(async () => {
+      expect(await progressiveDiscover({ kind })).toMatchObject({
+        pending: false,
+        items: [{ id: 'anilist:301' }],
+      });
+    });
+  },
+);
 
 it('shows local search immediately, then each completed catalog while the last provider is still blocked', async () => {
   track({ media: work() });

@@ -12,7 +12,7 @@ import { AppError } from './errors';
 import { publicationDay } from './edition-feeds';
 import { releaseNumber } from './release-providers';
 import { saveMetadata, storedMetadata, discoveryStatus } from './metadata-cache';
-import { sharedConcurrencyGate } from './concurrency';
+import { sharedConcurrencyGate, waitForSignal } from './concurrency';
 const DAY = 86400_000;
 export interface MetronSeries {
   id: number;
@@ -98,8 +98,9 @@ export function metronCoverUrl(id: number) {
   return `/api/metron/cover?seriesId=${id}`;
 }
 export async function metronCover(id: number, signal?: AbortSignal): Promise<string | null> {
+  const deadline = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(15_000)]);
   // Keep at most two cover lookups in the provider queue so browsing cannot starve searches.
-  return sharedConcurrencyGate('metron:covers', 2)(async () => {
+  const pending = sharedConcurrencyGate('metron:covers', 2)(async () => {
     const issues = await metronJson<Page<MetronIssue>>(`/issue/?series_id=${id}`, 7 * DAY);
     for (const issue of issues.results) {
       if (issue.series?.id !== id || !issue.image) continue;
@@ -122,7 +123,8 @@ export async function metronCover(id: number, signal?: AbortSignal): Promise<str
       }
     }
     return null;
-  }, signal);
+  }, deadline);
+  return waitForSignal(pending, deadline);
 }
 function pageMedia(data: Page<MetronSeries>) {
   return data.results.map(metronMedia);
