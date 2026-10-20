@@ -6,6 +6,7 @@ import { twMerge } from 'tailwind-merge';
 import type { LibraryProgress, UnifiedMedia } from '@/types/shared';
 import { useI18n } from '@/i18n/I18nProvider';
 import { ApiFailure } from '@/lib/client/api';
+import { ManagedImage } from './managed-image';
 
 /** Class names where later Tailwind utilities override earlier ones (e.g. a caller's width). */
 export const cx = (...values: ClassValue[]) => twMerge(clsx(values));
@@ -73,8 +74,7 @@ export function Cover({
       </span>
     );
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- covers come from arbitrary providers and the authenticated proxy
-    <img
+    <ManagedImage
       key={current}
       src={current}
       alt={alt}
@@ -82,7 +82,7 @@ export function Cover({
       fetchPriority={priority ? 'high' : 'auto'}
       decoding="async"
       referrerPolicy="no-referrer"
-      onError={() => {
+      onLoadError={() => {
         setFailed({ key, count: attempt + 1 });
         if (attempt + 1 >= candidates.length) onUnavailable?.();
       }}

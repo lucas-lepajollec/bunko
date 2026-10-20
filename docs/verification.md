@@ -1,5 +1,30 @@
 # Verification — current and historical evidence
 
+## HTTP/1 catalog recovery — 2026-10-20
+
+- A disposable standalone production browser with100 same-origin cover requests delayed12s
+  reproduced six occupied connections. Its Manga request reached the server36.079s after
+  catalog entry, while an independent health request took5ms. This establishes a connection
+  starvation mechanism; it is not a network trace or a latency benchmark of Lucas's NAS.
+- The corrected browser limits artwork to two cancellable transfers, including during fast
+  scrolling. On the same slow-cover fixture, final Manga navigation took183ms including
+  automation; earlier library/planning/known-sheet commands took104/78/254ms. All12 local
+  fixture covers loaded, and390px mobile/1280px desktop had no horizontal document overflow.
+  The real protected Metron image route also displayed decoded images with synthetic metadata
+  and CDN responses, without browser cross-origin fetching or forwarded provider credentials.
+- A separate pending→502→recovery scenario showed an error/partial notice with zero spinners
+  or skeletons after failure, then usable results on focus. Unit regressions cover30s aggregate
+  retry, the provider's additional60s503 cooldown, absent failed-provider payloads, cancellation,
+  shared waits, bounded image payloads and API header/body deadlines.
+- Local `npm run check` passes612 tests/50 files, lint, strict TypeScript and production build.
+  Two subsequent catalog-state cases pass alongside the nine cache-schema cases; final lint,
+  types and build are rerun for the frontend changes. Docker build and111 isolated container
+  smoke checks pass; production dependency audit reports0 vulnerabilities. CI runs the combined
+  suite on the final candidate. No dependency, migration, layout or real NAS data change.
+- These checks establish the synthetic regressions above, not complete NAS acceptance or
+  completion of the separate SWR-memory/ZIP profiling backlog.
+
+
 ## Reader optimization and publication candidate — 2026-10-19
 
 - Final `npm run check` exits 0 (`.project-local/reader-optimized-check.{log,exit}`): zero-warning lint, strict TypeScript, **586 tests / 46 files**, optimized build. Two added regressions guard read-only repeated local identities and authenticated warm source refreshes at the retained 20,000-chapter limit.

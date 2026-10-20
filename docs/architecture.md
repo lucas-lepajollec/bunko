@@ -18,11 +18,13 @@ are publication-feed/detail integrations rather than additional global-search en
 extension search stays separate. Fast and full browser responses belong to their exact query;
 a previous full response must never mask the next query's fast answer.
 
-Metron series cards resolve artwork through an authenticated, on-demand issue-cover redirect.
+Metron series cards resolve artwork through an authenticated, on-demand issue-cover proxy.
 The issue cache remains private and credential-scoped, with provider-wide pacing and at most
 two queued cover lookups so browsing does not monopolize the provider queue. Covers can arrive
 progressively on a cold cache. Null covers in older cached/tracked series are repaired on output;
-retaining a cover for imports resolves the same route server-side without forwarding auth to the CDN.
+retaining a cover for imports resolves the artwork server-side without forwarding auth to the CDN.
+The proxy serves raster bytes through the existing private, credential-scoped image cache and
+conditional ETags. Browser fetch does not depend on a cross-origin CDN CORS policy.
 
 Bunko is a long-running Node 22 Next.js App Router service. All route handlers run in the Node runtime, dynamically, with private JSON responses marked no-store and a persistent private image cache. The root page renders a French React interface with a server layout, locally bundled Geist font, Tailwind CSS and Radix dialogs/tabs. `src/lib/client/api.ts` is the browser adapter over the shared contract; server integrations never enter the client bundle. Authentication gates the views, signed HttpOnly cookies authenticate SSE, and logout/expiry resets interface state.
 
@@ -33,6 +35,22 @@ Chapter snapshots add one source at a time while projecting local ownership on e
 A bounded tenant/source-scoped map of already displayed card metadata opens known sheets immediately while full metadata loads, preserving content on later errors. Novel/book pages with Hardcover enabled independently expose both catalog lanes; existing single-provider and nonfatal-warning semantics are preserved. No UI redesign or schema migration is needed for these incremental responses.
 
 ## Data and execution
+
+- Same-origin cover and extension-icon transfers are scheduled in the browser, at most two at
+  once. An IntersectionObserver starts artwork within 200px of the viewport; leaving a route
+  aborts its active transfers and removes its queued work. Each active fetch has a 35-second
+  deadline and a 15MiB response limit. Completed images use object URLs revoked when replaced
+  or unmounted; normal HTTP caching and credential scoping remain in force. Remote public
+  artwork keeps native image loading. This retains connection capacity for navigation/JSON
+  on HTTP/1 LAN installations instead of letting slow artwork occupy all six browser sockets.
+- Metron cover waits are limited to15 seconds including the outer lookup queue; its image
+  response wait is bounded to30 seconds including the public image download. An abandoned
+  consumer does not cancel a coalesced provider/cache load used by another consumer. Single-kind
+  discovery also returns a progressive snapshot after at most a300ms initial wait instead of
+  holding the HTTP request until its provider finishes. Pending/partial/error semantics remain.
+- Browser JSON reads have a30-second deadline including the body (120s for explicit mutations), so a lost response ends
+  in the existing error state instead of leaving an indefinite skeleton. These bounds do not
+  establish NAS throughput or guarantee provider availability.
 
 - `src/types/shared.ts` is the browser-safe contract. `src/lib/validation.ts` validates untrusted request payloads; UI imports only shared types.
 - SQLite WAL and FTS5 are initialized lazily in `db.ts`, with schema version15 (nullable current-inventory volume declaration). A tenant-local additive v13 migration defaults `kavita_cover_sync` to true and adds stable local-reader chapter identities; existing chapter progress and files are preserved. A transactional, idempotent migration adds tracked reading status (default `READING`), numeric read/released values, reading timestamps and a progress-provenance marker. It preserves v1/v2/v3 data and never downgrades a newer user_version. The v3 migration adds `kavita_series` snapshots and durable `download_jobs`; existing files and ledger rows are preserved. The v7 migration adds a per-entry `backdrop` choice constrained to `auto`/`hidden`, defaulting existing and new entries to `auto`; catalog identity patches reset it to `auto`. The v6 migration adds sticky `off_catalog`, `cover_choice_json`, matching timestamps and per-entry `source_links`/`source_dismissals` tables with cascade deletion. The v5 migration adds sticky `kavita_manual` linkage, durable `kavita_dismissals` and a unique JSON media identity index, preserving earlier rows. The v4 migration adds the singleton `administrator` table (`id=1`, username, versioned password hash, random session epoch); no account is seeded and existing settings/library data stay intact. Alongside `settings`, `tracked_media`, `catalog_fts`, `catalog_keys`, `download_batches` and `worker_lock`, `imported_chapters`, `observed_chapters`, `source_health`, `update_entries`, `update_chapters` and `worker_state` persist the library, source observations and update scheduling. Stable FTS row IDs avoid scanning the entire catalog on every upsert. No sample catalog or media data is seeded.

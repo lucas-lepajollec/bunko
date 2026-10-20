@@ -18,6 +18,10 @@ export const UNAUTHORIZED_EVENT = 'bunko:unauthorized';
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   const headers = new Headers(init.headers);
+  const signal = AbortSignal.any([
+    ...(init.signal ? [init.signal] : []),
+    AbortSignal.timeout(!init.method || ['GET', 'HEAD'].includes(init.method) ? 30_000 : 120_000),
+  ]);
   headers.set('Accept-Language', getUiLanguage());
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   try {
@@ -25,8 +29,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init,
       credentials: 'same-origin',
       headers,
+      signal,
     });
   } catch (e) {
+    if (signal.aborted && !init.signal?.aborted) throw new ApiFailure('UPSTREAM_TIMEOUT', 0);
     if ((e as Error).name === 'AbortError') throw e;
     throw new ApiFailure('NETWORK_ERROR', 0);
   }
@@ -35,6 +41,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
   if (response.status === 204) return undefined as T;
   const body = (await response.json().catch(() => null)) as T | ApiError | null;
+  if (signal.aborted) {
+    if (init.signal?.aborted) init.signal.throwIfAborted();
+    throw new ApiFailure('UPSTREAM_TIMEOUT', 0);
+  }
   if (!response.ok) {
     const code = (body as ApiError | null)?.error?.code ?? 'HTTP_ERROR';
     throw new ApiFailure(code, response.status);

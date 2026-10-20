@@ -1,4 +1,5 @@
 'use client';
+import { ManagedImage } from '@/components/managed-image';
 import { Select } from '@/components/select';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -64,8 +65,7 @@ export default function SourcePage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:gap-6">
         <div className="flex items-end gap-4 md:gap-6">
           {info?.iconUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- proxied extension icon
-            <img
+            <ManagedImage
               src={info.iconUrl}
               alt=""
               className="size-14 rounded-2xl md:size-[72px] md:rounded-[18px]"

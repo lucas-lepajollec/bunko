@@ -1,4 +1,5 @@
 'use client';
+import { ManagedImage } from '@/components/managed-image';
 import Link from 'next/link';
 import { useState } from 'react';
 import type { Extension, PublicSettings, SourceInfo, SourcePreferences } from '@/types/shared';
@@ -227,8 +228,7 @@ function MySources({
                 className="border-line grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b py-3 text-sm md:grid-cols-[44px_minmax(0,1fr)_170px_200px_150px] md:gap-y-0 md:px-1"
               >
                 {s.iconUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- proxied extension icon
-                  <img src={s.iconUrl} alt="" className="size-[34px] rounded-[9px]" />
+                  <ManagedImage src={s.iconUrl} alt="" className="size-[34px] rounded-[9px]" />
                 ) : (
                   <span className="bg-hover font-display flex size-[34px] items-center justify-center rounded-[9px] font-extrabold">
                     {s.name[0]}
@@ -326,8 +326,7 @@ function ExtensionList({
     <ul className="flex flex-col">
       {items.map((e) => (
         <li key={e.id} className="border-line flex items-center gap-3 border-b py-3 text-sm">
-          {/* eslint-disable-next-line @next/next/no-img-element -- proxied extension icon */}
-          <img src={e.iconUrl} alt="" className="size-[34px] rounded-[9px]" />
+          <ManagedImage src={e.iconUrl} alt="" className="size-[34px] rounded-[9px]" />
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-[15px] font-semibold">{e.name}</span>
             <span className="text-muted text-xs">
