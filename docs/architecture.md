@@ -336,3 +336,20 @@ independently of the upstream network timeout. Optional catalog loads have a thi
 queue/pacing/network deadline, a twelve-second network cap and tenant revocation. Existing
 provider pacing and account boundaries remain in force. Noncritical poster shelves use lazy
 image loading. These bounds do not prove CPU, RSS or disk performance on a real NAS.
+
+
+## Download cancellation and maintenance recovery
+
+The lease-owning worker continues to pump durable download batches while source matching,
+cover backfill or Kavita/update maintenance runs. A wake on enqueue, retry, pause or removal
+interrupts its wait; task completion also wakes the pump. Slow maintenance does not hold new
+lots in `enqueuing`. The worker retains one maintenance run at a time and the existing source,
+chapter-transfer and tenant concurrency limits. It sleeps when idle instead of polling rapidly.
+
+Before processing a queue snapshot, `processBatch` reloads the durable batch and ignores
+removed/terminal entries; a cancelled snapshot cannot overwrite `CANCELLED`. Worker ownership
+and tenant revocation are included in the transfer signal. Kavita index requests issued by the
+worker/update check inherit its lifetime, so lease loss cancels ongoing index network work.
+Existing imports, files, retry generations and pause preference remain intact. On restart,
+nonterminal lots already in SQLite are retried through the same pump after lease recovery;
+no purge or queue reset is required for this correction.

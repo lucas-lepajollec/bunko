@@ -1027,3 +1027,30 @@ it('durably defers retries requested during a transfer to only the already faile
       .every((c) => c.path.includes('/chapter/141/')),
   ).toBe(true);
 });
+
+it('starts the next queued batch after removing an active one and preserves completed files', async () => {
+  slowPage = true;
+  const first = engine.createBatch({ media, chapterIds: [151, 152] });
+  const processing = engine.processBatch(first);
+  await waitUntil(
+    () => listBatches().find((b) => b.id === first.id)?.chapters[1]?.state === 'downloading',
+  );
+  const next = engine.createBatch({ media, chapterIds: [153] });
+  const waiting = engine.processBatch(next);
+  await engine.controlEngine({ action: 'remove', batchId: first.id });
+  await Promise.all([processing, waiting]);
+  expect(listBatches().find((b) => b.id === first.id)).toMatchObject({
+    state: 'completed',
+    importedIds: [151],
+    error: 'CANCELLED',
+  });
+  expect(listBatches().find((b) => b.id === next.id)).toMatchObject({
+    state: 'completed',
+    importedIds: [153],
+    error: null,
+  });
+  expect(
+    db().prepare('SELECT chapter_id FROM imported_chapters ORDER BY chapter_id').all(),
+  ).toEqual([{ chapter_id: 151 }, { chapter_id: 153 }]);
+  expect(engine.engineStatus().queue).toEqual([]);
+});

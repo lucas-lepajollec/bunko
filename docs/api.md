@@ -478,3 +478,13 @@ The browser's `openStream(...,{reconnect:true})` option is used only for continu
 snapshots. Transport interruption in CONNECTING state retains EventSource's reconnect; a resumed
 stream starts with the current full snapshot. Finite search streams do not automatically replay.
 Closed streams expose the existing localized Retry action.
+
+
+### Download recovery during maintenance
+
+Enqueue/retry/control continue to persist first. A lot may be `enqueuing` until its transfer
+slot is available, but a running Kavita index/cover/source maintenance task does not prevent
+the worker from starting it. Removing an active batch cancels only its remaining work and
+retains completed imports; stale worker snapshots cannot restart the cancelled batch.
+Nonterminal lots saved before a restart resume through the same worker without recreating
+the queue. Pause remains an explicit durable setting; enqueue does not silently resume it.
