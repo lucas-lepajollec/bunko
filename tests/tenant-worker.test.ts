@@ -15,7 +15,8 @@ vi.mock('@/lib/kavita', () => ({
 }));
 const { inTenant, tenantId } = await import('@/lib/tenant-context');
 const { accountsDb } = await import('@/lib/accounts-store');
-const { db, closeTenant } = await import('@/lib/db');
+const { db, closeTenant, track } = await import('@/lib/db');
+const { emptyMedia } = await import('@/lib/media');
 const { updateSettings } = await import('@/lib/settings');
 const { runTenantWorkers, workerTick } = await import('@/lib/downloads');
 const { syncTrackedCovers } = await import('@/lib/tracked-covers');
@@ -34,7 +35,10 @@ it('runs tenant leases independently with at most two active instances, skips bl
       )
       .run(id, `Member${id}`);
     inTenant(id, () => {
-      if (id !== 5) updateSettings({ suwayomiUrl: `http://fixture-${id}.test` });
+      if (id !== 5) {
+        updateSettings({ suwayomiUrl: `http://fixture-${id}.test` });
+        track({ media: emptyMedia(`anilist:${id}`, 'Fixture Work', 'MANGA') });
+      }
       setWorkerValue('last_check_at', new Date().toISOString());
     });
   }

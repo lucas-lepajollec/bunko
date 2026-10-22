@@ -21,7 +21,8 @@ Types below refer to **the complete browser-safe definitions in `src/types/share
 `TrackedMedia.favorite` is a tenant-local persistent like (default false). `PATCH /api/tracked`
 accepts `favorite:boolean`; a favorite-only edit performs no upstream work or download. The UI can
 follow an unowned title as `PLANNING` with `autoDownload:false` before liking it. Removing a like
-keeps the title followed. `/profile` and `/favorites` use the existing private tracked/auth APIs.
+keeps the title followed. Likes appear inside `/profile#favorites`, using the existing private
+tracked/auth APIs. The former `/favorites` route redirects there; navigation only exposes the profile.
 
 Automatic covers still resolve the linked catalog first, then selected source thumbnails, then
 owned-library artwork. Once complete bytes have been validated, the stored source URL and hash
@@ -31,9 +32,19 @@ uploads the retained bytes without selecting another image. Schema v16 preserves
 files and provenance while removing source-list enrichment from cover invalidation.
 
 `POST /api/library/match` accepts `{ids?:number[]}` (maximum5000) and returns202 `{queued:number}`.
-It requeues visible source-less manga works in the existing durable, paced matching worker; it
-does not download files. Explicitly requested off-catalog Kavita works can receive a catalog
-identity only from an unambiguous very high confidence match (score≥0.98 and margin≥0.1).
+It prioritizes visible source-less manga works in the existing durable, paced matching worker; it
+does not download files. The request retains the interface language, subject to source preferences.
+A request arriving during an already-running maintenance cycle starts matching without waiting
+for that maintenance to finish. The active state starts before catalog lookup. A catalog lookup waits
+at most five seconds; source discovery continues from the indexed title if it fails. Each work has a thirty-second budget, including
+catalog lookup and enrichment, then yields to the next work. Explicit batches resume after the normal
+two-entry tenant yield without the idle delay. Confident source links persist as soon as title search
+returns, before chapter counts or slower sources; completed counts refine the same guarded selection.
+Errors or budget exhaustion without a link retry in five minutes rather than suppressing it for a week.
+An exhausted scan rotates extension lanes on its next attempt so later sources are eventually visited,
+while result ranking retains language and source preferences. Explicitly requested off-catalog Kavita
+works can receive a catalog identity only from an unambiguous very high confidence match
+(score≥0.98 and margin≥0.1).
 Manual identity/source choices, concurrent edits, collisions, tenant and lease boundaries win.
 Reading positions, local chapter IDs and validated cover bytes remain attached to the same work.
 

@@ -47,7 +47,9 @@ const request = (query = '') =>
   new Request(`http://fixture.test/api/media/sources?id=anilist:301${query}`, {
     headers: { Authorization: `Bearer ${token}`, 'Accept-Language': 'fr' },
   });
-let searchGate: (() => Promise<void>) | null = null;
+let searchGate: ((source: string, signal?: AbortSignal | null) => Promise<void>) | null = null;
+let chapterGate: (() => Promise<void>) | null = null;
+let searchOrder: string[] = [];
 let fail = false;
 beforeEach(() => {
   db().exec(
@@ -62,13 +64,16 @@ beforeEach(() => {
   setSourcePreferences({ enabledSourceIds: [], languages: ['fr', 'en'] });
   saveMetadata('detail:anilist:301', { ...work(), tags: [], relations: [], recommendations: [] });
   searchGate = null;
+  chapterGate = null;
+  searchOrder = [];
   fail = false;
   vi.stubGlobal('fetch', async (_url: unknown, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? '{}'));
     if (body.query?.includes('sources {'))
       return Response.json({ data: { sources: { nodes: sourceList } } });
     if (body.query?.includes('fetchSourceManga')) {
-      await searchGate?.();
+      searchOrder.push(body.variables.input.source);
+      await searchGate?.(body.variables.input.source, init?.signal);
       if (fail) return new Response('{}', { status: 503 });
       const index = body.variables.input.source === sourceList[0].id ? 0 : 1;
       return Response.json({
@@ -80,7 +85,8 @@ beforeEach(() => {
         },
       });
     }
-    if (body.query?.includes('fetchChapters'))
+    if (body.query?.includes('fetchChapters')) {
+      await chapterGate?.();
       return Response.json({
         data: {
           fetchChapters: {
@@ -90,6 +96,7 @@ beforeEach(() => {
           },
         },
       });
+    }
     if (body.query?.includes('query($id: Int!)'))
       return Response.json({
         data: {
@@ -187,6 +194,43 @@ it('accepts background catalog enrichment while revalidating matches against the
     .run(JSON.stringify({ ...work(), altTitles: ['Other Name'] }), t.id);
   expect(linkMatchedSources(t, [hit()])?.sourceMatch).toBe('linked');
 });
+it.each([false, true])(
+  'persists a background match before slow sources/counts and preserves a later manual edit (%s)',
+  async (manualEdit) => {
+    const entry = track({ media: work() });
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    searchGate = async (source) => {
+      if (source === sourceList[1].id) await blocked;
+    };
+    chapterGate = () => blocked;
+    const pending = matchTrackedSources();
+    const manual = { sourceId: '789', sourceName: 'Manual', suwayomiMangaId: 77 };
+    try {
+      await vi.waitFor(() =>
+        expect(getTracked(entry.id)).toMatchObject({
+          sourceMatch: 'linked',
+          sources: [{ sourceId: sourceList[0].id }],
+        }),
+      );
+      expect(db().prepare('SELECT COUNT(*) AS n FROM download_batches').get()).toEqual({ n: 0 });
+      if (manualEdit) {
+        replaceSources(getTracked(entry.id)!, [manual]);
+        db()
+          .prepare('UPDATE tracked_media SET sources_json=? WHERE id=?')
+          .run(JSON.stringify([manual]), entry.id);
+      }
+    } finally {
+      release();
+      await pending;
+    }
+    expect(getTracked(entry.id)?.sources.map((s) => s.sourceId)).toEqual(
+      manualEdit ? ['789'] : sourceList.map((s) => s.id),
+    );
+  },
+);
 it('retries failed source searches after five minutes and clears stale misses after language or extension changes', async () => {
   const t = track({ media: work() });
   fail = true;
@@ -206,6 +250,42 @@ it('retries failed source searches after five minutes and clears stale misses af
     .run(new Date().toISOString(), t.id);
   await extensionAction({ action: 'install', id: 'fixture.extension' });
   expect(sourceMatchQueue().map((t) => t.id)).toContain(t.id);
+});
+it('yields a stalled work at its budget, retries it soon and lets the next work finish', async () => {
+  const stalled = track({ media: work() });
+  const next = track({ media: { ...work(), id: 'anilist:302', anilistId: 302 } });
+  searchGate = (_source, signal) =>
+    new Promise((_, reject) => {
+      if (signal?.aborted) reject(signal.reason);
+      else signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  const spy = vi
+    .spyOn(AbortSignal, 'timeout')
+    .mockImplementation((ms) => timeout(ms === 30_000 ? 40 : ms));
+  try {
+    expect(await matchTrackedSources()).toBe(true);
+  } finally {
+    spy.mockRestore();
+  }
+  expect(getTracked(stalled.id)?.sources).toEqual([]);
+  expect(sourceMatchQueue().map((e) => e.id)).toEqual([next.id]);
+  searchGate = null;
+  await matchTrackedSources();
+  expect(getTracked(next.id)?.sourceMatch).toBe('linked');
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(Date.now() + 6 * 60_000);
+  expect(sourceMatchQueue().map((e) => e.id)).toContain(stalled.id);
+  const before = searchOrder.length;
+  await matchTrackedSources();
+  // Rotate extension lanes after an exhausted budget, retaining language preference in the results.
+  expect(searchOrder.slice(before)).toEqual([sourceList[1].id, sourceList[0].id]);
+  expect(getTracked(stalled.id)?.sources.map((s) => s.sourceId)).toEqual(
+    sourceList.map((s) => s.id),
+  );
+  expect(
+    db().prepare('SELECT 1 FROM worker_state WHERE key=?').get(`source_match_cursor:${stalled.id}`),
+  ).toBeUndefined();
 });
 it('renders owned tomes as normal reading rows with one correction button beside the existing view switch', () => {
   const render = (byVolume: boolean, active = true) =>

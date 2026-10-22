@@ -59,6 +59,7 @@ export async function matchOnSource(
   media: Pick<MediaDetail, 'title' | 'altTitles'>,
   signal?: AbortSignal,
   queryOverride?: string,
+  onDiscovery: (candidates: SourceCandidate[]) => void = () => {},
 ): Promise<SourceCandidate[]> {
   const titles = [media.title, ...media.altTitles];
   const found = new Map<number, SourceCandidate>();
@@ -73,6 +74,7 @@ export async function matchOnSource(
     if ([...found.values()].some((c) => c.score >= 0.9)) break;
   }
   const candidates = [...found.values()];
+  onDiscovery(candidates);
   await Promise.all(
     candidates
       .filter((c) => c.score >= 0.9)

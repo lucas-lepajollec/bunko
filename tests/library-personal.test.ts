@@ -19,6 +19,7 @@ const { persistentSecret, updateSettings } = await import('@/lib/settings');
 const { requestLibraryMatching, resolveQueuedCatalog } = await import('@/lib/library-matching');
 const { continueReading, resumeHref } = await import('@/lib/client/reading');
 const { coverContext } = await import('@/lib/cover-state');
+const { sourceMatchQueue } = await import('@/lib/source-match-state');
 const trackedRoute = await import('@/app/api/tracked/route');
 const bulkRoute = await import('@/app/api/library/match/route');
 const canonical = () => ({ ...emptyMedia('anilist:501', 'Fixture Work', 'MANGA'), anilistId: 501 });
@@ -148,7 +149,7 @@ it('queues a tenant-local bounded worker lookup and preserves reading/cover iden
   const matched = await resolveQueuedCatalog(getTracked(entry.id)!);
   expect(catalogMatch).toHaveBeenCalledWith(
     expect.objectContaining({ seriesId: 7 }),
-    undefined,
+    expect.any(AbortSignal),
     0.98,
   );
   expect(matched.media.id).toBe(canonical().id);
@@ -160,6 +161,38 @@ it('queues a tenant-local bounded worker lookup and preserves reading/cover iden
     db().prepare("SELECT 1 FROM worker_state WHERE key LIKE 'library_catalog_match:%'").get(),
   ).toBeUndefined();
   expect(db().prepare('SELECT COUNT(*) AS n FROM download_batches').get()).toEqual({ n: 0 });
+});
+it('prioritizes an explicit library association over older automatic work without duplicating it', () => {
+  const older = track({ media: canonical() });
+  const requested = track({ media: local() });
+  expect(sourceMatchQueue().map((e) => e.id)).toEqual([older.id, requested.id]);
+  requestLibraryMatching([requested.id]);
+  requestLibraryMatching([requested.id]);
+  expect(sourceMatchQueue().map((e) => e.id)).toEqual([requested.id, older.id]);
+});
+it('bounds a stalled catalog lookup and prevents its late result from replacing the work', async () => {
+  db().prepare('INSERT INTO kavita_series VALUES(?,?)').run(7, JSON.stringify(series));
+  const entry = track({ media: local(), kavitaSeriesId: 7 });
+  requestLibraryMatching([entry.id]);
+  let finish!: (value: ReturnType<typeof canonical>) => void;
+  catalogMatch.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  const spy = vi
+    .spyOn(AbortSignal, 'timeout')
+    .mockImplementation((ms) => timeout(ms === 5000 ? 20 : ms));
+  try {
+    await expect(resolveQueuedCatalog(getTracked(entry.id)!)).rejects.toThrow();
+    finish(canonical());
+    await Promise.resolve();
+    expect(getTracked(entry.id)?.media.id).toBe(local().id);
+  } finally {
+    spy.mockRestore();
+  }
 });
 it.each(['manual', 'collision', 'in-flight edit', 'lease'] as const)(
   'leaves %s correspondence decisions untouched',

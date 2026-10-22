@@ -14,7 +14,7 @@ import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
 import { ActivityPill } from './activity';
 import { Toaster } from './notify';
 import { Select } from './select';
-import { Heart, UserRound } from 'lucide-react';
+import { UserRound } from 'lucide-react';
 import { clearPersistentCache, persistentCache } from '@/lib/client/cache';
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -313,9 +313,6 @@ function Header() {
         <IconLink href="/profile" label={t('profile.title')} className="hidden md:flex">
           <UserRound className="size-[19px]" aria-hidden />
         </IconLink>
-        <IconLink href="/favorites" label={t('favorites.title')} className="hidden xl:flex">
-          <Heart className="size-[19px]" aria-hidden />
-        </IconLink>
         <IconLink href="/settings" label={t('nav.settings')} className="hidden md:flex">
           <SlidersIcon />
         </IconLink>
@@ -340,7 +337,6 @@ function MobileMenu() {
   }
   const links = [
     { href: '/profile', label: t('profile.title') },
-    { href: '/favorites', label: t('favorites.title') },
     { href: '/downloads', label: t('nav.downloads') },
     { href: '/sources', label: t('nav.sources') },
     { href: '/settings', label: t('nav.settings') },

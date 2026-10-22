@@ -6,16 +6,16 @@ import { withBackgroundSources } from './source-gate';
 import type { ChapterSelection, SourceCandidate, TrackedMedia } from '@/types/shared';
 import { statement, db, getTracked, saveSourceStatus } from './db';
 import { matchingSources, chaptersFor } from './suwayomi';
-import { getSourcePreferences } from './source-preferences';
+import { getSourcePreferences, withSourceLanguage } from './source-preferences';
 import { rankCandidates, titleScore } from './matching';
-import { scanMatchingSources } from './matching-scan';
+import { deduplicateCandidates, scanMatchingSources } from './matching-scan';
 import { suwayomiDetail } from './catalog';
 import { errorCode } from './errors';
 import { sourceMatchQueue } from './source-match-state';
-import { sharedConcurrencyGate } from './concurrency';
+import { sharedConcurrencyGate, waitForSignal } from './concurrency';
 import { tenantPath, tenantId } from './tenant-context';
 import { setTimeout as pause } from 'node:timers/promises';
-import { resolveQueuedCatalog } from './library-matching';
+import { finishLibraryMatch, libraryMatchRequest, resolveQueuedCatalog } from './library-matching';
 
 export function sameSource(
   a: Pick<ChapterSelection, 'sourceId' | 'suwayomiMangaId'>,
@@ -165,69 +165,121 @@ export async function matchTrackedSources(
       if (!ownsLease()) return false;
       const next = sourceMatchQueue()[0];
       if (!next) return false;
-      let t = getTracked(next.id);
-      if (!t || t.sources.length) return false;
-      try {
-        t = await resolveQueuedCatalog(t, signal, ownsLease);
-      } catch {
-        signal?.throwIfAborted();
-        // A metadata provider failure must not prevent source discovery for the same work.
-      }
-      const namespace = sourceServerKey();
-      const available = await matchingSources(signal);
-      if (!available.length || signal?.aborted || !ownsLease()) return false;
+      const entry = getTracked(next.id);
+      if (!entry || entry.sources.length) return false;
+      let t = entry;
+      const request = libraryMatchRequest(t.id);
+      const language = request ? (JSON.parse(request.value).language as string | null) : null;
       const lease = statement('SELECT owner FROM worker_lock WHERE id=1').get() as
         { owner: string } | undefined;
       const state = JSON.stringify({ id: t.id, title: t.title, owner: lease?.owner ?? null });
       statement("INSERT OR REPLACE INTO worker_state VALUES('source_matching',?)").run(state);
-      try {
-        let failures = 0;
-        const results = await scanMatchingSources(available, t.media, signal, undefined, () => {
-          failures++;
-        });
-        const candidates = available.flatMap((source) => {
-          const candidate = results.find(
-            (c) =>
-              c.sourceId === source.id &&
-              c.score >= 0.9 &&
-              !statement(
-                'SELECT 1 FROM source_dismissals WHERE tracked_id=? AND source_id=? AND manga_id=?',
-              ).get(t.id, c.sourceId, c.suwayomiMangaId),
-          );
-          return candidate ? [candidate] : [];
-        });
-        if (signal?.aborted || !ownsLease()) return false;
-        const linked = linkMatchedSources(t, candidates, t.sources, namespace);
-        if (!linked)
-          db().transaction(() => {
-            const current = getTracked(t.id);
-            if (
-              !current ||
-              current.sources.length ||
-              namespace !== sourceServerKey() ||
-              identity(current) !== identity(t)
-            )
-              return;
-            // Transient source failures retry in five minutes, rather than suppressing a work for a week.
-            const retry = failures ? Date.now() - 7 * 24 * 3600_000 + 5 * 60_000 : Date.now();
-            statement('UPDATE tracked_media SET source_match_at=? WHERE id=?').run(
-              new Date(retry).toISOString(),
-              t.id,
-            );
-          })();
-        if (linked && !signal?.aborted && ownsLease()) {
-          const current = getTracked(t.id)!;
-          const result = await chaptersFor(current.sources, signal, undefined, ownsLease);
-          if (!signal?.aborted && ownsLease())
-            await refreshSourceStatuses(current, result, signal, ownsLease);
+      const namespace = sourceServerKey();
+      const cursorKey = `source_match_cursor:${t.id}`;
+      const cursor = statement('SELECT value FROM worker_state WHERE key=?').get(cursorKey) as
+        { value: string } | undefined;
+      const resume = cursor ? JSON.parse(cursor.value) : null;
+      const offset: number =
+        resume?.namespace === namespace &&
+        resume?.mediaId === t.media.id &&
+        Number.isSafeInteger(resume?.offset) &&
+        resume.offset >= 0
+          ? resume.offset
+          : 0;
+      // A slow extension must yield to the next library work, not hold the whole batch forever.
+      const scanSignal = AbortSignal.any([
+        ...(signal ? [signal] : []),
+        AbortSignal.timeout(30_000),
+      ]);
+      let failures = 0;
+      let expected = t.sources;
+      const found = new Map<string, SourceCandidate[]>();
+      const run = async () => {
+        try {
+          t = await resolveQueuedCatalog(t, scanSignal, ownsLease);
+        } catch {
+          scanSignal.throwIfAborted();
+          // Catalog enrichment is optional; sources can match the indexed title directly.
         }
-        return true;
-      } catch (error) {
+        expected = t.sources;
+        const available = await matchingSources(scanSignal);
+        if (!available.length) failures++;
+        const publish = (source: (typeof available)[number], candidates: SourceCandidate[]) => {
+          if (scanSignal.aborted || !ownsLease()) return;
+          found.set(source.id, candidates);
+          const all = deduplicateCandidates(
+            available.flatMap((s) => found.get(s.id) ?? []),
+            available,
+          );
+          const linked = linkMatchedSources(t, all, expected, namespace, language);
+          if (linked) expected = linked.sources;
+        };
+        await waitForSignal(
+          scanMatchingSources(
+            available,
+            { ...t.media, title: t.title },
+            scanSignal,
+            publish,
+            () => {
+              failures++;
+            },
+            undefined,
+            // Publish confident hits before chapter counts; enrich/rank as the same scan finishes.
+            publish,
+            offset,
+          ),
+          scanSignal,
+        );
+        const current = getTracked(t.id);
+        if (current && current.sources.length && !scanSignal.aborted && ownsLease()) {
+          const result = await waitForSignal(
+            chaptersFor(current.sources, scanSignal, undefined, ownsLease),
+            scanSignal,
+          );
+          if (!scanSignal.aborted && ownsLease())
+            await waitForSignal(
+              refreshSourceStatuses(current, result, scanSignal, ownsLease),
+              scanSignal,
+            );
+        }
+      };
+      try {
+        if (language) await withSourceLanguage(language, run);
+        else await run();
+      } catch {
         if (signal?.aborted || !ownsLease()) return false;
-        throw error;
+        failures++;
       } finally {
         statement("DELETE FROM worker_state WHERE key='source_matching' AND value=?").run(state);
       }
+      if (signal?.aborted || !ownsLease()) return false;
+      const current = getTracked(t.id);
+      if (current && identity(current) === identity(t) && namespace === sourceServerKey()) {
+        if (scanSignal.aborted && !current.sources.length)
+          statement('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)').run(
+            cursorKey,
+            JSON.stringify({ namespace, mediaId: t.media.id, offset: offset + 1 }),
+          );
+        else statement('DELETE FROM worker_state WHERE key=?').run(cursorKey);
+      }
+      db().transaction(() => {
+        const current = getTracked(t.id);
+        if (
+          !current ||
+          current.sources.length ||
+          namespace !== sourceServerKey() ||
+          identity(current) !== identity(t)
+        )
+          return;
+        // Transient errors/budget exhaustion retry in five minutes; a completed miss in a week.
+        const retry = failures ? Date.now() - 7 * 24 * 3600_000 + 5 * 60_000 : Date.now();
+        statement('UPDATE tracked_media SET source_match_at=? WHERE id=?').run(
+          new Date(retry).toISOString(),
+          t.id,
+        );
+      })();
+      if (request) finishLibraryMatch(t.id, request.value);
+      return true;
     }, signal),
   );
 }
@@ -236,6 +288,9 @@ export async function drainSourceMatches(signal: AbortSignal, ownsLease: () => b
     if (!(await matchTrackedSources(signal, ownsLease))) return;
     await pause(250, undefined, { signal });
   }
+  // Yield to other accounts after two entries, then resume an explicit batch without the idle delay.
+  if (!signal.aborted && ownsLease() && sourceMatchQueue().some((t) => libraryMatchRequest(t.id)))
+    wakeWorker();
 }
 export async function refreshSourceStatuses(
   t: TrackedMedia,

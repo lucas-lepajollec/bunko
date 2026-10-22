@@ -122,29 +122,20 @@ export function ScrollRow({ children, label }: { children: ReactNode; label?: st
     </button>
   );
   return (
-    <div className="relative">
+    <div className="relative -mx-4 md:mx-0">
       {arrow(-1)}
       <div
         ref={ref}
         role={label ? 'region' : undefined}
         aria-label={label}
         onScroll={update}
-        className="no-scrollbar -mx-4 -my-2 flex snap-x gap-3.5 overflow-x-auto scroll-smooth px-4 py-2 motion-reduce:scroll-auto md:mx-0 md:gap-6 md:px-0"
+        className="no-scrollbar -my-2 flex snap-x scroll-px-4 gap-3.5 overflow-x-auto scroll-smooth px-4 py-2 motion-reduce:scroll-auto md:scroll-px-0 md:gap-6 md:px-0"
+        style={{
+          maskImage: `linear-gradient(to right, ${edges.start ? 'black' : 'transparent'}, black ${edges.start ? '0px' : '16px'}, black calc(100% - ${edges.end ? '0px' : '16px'}), ${edges.end ? 'black' : 'transparent'})`,
+        }}
       >
         {children}
       </div>
-      {!edges.start && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-bg to-transparent md:w-10"
-        />
-      )}
-      {!edges.end && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-bg to-transparent md:w-10"
-        />
-      )}
       {arrow(1)}
     </div>
   );

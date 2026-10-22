@@ -28,7 +28,7 @@ export function deduplicateCandidates(candidates: SourceCandidate[], sources: Ma
   );
 }
 
-/** Resolve sibling variants in preference order; unrelated extensions stream independently. */
+/** Final sibling variants follow preference order; early discoveries need caller-side deduplication. */
 export async function scanMatchingSources(
   sources: MatchingSource[],
   media: Pick<MediaDetail, 'title' | 'altTitles'>,
@@ -40,6 +40,8 @@ export async function scanMatchingSources(
   ) => void = () => {},
   onError: (source: MatchingSource, error: unknown) => void = () => {},
   queryOverride?: string,
+  onDiscovery: (source: MatchingSource, candidates: SourceCandidate[]) => void = () => {},
+  groupOffset = 0,
 ) {
   const groups = new Map<string, MatchingSource[]>();
   for (const source of sources) {
@@ -49,14 +51,22 @@ export async function scanMatchingSources(
     groups.set(key, group);
   }
   const found: SourceCandidate[] = [];
+  const lanes = [...groups.values()];
+  const start = lanes.length ? groupOffset % lanes.length : 0;
   await eachConcurrent(
-    [...groups.values()],
+    [...lanes.slice(start), ...lanes.slice(0, start)],
     6,
     async (group) => {
       const pending = group.map(async (source) => {
         const start = Date.now();
         try {
-          const candidates = await matchOnSource(source, media, signal, queryOverride);
+          const candidates = await matchOnSource(
+            source,
+            media,
+            signal,
+            queryOverride,
+            (candidates) => onDiscovery(source, candidates),
+          );
           return { source, candidates, durationMs: Date.now() - start };
         } catch (error) {
           onError(source, error);

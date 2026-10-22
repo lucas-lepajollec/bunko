@@ -1192,6 +1192,41 @@ it('backfills covers while a source match remains blocked', async () => {
     await work;
   }
 });
+it('starts an explicitly requested association during cover maintenance after an initially empty matching queue', async () => {
+  const { requestLibraryMatching } = await import('@/lib/library-matching');
+  const t = track({ media: catalog() });
+  db()
+    .prepare('UPDATE tracked_media SET source_match_at=? WHERE id=?')
+    .run(new Date().toISOString(), t.id);
+  setWorkerValue('last_check_at', new Date().toISOString());
+  let release!: () => void;
+  let arrived!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  const fixtureFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).startsWith('https://s4.anilist.co/')) {
+      arrived();
+      await blocked;
+    }
+    return fixtureFetch(url, init);
+  });
+  const work = workerTick();
+  try {
+    await started;
+    expect(requestLibraryMatching([t.id])).toEqual({ queued: 1 });
+    await vi.waitFor(() =>
+      expect(listTracked().find((v) => v.id === t.id)?.sourceMatch).toBe('linked'),
+    );
+  } finally {
+    release();
+    await work;
+  }
+});
 
 it('persists pending, denied, synced and replacement cover states independently per entry', async () => {
   indexSeries();

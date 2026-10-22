@@ -6,7 +6,8 @@ export function sourceMatchQueue() {
     `SELECT id,COALESCE(display_title,title) AS title FROM tracked_media
     WHERE type='MANGA' AND json_array_length(sources_json)=0
     AND (source_match_at IS NULL OR source_match_at <= ?)
-    ORDER BY COALESCE(source_match_at,''),id`,
+    ORDER BY EXISTS(SELECT 1 FROM worker_state WHERE key='library_catalog_match:' || tracked_media.id) DESC,
+      COALESCE(source_match_at,''),id`,
   ).all(new Date(Date.now() - SOURCE_MATCH_RETRY_MS).toISOString()) as {
     id: number;
     title: string;
