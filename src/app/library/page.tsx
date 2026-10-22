@@ -1,4 +1,5 @@
 'use client';
+import { OwnedInventory } from '@/components/owned-inventory';
 import { MediaLink } from '@/components/media-link';
 import { Select } from '@/components/select';
 import Link from 'next/link';
@@ -40,9 +41,7 @@ type Shelf = 'READING' | 'CAUGHT_UP' | 'PLANNING' | 'PAUSED' | 'COMPLETED' | 'DR
 type View = 'ALL' | 'KAVITA' | 'UPDATES' | 'UNOWNED';
 type Kind =
   'all' | 'manga' | 'manhwa' | 'manhua' | 'comic' | 'lightnovel' | 'webnovel' | 'novel' | 'book';
-/** Needs a look: no source could be found automatically. */
-const needsReview = (e: TrackedMedia) => e.type === 'MANGA' && e.sourceMatch === 'not-found';
-type Sort = 'news' | 'recent' | 'title' | 'added';
+type Sort = 'news' | 'recent' | 'title' | 'added' | 'unlinked';
 
 const caughtUp = (e: TrackedMedia) =>
   e.status === 'READING' &&
@@ -103,7 +102,6 @@ function Library() {
   const unmatched = useApi<KavitaSeriesSummary[]>('/api/kavita/series?unmatched=1');
   const [kind, setKind] = useState<Kind>('all');
   const [sort, setSort] = useState<Sort>('news');
-  const [review, setReview] = useState(false);
   const updates = useApi<UpdatesFeed>('/api/updates');
   // Never hide titles silently: say how many the 18+ setting keeps out of view.
   const activity = useApi<LibraryActivity>('/api/library/activity');
@@ -126,28 +124,27 @@ function Library() {
     0,
   );
   const ownedVolumes = entries.reduce((sum, e) => sum + (e.ownedVolumes?.length ?? 0), 0);
-  const toReview = entries.filter(needsReview).length;
-  const withoutSources = entries.filter((entry) => entry.type === 'MANGA' && !entry.sources.length);
   const unownedCount = entries.filter((entry) => !hasOwnedFiles(entry)).length;
-  const shown = entries
+  const filtered = entries
     .filter((entry) => shelf !== 'UNOWNED' || !hasOwnedFiles(entry))
-    .filter((e) => (review ? needsReview(e) : !status || shelfOf(e) === status))
+    .filter((e) => !status || shelfOf(e) === status)
     .filter(
       (e) =>
         kind === 'all' ||
         (e.media.format
           ? KIND_FORMATS[kind].includes(e.media.format)
           : kind === 'manga' && e.type === 'MANGA'),
-    )
-    .sort((a, b) => {
-      if (sort === 'news')
-        return (
-          b.newChapters - a.newChapters || (b.progress?.unread ?? 0) - (a.progress?.unread ?? 0)
-        );
-      if (sort === 'recent') return (b.lastReadAt ?? '').localeCompare(a.lastReadAt ?? '');
-      if (sort === 'title') return a.title.localeCompare(b.title);
-      return b.createdAt.localeCompare(a.createdAt);
-    });
+    );
+  const withoutSources = filtered.filter(
+    (entry) => entry.type === 'MANGA' && !entry.sources.length,
+  );
+  const shown = [...(sort === 'unlinked' ? withoutSources : filtered)].sort((a, b) => {
+    if (sort === 'news' || sort === 'unlinked')
+      return b.newChapters - a.newChapters || (b.progress?.unread ?? 0) - (a.progress?.unread ?? 0);
+    if (sort === 'recent') return (b.lastReadAt ?? '').localeCompare(a.lastReadAt ?? '');
+    if (sort === 'title') return a.title.localeCompare(b.title);
+    return b.createdAt.localeCompare(a.createdAt);
+  });
   return (
     <Page className="pb-16">
       <PageTitle
@@ -182,11 +179,8 @@ function Library() {
         </p>
       )}
       <Tabs
-        value={review ? ('' as View) : shelf}
-        onChange={(v) => {
-          setReview(false);
-          setShelf(v);
-        }}
+        value={shelf}
+        onChange={setShelf}
         label={t('library.statusLabel')}
         items={[
           { id: 'ALL' as View, label: t('library.all'), count: entries.length },
@@ -201,7 +195,7 @@ function Library() {
             : []),
         ]}
       />
-      {shelf === 'UPDATES' && !review ? (
+      {shelf === 'UPDATES' ? (
         <LibraryUpdates />
       ) : shelf === 'KAVITA' ? (
         <KavitaUnmatched
@@ -252,24 +246,7 @@ function Library() {
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {toReview > 0 && (
-                <button
-                  type="button"
-                  aria-pressed={review}
-                  onClick={() => {
-                    setReview(!review);
-                    setShelf('ALL');
-                  }}
-                  className={cx(
-                    'text-mid flex h-[34px] items-center gap-2 rounded-full px-3.5',
-                    review ? 'bg-white/10 text-white' : 'hover:bg-white/[0.06]',
-                  )}
-                >
-                  {t('library.review', { count: toReview })}
-                  <Dot tone="warn" className="size-1.5" />
-                </button>
-              )}
-              {withoutSources.length > 0 && (
+              {sort === 'unlinked' && withoutSources.length > 0 && (
                 <button
                   type="button"
                   disabled={matchingBusy}
@@ -321,10 +298,15 @@ function Library() {
                     label={t('catalog.sort')}
                     value={sort}
                     onChange={(v) => setSort(v as Sort)}
-                    options={(['news', 'recent', 'title', 'added'] as Sort[]).map((x) => ({
-                      value: x,
-                      label: t(`library.sort.${x}`),
-                    }))}
+                    options={(['news', 'recent', 'title', 'added', 'unlinked'] as Sort[]).map(
+                      (x) => ({
+                        value: x,
+                        label:
+                          x === 'unlinked'
+                            ? `${t('library.sort.unlinked')} · ${n(withoutSources.length)}`
+                            : t(`library.sort.${x}`),
+                      }),
+                    )}
                   />
                 </div>
               </div>
@@ -380,23 +362,23 @@ function Library() {
                 </span>
                 <ProgressBar progress={e.progress} color={e.media.color} />
                 <span className="text-muted -mt-1 hidden truncate text-xs md:block">
-                  {[
-                    e.progress?.read !== null && e.progress?.read !== undefined
-                      ? t(e.unit === 'volume' ? 'library.readNVol' : 'library.readN', {
-                          n: n(e.progress.read),
-                        })
-                      : null,
-                    t(e.unit === 'volume' ? 'library.ownedNVol' : 'library.ownedN', {
-                      n: n(e.progress?.owned ?? 0),
-                    }),
-                    e.progress?.released
-                      ? t(e.unit === 'volume' ? 'library.releasedNVol' : 'library.releasedN', {
-                          n: n(e.progress.released),
-                        })
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
+                  {e.progress?.read != null && (
+                    <>
+                      {t(e.unit === 'volume' ? 'library.readNVol' : 'library.readN', {
+                        n: n(e.progress.read),
+                      })}
+                      {' · '}
+                    </>
+                  )}
+                  <OwnedInventory entry={e} compact />
+                  {Boolean(e.progress?.released) && (
+                    <>
+                      {' · '}
+                      {t(e.unit === 'volume' ? 'library.releasedNVol' : 'library.releasedN', {
+                        n: n(e.progress.released!),
+                      })}
+                    </>
+                  )}
                 </span>
               </MediaLink>
             ))}

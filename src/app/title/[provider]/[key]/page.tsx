@@ -27,6 +27,7 @@ import { clearPersistentCache } from '@/lib/client/cache';
 import { MatchesDrawer, MatchesSummary, type Lane, type Section } from '@/components/matches';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import { FavoriteButton } from '@/components/favorite';
+import { OwnedInventory } from '@/components/owned-inventory';
 import {
   Cover,
   Dot,
@@ -525,7 +526,7 @@ function Title({ media }: { media: MediaDetail }) {
                 <span>
                   {t(vol('title.read'), { n: progress.read !== null ? n(progress.read) : '—' })}
                 </span>
-                <span>{t(vol('title.owned'), { n: n(progress.owned) })}</span>
+                <OwnedInventory entry={entry} />
                 <span>
                   {t(vol('title.released'), {
                     n: progress.released !== null ? n(progress.released) : '—',

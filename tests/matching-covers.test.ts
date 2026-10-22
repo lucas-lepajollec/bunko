@@ -1228,6 +1228,39 @@ it('starts an explicitly requested association during cover maintenance after an
   }
 });
 
+it('continues beyond the first two matches while maintenance remains blocked with 45 works left', async () => {
+  const { requestLibraryMatching } = await import('@/lib/library-matching');
+  for (let i = 1; i <= 47; i++) track({ media: catalog(i, `Fixture work ${i}`) });
+  setWorkerValue('last_check_at', new Date().toISOString());
+  requestLibraryMatching();
+  let release!: () => void;
+  let arrived!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  const fixtureFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).startsWith('https://s4.anilist.co/')) {
+      arrived();
+      await blocked;
+    }
+    return fixtureFetch(url, init);
+  });
+  const work = workerTick();
+  try {
+    await started;
+    await vi.waitFor(() => expect(listTracked().filter((t) => t.sources.length)).toHaveLength(47), {
+      timeout: 30_000,
+    });
+  } finally {
+    release();
+    await work;
+  }
+}, 35_000);
+
 it('persists pending, denied, synced and replacement cover states independently per entry', async () => {
   indexSeries();
   updateSettings({ kavitaApiKey: 'synthetic-admin-check' });
