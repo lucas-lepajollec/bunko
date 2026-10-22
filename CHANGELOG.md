@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Keep likes inside the profile and redirect the former favorites page there. Align home shelf
+  fades with the actual mobile scrolling edges and retain the first-card gutter when snapping.
+- Prioritize explicit library source associations, persist confident results before slower source
+  searches/counts, and start an initially empty matching lane during ongoing maintenance. Bound
+  catalog/entry waits, retry transient failures and rotate exhausted extension lanes, preserving
+  manual choices, source preferences and account isolation.
+
 - Build release images once per architecture on parallel native amd64/arm64 runners, reuse
   architecture-specific CI caches and publish the exact smoke-tested digests without rebuilding.
   Preserve source checks, both native SQLite smoke tests, provenance/SBOM and recoverable tags.
