@@ -5,6 +5,8 @@ import { useApi } from '@/lib/client/api';
 import { continueReading } from '@/lib/client/reading';
 import { useI18n } from '@/i18n/I18nProvider';
 import { ReadingCard } from '@/components/reading';
+import { PosterCard } from '@/components/media';
+import { FavoriteButton } from '@/components/favorite';
 import { Page } from '@/components/shell';
 import {
   Empty,
@@ -25,13 +27,14 @@ export default function ProfilePage() {
   });
   const entries = library.data ?? [];
   const reading = continueReading(entries);
+  const favorites = entries.filter((e) => e.favorite);
   return (
     <Page className="pb-16">
       <PageTitle title={t('profile.title')} aside={auth.data?.username} />
       <div className="flex flex-wrap items-center gap-3 text-sm text-mid">
         <span>{t('profile.followed', { count: n(entries.length) })}</span>
-        <Link href="/favorites" className={smallButton}>
-          {t('favorites.title')} · {n(entries.filter((e) => e.favorite).length)}
+        <Link href="#favorites" className={smallButton}>
+          {t('favorites.title')} · {n(favorites.length)}
         </Link>
         <Link href="/library" className={smallButton}>
           {t('nav.library')}
@@ -50,6 +53,37 @@ export default function ProfilePage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {reading.map((e) => (
             <ReadingCard key={e.id} entry={e} className="w-full md:w-full" />
+          ))}
+        </div>
+      </section>
+      <section id="favorites" className="scroll-mt-28 flex flex-col gap-5">
+        <SectionHeading
+          title={t('favorites.title')}
+          aside={library.data ? t('favorites.count', { count: n(favorites.length) }) : undefined}
+        />
+        {!library.data && !library.error && <Skeleton className="h-36 rounded-2xl" />}
+        {library.data && !favorites.length && (
+          <Empty
+            title={t('favorites.empty')}
+            action={
+              <Link href="/catalog" className={smallButton}>
+                {t('library.browse')}
+              </Link>
+            }
+          >
+            {t('favorites.emptyBody')}
+          </Empty>
+        )}
+        <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] md:gap-y-9 xl:grid-cols-8">
+          {favorites.map((entry) => (
+            <article key={entry.id} className="relative min-w-0">
+              <PosterCard media={entry.media} badge={<></>} />
+              <FavoriteButton
+                media={entry.media}
+                entry={entry}
+                className="absolute top-1 right-1 size-9 bg-bg/85"
+              />
+            </article>
           ))}
         </div>
       </section>

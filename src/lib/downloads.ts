@@ -44,6 +44,7 @@ import { targetFor } from './library-paths';
 import { env } from '@/lib/env';
 import { sourceServerKey } from './source-server';
 import { drainSourceMatches } from './tracked-sources';
+import { sourceMatchQueue } from './source-match-state';
 const chapterGate = sharedConcurrencyGate('chapters', 1);
 const downloadState = tenantState(() => ({
   activeBatches: new Set<string>(),
@@ -543,16 +544,21 @@ async function workerTickBackground() {
       /* Retry after a later wake. */
     }),
   );
-  const matching = background(() =>
-    drainSourceMatches(signal, ownsLease).catch(() => {
-      /* An aborted/failed lookup remains queued for a subsequent tick. */
-    }),
-  );
+  let matching: ReturnType<typeof background> | undefined;
+  const startMatching = () => {
+    if (matching || !sourceMatchQueue().length) return;
+    matching = background(() =>
+      drainSourceMatches(signal, ownsLease).catch(() => {
+        /* An aborted/failed lookup remains queued for a subsequent tick. */
+      }),
+    );
+  };
   let maintenance: ReturnType<typeof background> | undefined;
   let finalCovers: ReturnType<typeof background> | undefined;
   let maintenanceError: unknown;
   try {
     do {
+      startMatching();
       for (const batch of listBatches().filter((b) => !['completed', 'error'].includes(b.state))) {
         if (!ownsLease()) return;
         await processBatch(batch, signal);
@@ -574,6 +580,8 @@ async function workerTickBackground() {
         )
       )
         continue;
+      // A source request can arrive after an empty initial queue, during slow maintenance/transfers.
+      startMatching();
       let pending = [matching, covers, maintenance, finalCovers].filter((task) => task?.running);
       if (!pending.length) {
         if (finalCovers) break;
@@ -589,12 +597,12 @@ async function workerTickBackground() {
         AbortSignal.any([signal, ...pending.map((task) => task!.done.signal)]),
       );
     } while (!signal.aborted);
-    await matching.promise;
+    await matching?.promise;
     await covers.promise;
     if (maintenanceError) throw maintenanceError;
   } finally {
     controller.abort();
-    await matching.promise;
+    await matching?.promise;
     await covers.promise;
     await maintenance?.promise;
     await finalCovers?.promise;

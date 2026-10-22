@@ -5,9 +5,18 @@ import { sourceServerKey } from './source-server';
 import { wakeWorker } from './worker-events';
 import { coverContext } from './cover-state';
 import { indexedSeriesById } from './kavita-index';
+import { preferredSourceLanguage } from './source-preferences';
 import type { TrackedMedia } from '@/types/shared';
 
 const marker = (id: number) => `library_catalog_match:${id}`;
+
+export function libraryMatchRequest(id: number) {
+  return statement('SELECT value FROM worker_state WHERE key=?').get(marker(id)) as
+    { value: string } | undefined;
+}
+export function finishLibraryMatch(id: number, value: string) {
+  statement('DELETE FROM worker_state WHERE key=? AND value=?').run(marker(id), value);
+}
 
 /** Reuse the durable source worker; a button never launches an unbounded HTTP fan-out. */
 export function requestLibraryMatching(ids?: number[]) {
@@ -28,7 +37,7 @@ export function requestLibraryMatching(ids?: number[]) {
       ).run(entry.id);
       statement('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)').run(
         marker(entry.id),
-        JSON.stringify({ mediaId: entry.media.id, namespace }),
+        JSON.stringify({ mediaId: entry.media.id, namespace, language: preferredSourceLanguage() }),
       );
     }
   })();
@@ -42,8 +51,7 @@ export async function resolveQueuedCatalog(
   signal?: AbortSignal,
   ownsLease = () => true,
 ) {
-  const row = statement('SELECT value FROM worker_state WHERE key=?').get(marker(entry.id)) as
-    { value: string } | undefined;
+  const row = libraryMatchRequest(entry.id);
   if (!row) return entry;
   const request = JSON.parse(row.value) as { mediaId: string; namespace: string };
   const seriesId = entry.kavitaSeriesId ?? entry.media.kavitaSeriesId;
@@ -65,7 +73,10 @@ export async function resolveQueuedCatalog(
     )
       return entry;
     const { catalogMatch } = await import('./kavita-track');
-    const media = await catalogMatch(series, signal, 0.98);
+    // Catalog providers coalesce loads: bound this consumer's wait without cancelling other readers.
+    const { waitForSignal } = await import('./concurrency');
+    const lookupSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5_000)]);
+    const media = await waitForSignal(catalogMatch(series, lookupSignal, 0.98), lookupSignal);
     if (!media || signal?.aborted || !ownsLease()) return entry;
     db().transaction(() => {
       const current = getTracked(entry.id);
@@ -137,10 +148,6 @@ export async function resolveQueuedCatalog(
     })();
     return getTracked(entry.id) ?? entry;
   } finally {
-    if (!signal?.aborted && ownsLease())
-      statement('DELETE FROM worker_state WHERE key=? AND value=?').run(
-        marker(entry.id),
-        row.value,
-      );
+    if (!signal?.aborted && ownsLease()) finishLibraryMatch(entry.id, row.value);
   }
 }

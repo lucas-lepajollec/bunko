@@ -1,5 +1,22 @@
 # Verification — current and historical evidence
 
+## Profile and source association corrections — 2026-10-22
+
+- `npm run check` passes **640 tests/53 files**, zero-warning lint, strict TypeScript and the
+  production build.95 focused tests cover priority, early persistence before blocked source/count
+  work, manual edits, timeout/retry/extension rotation, tenant fairness, and a source request arriving
+  while an initially empty matching lane's cover maintenance is still blocked.
+- A disposable standalone production browser verifies profile likes, persisted unlike/reload,
+  legacy URL redirection, no separate likes menu entry, empty likes, no horizontal overflow,
+  aligned fades at both edges/mid-scroll, mobile snap starting at0 and unclipped desktop hover.
+  Sizes:390×844,768×400 and1440×1000. No uncaught browser errors. Test server/storage removed.
+- These screenshots use fictional titles and generated geometric test covers only:
+  [profile likes on mobile](assets/profile-likes-mobile.png),
+  [mobile home shelf](assets/home-shelf-mobile.png),
+  [desktop home shelf](assets/home-shelf-desktop.png).
+- Actual NAS/provider availability is not established by these isolated tests. The matching worker
+  preserves already validated links when other sources fail and retains manual/security boundaries.
+
 ## Personal library and stable artwork — 2026-10-20
 
 - Automatic artwork still comes from the linked catalog, then source thumbnails, then Kavita.
