@@ -1,4 +1,8 @@
 import { afterAll, beforeEach, expect, it, vi } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { OwnedInventory } from '@/components/owned-inventory';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -27,7 +31,8 @@ const { cached, saveMetadata, metadataStatus } = await import('@/lib/metadata-ca
 const { mediaDetail } = await import('@/lib/catalog');
 const { chaptersFor } = await import('@/lib/suwayomi');
 const { refreshTrackedProgress } = await import('@/lib/kavita');
-const { isMissing, chapterIsRead } = await import('@/components/chapters');
+const { kavitaChapterNumbers, kavitaVolumeProgress } = await import('@/lib/kavita-index');
+const { isMissing, chapterIsRead, ChapterTable } = await import('@/components/chapters');
 const { PATCH } = await import('@/app/api/tracked/route');
 const token = persistentSecret('access.token', 32).toString('hex');
 const work = () => ({
@@ -149,6 +154,126 @@ it('declares 13 owned files as 13 volumes, independent of presentation, and reve
     progress: { owned: 13, read: 4 },
   });
 });
+it('renders actual chapters and volumes independently of the selected progress unit, without a false zero', async () => {
+  const t = inventory();
+  const render = () =>
+    renderToStaticMarkup(
+      createElement(
+        I18nProvider,
+        null,
+        createElement(OwnedInventory, { entry: getTracked(t.id)! }),
+      ),
+    );
+  await patch(t.id, { unit: 'volume' });
+  expect(getTracked(t.id)?.progress.owned).toBe(0);
+  expect(render()).toContain('13 ch. in Kavita');
+  expect(render()).not.toContain('0 in Kavita');
+  await patch(t.id, { ownedAsVolumes: true });
+  await patch(t.id, { unit: 'chapter' });
+  expect(getTracked(t.id)?.progress.owned).toBe(0);
+  expect(render()).toContain('13 volumes in Kavita');
+  expect(render()).not.toContain('0 in Kavita');
+  recordImport(t.media, { id: 991, chapterNumber: 14, name: 'Future Ch. 14' });
+  expect(render()).toContain('1 ch. in Kavita');
+  expect(render()).toContain('13 volumes in Kavita');
+});
+
+it('shows 42 complete tomes while source chapters covered by them remain in Kavita, without counting them as owned chapter files', async () => {
+  const t = track({ media: work() });
+  const rows = Array.from({ length: 42 }, (_, i) => ({
+    name: String(i + 1),
+    chapters: [
+      {
+        number: '-100000',
+        minNumber: -100000,
+        maxNumber: -100000,
+        pages: 10,
+        pagesRead: 0,
+        files: [{ filePath: `/library/Fixture Vol. ${i + 1}.cbz` }],
+      },
+    ],
+  }));
+  const stock = kavitaVolumeProgress(rows);
+  expect(stock.volumes).toHaveLength(42);
+  db()
+    .prepare('INSERT INTO kavita_series VALUES(?,?)')
+    .run(
+      7,
+      JSON.stringify({
+        seriesId: 7,
+        libraryId: 1,
+        libraryName: 'Manga',
+        name: t.title,
+        names: [t.title],
+        numbers: kavitaChapterNumbers(rows),
+        ...stock,
+      }),
+    );
+  db().prepare('UPDATE tracked_media SET kavita_series_id=7 WHERE id=?').run(t.id);
+  vi.stubGlobal('fetch', async () =>
+    Response.json({
+      data: {
+        fetchChapters: {
+          chapters: [
+            {
+              id: 519,
+              chapterNumber: 519,
+              name: 'Vol. 42 Chapter 519',
+              isDownloaded: false,
+              scanlator: null,
+            },
+            {
+              id: 520,
+              chapterNumber: 520,
+              name: 'Chapter 520',
+              isDownloaded: false,
+              scanlator: null,
+            },
+          ],
+        },
+      },
+    }),
+  );
+  const response = await chaptersFor(
+    [{ sourceId: '42', sourceName: 'Fixture', suwayomiMangaId: 42 }],
+    undefined,
+    t.media,
+  );
+  expect(response.inKavita).toEqual([]);
+  expect(response.ownedVolumes).toHaveLength(42);
+  expect(
+    response.chapters
+      .filter((c) => !isMissing(c, new Set(), new Set(response.ownedVolumes)))
+      .map((c) => c.number),
+  ).toEqual([519]);
+  const entry = getTracked(t.id)!;
+  expect(entry.progress.owned).toBe(0);
+  expect(entry.ownedChapterCount).toBe(0);
+  const render = (child: React.ReactNode) =>
+    renderToStaticMarkup(createElement(I18nProvider, null, child));
+  expect(render(createElement(OwnedInventory, { entry }))).toContain('42 volumes in Kavita');
+  expect(render(createElement(OwnedInventory, { entry, compact: true }))).toContain(
+    'owned 42 vol.',
+  );
+  const table = render(
+    createElement(ChapterTable, {
+      chapters: response.chapters,
+      priority: [],
+      read: null,
+      selected: new Set<string>(),
+      setSelected: () => {},
+      choice: {},
+      setChoice: () => {},
+      queued: new Set<number>(),
+      owned: new Set<number>(),
+      ownedVolumes: new Set(response.ownedVolumes),
+      mediaId: t.media.id,
+    }),
+  );
+  expect(table).toContain('in Kavita');
+  expect(table).toContain('to download');
+});
+
 it('reads declared local volumes with separate IDs, neighbours, page access and volume progress only', async () => {
   const t = inventory();
   const original = await localReaderChapter(2, t.media.id);

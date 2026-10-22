@@ -34,14 +34,16 @@ Chapter snapshots add one source at a time while projecting local ownership on e
 
 A bounded tenant/source-scoped map of already displayed card metadata opens known sheets immediately while full metadata loads, preserving content on later errors. Novel/book pages with Hardcover enabled independently expose both catalog lanes; existing single-provider and nonfatal-warning semantics are preserved. No UI redesign or schema migration is needed for these incremental responses.
 
-Explicit library association requests take priority over automatic source-less work. An initially
-empty matching lane starts on a new request even while cover/index maintenance is still running. The worker
+Explicit library association requests take priority over automatic source-less work. Matching takes successive paced two-entry batches while cover/index maintenance is still running,
+including when the lane was initially empty. A completed batch must not wait for that maintenance
+before starting the next one. Once the other lanes finish, the current batch yields to the tenant
+scheduler; unexpected matching/storage failures stop relaunching until the next cycle. The worker
 publishes its active title before catalog lookup, bounds that consumer's catalog wait to five seconds
 and the whole entry to thirty seconds, and persists confident title hits before count/enrichment or
 other extensions finish. Counts still refine relevance ties, with stable source preference ordering;
 manual edits, dismissals, language filters, namespaces and lease checks remain authoritative. A timed
 out unlinked work retries in five minutes and rotates extension lanes on retry so slow earlier
-extensions do not permanently starve later ones. Two-entry tenant fairness remains, with an immediate wake
+extensions do not permanently starve later ones. Two-entry tenant fairness remains when yielding the worker, with an immediate wake
 for further explicit requests instead of an idle delay. Valid already-committed links survive later
 source failures. Profile owns the liked collection; the former favorites URL redirects to its section.
 Home shelf fades mask only the actual scrolling viewport edges, including the mobile page gutters;
@@ -384,3 +386,11 @@ worker/update check inherit its lifetime, so lease loss cancels ongoing index ne
 Existing imports, files, retry generations and pause preference remain intact. On restart,
 nonterminal lots already in SQLite are retried through the same pump after lease recovery;
 no purge or queue reset is required for this correction.
+
+Library's source-less view lives in the sort dropdown, intersecting the active format, status and
+ownership shelf. It includes pending, searching and unmatched manga works; novel/book integrations
+do not participate in Suwayomi source association. Only that view exposes the bulk action, and its
+submitted IDs match its visible works. Matching progress remains informative in other views.
+Sheet summaries and library card stock labels show actual chapters and tomes separately from the
+chosen progress unit. A complete owned tome may cover source chapters with known tome metadata;
+that coverage does not turn it into individually owned chapter files or change reading progress.

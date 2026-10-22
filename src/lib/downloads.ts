@@ -545,11 +545,22 @@ async function workerTickBackground() {
     }),
   );
   let matching: ReturnType<typeof background> | undefined;
+  let matchingFailed = false;
   const startMatching = () => {
-    if (matching || !sourceMatchQueue().length) return;
+    // Keep taking paced batches while other work holds this lease. A finished batch must not
+    // freeze the remaining queue behind a long index/cover refresh. Once those lanes finish,
+    // yield after the current two entries so the scheduler can serve other tenants.
+    if (
+      matchingFailed ||
+      matching?.running ||
+      (matching && !covers.running && !maintenance?.running) ||
+      !sourceMatchQueue().length
+    )
+      return;
     matching = background(() =>
       drainSourceMatches(signal, ownsLease).catch(() => {
-        /* An aborted/failed lookup remains queued for a subsequent tick. */
+        // Unexpected worker/storage failures retry next cycle instead of spinning on the same row.
+        matchingFailed = true;
       }),
     );
   };

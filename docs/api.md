@@ -37,8 +37,10 @@ does not download files. The request retains the interface language, subject to 
 A request arriving during an already-running maintenance cycle starts matching without waiting
 for that maintenance to finish. The active state starts before catalog lookup. A catalog lookup waits
 at most five seconds; source discovery continues from the indexed title if it fails. Each work has a thirty-second budget, including
-catalog lookup and enrichment, then yields to the next work. Explicit batches resume after the normal
-two-entry tenant yield without the idle delay. Confident source links persist as soon as title search
+catalog lookup and enrichment, then yields to the next work. While cover/index maintenance holds a worker cycle open, matching continues with successive paced
+two-entry batches instead of stopping after its first batch. Once the other lanes finish, the
+current batch yields to the tenant scheduler; explicit batches resume without the idle delay.
+Unexpected matching/storage failures stop relaunching in that cycle. Confident source links persist as soon as title search
 returns, before chapter counts or slower sources; completed counts refine the same guarded selection.
 Errors or budget exhaustion without a link retry in five minutes rather than suppressing it for a week.
 An exhausted scan rotates extension lanes on its next attempt so later sources are eventually visited,

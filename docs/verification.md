@@ -1,5 +1,29 @@
 # Verification — current and historical evidence
 
+## Source queue continuation and owned-stock labels — 2026-10-22
+
+- A 47-work regression holds cover maintenance open. Before the fix only two works link, leaving
+  45 queued; after the fix all 47 link before maintenance is released. Matching retains paced
+  two-entry batches, failure guards and its normal tenant yield once other lanes finish.
+- Real stock projection and server-rendered UI tests cover the opposite progress unit, declared
+  tomes, mixed future chapter imports and 42 explicitly complete Kavita archives. A source chapter
+  in a known owned tome stays available without being fabricated as an individual chapter file.
+  Both sheet and card stock text report actual inventory rather than the selected progress count.
+- Final `npm run check`: **643 tests/53 files**, zero-warning lint, strict TypeScript and production
+  build pass. The final local Docker image builds and passes all114 container smoke checks.
+- A disposable standalone production browser checks390×844,768×400 and1440×1000: no standalone
+  review filter/button in the default view, source-less sort including queued/not-found states,
+  format intersection, precise submitted IDs, hidden action after changing sort, live removal and
+  empty-state action removal. No horizontal overflow or uncaught browser error. The real matching
+  POST receives the filtered IDs; controlled worker snapshots exercise its subsequent UI updates.
+- Sheet QA at390 and1440 verifies42 owned tomes with chapter-mode progress0, one covered source
+  chapter, one uncovered chapter, and retained counts after reload. Synthetic library data and
+  deterministic geometric covers only:
+  [mobile source filter](assets/source-filter-mobile.png),
+  [desktop stock summary](assets/owned-inventory-desktop.png).
+- These are local reproductions and packaging/UI checks. They do not establish a NAS rollout,
+  inspect the real queue, prove availability of every installed extension, or change media files.
+
 ## Profile and source association corrections — 2026-10-22
 
 - `npm run check` passes **640 tests/53 files**, zero-warning lint, strict TypeScript and the

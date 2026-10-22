@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Continue source-association batches while cover/index maintenance is still running, so the
+  remaining library queue does not stop after the first two works. Keep pacing, account fairness
+  and failure guards. Move source-less works into the library sort dropdown; show the bulk action
+  only for that filtered view and submit precisely its current format/status/shelf selection.
+- Show actual owned chapters and tomes in sheet summaries and library cards independently of the
+  reading-progress unit, avoiding a false zero when only the other kind of file is present.
+  Chapters covered by a known complete tome still display their existing Kavita availability.
+
 - Keep likes inside the profile and redirect the former favorites page there. Align home shelf
   fades with the actual mobile scrolling edges and retain the first-card gutter when snapping.
 - Prioritize explicit library source associations, persist confident results before slower source
