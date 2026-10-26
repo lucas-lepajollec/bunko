@@ -1,4 +1,4 @@
-FROM node:22.23.1-bookworm-slim AS build
+FROM node:22.23.2-bookworm-slim AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
@@ -7,7 +7,7 @@ RUN npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build
 
-FROM node:22.23.1-bookworm-slim AS runtime
+FROM node:22.23.2-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=2512 HOSTNAME=0.0.0.0 KAVISEERR_DATA_DIR=/data KAVISEERR_LIBRARY_DIR=/library
 COPY --from=build --chown=node:node /app/.next/standalone ./
