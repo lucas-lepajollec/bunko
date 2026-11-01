@@ -4,27 +4,26 @@ import { LoadNotice } from '@/components/load-notice';
 import { Select } from '@/components/select';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
-import useSWR, { useSWRConfig } from 'swr';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import useSWR from 'swr';
 import type {
   ChapterSelection,
   ChaptersResponse,
   DownloadBatch,
   MediaDetail,
   ReadingStatus,
-  Source,
-  SourceCandidate,
   TrackedMedia,
 } from '@/types/shared';
-import { batchesInterval, libraryKeys, openStream, send, useApi } from '@/lib/client/api';
+import { batchesInterval, mediaHref, send, useApi } from '@/lib/client/api';
+import { useSourceScan } from '@/lib/client/use-source-scan';
+import { trackedFor } from '@/lib/client/tracked-entry';
 import { useI18n } from '@/i18n/I18nProvider';
 import { rankSourceCandidates } from '@/lib/client/source-ranking';
 import { Backdrop } from '@/components/backdrop';
-import { ChapterTable, isMissing, preferredVariant } from '@/components/chapters';
+import { ChapterTable, missingForUnit, preferredVariant } from '@/components/chapters';
 import { PosterCard } from '@/components/media';
 import { InfoBubble, Notice, toast } from '@/components/notify';
-import { clearPersistentCache } from '@/lib/client/cache';
-import { MatchesDrawer, MatchesSummary, type Lane, type Section } from '@/components/matches';
+import { MatchesSummary, type Lane } from '@/components/matches';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import { FavoriteButton } from '@/components/favorite';
 import { OwnedInventory } from '@/components/owned-inventory';
@@ -90,25 +89,12 @@ export default function TitlePage() {
 
 function Title({ media }: { media: MediaDetail }) {
   const { t, n, language } = useI18n();
-  const { mutate: mutateShared } = useSWRConfig();
-  const [inventoryBusy, setInventoryBusy] = useState(false);
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const batches = useApi<DownloadBatch[]>('/api/downloads/batches', {
     refreshInterval: batchesInterval,
   });
-  const entry = (library.data ?? []).find(
-    (e) =>
-      e.media.id === media.id ||
-      (media.anilistId !== null && e.anilistId === media.anilistId) ||
-      (media.mangadexId !== null && e.mangadexId === media.mangadexId),
-  );
+  const entry = trackedFor(library.data, media);
   const [tab, setTab] = useState<'chapters' | 'info'>('chapters');
-  const [drawer, setDrawer] = useState<Section | null>(null);
-  const [override, setOverride] = useState<ChapterSelection[] | null>(null);
-  const [lanes, setLanes] = useState<Lane[] | null>(null);
-  const [matchRun, setMatchRun] = useState(0);
-  const [scanFailed, setScanFailed] = useState(false);
-  const [scanQuery, setScanQuery] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [choice, setChoice] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
@@ -121,61 +107,13 @@ function Title({ media }: { media: MediaDetail }) {
   const stored = entry?.sources.length ? entry.sources : null;
   const needsMatch = isComic && !stored && fromDetail.length === 0 && library.data !== undefined;
 
-  const shouldScan = useEffectEvent(() => needsMatch || matchRun > 0);
-  const libraryReady = library.data !== undefined;
-  useEffect(() => {
-    if (!libraryReady || !shouldScan()) return;
-    const failScan = () => {
-      setScanFailed(true);
-      setLanes((ls) =>
-        (ls ?? []).map((l) => (l.state === 'loading' ? { ...l, state: 'error' } : l)),
-      );
-    };
-    const close = openStream(
-      `/api/media/sources?id=${encodeURIComponent(media.id)}${scanQuery ? `&q=${encodeURIComponent(scanQuery)}` : ''}`,
-      {
-        sources: (d) =>
-          setLanes(
-            (d as { sources: Source[] }).sources.map((source) => ({
-              source,
-              state: 'loading',
-              candidates: [],
-            })),
-          ),
-        match: (d) => {
-          const m = d as { source: Source; candidates: SourceCandidate[] };
-          setLanes((ls) =>
-            (ls ?? []).map((l) =>
-              l.source.id === m.source.id ? { ...l, state: 'done', candidates: m.candidates } : l,
-            ),
-          );
-        },
-        source_error: (d) => {
-          const e = d as { source: Source };
-          setLanes((ls) =>
-            (ls ?? []).map((l) => (l.source.id === e.source.id ? { ...l, state: 'error' } : l)),
-          );
-        },
-        linked: () => {
-          void mutateShared(libraryKeys);
-        },
-        done: () => {
-          void mutateShared(libraryKeys);
-        },
-        error: failScan,
-      },
-      failScan,
-    );
-    return close;
-  }, [libraryReady, matchRun, media.id, scanQuery, language, mutateShared]);
-
-  // A custom query (Matches → Sources search box) replaces the work's titles for the scan.
-  const rescan = useCallback((q?: string) => {
-    setScanFailed(false);
-    setScanQuery(q?.trim() || null);
-    setLanes(null);
-    setMatchRun((r) => r + 1);
-  }, []);
+  const scan = useSourceScan(media.id, {
+    ready: library.data !== undefined,
+    auto: needsMatch,
+  });
+  const { lanes, rescan } = scan;
+  const settingsHref = (section?: string) =>
+    `${mediaHref(media.id)}/settings${section && section !== 'general' ? `?s=${section}` : ''}`;
 
   const autoPicked = useMemo(
     () =>
@@ -191,7 +129,7 @@ function Title({ media }: { media: MediaDetail }) {
         })),
     [lanes, language],
   );
-  const sources = override ?? stored ?? (fromDetail.length ? fromDetail : autoPicked);
+  const sources = stored ?? (fromDetail.length ? fromDetail : autoPicked);
   // Something needs a look: no source, or none could be found automatically.
   const attention = isComic && Boolean(entry) && sources.length === 0;
   const priority = sources.map((s) => s.sourceId);
@@ -229,14 +167,15 @@ function Title({ media }: { media: MediaDetail }) {
   );
   const owned = new Set(chapters.data?.inKavita ?? []);
   const ownedVolumes = new Set(entry?.ownedVolumes ?? chapters.data?.ownedVolumes ?? []);
-  const missing = (chapters.data?.chapters ?? []).filter((c) => isMissing(c, owned, ownedVolumes));
-  const matching =
-    !scanFailed &&
-    (lanes === null ? needsMatch || matchRun > 0 : lanes.some((l) => l.state === 'loading'));
+  // A work followed in volumes completes whole volumes; chapters not yet in a volume stay apart.
+  const byVolume = entry?.unit === 'volume';
+  const missing = missingForUnit(chapters.data?.chapters ?? [], owned, ownedVolumes, byVolume);
+  const missingVolumeCount = new Set(missing.map((c) => c.volume)).size;
+  const matching = scan.scanning;
   const checking =
     matching || chapters.isLoading || chapters.isValidating || Boolean(chapters.data?.pending);
   const incomplete = Boolean(
-    scanFailed ||
+    scan.failed ||
     chapters.error ||
     chapters.data?.errors.length ||
     lanes?.some((l) => l.state === 'error'),
@@ -304,14 +243,6 @@ function Title({ media }: { media: MediaDetail }) {
       : null;
   })();
 
-  async function updateSources(next: ChapterSelection[]) {
-    setOverride(next);
-    try {
-      if (entry) await send('/api/tracked', 'PATCH', { id: entry.id, sources: next });
-    } finally {
-      void library.mutate();
-    }
-  }
   async function setStatus(value: ReadingStatus | 'NONE') {
     try {
       if (value === 'NONE') {
@@ -323,20 +254,14 @@ function Title({ media }: { media: MediaDetail }) {
       toast({ tone: 'bad', text: errorText(t, e) });
     }
   }
-  async function setAuto(on: boolean) {
-    try {
-      if (entry) await send('/api/tracked', 'PATCH', { id: entry.id, autoDownload: on, sources });
-      else
-        await send('/api/tracked', 'POST', { media, status: 'READING', autoDownload: on, sources });
-      await library.mutate();
-    } catch (e) {
-      toast({ tone: 'bad', text: errorText(t, e) });
-    }
-  }
+  const missingKeys = new Set(
+    missingForUnit(chapters.data?.chapters ?? [], owned, ownedVolumes, false).map((c) => c.key),
+  );
   async function download(keys: string[]) {
     const list = chapters.data?.chapters ?? [];
+    const wanted = new Set(keys);
     const ids = list
-      .filter((c) => keys.includes(c.key) && isMissing(c, owned, ownedVolumes))
+      .filter((c) => wanted.has(c.key) && missingKeys.has(c.key))
       .map((c) => preferredVariant(c, priority, choice[c.key])?.id)
       .filter((v): v is number => typeof v === 'number' && !queued.has(v));
     if (!ids.length) return;
@@ -399,16 +324,15 @@ function Title({ media }: { media: MediaDetail }) {
     ],
   ].filter(([, v]) => v);
 
-  const matchesButton = isComic && (
-    <button
-      type="button"
-      onClick={() => setDrawer('catalog')}
+  const settingsLink = (
+    <Link
+      href={settingsHref(attention ? 'sources' : undefined)}
       className={cx(ghostButton, 'w-full gap-2.5 bg-transparent ring-1 ring-white/25')}
     >
-      <LinkIcon />
-      {t('match.manage')}
+      <GearIcon />
+      {t('settings.work.open')}
       {attention && <Dot tone="warn" />}
-    </button>
+    </Link>
   );
   const details = (
     <>
@@ -423,17 +347,10 @@ function Title({ media }: { media: MediaDetail }) {
       {media.synopsis && <Synopsis text={media.synopsis} />}
       {isComic && (
         <div className="flex flex-col gap-4">
-          <MatchesSummary
-            entry={entry}
-            media={media}
-            sources={sources}
-            onOpen={(section) => setDrawer(section)}
-          />
-          {matchesButton}
-          <Automation entry={entry} disabled={!sources.length} onAuto={setAuto} />
+          <MatchesSummary entry={entry} media={media} sources={sources} href={settingsHref} />
         </div>
       )}
-      <AdultMark media={media} />
+      {settingsLink}
     </>
   );
 
@@ -486,7 +403,9 @@ function Title({ media }: { media: MediaDetail }) {
                 className={primaryButton}
               >
                 {missing.length
-                  ? t('title.completeSeries', { count: missing.length })
+                  ? byVolume
+                    ? t('title.completeSeriesVol', { count: missingVolumeCount })
+                    : t('title.completeSeries', { count: missing.length })
                   : checking || (!chapters.data && sources.length > 0)
                     ? t('title.loadingChapters')
                     : incomplete
@@ -592,8 +511,17 @@ function Title({ media }: { media: MediaDetail }) {
                     ) : undefined
                   }
                 />
+                {entry && !sources.length && (
+                  <NoSource
+                    lanes={lanes}
+                    started={scan.started}
+                    background={entry.sourceMatch === 'queued' || entry.sourceMatch === 'searching'}
+                    onSearch={() => rescan()}
+                    href={settingsHref('sources')}
+                  />
+                )}
                 {!sources.length && !entry ? (
-                  scanFailed ? (
+                  scan.failed ? (
                     <Notice
                       title={t('loading.partial')}
                       action={
@@ -603,7 +531,12 @@ function Title({ media }: { media: MediaDetail }) {
                       }
                     />
                   ) : (
-                    <NoSource lanes={lanes} onSearch={() => setDrawer('sources')} />
+                    <NoSource
+                      lanes={lanes}
+                      started={scan.started}
+                      onSearch={() => rescan()}
+                      href={settingsHref('sources')}
+                    />
                   )
                 ) : chapters.error && !chapters.data ? (
                   <Notice
@@ -630,44 +563,10 @@ function Title({ media }: { media: MediaDetail }) {
                 ) : (
                   <ChapterTable
                     key={media.id}
-                    onViewChange={async (volume) => {
-                      if (!entry || (entry.unit === 'volume') === volume) return;
-                      try {
-                        await send('/api/tracked', 'PATCH', {
-                          id: entry.id,
-                          unit: volume ? 'volume' : 'chapter',
-                        });
-                        await mutateShared(libraryKeys);
-                      } catch (e) {
-                        toast({ tone: 'bad', text: errorText(t, e) });
-                      }
-                    }}
-                    inventoryCorrection={
-                      entry && ((entry.ownedChapterCount ?? 0) > 0 || entry.ownedAsVolumes)
-                        ? {
-                            active: Boolean(entry.ownedAsVolumes),
-                            busy: inventoryBusy,
-                            onCorrect: async () => {
-                              setInventoryBusy(true);
-                              try {
-                                await send('/api/tracked', 'PATCH', {
-                                  id: entry.id,
-                                  ownedAsVolumes: !entry.ownedAsVolumes,
-                                });
-                                await mutateShared(libraryKeys);
-                              } catch (e) {
-                                toast({ tone: 'bad', text: errorText(t, e) });
-                              } finally {
-                                setInventoryBusy(false);
-                              }
-                            },
-                          }
-                        : undefined
-                    }
                     pending={checking}
                     ownedVolumes={ownedVolumes}
                     mediaId={entry?.media.id ?? media.id}
-                    defaultByVolume={entry?.unit === 'volume'}
+                    byVolume={byVolume}
                     chapters={chapters.data.chapters}
                     priority={priority}
                     read={entry?.chapterRead ?? null}
@@ -728,20 +627,6 @@ function Title({ media }: { media: MediaDetail }) {
         </section>
       )}
 
-      <MatchesDrawer
-        open={drawer !== null}
-        section={drawer ?? 'catalog'}
-        onSection={setDrawer}
-        onClose={() => setDrawer(null)}
-        entry={entry}
-        media={media}
-        sources={sources}
-        lanes={lanes}
-        scanStarted={needsMatch || matchRun > 0}
-        onScan={rescan}
-        onSources={updateSources}
-        onTrack={() => setStatus('PLANNING')}
-      />
       {selected.size > 0 && (
         <div className="bg-fg text-bg fixed inset-x-3 bottom-24 z-30 mx-auto flex max-w-[760px] items-center gap-3 rounded-full py-2 pr-2 pl-5 shadow-[0_20px_40px_rgba(0,0,0,0.5)] md:bottom-6">
           <span className="font-semibold">{t('title.selected', { count: selected.size })}</span>
@@ -814,143 +699,74 @@ function Synopsis({ text }: { text: string }) {
   );
 }
 
-function Automation({
-  entry,
-  disabled,
-  onAuto,
+/** No linked source: search the work's titles in every source, or choose one by hand. */
+function NoSource({
+  lanes,
+  started,
+  background = false,
+  onSearch,
+  href,
 }: {
-  entry: TrackedMedia | undefined;
-  disabled: boolean;
-  onAuto: (on: boolean) => void;
+  lanes: Lane[] | null;
+  started: boolean;
+  background?: boolean;
+  onSearch: () => void;
+  href: string;
 }) {
-  const { t } = useI18n();
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-muted mb-2 text-xs tracking-[0.16em] uppercase">
-        {t('title.automation')}
-      </span>
-      <label className="flex min-h-11 items-center justify-between gap-3 text-sm">
-        {t('title.autoDownload')}
-        <input
-          type="checkbox"
-          disabled={disabled}
-          checked={entry?.autoDownload ?? false}
-          onChange={(e) => onAuto(e.target.checked)}
-          className="size-[18px] accent-[var(--accent)]"
-        />
-      </label>
-      <p className="text-muted text-xs leading-relaxed">
-        {disabled ? t('title.autoNeedsSource') : t('title.autoHint')}
-      </p>
-    </div>
-  );
-}
-
-function NoSource({ lanes, onSearch }: { lanes: Lane[] | null; onSearch: () => void }) {
   const { t } = useI18n();
   const engine = useSuwayomi();
   const pending = (lanes ?? []).filter((l) => l.state === 'loading').length;
   if (engine.state && engine.state !== 'ok') return <SuwayomiNotice />;
-  if (lanes === null || pending > 0)
+  if ((started && (lanes === null || pending > 0)) || (!started && background))
     return (
       <p className="text-mid flex items-center gap-2 text-sm">
         <Spinner />
         {t('sources.matchingLong')}
       </p>
     );
-  return (
-    <Notice
-      title={lanes.length === 0 ? t('sources.noSourcesInstalled') : t('sources.notFound')}
-      action={
-        lanes.length === 0 ? (
+  if (lanes?.length === 0)
+    return (
+      <Notice
+        title={t('sources.noSourcesInstalled')}
+        action={
           <Link href="/sources" className={smallButton}>
             {t('sources.manage')}
           </Link>
-        ) : (
+        }
+      >
+        {t('sources.noSourcesBody')}
+      </Notice>
+    );
+  return (
+    <Notice
+      title={started ? t('sources.notFound') : t('sources.noLinked')}
+      action={
+        <span className="flex flex-wrap gap-2">
           <button type="button" onClick={onSearch} className={smallButton}>
-            {t('sources.seeCandidates')}
+            {t('match.autoSearch')}
           </button>
-        )
+          <Link href={href} className={smallButton}>
+            {t('sources.searchOther')}
+          </Link>
+        </span>
       }
     >
-      {lanes.length === 0 ? t('sources.noSourcesBody') : t('sources.notFoundBody')}
+      {started ? t('sources.notFoundBody') : t('sources.noLinkedBody')}
     </Notice>
   );
 }
 
-function LinkIcon() {
+function GearIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
       <path
-        d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"
+        d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"
         stroke="currentColor"
         strokeWidth="2"
-        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
-  );
-}
-
-/** Lets the reader mark a work 18+ (or unmark a false positive); hidden with 18+ content off. */
-function AdultMark({ media }: { media: MediaDetail }) {
-  const { t } = useI18n();
-  const { mutate } = useSWRConfig();
-  const [busy, setBusy] = useState(false);
-  const adult = Boolean(media.adult);
-  async function set(value: boolean | null) {
-    setBusy(true);
-    try {
-      await send('/api/media/adult', 'PATCH', { id: media.id, adult: value });
-      clearPersistentCache();
-      await mutate((key) => typeof key === 'string' && key !== '/api/settings', undefined, {
-        revalidate: true,
-      });
-      toast({
-        tone: 'ok',
-        text: value === null ? t('adult.reset') : value ? t('adult.marked') : t('adult.unmarked'),
-      });
-    } catch (e) {
-      toast({ tone: 'bad', text: errorText(t, e) });
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="border-line flex flex-wrap items-center gap-3 border-t pt-5 text-sm">
-      <span className="text-muted">{t('adult.label')}</span>
-      <InfoBubble label={t('adult.label')}>{t('adult.info')}</InfoBubble>
-      <span className="ml-auto flex items-center gap-2">
-        {media.adultOverride != null && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => set(null)}
-            className="text-mid text-xs underline hover:text-white"
-          >
-            {t('adult.automatic')}
-          </button>
-        )}
-        <button
-          type="button"
-          role="switch"
-          aria-checked={adult}
-          aria-label={t('adult.label')}
-          disabled={busy}
-          onClick={() => set(!adult)}
-          className={cx(
-            'relative h-6 w-11 rounded-full transition-colors disabled:opacity-50',
-            adult ? 'bg-fg' : 'bg-white/15',
-          )}
-        >
-          <span
-            className={cx(
-              'absolute top-1 size-4 rounded-full transition-[left]',
-              adult ? 'bg-bg left-6' : 'bg-fg left-1',
-            )}
-          />
-        </button>
-      </span>
-    </div>
   );
 }
 

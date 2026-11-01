@@ -1,30 +1,26 @@
 'use client';
-import * as Dialog from '@radix-ui/react-dialog';
-import { useEffect, useState, type ReactNode } from 'react';
-import { useSWRConfig } from 'swr';
+import Link from 'next/link';
+import { useState, type ReactNode } from 'react';
 import type {
   ChapterSelection,
   CoverChoice,
   CoverOption,
   MediaDetail,
-  Source,
-  SourceCandidate,
   TrackedMedia,
 } from '@/types/shared';
-import { libraryKeys, mediaHref, send, useApi } from '@/lib/client/api';
+import { useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { rankSourceCandidates } from '@/lib/client/source-ranking';
 import { useRelativeTime } from './time';
+import type { Lane } from '@/lib/client/use-source-scan';
 import { CatalogPicker, KavitaPicker } from './relink';
-import { Cover, Dot, Segmented, Skeleton, Spinner, cx, errorText, smallButton } from './ui';
+import { Cover, Dot, Skeleton, Spinner, cx, primaryButton, smallButton } from './ui';
 
-export type Lane = {
-  source: Source;
-  state: 'loading' | 'done' | 'error';
-  candidates: SourceCandidate[];
-};
-export type Section = 'catalog' | 'sources' | 'kavita' | 'cover';
-type Save = { state: 'saving' } | { state: 'saved' } | { state: 'error'; text: string } | null;
+export type { Lane };
+/** Sections of the work settings page (`/title/…/settings?s=`). */
+export type Section = 'general' | 'catalog' | 'sources' | 'kavita' | 'cover';
+export type Save =
+  { state: 'saving' } | { state: 'saved' } | { state: 'error'; text: string } | null;
 
 const searching = (e: TrackedMedia | undefined) =>
   e?.sourceMatch === 'queued' || e?.sourceMatch === 'searching';
@@ -34,12 +30,13 @@ export function MatchesSummary({
   entry,
   media,
   sources,
-  onOpen,
+  href,
 }: {
   entry: TrackedMedia | undefined;
   media: MediaDetail;
   sources: ChapterSelection[];
-  onOpen: (section: Section) => void;
+  /** Settings page link for one section. */
+  href: (section: Section) => string;
 }) {
   const { t, n } = useI18n();
   const latest = Math.max(0, ...(entry?.sourceStatus ?? []).map((s) => s.latestChapter ?? 0));
@@ -96,10 +93,9 @@ export function MatchesSummary({
       <span className="text-muted text-xs tracking-[0.16em] uppercase">{t('match.title')}</span>
       <div className="flex flex-col text-sm">
         {rows.map((r) => (
-          <button
+          <Link
             key={r.key}
-            type="button"
-            onClick={() => onOpen(r.key)}
+            href={href(r.key)}
             className="border-line group flex items-center gap-3 border-b py-2.5 text-left"
           >
             <Dot tone={r.tone} />
@@ -115,201 +111,15 @@ export function MatchesSummary({
                 ›
               </span>
             </span>
-          </button>
+          </Link>
         ))}
       </div>
     </div>
   );
 }
 
-/** The single place to fix a title's catalog work, sources, Kavita series and cover. */
-export function MatchesDrawer({
-  open,
-  section,
-  onSection,
-  onClose,
-  entry,
-  media,
-  sources,
-  lanes,
-  scanStarted,
-  onScan,
-  onSources,
-  onTrack,
-}: {
-  open: boolean;
-  /** Adds the title to the library, which makes catalog/Kavita/cover settings available. */
-  onTrack?: () => Promise<void>;
-  /** A scan already ran or is running for this title (the drawer then never starts another). */
-  scanStarted: boolean;
-  section: Section;
-  onSection: (s: Section) => void;
-  onClose: () => void;
-  entry: TrackedMedia | undefined;
-  media: MediaDetail;
-  sources: ChapterSelection[];
-  lanes: Lane[] | null;
-  onScan: (q?: string) => void;
-  onSources: (next: ChapterSelection[]) => Promise<void>;
-}) {
-  const { t } = useI18n();
-  const { mutate } = useSWRConfig();
-  const [save, setSave] = useState<Save>(null);
-
-  // Sources and covers need the live scan: start it as soon as one of those tabs is shown.
-  const wantsScan = open && (section === 'sources' || section === 'cover');
-  useEffect(() => {
-    if (wantsScan && !scanStarted) onScan();
-  }, [wantsScan, scanStarted, onScan]);
-
-  async function run(action: () => Promise<unknown>) {
-    setSave({ state: 'saving' });
-    try {
-      await action();
-      await mutate(libraryKeys);
-      setSave({ state: 'saved' });
-    } catch (e) {
-      setSave({ state: 'error', text: errorText(t, e) });
-    }
-  }
-  const patch = (body: object) =>
-    send<TrackedMedia>('/api/tracked', 'PATCH', { id: entry!.id, ...body });
-
-  return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={(o) => {
-        if (!o) {
-          setSave(null);
-          onClose();
-        }
-      }}
-    >
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="bg-bg border-line fixed inset-y-0 right-0 z-50 flex w-full max-w-[580px] flex-col border-l outline-none">
-          <div className="flex flex-col gap-5 p-5 pb-4 md:p-8 md:pb-5">
-            <div className="flex items-start gap-4">
-              <Cover
-                src={entry?.coverUrl ?? media.coverUrl}
-                fallbacks={entry?.coverFallbacks}
-                className="w-14 shrink-0 shadow-none"
-              />
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <Dialog.Title className="font-display truncate text-[22px] leading-none font-extrabold tracking-[-0.03em] md:text-[28px]">
-                  {t('match.title')}
-                </Dialog.Title>
-                <Dialog.Description className="text-muted truncate font-serif text-lg italic">
-                  {media.title}
-                </Dialog.Description>
-              </div>
-              <Dialog.Close
-                className="text-mid -mt-2 -mr-2 flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08]"
-                aria-label={t('common.close')}
-              >
-                ✕
-              </Dialog.Close>
-            </div>
-            <Segmented
-              value={section}
-              onChange={onSection}
-              label={t('match.title')}
-              items={[
-                { id: 'catalog', label: t('match.catalog') },
-                { id: 'sources', label: t('match.sources') },
-                { id: 'kavita', label: 'Kavita' },
-                { id: 'cover', label: t('match.tab.images') },
-              ]}
-            />
-          </div>
-          <div className="flex-1 overflow-y-auto px-5 pb-8 md:px-8">
-            {!entry && section !== 'sources' ? (
-              <div className="flex flex-col items-start gap-3">
-                <p className="text-mid">{t('match.trackFirst')}</p>
-                {onTrack && (
-                  <button type="button" onClick={() => run(onTrack)} className={smallButton}>
-                    {t('match.addToLibrary')}
-                  </button>
-                )}
-              </div>
-            ) : section === 'catalog' ? (
-              <CatalogTab
-                entry={entry!}
-                media={media}
-                onPick={(m) =>
-                  run(async () => {
-                    const u = await patch({ media: m });
-                    window.location.assign(mediaHref(u.media.id));
-                  })
-                }
-                onDetach={() =>
-                  run(async () => {
-                    const u = await patch({ offCatalog: true });
-                    window.location.assign(mediaHref(u.media.id));
-                  })
-                }
-                onTitle={(displayTitle) => run(() => patch({ displayTitle }))}
-              />
-            ) : section === 'sources' ? (
-              <SourcesTab
-                entry={entry}
-                sources={sources}
-                lanes={lanes}
-                onScan={onScan}
-                onSources={(next) => run(() => onSources(next))}
-              />
-            ) : section === 'kavita' ? (
-              <KavitaTab
-                entry={entry!}
-                media={media}
-                onPick={(id) => run(() => patch({ kavitaSeriesId: id }))}
-                onCoverSync={(kavitaCoverSync) => run(() => patch({ kavitaCoverSync }))}
-              />
-            ) : (
-              <CoverTab
-                entry={entry!}
-                media={media}
-                onBackdrop={(backdrop) => run(() => patch({ backdrop }))}
-                lanes={lanes}
-                sources={sources}
-                onPick={(cover) => run(() => patch({ cover }))}
-              />
-            )}
-          </div>
-          <SaveBar save={save} />
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
-function SaveBar({ save }: { save: Save }) {
-  const { t } = useI18n();
-  return (
-    <div
-      aria-live="polite"
-      className={cx(
-        'border-line flex min-h-12 items-center gap-2 border-t px-5 text-sm md:px-8',
-        !save && 'text-muted',
-      )}
-    >
-      {save?.state === 'saving' && (
-        <>
-          <Spinner />
-          {t('match.saving')}
-        </>
-      )}
-      {save?.state === 'saved' && (
-        <span className="text-ok flex items-center gap-2">✓ {t('match.saved')}</span>
-      )}
-      {save?.state === 'error' && <span className="text-bad">{save.text}</span>}
-      {!save && t('match.saveHint')}
-    </div>
-  );
-}
-
 /** One linked thing, shown the same way in every tab. */
-function Current({
+export function Current({
   cover,
   title,
   detail,
@@ -337,80 +147,91 @@ function Current({
   );
 }
 
-function Hint({ children }: { children: ReactNode }) {
+export function Hint({ children }: { children: ReactNode }) {
   return <p className="text-mid text-sm leading-relaxed">{children}</p>;
 }
 
-function CatalogTab({
+/** The name Bunko shows for this work: catalog/Kavita names or a custom one. */
+export function DisplayTitle({
+  entry,
+  onTitle,
+}: {
+  entry: TrackedMedia;
+  onTitle: (title: string | null) => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const [custom, setCustom] = useState('');
+  const names = [...new Set([entry.title, ...(entry.titleOptions ?? [])])];
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-muted text-xs tracking-[0.14em] uppercase">
+        {t('match.displayTitle')}
+      </span>
+      <div className="flex flex-wrap gap-1.5">
+        {names.map((name) => (
+          <button
+            key={name}
+            type="button"
+            aria-pressed={entry.title === name}
+            onClick={() => onTitle(name)}
+            className={cx(
+              'max-w-full truncate rounded-full px-3 py-1.5 text-sm',
+              entry.title === name
+                ? 'bg-fg text-bg font-semibold'
+                : 'bg-white/[0.06] hover:bg-white/[0.1]',
+            )}
+          >
+            {name}
+          </button>
+        ))}
+        {entry.customTitle && (
+          <button
+            type="button"
+            onClick={() => onTitle(null)}
+            className="text-mid px-2 text-sm underline hover:text-white"
+          >
+            {t('match.titleAuto')}
+          </button>
+        )}
+      </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (custom.trim()) void onTitle(custom.trim()).then(() => setCustom(''));
+        }}
+        className="flex gap-2"
+      >
+        <input
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          placeholder={t('match.titleCustom')}
+          aria-label={t('match.titleCustom')}
+          maxLength={300}
+          className="border-line bg-raised h-10 min-w-0 flex-1 rounded-full border px-4 text-sm"
+        />
+        <button type="submit" disabled={!custom.trim()} className={smallButton}>
+          {t('common.save')}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+export function CatalogTab({
   entry,
   media,
   onPick,
   onDetach,
-  onTitle,
 }: {
   entry: TrackedMedia;
   media: MediaDetail;
   onPick: (m: Parameters<Parameters<typeof CatalogPicker>[0]['onPick']>[0]) => void;
   onDetach: () => void;
-  onTitle: (title: string | null) => Promise<void>;
 }) {
   const { t } = useI18n();
   const off = entry.identity === 'off-catalog';
-  const [custom, setCustom] = useState('');
-  const names = [...new Set([entry.title, ...(entry.titleOptions ?? [])])];
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <span className="text-muted text-xs tracking-[0.14em] uppercase">
-          {t('match.displayTitle')}
-        </span>
-        <div className="flex flex-wrap gap-1.5">
-          {names.map((name) => (
-            <button
-              key={name}
-              type="button"
-              aria-pressed={entry.title === name}
-              onClick={() => onTitle(name)}
-              className={cx(
-                'max-w-full truncate rounded-full px-3 py-1.5 text-sm',
-                entry.title === name
-                  ? 'bg-fg text-bg font-semibold'
-                  : 'bg-white/[0.06] hover:bg-white/[0.1]',
-              )}
-            >
-              {name}
-            </button>
-          ))}
-          {entry.customTitle && (
-            <button
-              type="button"
-              onClick={() => onTitle(null)}
-              className="text-mid px-2 text-sm underline hover:text-white"
-            >
-              {t('match.titleAuto')}
-            </button>
-          )}
-        </div>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (custom.trim()) void onTitle(custom.trim()).then(() => setCustom(''));
-          }}
-          className="flex gap-2"
-        >
-          <input
-            value={custom}
-            onChange={(e) => setCustom(e.target.value)}
-            placeholder={t('match.titleCustom')}
-            aria-label={t('match.titleCustom')}
-            maxLength={300}
-            className="border-line bg-raised h-10 min-w-0 flex-1 rounded-full border px-4 text-sm"
-          />
-          <button type="submit" disabled={!custom.trim()} className={smallButton}>
-            {t('common.save')}
-          </button>
-        </form>
-      </div>
       <Current
         cover={off ? null : (media.coverUrl ?? entry.coverUrl)}
         title={off ? undefined : media.title}
@@ -439,7 +260,7 @@ function CatalogTab({
   );
 }
 
-function KavitaTab({
+export function KavitaTab({
   entry,
   media,
   onPick,
@@ -521,7 +342,7 @@ function ScanProgress({ lanes, onScan }: { lanes: Lane[] | null; onScan: () => v
   );
 }
 
-function SourcesTab({
+export function SourcesTab({
   entry,
   sources,
   lanes,
@@ -535,6 +356,7 @@ function SourcesTab({
   onSources: (next: ChapterSelection[]) => void;
 }) {
   const [query, setQuery] = useState(entry?.title ?? '');
+  const scanning = lanes === null || lanes.some((l) => l.state === 'loading');
   const { t, n, language } = useI18n();
   const relative = useRelativeTime();
   const linked = new Set(sources.map((s) => `${s.sourceId}:${s.suwayomiMangaId}`));
@@ -558,6 +380,20 @@ function SourcesTab({
   return (
     <div className="flex flex-col gap-4">
       <Hint>{t('match.sourcesHint')}</Hint>
+      <div className="flex flex-col items-start gap-2 rounded-2xl bg-white/[0.04] p-3">
+        <button
+          type="button"
+          disabled={scanning}
+          onClick={() => onScan()}
+          className={cx(primaryButton, 'h-10 gap-2 px-4 text-sm')}
+        >
+          {scanning && <Spinner className="size-3.5" />}
+          {scanning ? t('match.autoSearching') : t('match.autoSearch')}
+        </button>
+        <span className="text-muted text-xs leading-relaxed">
+          {t(sources.length ? 'match.autoSearchHintLinked' : 'match.autoSearchHint')}
+        </span>
+      </div>
       {sources.length === 0 && (
         <Current empty={searching(entry) ? t('match.searchingBackground') : t('match.noSource')} />
       )}
@@ -675,7 +511,7 @@ function SourcesTab({
   );
 }
 
-function CoverTab({
+export function CoverTab({
   entry,
   media,
   onBackdrop,

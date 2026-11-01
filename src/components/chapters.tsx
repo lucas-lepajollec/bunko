@@ -28,6 +28,17 @@ export const isMissing = (c: MergedChapter, owned?: Set<number>, ownedVolumes?: 
   !(c.number !== null && owned?.has(c.number)) &&
   !c.variants.some((v) => v.isDownloaded);
 
+/**
+ * What "complete the series" fetches. Works followed in volumes only complete numbered volumes:
+ * recent chapters that no volume collects yet are left to an explicit choice.
+ */
+export const missingForUnit = (
+  chapters: MergedChapter[],
+  owned: Set<number>,
+  ownedVolumes: Set<number>,
+  byVolume: boolean,
+) => chapters.filter((c) => isMissing(c, owned, ownedVolumes) && (!byVolume || c.volume !== null));
+
 export const chapterIsRead = (
   c: MergedChapter,
   chapterRead: number | null,
@@ -48,17 +59,13 @@ export function ChapterTable({
   queued,
   owned,
   mediaId,
-  defaultByVolume,
+  byVolume = false,
   ownedVolumes = new Set<number>(),
-  onViewChange,
-  inventoryCorrection,
   pending = false,
 }: {
-  /** Start in the volume view (works counted in volumes). */
-  defaultByVolume?: boolean;
+  /** The work is followed in volumes (its settings page decides): rows are whole volumes. */
+  byVolume?: boolean;
   pending?: boolean;
-  onViewChange?: (volume: boolean) => void;
-  inventoryCorrection?: { active: boolean; busy: boolean; onCorrect: () => void };
   ownedVolumes?: Set<number>;
   /** Opens chapters in the built-in reader with this work's progress. */
   mediaId: string;
@@ -80,8 +87,7 @@ export function ChapterTable({
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [rangeOpen, setRangeOpen] = useState(false);
-  const [byVolume, setByVolume] = useState(defaultByVolume ?? false);
-  const [open, setOpen] = useState<Set<string>>(new Set());
+  const [looseOpen, setLooseOpen] = useState(false);
   const ordered = useMemo(
     () => [...chapters].sort((a, b) => (b.number ?? -1) - (a.number ?? -1)),
     [chapters],
@@ -93,20 +99,30 @@ export function ChapterTable({
     if (filter === 'unread') return !chapterIsRead(c, read, volumeRead);
     return true;
   });
-  const groups = volumes(ordered);
+  const groups = volumes(ordered).filter((g): g is [number, MergedChapter[]] => g[0] !== null);
   for (const volume of ownedVolumes)
     if (!groups.some(([v]) => v === volume)) groups.push([volume, []]);
-  groups.sort(([a], [b]) => (a === null ? 1 : b === null ? -1 : b - a));
-  const missingVolume = ([v, list]: [number | null, MergedChapter[]]) =>
-    !(v !== null && ownedVolumes.has(v)) && list.some((c) => isMissing(c, owned, ownedVolumes));
-  const unreadVolume = ([v, list]: [number | null, MergedChapter[]]) =>
-    !(v !== null && volumeRead !== null && v <= volumeRead) &&
+  groups.sort(([a], [b]) => b - a);
+  // Recent chapters that no volume collects yet: shown apart, never counted as missing volumes.
+  const loose = ordered.filter(
+    (c) =>
+      c.volume === null &&
+      (filter === 'missing'
+        ? isMissing(c, owned, ownedVolumes)
+        : filter === 'unread'
+          ? !chapterIsRead(c, read, volumeRead)
+          : true),
+  );
+  const missingVolume = ([v, list]: [number, MergedChapter[]]) =>
+    !ownedVolumes.has(v) && list.some((c) => isMissing(c, owned, ownedVolumes));
+  const unreadVolume = ([v, list]: [number, MergedChapter[]]) =>
+    !(volumeRead !== null && v <= volumeRead) &&
     (!list.length || list.some((c) => !chapterIsRead(c, read, volumeRead)));
   const visibleGroups = groups.filter((g) =>
     filter === 'missing' ? missingVolume(g) : filter === 'unread' ? unreadVolume(g) : true,
   );
   const selectable = byVolume ? visibleGroups.flatMap(([, list]) => list) : visible;
-  const total = byVolume ? visibleGroups.filter(([v]) => v !== null).length : visible.length;
+  const total = byVolume ? visibleGroups.length : visible.length;
   const toggle = (key: string) => {
     const next = new Set(selected);
     if (next.has(key)) next.delete(key);
@@ -157,61 +173,21 @@ export function ChapterTable({
           {pill(
             'missing',
             t('chapters.missing', {
-              count: byVolume
-                ? groups.filter((g) => g[0] !== null && missingVolume(g)).length
-                : missing.length,
+              count: byVolume ? groups.filter(missingVolume).length : missing.length,
             }),
           )}
           {pill(
             'unread',
             t('chapters.unread', {
-              count: byVolume
-                ? groups.filter((g) => g[0] !== null && unreadVolume(g)).length
-                : unread.length,
+              count: byVolume ? groups.filter(unreadVolume).length : unread.length,
             }),
           )}
           {pill(
             'all',
             t('chapters.all', {
-              count: byVolume ? groups.filter(([v]) => v !== null).length : ordered.length,
+              count: byVolume ? groups.length : ordered.length,
             }),
           )}
-          <div className="ml-auto flex flex-wrap items-center gap-3">
-            <div
-              className="ml-auto flex shrink-0 rounded-full bg-white/[0.08] p-0.5"
-              role="group"
-              aria-label={t('chapters.view')}
-            >
-              {([false, true] as const).map((v) => (
-                <button
-                  key={String(v)}
-                  type="button"
-                  aria-pressed={byVolume === v}
-                  onClick={() => {
-                    setByVolume(v);
-                    setLimit(FIRST);
-                    onViewChange?.(v);
-                  }}
-                  className={cx(
-                    'h-8 rounded-full px-3.5 text-sm',
-                    byVolume === v ? 'bg-white text-bg font-semibold' : 'text-mid',
-                  )}
-                >
-                  {v ? t('chapters.byVolume') : t('chapters.byChapter')}
-                </button>
-              ))}
-            </div>
-            {byVolume && inventoryCorrection && (
-              <button
-                type="button"
-                disabled={inventoryCorrection.busy}
-                onClick={inventoryCorrection.onCorrect}
-                className="text-mid min-h-9 text-xs underline decoration-white/30 underline-offset-4 hover:text-white disabled:opacity-50"
-              >
-                {t(inventoryCorrection.active ? 'unit.undoVolumes' : 'unit.correctVolumes')}
-              </button>
-            )}
-          </div>
         </div>
         <div className="text-mid flex flex-wrap items-center gap-2 text-sm">
           <label className="flex items-center gap-2">
@@ -320,100 +296,115 @@ export function ChapterTable({
       )}
       {/* Desktop: the list scrolls inside the column so details stay in view. */}
       <ul className="md:max-h-[68vh] md:overflow-y-auto md:pr-2">
+        {byVolume && loose.length > 0 && (
+          <li className="border-line border-b">
+            <button
+              type="button"
+              aria-expanded={looseOpen}
+              onClick={() => setLooseOpen((o) => !o)}
+              className="flex w-full items-baseline gap-3 py-2.5 text-left md:py-3"
+            >
+              <span className="shrink-0 font-serif text-[19px] md:text-[21px]">
+                {t('chapters.looseTitle')}
+              </span>
+              <span className="text-muted truncate text-xs md:text-[13px]">
+                {t('chapters.looseCount', { n: n(loose.length) })}
+              </span>
+              <span aria-hidden className="text-muted ml-auto">
+                {looseOpen ? '−' : '+'}
+              </span>
+            </button>
+            {looseOpen && (
+              <>
+                <p className="text-muted pb-2 text-xs">{t('chapters.looseHint')}</p>
+                <ul className="pb-2 pl-4 md:pl-8">{loose.map((c) => row(c))}</ul>
+              </>
+            )}
+          </li>
+        )}
         {byVolume
-          ? visibleGroups
-              .filter(([vol], index) => vol === null || index < limit)
-              .map(([vol, list]) => {
-                const key = vol === null ? 'none' : String(vol);
-                const expanded = open.has(key);
-                const all = list.every((c) => selected.has(c.key));
-                const nums = list.map((c) => c.number).filter((x): x is number => x !== null);
-                if (vol !== null && ownedVolumes.has(vol))
-                  return (
-                    <ChapterRow
-                      key={`owned-volume:${vol}`}
-                      volumeNumber={vol}
-                      owned={owned}
-                      ownedVolumes={ownedVolumes}
-                      chapter={{ key: `volume:${vol}`, number: null, volume: vol, variants: [] }}
-                      variant={undefined}
-                      read={read}
-                      volumeRead={volumeRead}
-                      mediaId={mediaId}
-                      checked={list.length > 0 && all}
-                      disabled={!list.length}
-                      onToggle={() => {
-                        const next = new Set(selected);
-                        for (const c of list) {
-                          if (all) next.delete(c.key);
-                          else next.add(c.key);
-                        }
-                        setSelected(next);
-                      }}
-                      onChoose={() => {}}
-                      queued={false}
-                    />
-                  );
-
+          ? visibleGroups.slice(0, limit).map(([vol, list]) => {
+              const all = list.length > 0 && list.every((c) => selected.has(c.key));
+              const toggleVolume = () => {
+                const next = new Set(selected);
+                for (const c of list) {
+                  if (all) next.delete(c.key);
+                  else next.add(c.key);
+                }
+                setSelected(next);
+              };
+              if (ownedVolumes.has(vol))
                 return (
-                  <li key={key} className="border-line border-b">
-                    <div className="flex items-center gap-3 py-2.5 md:items-baseline md:gap-3.5 md:py-3">
-                      <input
-                        type="checkbox"
-                        checked={all}
-                        aria-label={t('chapters.selectVolume', {
-                          v: vol === null ? t('chapters.noVolume') : n(vol),
-                        })}
-                        onChange={() => {
-                          const next = new Set(selected);
-                          for (const c of list) {
-                            if (all) next.delete(c.key);
-                            else next.add(c.key);
-                          }
-                          setSelected(next);
-                        }}
-                        className="size-5 shrink-0 accent-[var(--accent)] md:size-[17px]"
-                      />
-                      <button
-                        type="button"
-                        aria-expanded={expanded}
-                        onClick={() =>
-                          setOpen((o) => {
-                            const next = new Set(o);
-                            if (next.has(key)) next.delete(key);
-                            else next.add(key);
-                            return next;
-                          })
-                        }
-                        className="flex min-w-0 flex-1 items-baseline gap-3 text-left"
-                      >
-                        <span className="shrink-0 font-serif text-[21px] md:w-[150px] md:text-[23px]">
-                          {vol === null
-                            ? t('chapters.noVolume')
-                            : t('chapters.volume', { v: n(vol) })}
-                        </span>
-                        <span
-                          aria-hidden
-                          className="border-line-strong hidden flex-1 -translate-y-[5px] border-b border-dotted md:block"
-                        />
-                        <span className="text-muted truncate text-xs md:text-[13px]">
-                          {nums.length
-                            ? t('chapters.volumeRange', {
-                                from: n(Math.min(...nums)),
-                                to: n(Math.max(...nums)),
-                                count: list.length,
-                              })
-                            : t('chapters.count', { count: list.length })}
-                        </span>
-                        <span aria-hidden className="text-muted ml-auto">
-                          {expanded ? '−' : '+'}
-                        </span>
-                      </button>
-                    </div>
-                    {expanded && <ul className="pb-2 pl-4 md:pl-8">{list.map((c) => row(c))}</ul>}
-                  </li>
+                  <ChapterRow
+                    key={`owned-volume:${vol}`}
+                    volumeNumber={vol}
+                    owned={owned}
+                    ownedVolumes={ownedVolumes}
+                    chapter={{ key: `volume:${vol}`, number: null, volume: vol, variants: [] }}
+                    variant={undefined}
+                    read={read}
+                    volumeRead={volumeRead}
+                    mediaId={mediaId}
+                    checked={all}
+                    disabled
+                    onToggle={toggleVolume}
+                    onChoose={() => {}}
+                    queued={false}
+                  />
                 );
-              })
+              const nums = list.map((c) => c.number).filter((x): x is number => x !== null);
+              const lacking = list.filter((c) => isMissing(c, owned, ownedVolumes)).length;
+              const waiting = list.some((c) => {
+                const v = preferredVariant(c, priority, choice[c.key]);
+                return v ? queued.has(v.id) : false;
+              });
+              const done = lacking === 0;
+              const isRead =
+                list.length > 0 && list.every((c) => chapterIsRead(c, read, volumeRead));
+              return (
+                <li key={vol} className="border-line border-b">
+                  <label className="flex items-center gap-3 py-2.5 md:items-baseline md:gap-3.5 md:py-3">
+                    <input
+                      type="checkbox"
+                      checked={all}
+                      disabled={done}
+                      aria-label={t('chapters.selectVolume', { v: n(vol) })}
+                      onChange={toggleVolume}
+                      className="size-5 shrink-0 accent-[var(--accent)] disabled:opacity-30 md:size-[17px]"
+                    />
+                    <span
+                      className={cx(
+                        'shrink-0 font-serif text-[21px] md:w-[150px] md:text-[23px]',
+                        isRead && 'text-muted',
+                      )}
+                    >
+                      {t('chapters.volume', { v: n(vol) })}
+                    </span>
+                    <span
+                      aria-hidden
+                      className="border-line-strong hidden flex-1 -translate-y-[5px] border-b border-dotted md:block"
+                    />
+                    <span className="text-muted ml-auto truncate text-xs md:ml-0 md:text-[13px]">
+                      {nums.length
+                        ? t('chapters.volumeRange', {
+                            from: n(Math.min(...nums)),
+                            to: n(Math.max(...nums)),
+                            count: list.length,
+                          })
+                        : t('chapters.count', { count: list.length })}
+                      {' · '}
+                      {waiting
+                        ? t('chapters.queued')
+                        : done
+                          ? t('chapters.volumeHaveChapters')
+                          : lacking < list.length
+                            ? t('chapters.volumePartial', { n: n(lacking) })
+                            : t('chapters.volumeMissing')}
+                    </span>
+                  </label>
+                </li>
+              );
+            })
           : visible.slice(0, limit).map((c) => row(c))}
         {total > limit && (
           <li className="flex justify-center py-4">
