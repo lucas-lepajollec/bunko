@@ -934,6 +934,39 @@ const en: Dictionary = {
   'catalogs.googlebooks.paste': 'Copy the key into the field below, save it, then select Test.',
   'catalogs.googlebooks.serverKey':
     'Bunko calls Google from your server. Website restrictions do not fit this connection. If you restrict by IP, allow the server’s outgoing public IP, rather than its LAN address.',
+  'settings.work.title': 'Work settings',
+  'settings.work.open': 'Work settings',
+  'settings.work.general': 'General',
+  'settings.work.collection': 'My collection',
+  'settings.work.content': 'Content',
+  'settings.work.unitChapterHint': 'Bunko lists, counts and fetches chapters one by one.',
+  'settings.work.unitVolumeHint':
+    'Progress, missing items and downloads are counted in whole volumes. Recent chapters not yet collected in a volume stay apart.',
+  'settings.work.unitEditions':
+    'Volume numbers come from your Kavita files and from your sources. Bunko never guesses a volume from a chapter count: if your edition splits volumes differently, compare the chapter ranges shown on each volume.',
+  'settings.work.detectedVolumes': 'Your Kavita files include {n} complete volume(s).',
+  'settings.work.useVolumes': 'Follow in volumes',
+  'settings.work.declareHint':
+    'Files named “Vol. 3” or “Tome 3” are recognised automatically. Turn this on when your current files are whole volumes with other names. New downloads keep their own unit.',
+  'settings.work.autoVolumes': 'Fetch new releases automatically',
+  'title.completeSeriesVol': 'Complete the series · {count} volumes',
+  'match.autoSearch': 'Search my sources',
+  'match.autoSearching': 'Searching your sources…',
+  'match.autoSearchHint':
+    'Searches every installed source with this work’s titles and links the confident matches.',
+  'match.autoSearchHintLinked':
+    'Searches every installed source with this work’s titles; results below can be added.',
+  'sources.noLinked': 'No source linked',
+  'sources.noLinkedBody':
+    'Bunko can search your installed sources for this work, or you can pick one yourself.',
+  'sources.searchOther': 'Search another title',
+  'chapters.looseTitle': 'Not in a volume yet',
+  'chapters.looseCount': '{n} recent chapters',
+  'chapters.looseHint':
+    'These chapters will be collected in a future volume. You can still fetch them one by one.',
+  'chapters.volumeHaveChapters': 'all chapters owned',
+  'chapters.volumePartial': '{n} chapters missing',
+  'chapters.volumeMissing': 'missing',
 };
 
 const fr: Dictionary = {
@@ -1852,6 +1885,39 @@ const fr: Dictionary = {
     'Copie la clé dans le champ ci-dessous, enregistre-la, puis clique sur Tester.',
   'catalogs.googlebooks.serverKey':
     'Bunko appelle Google depuis ton serveur. Les restrictions par site web ne conviennent pas à cette connexion. Si tu limites par IP, autorise l’IP publique de sortie du serveur, plutôt que son adresse locale.',
+  'settings.work.title': 'Paramètres de l’œuvre',
+  'settings.work.open': 'Paramètres de l’œuvre',
+  'settings.work.general': 'Général',
+  'settings.work.collection': 'Ma collection',
+  'settings.work.content': 'Contenu',
+  'settings.work.unitChapterHint': 'Bunko liste, compte et récupère les chapitres un par un.',
+  'settings.work.unitVolumeHint':
+    'Progression, manquants et téléchargements se comptent en tomes entiers. Les chapitres récents pas encore reliés en tome restent à part.',
+  'settings.work.unitEditions':
+    'Les numéros de tome viennent de tes fichiers Kavita et de tes sources. Bunko ne devine jamais un tome à partir d’un nombre de chapitres : si ton édition découpe autrement, compare les plages de chapitres affichées sur chaque tome.',
+  'settings.work.detectedVolumes': 'Tes fichiers Kavita contiennent {n} tome(s) complet(s).',
+  'settings.work.useVolumes': 'Suivre en tomes',
+  'settings.work.declareHint':
+    'Les fichiers nommés « Vol. 3 » ou « Tome 3 » sont reconnus automatiquement. Active ceci si tes fichiers actuels sont des tomes entiers nommés autrement. Les nouveaux téléchargements gardent leur propre unité.',
+  'settings.work.autoVolumes': 'Récupérer les nouveautés automatiquement',
+  'title.completeSeriesVol': 'Compléter la série · {count} tomes',
+  'match.autoSearch': 'Rechercher dans mes sources',
+  'match.autoSearching': 'Recherche dans tes sources…',
+  'match.autoSearchHint':
+    'Cherche les titres de cette œuvre dans toutes tes sources installées et lie les correspondances sûres.',
+  'match.autoSearchHintLinked':
+    'Cherche les titres de cette œuvre dans toutes tes sources installées ; les résultats ci-dessous peuvent être ajoutés.',
+  'sources.noLinked': 'Aucune source liée',
+  'sources.noLinkedBody':
+    'Bunko peut chercher cette œuvre dans tes sources installées, ou tu peux en choisir une toi-même.',
+  'sources.searchOther': 'Chercher un autre titre',
+  'chapters.looseTitle': 'Pas encore en tome',
+  'chapters.looseCount': '{n} chapitres récents',
+  'chapters.looseHint':
+    'Ces chapitres seront reliés dans un prochain tome. Tu peux quand même les récupérer un par un.',
+  'chapters.volumeHaveChapters': 'tous les chapitres possédés',
+  'chapters.volumePartial': '{n} chapitres manquants',
+  'chapters.volumeMissing': 'manquant',
 };
 
 const es: Dictionary = {
@@ -2762,6 +2828,39 @@ const es: Dictionary = {
   'catalogs.googlebooks.paste': 'Copia la clave en el campo de abajo, guárdala y pulsa Probar.',
   'catalogs.googlebooks.serverKey':
     'Bunko llama a Google desde tu servidor. Las restricciones por sitio web no sirven para esta conexión. Si limitas por IP, permite la IP pública de salida del servidor, no su dirección local.',
+  'settings.work.title': 'Ajustes de la obra',
+  'settings.work.open': 'Ajustes de la obra',
+  'settings.work.general': 'General',
+  'settings.work.collection': 'Mi colección',
+  'settings.work.content': 'Contenido',
+  'settings.work.unitChapterHint': 'Bunko lista, cuenta y descarga los capítulos uno a uno.',
+  'settings.work.unitVolumeHint':
+    'Progreso, faltantes y descargas se cuentan en tomos completos. Los capítulos recientes aún sin tomo quedan aparte.',
+  'settings.work.unitEditions':
+    'Los números de tomo vienen de tus archivos de Kavita y de tus fuentes. Bunko nunca deduce un tomo a partir de un número de capítulos: si tu edición divide de otra forma, compara los rangos de capítulos de cada tomo.',
+  'settings.work.detectedVolumes': 'Tus archivos de Kavita incluyen {n} tomo(s) completo(s).',
+  'settings.work.useVolumes': 'Seguir en tomos',
+  'settings.work.declareHint':
+    'Los archivos llamados «Vol. 3» o «Tomo 3» se reconocen solos. Actívalo si tus archivos actuales son tomos completos con otros nombres. Las nuevas descargas conservan su unidad.',
+  'settings.work.autoVolumes': 'Descargar novedades automáticamente',
+  'title.completeSeriesVol': 'Completar la serie · {count} tomos',
+  'match.autoSearch': 'Buscar en mis fuentes',
+  'match.autoSearching': 'Buscando en tus fuentes…',
+  'match.autoSearchHint':
+    'Busca los títulos de esta obra en todas tus fuentes instaladas y vincula las coincidencias seguras.',
+  'match.autoSearchHintLinked':
+    'Busca los títulos de esta obra en todas tus fuentes instaladas; puedes añadir los resultados de abajo.',
+  'sources.noLinked': 'Ninguna fuente vinculada',
+  'sources.noLinkedBody':
+    'Bunko puede buscar esta obra en tus fuentes instaladas, o puedes elegir una tú mismo.',
+  'sources.searchOther': 'Buscar otro título',
+  'chapters.looseTitle': 'Aún sin tomo',
+  'chapters.looseCount': '{n} capítulos recientes',
+  'chapters.looseHint':
+    'Estos capítulos se recopilarán en un próximo tomo. Aun así puedes descargarlos uno a uno.',
+  'chapters.volumeHaveChapters': 'todos los capítulos disponibles',
+  'chapters.volumePartial': 'faltan {n} capítulos',
+  'chapters.volumeMissing': 'falta',
 };
 
 const de: Dictionary = {
@@ -3680,6 +3779,39 @@ const de: Dictionary = {
     'Kopiere den Schlüssel in das Feld unten, speichere ihn und wähle Testen.',
   'catalogs.googlebooks.serverKey':
     'Bunko ruft Google von deinem Server aus auf. Website-Einschränkungen passen nicht zu dieser Verbindung. Bei einer IP-Beschränkung muss die ausgehende öffentliche IP des Servers erlaubt sein, nicht seine LAN-Adresse.',
+  'settings.work.title': 'Werkeinstellungen',
+  'settings.work.open': 'Werkeinstellungen',
+  'settings.work.general': 'Allgemein',
+  'settings.work.collection': 'Meine Sammlung',
+  'settings.work.content': 'Inhalt',
+  'settings.work.unitChapterHint': 'Bunko listet, zählt und holt Kapitel einzeln.',
+  'settings.work.unitVolumeHint':
+    'Fortschritt, Fehlendes und Downloads zählen in ganzen Bänden. Neue Kapitel, die noch in keinem Band stehen, bleiben getrennt.',
+  'settings.work.unitEditions':
+    'Bandnummern stammen aus deinen Kavita-Dateien und deinen Quellen. Bunko leitet nie einen Band aus einer Kapitelanzahl ab: Teilt deine Ausgabe anders auf, vergleiche die Kapitelbereiche jedes Bands.',
+  'settings.work.detectedVolumes': 'Deine Kavita-Dateien enthalten {n} vollständige(n) Band/Bände.',
+  'settings.work.useVolumes': 'In Bänden verfolgen',
+  'settings.work.declareHint':
+    'Dateien wie „Vol. 3“ oder „Band 3“ werden automatisch erkannt. Schalte dies ein, wenn deine aktuellen Dateien ganze Bände mit anderen Namen sind. Neue Downloads behalten ihre eigene Einheit.',
+  'settings.work.autoVolumes': 'Neuerscheinungen automatisch holen',
+  'title.completeSeriesVol': 'Serie vervollständigen · {count} Bände',
+  'match.autoSearch': 'In meinen Quellen suchen',
+  'match.autoSearching': 'Suche in deinen Quellen…',
+  'match.autoSearchHint':
+    'Sucht die Titel dieses Werks in allen installierten Quellen und verknüpft sichere Treffer.',
+  'match.autoSearchHintLinked':
+    'Sucht die Titel dieses Werks in allen installierten Quellen; Treffer unten lassen sich hinzufügen.',
+  'sources.noLinked': 'Keine Quelle verknüpft',
+  'sources.noLinkedBody':
+    'Bunko kann deine installierten Quellen nach diesem Werk durchsuchen, oder du wählst selbst eine.',
+  'sources.searchOther': 'Anderen Titel suchen',
+  'chapters.looseTitle': 'Noch in keinem Band',
+  'chapters.looseCount': '{n} neue Kapitel',
+  'chapters.looseHint':
+    'Diese Kapitel erscheinen später in einem Band. Du kannst sie trotzdem einzeln holen.',
+  'chapters.volumeHaveChapters': 'alle Kapitel vorhanden',
+  'chapters.volumePartial': '{n} Kapitel fehlen',
+  'chapters.volumeMissing': 'fehlt',
 };
 
 const it: Dictionary = {
@@ -4590,6 +4722,39 @@ const it: Dictionary = {
   'catalogs.googlebooks.paste': 'Copia la chiave nel campo sotto, salvala e seleziona Prova.',
   'catalogs.googlebooks.serverKey':
     'Bunko chiama Google dal tuo server. Le restrizioni per sito web non sono adatte a questa connessione. Se limiti per IP, autorizza l’IP pubblico di uscita del server, non il suo indirizzo locale.',
+  'settings.work.title': 'Impostazioni dell’opera',
+  'settings.work.open': 'Impostazioni dell’opera',
+  'settings.work.general': 'Generale',
+  'settings.work.collection': 'La mia collezione',
+  'settings.work.content': 'Contenuto',
+  'settings.work.unitChapterHint': 'Bunko elenca, conta e scarica i capitoli uno per uno.',
+  'settings.work.unitVolumeHint':
+    'Progressi, mancanti e download si contano in volumi interi. I capitoli recenti non ancora raccolti in un volume restano a parte.',
+  'settings.work.unitEditions':
+    'I numeri dei volumi vengono dai tuoi file Kavita e dalle tue fonti. Bunko non deduce mai un volume da un numero di capitoli: se la tua edizione divide diversamente, confronta gli intervalli di capitoli di ogni volume.',
+  'settings.work.detectedVolumes': 'I tuoi file Kavita contengono {n} volume/i completo/i.',
+  'settings.work.useVolumes': 'Segui in volumi',
+  'settings.work.declareHint':
+    'I file chiamati «Vol. 3» o «Volume 3» vengono riconosciuti da soli. Attivalo se i tuoi file attuali sono volumi interi con altri nomi. I nuovi download mantengono la loro unità.',
+  'settings.work.autoVolumes': 'Scarica automaticamente le novità',
+  'title.completeSeriesVol': 'Completa la serie · {count} volumi',
+  'match.autoSearch': 'Cerca nelle mie fonti',
+  'match.autoSearching': 'Ricerca nelle tue fonti…',
+  'match.autoSearchHint':
+    'Cerca i titoli di quest’opera in tutte le fonti installate e collega le corrispondenze sicure.',
+  'match.autoSearchHintLinked':
+    'Cerca i titoli di quest’opera in tutte le fonti installate; puoi aggiungere i risultati qui sotto.',
+  'sources.noLinked': 'Nessuna fonte collegata',
+  'sources.noLinkedBody':
+    'Bunko può cercare quest’opera nelle tue fonti installate, oppure puoi sceglierne una tu.',
+  'sources.searchOther': 'Cerca un altro titolo',
+  'chapters.looseTitle': 'Non ancora in un volume',
+  'chapters.looseCount': '{n} capitoli recenti',
+  'chapters.looseHint':
+    'Questi capitoli saranno raccolti in un prossimo volume. Puoi comunque scaricarli uno per uno.',
+  'chapters.volumeHaveChapters': 'tutti i capitoli posseduti',
+  'chapters.volumePartial': '{n} capitoli mancanti',
+  'chapters.volumeMissing': 'mancante',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

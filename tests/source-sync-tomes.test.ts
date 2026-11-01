@@ -24,7 +24,7 @@ const { linkMatchedSources, replaceSources, matchTrackedSources } =
 const { libraryActivity } = await import('@/lib/library-activity');
 const { extensionAction } = await import('@/lib/suwayomi');
 const { GET } = await import('@/app/api/media/sources/route');
-const { ChapterTable } = await import('@/components/chapters');
+const { ChapterTable, missingForUnit } = await import('@/components/chapters');
 const { I18nProvider } = await import('@/i18n/I18nProvider');
 const work = () => ({ ...emptyMedia('anilist:301', 'Source Work', 'MANGA'), anilistId: 301 });
 const sourceList = [
@@ -287,14 +287,33 @@ it('yields a stalled work at its budget, retries it soon and lets the next work 
     db().prepare('SELECT 1 FROM worker_state WHERE key=?').get(`source_match_cursor:${stalled.id}`),
   ).toBeUndefined();
 });
-it('renders owned tomes as normal reading rows with one correction button beside the existing view switch', () => {
-  const render = (byVolume: boolean, active = true) =>
+it('renders a work followed in volumes as whole volumes, with recent loose chapters apart', () => {
+  const chapter = (number: number, volume: number | null, id: number) => ({
+    key: `c${number}`,
+    number,
+    volume,
+    variants: [
+      {
+        id,
+        mangaId: 9,
+        sourceId: '1',
+        sourceName: 'Source',
+        name: `Chapter ${number}`,
+        number,
+        scanlator: null,
+        isDownloaded: false,
+        volume,
+      },
+    ],
+  });
+  const chapters = [chapter(1, 4, 11), chapter(2, 4, 12), chapter(3, null, 13)];
+  const render = (byVolume: boolean) =>
     renderToStaticMarkup(
       createElement(
         I18nProvider,
         null,
         createElement(ChapterTable, {
-          chapters: [],
+          chapters,
           priority: [],
           read: null,
           volumeRead: 2,
@@ -303,21 +322,33 @@ it('renders owned tomes as normal reading rows with one correction button beside
           choice: {},
           setChoice: () => {},
           queued: new Set<number>(),
-          owned: new Set<number>(),
+          owned: new Set<number>([1]),
           ownedVolumes: new Set([1, 2, 3]),
           mediaId: 'anilist:301',
-          defaultByVolume: byVolume,
-          inventoryCorrection: { active, busy: false, onCorrect: () => {} },
+          byVolume,
         }),
       ),
     );
   const html = render(true);
+  // Owned volumes keep their reading rows; the table no longer switches unit by itself.
   expect(html).toContain('Volume 3');
   expect(html).toContain('/read/local-volume-3?');
-  expect(html).toContain('border-dotted');
-  expect(html).toContain('Undo correction');
-  expect(html).not.toContain('<select');
-  expect(html).not.toContain('Owned volumes');
-  expect(render(false)).not.toContain('Undo correction');
-  expect(render(true, false)).toContain('These are volumes');
+  expect(html).not.toContain('These are volumes');
+  expect(html).not.toContain('aria-pressed="true">Volumes');
+  // A missing volume is one row with one checkbox, never one checkbox per chapter.
+  expect(html).toContain('Select volume 4');
+  expect(html).toContain('1 chapters missing');
+  expect(html).not.toContain('Chapter 1');
+  expect(html).toContain('Not in a volume yet');
+  expect(html).toContain('1 recent chapters');
+  expect(html).toContain('Missing · 1');
+  expect(render(false)).not.toContain('Not in a volume yet');
+
+  const ownedNumbers = new Set([1]);
+  expect(missingForUnit(chapters, ownedNumbers, new Set(), true).map((c) => c.key)).toEqual(['c2']);
+  expect(missingForUnit(chapters, ownedNumbers, new Set(), false).map((c) => c.key)).toEqual([
+    'c2',
+    'c3',
+  ]);
+  expect(missingForUnit(chapters, new Set(), new Set([4]), true)).toEqual([]);
 });

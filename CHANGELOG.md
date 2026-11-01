@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Gather everything that changes how Bunko treats a work on its own settings page, linked under
+  the work's details: chapter or volume unit (with a suggestion when Kavita already holds whole
+  volumes), the owned-files declaration, automatic downloads, 18+ classification, display title,
+  catalog, sources, Kavita and images. The sheet follows the chosen unit: in volume mode missing
+  items, selection and "complete the series" work on whole volumes, and recent chapters not yet in
+  a volume stay in their own group. Add a "Search my sources" action that runs the automatic title
+  search for a work, from its settings and from the sheet when no source is linked.
+
 - Continue source-association batches while cover/index maintenance is still running, so the
   remaining library queue does not stop after the first two works. Keep pacing, account fairness
   and failure guards. Move source-less works into the library sort dropdown; show the bulk action
