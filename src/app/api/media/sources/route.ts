@@ -1,4 +1,4 @@
-import { listTracked, trackedForMedia } from '@/lib/db';
+import { listTracked, statement, trackedForMedia } from '@/lib/db';
 import { linkMatchedSources } from '@/lib/tracked-sources';
 import { preferredSourceLanguage } from '@/lib/source-preferences';
 import { sourceServerKey } from '@/lib/source-server';
@@ -14,7 +14,7 @@ import { matchingSources } from '@/lib/suwayomi';
 import { errorCode, errorDetail } from '@/lib/errors';
 /** Streams, source by source, the Suwayomi entries that correspond to a catalogue title. */
 export const GET = route(async (r) => {
-  const { id, q } = z
+  const { id, q, link } = z
     .object({
       id: mediaId,
       q: z
@@ -24,11 +24,21 @@ export const GET = route(async (r) => {
         .max(200)
         .regex(/^[^\u0000-\u001f\u007f]+$/)
         .optional(),
+      link: z.literal('1').optional(),
     })
     .parse(Object.fromEntries(new URL(r.url).searchParams));
   const media = await mediaDetail(id, r.signal);
   const tracked = trackedForMedia(media, listTracked());
-  const snapshot = tracked && !tracked.sources.length && q === undefined ? tracked : null;
+  // A work whose sources were all removed by hand is only relinked on an explicit search.
+  const cleared =
+    tracked &&
+    statement('SELECT 1 FROM worker_state WHERE key=?').get(`source_manual_empty:${tracked.id}`);
+  if (tracked && cleared && link === '1')
+    statement('DELETE FROM worker_state WHERE key=?').run(`source_manual_empty:${tracked.id}`);
+  const snapshot =
+    tracked && !tracked.sources.length && q === undefined && (!cleared || link === '1')
+      ? tracked
+      : null;
   const namespace = sourceServerKey();
   const language = preferredSourceLanguage();
   let expected = snapshot?.sources ?? [];

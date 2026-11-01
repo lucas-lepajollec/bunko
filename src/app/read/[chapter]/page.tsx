@@ -192,6 +192,8 @@ function ChapterReader({ chapter, media }: { chapter: string; media: string | nu
     <div className="fixed inset-0 z-[80] flex flex-col bg-black text-white">
       <header
         data-reader-bar
+        // Hidden controls must not stay reachable from the keyboard.
+        inert={!chrome}
         className={cx(
           'absolute inset-x-0 top-0 z-10 flex items-center gap-3 bg-gradient-to-b from-black/90 to-transparent px-3 pt-[max(env(safe-area-inset-top),10px)] pb-6 transition-opacity md:px-6',
           chrome ? 'opacity-100' : 'pointer-events-none opacity-0',

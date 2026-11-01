@@ -348,12 +348,15 @@ export function SourcesTab({
   lanes,
   onScan,
   onSources,
+  busy = false,
 }: {
   entry: TrackedMedia | undefined;
   sources: ChapterSelection[];
   lanes: Lane[] | null;
   onScan: (q?: string) => void;
   onSources: (next: ChapterSelection[]) => void;
+  /** A save is in flight: edits wait, so two quick clicks never overwrite each other. */
+  busy?: boolean;
 }) {
   const [query, setQuery] = useState(entry?.title ?? '');
   const scanning = lanes === null || lanes.some((l) => l.state === 'loading');
@@ -429,18 +432,23 @@ export function SourcesTab({
                 </span>
               </span>
               <span className="flex shrink-0 gap-0.5">
-                <Small label={t('sources.up')} disabled={i === 0} onClick={() => move(i, -1)}>
+                <Small
+                  label={t('sources.up')}
+                  disabled={busy || i === 0}
+                  onClick={() => move(i, -1)}
+                >
                   ↑
                 </Small>
                 <Small
                   label={t('sources.down')}
-                  disabled={i === sources.length - 1}
+                  disabled={busy || i === sources.length - 1}
                   onClick={() => move(i, 1)}
                 >
                   ↓
                 </Small>
                 <Small
                   label={t('sources.remove')}
+                  disabled={busy}
                   onClick={() => onSources(sources.filter((_, j) => j !== i))}
                 >
                   ✕
@@ -478,6 +486,7 @@ export function SourcesTab({
           <button
             key={`${c.sourceId}:${c.suwayomiMangaId}`}
             type="button"
+            disabled={busy}
             onClick={() =>
               onSources([
                 ...sources,
@@ -488,7 +497,7 @@ export function SourcesTab({
                 },
               ])
             }
-            className="flex items-center gap-3 rounded-xl p-2 text-left text-sm hover:bg-white/[0.05]"
+            className="flex items-center gap-3 rounded-xl p-2 text-left text-sm hover:bg-white/[0.05] disabled:opacity-50"
           >
             <Cover src={c.thumbnailUrl} className="w-9 shrink-0 shadow-none" />
             <span className="flex min-w-0 flex-1 flex-col">

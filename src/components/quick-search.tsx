@@ -242,7 +242,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
       role="dialog"
       aria-modal="true"
       aria-label={t('nav.search')}
-      className="bg-bg fixed inset-0 z-50 flex flex-col px-4 pt-4 lg:hidden"
+      className="bg-bg fixed inset-0 z-50 flex flex-col px-4 pt-4 xl:hidden"
     >
       <div className="flex items-center gap-2">
         <div className="flex-1">{field}</div>

@@ -34,7 +34,9 @@ export function useSourceScan(mediaId: string, { ready, auto }: { ready: boolean
       );
     };
     return openStream(
-      `/api/media/sources?id=${encodeURIComponent(mediaId)}${query ? `&q=${encodeURIComponent(query)}` : ''}`,
+      // `link=1`: the user asked for this search, so confident matches may be linked even after
+      // every source was removed by hand.
+      `/api/media/sources?id=${encodeURIComponent(mediaId)}${query ? `&q=${encodeURIComponent(query)}` : run > 0 ? '&link=1' : ''}`,
       {
         sources: (d) =>
           setLanes(

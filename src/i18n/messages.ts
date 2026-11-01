@@ -1027,6 +1027,7 @@ const en: Dictionary = {
   'error.FILE_TOO_LARGE': 'This file is too large to send.',
   'translate.removeBackup':
     'Remove this translation from the list? The kept original will be deleted; the translated file stays in your library.',
+  'title.nothingToQueue': 'Already owned or in the queue.',
 };
 
 const fr: Dictionary = {
@@ -2038,6 +2039,7 @@ const fr: Dictionary = {
   'error.FILE_TOO_LARGE': 'Ce fichier est trop volumineux pour être envoyé.',
   'translate.removeBackup':
     'Retirer cette traduction de la liste ? L’original conservé sera supprimé ; le fichier traduit reste dans ta bibliothèque.',
+  'title.nothingToQueue': 'Déjà possédé ou déjà en file.',
 };
 
 const es: Dictionary = {
@@ -3041,6 +3043,7 @@ const es: Dictionary = {
   'error.FILE_TOO_LARGE': 'Este archivo es demasiado grande para enviarlo.',
   'translate.removeBackup':
     '¿Quitar esta traducción de la lista? Se borrará el original conservado; el archivo traducido sigue en tu biblioteca.',
+  'title.nothingToQueue': 'Ya disponible o en cola.',
 };
 
 const de: Dictionary = {
@@ -4052,6 +4055,7 @@ const de: Dictionary = {
   'error.FILE_TOO_LARGE': 'Diese Datei ist zu groß zum Senden.',
   'translate.removeBackup':
     'Diese Übersetzung aus der Liste entfernen? Das behaltene Original wird gelöscht; die übersetzte Datei bleibt in deiner Bibliothek.',
+  'title.nothingToQueue': 'Bereits vorhanden oder in der Warteschlange.',
 };
 
 const it: Dictionary = {
@@ -5055,6 +5059,7 @@ const it: Dictionary = {
   'error.FILE_TOO_LARGE': 'Questo file è troppo grande per essere inviato.',
   'translate.removeBackup':
     'Rimuovere questa traduzione dall’elenco? L’originale conservato verrà eliminato; il file tradotto resta nella tua libreria.',
+  'title.nothingToQueue': 'Già posseduto o in coda.',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

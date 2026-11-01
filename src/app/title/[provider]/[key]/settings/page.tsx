@@ -72,7 +72,8 @@ function WorkSettings({ media }: { media: MediaDetail }) {
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const entry = trackedFor(library.data, media);
   const isComic = media.type === 'MANGA';
-  const sections = SECTIONS.filter((s) => isComic || (s !== 'sources' && s !== 'kavita'));
+  // Kavita links books too; sources (and their scan) only exist for comics.
+  const sections = SECTIONS.filter((s) => isComic || s !== 'sources');
   const requested = params.get('s') as Section | null;
   const section: Section = requested && sections.includes(requested) ? requested : 'general';
   const [save, setSave] = useState<Save>(null);
@@ -205,6 +206,7 @@ function WorkSettings({ media }: { media: MediaDetail }) {
           lanes={scan.lanes}
           onScan={rescan}
           onSources={(next) => run(() => patch({ sources: next }))}
+          busy={save?.state === 'saving'}
         />
       ) : section === 'kavita' ? (
         <KavitaTab

@@ -434,7 +434,9 @@ function ServiceCard({
               <button
                 type="button"
                 onClick={async () => {
-                  await send('/api/settings', 'PATCH', { [f.name]: '' }).catch(() => undefined);
+                  await send('/api/settings', 'PATCH', { [f.name]: '' }).catch((e) =>
+                    toast({ tone: 'bad', text: errorText(t, e) }),
+                  );
                   await onSaved();
                 }}
                 className="text-muted self-start text-xs underline hover:text-white"
@@ -610,7 +612,9 @@ function KavitaTargets({
           disabled={syncing}
           onClick={async () => {
             setSyncing(true);
-            await send('/api/kavita/sync', 'POST').catch(() => undefined);
+            await send('/api/kavita/sync', 'POST').catch((e) =>
+              toast({ tone: 'bad', text: errorText(t, e) }),
+            );
             setSyncing(false);
             void index.mutate();
           }}
@@ -771,7 +775,9 @@ function Account() {
           <button
             type="button"
             onClick={async () => {
-              await send('/api/auth', 'DELETE').catch(() => undefined);
+              await send('/api/auth', 'DELETE').catch((e) =>
+                toast({ tone: 'bad', text: errorText(t, e) }),
+              );
               clearPersistentCache();
               await mutate('/api/auth');
             }}
@@ -829,7 +835,7 @@ function Account() {
             const value = e.target.checked;
             if (await patchMe({ adultContent: value }, t('account.saved'))) {
               // Drop every cached list (not only mounted ones) so no page shows stale data.
-              clearPersistentCache();
+              clearPersistentCache({ resume: true });
               await mutate(
                 (key) => typeof key === 'string' && key !== '/api/me' && key !== '/api/auth',
                 undefined,

@@ -163,7 +163,7 @@ export function chapterFilename(
 async function atomicWrite(folder: string, name: string, contents: string | Buffer) {
   const tmp = path.join(folder, `.${randomUUID()}.partial`);
   try {
-    await writeFile(tmp, contents, { flag: 'wx', mode: 0o600 });
+    await writeFile(tmp, contents, { flag: 'wx', mode: 0o644 });
     await rename(tmp, path.join(folder, name));
   } finally {
     await unlink(tmp).catch((e) => {
@@ -241,7 +241,7 @@ export async function importChapter(
   const target = path.join(folder, chapterFilename(media, chapter));
   const tmp = `${target}.${randomUUID()}.partial`;
   try {
-    const handle = await open(tmp, 'wx', 0o600);
+    const handle = await open(tmp, 'wx', 0o644);
     try {
       await handle.writeFile(zip.toBuffer());
       await handle.sync();

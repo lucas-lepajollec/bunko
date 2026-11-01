@@ -265,7 +265,12 @@ function Title({ media }: { media: MediaDetail }) {
       .filter((c) => wanted.has(c.key) && missingKeys.has(c.key))
       .map((c) => preferredVariant(c, priority, choice[c.key])?.id)
       .filter((v): v is number => typeof v === 'number' && !queued.has(v));
-    if (!ids.length) return;
+    if (!ids.length) {
+      // Everything selected is already owned or queued: say so instead of doing nothing.
+      toast({ tone: 'ok', text: t('title.nothingToQueue') });
+      setSelected(new Set());
+      return;
+    }
     setBusy(true);
     try {
       if (!entry) await send('/api/tracked', 'POST', { media, status: 'READING', sources });
@@ -277,10 +282,11 @@ function Title({ media }: { media: MediaDetail }) {
         text: t('title.queued', { count: ids.length }),
         link: { href: '/downloads', label: t('title.seeDownloads') },
       });
-      await Promise.all([batches.mutate(), library.mutate()]);
     } catch (e) {
       toast({ tone: 'bad', text: errorText(t, e) });
     } finally {
+      // Earlier chunks may already be queued even when a later one failed.
+      await Promise.all([batches.mutate(), library.mutate()]).catch(() => undefined);
       setBusy(false);
     }
   }

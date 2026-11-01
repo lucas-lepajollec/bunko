@@ -10,6 +10,7 @@ import {
   listTracked,
   observeChapters,
   sameMedia,
+  getTracked,
   ownedVolumeNumbers,
   trackedForMedia,
 } from './db';
@@ -19,6 +20,7 @@ import { refreshLibraryProgress } from './kavita';
 import { syncKavitaIndex, matchKavita } from './kavita-index';
 import { refreshSourceStatuses } from './tracked-sources';
 import { syncTrackedCovers } from './tracked-covers';
+import { isTextKind } from './library-kinds';
 export function workerValue(key: string): string | null {
   return (
     (
@@ -250,6 +252,14 @@ export async function runUpdateCheck(
                 return v ? [v] : [];
               });
             db().transaction(() => {
+              // The check started before slow source calls: honour the entry as it is now.
+              const current = getTracked(t.id);
+              const sameSources =
+                current != null &&
+                sameMedia(current.media, t.media) &&
+                JSON.stringify(current.sources) === JSON.stringify(t.sources);
+              const autoDownload =
+                sameSources && current!.autoDownload && !isTextKind(current!.media);
               observeChapters(
                 t.id,
                 result.chapters.flatMap((c) => c.variants),
@@ -282,12 +292,19 @@ export async function runUpdateCheck(
                   statement(
                     'INSERT INTO update_chapters(entry_id,chapter_id,number) VALUES(?,?,?)',
                   ).run(id, c.id, c.number);
-                if (t.autoDownload)
+                if (autoDownload)
                   for (let offset = 0; offset < selected.length; offset += 500)
-                    create({
-                      media: t.media,
-                      chapterIds: selected.slice(offset, offset + 500).map((c) => c.id),
-                    });
+                    try {
+                      // A refused lot (missing target, unsupported kind) must not undo detection.
+                      db().transaction(() =>
+                        create({
+                          media: current!.media,
+                          chapterIds: selected.slice(offset, offset + 500).map((c) => c.id),
+                        }),
+                      )();
+                    } catch {
+                      /* Detection stays visible in Updates; the lot can be fetched by hand. */
+                    }
               }
             })();
           } catch {
@@ -299,10 +316,14 @@ export async function runUpdateCheck(
         }
       }),
     );
-    if (signal.aborted || !ownsLease()) return;
-    await refreshLibraryProgress(signal);
-    await syncTrackedCovers(signal);
-    if (ownsLease() && !signal.aborted)
+    // The source sweep has a budget; works left over are first in line (oldest check) next time.
+    // Only a cancelled worker or a lost lease leaves the request pending.
+    if (parentSignal?.aborted || !ownsLease()) return;
+    const after = parentSignal ?? new AbortController().signal;
+    await refreshLibraryProgress(after);
+    await syncTrackedCovers(after);
+    if (after.aborted || !ownsLease()) return;
+    if (ownsLease())
       statement("UPDATE worker_state SET value='0' WHERE key='check_requested' AND value=?").run(
         request,
       );

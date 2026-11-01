@@ -538,6 +538,20 @@ describe('v2 protocol fixtures', () => {
     expect(updatesFeed().entries).toHaveLength(3);
     expect(updatesFeed().nextCheckAt).not.toBeNull();
   });
+  it('keeps detected chapters when an automatic lot is refused', async () => {
+    const t = establishedTrack({ media, sources: [selectionA, selectionB] });
+    db().prepare('UPDATE tracked_media SET auto_download=1 WHERE id=?').run(t.id);
+    let attempts = 0;
+    await runUpdateCheck(() => {
+      attempts++;
+      throw new Error('TARGET_NOT_CONFIGURED');
+    });
+    expect(attempts).toBeGreaterThan(0);
+    // Detection and observations survive; only the refused lot is missing.
+    expect(updatesFeed().entries.map((e) => e.chapters)).toEqual([[3], [1, 2, 2.5]]);
+    expect(listBatches()).toHaveLength(0);
+    expect(db().prepare('SELECT COUNT(*) AS n FROM observed_chapters').get()).not.toEqual({ n: 0 });
+  });
   it('follows automatic and manual batches through queued, downloading, error, retry and downloaded', async () => {
     const t = establishedTrack({ media, sources: [selectionA, selectionB] });
     await runUpdateCheck(createBatch);
