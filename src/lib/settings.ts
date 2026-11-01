@@ -18,6 +18,7 @@ export const secretKeys: SecretSetting[] = [
   'kavitaApiKey',
   'sonarrApiKey',
   'prowlarrApiKey',
+  'tradocApiKey',
   'googleBooksApiKey',
   'metronApiToken',
   'metronPassword',
@@ -86,6 +87,8 @@ function serverSettings(): Settings {
     sonarrApiKey: '',
     prowlarrUrl: '',
     prowlarrApiKey: '',
+    tradocUrl: '',
+    tradocApiKey: '',
     googleBooksApiKey: '',
     metronApiToken: '',
     metronUsername: '',
@@ -232,6 +235,8 @@ function seedEnvironment() {
           sonarrApiKey: 'SONARR_API_KEY',
           prowlarrUrl: 'PROWLARR_URL',
           prowlarrApiKey: 'PROWLARR_API_KEY',
+          tradocUrl: 'TRADOC_URL',
+          tradocApiKey: 'TRADOC_API_KEY',
         };
         for (const [key, name] of Object.entries(keys)) {
           const value = process.env[name] ?? env(name);

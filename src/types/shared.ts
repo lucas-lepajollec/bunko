@@ -399,6 +399,10 @@ export interface Settings {
   sonarrApiKey: string;
   prowlarrUrl: string;
   prowlarrApiKey: string;
+  /** TraDoc integration API address, e.g. `http://tradoc.local:2507/api/v1`; empty = unused. */
+  tradocUrl: string;
+  /** TraDoc connection key (`tdk_…`), created in TraDoc → Settings → Integrations. */
+  tradocApiKey: string;
   /** Kavita-side path of the folder mounted at /library in this container. */
   kavitaLibraryPath: string;
   /** Kavita library and folder receiving each format; unset kinds use the suggested library. */
@@ -433,6 +437,7 @@ export type SecretSetting =
   | 'kavitaApiKey'
   | 'sonarrApiKey'
   | 'prowlarrApiKey'
+  | 'tradocApiKey'
   | 'googleBooksApiKey'
   | 'metronApiToken'
   | 'metronPassword'
@@ -635,7 +640,64 @@ export interface ServicesStatus {
     /** The API key belongs to a Kavita admin (needed for scans and cover uploads); null if unknown. */
     admin: boolean | null;
   };
+  /** TraDoc translation engine; `version` is TraDoc's own version when reachable. */
+  tradoc: { state: ServiceState; version: string | null };
 }
+
+/* ---- Book translation through TraDoc (contract for /api/translations/*) ---- */
+export type TranslationMode = 'replace' | 'separate';
+export type TranslationState =
+  | 'queued'
+  | 'pending'
+  | 'running'
+  | 'paused'
+  | 'failed'
+  | 'importing'
+  | 'completed'
+  | 'error'
+  | 'cancelled'
+  | 'restored';
+/** An owned text file of a work, as Kavita indexes it. */
+export interface TranslationFile {
+  /** Kavita-side path; identifies the file in translation requests. */
+  path: string;
+  name: string;
+  volume: number | null;
+  sizeBytes: number | null;
+}
+export interface TranslationJob {
+  id: number;
+  trackedId: number;
+  fileName: string;
+  sourceLang: string;
+  targetLang: string;
+  provider: string | null;
+  model: string | null;
+  mode: TranslationMode;
+  state: TranslationState;
+  /** 0–1 while TraDoc reports progress. */
+  progress: number | null;
+  /** Safe error code only. */
+  error: string | null;
+  /** The original file is kept outside the library and can be put back. */
+  backup: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface TranslationModels {
+  default: { provider: string | null; model: string | null };
+  providers: { provider: string; models: string[]; error: string | null }[];
+}
+export interface TranslationRequest {
+  trackedId: number;
+  paths: string[];
+  sourceLang: string;
+  targetLang: string;
+  provider?: string;
+  model?: string;
+  mode: TranslationMode;
+}
+export type TranslationAction = 'pause' | 'resume' | 'cancel' | 'retry' | 'restore' | 'remove';
 
 /* ---- Sources, browsing and updates (contract for /api/sources/*, /api/updates, /api/downloads/control) ---- */
 export interface SourceHealth {

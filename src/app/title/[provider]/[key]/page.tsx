@@ -27,6 +27,7 @@ import { MatchesSummary, type Lane } from '@/components/matches';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import { FavoriteButton } from '@/components/favorite';
 import { OwnedInventory } from '@/components/owned-inventory';
+import { Translations } from '@/components/translations';
 import {
   Cover,
   Dot,
@@ -581,7 +582,10 @@ function Title({ media }: { media: MediaDetail }) {
                 )}
               </>
             ) : (
-              <Empty title={t('novel.title')}>{t('novel.body')}</Empty>
+              <div className="flex flex-col gap-5">
+                {entry && <Translations entry={entry} owned={Boolean(media.kavita)} />}
+                <Empty title={t('novel.title')}>{t('novel.body')}</Empty>
+              </div>
             )}
           </section>
         </div>

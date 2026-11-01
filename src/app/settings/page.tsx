@@ -265,7 +265,7 @@ function Connections({
 }) {
   const { t } = useI18n();
   const services: {
-    key: 'suwayomi' | 'kavita';
+    key: 'suwayomi' | 'kavita' | 'tradoc';
     fields: {
       name: keyof SettingsPatch;
       label: string;
@@ -306,6 +306,20 @@ function Connections({
         { name: 'kavitaAuthMode', label: t('settings.authMode'), options: ['api-key', 'jwt'] },
       ],
     },
+    {
+      key: 'tradoc',
+      state: status?.tradoc?.state,
+      detail: status?.tradoc?.version ? `v${status.tradoc.version}` : null,
+      fields: [
+        { name: 'tradocUrl', label: t('settings.tradocAddress'), type: 'url' },
+        {
+          name: 'tradocApiKey',
+          label: t('settings.tradocKey'),
+          type: 'password',
+          secret: 'tradocApiKey',
+        },
+      ],
+    },
   ];
   return (
     <>
@@ -332,7 +346,7 @@ function ServiceCard({
   settings,
   onSaved,
 }: {
-  name: 'suwayomi' | 'kavita';
+  name: 'suwayomi' | 'kavita' | 'tradoc';
   state: string | undefined;
   detail?: string | null;
   fields: {

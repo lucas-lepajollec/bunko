@@ -196,6 +196,8 @@ export const settingsPatch = z
     kavitaAuthMode: z.enum(['api-key', 'jwt']).optional(),
     sonarrUrl: z.union([httpUrl, z.literal('')]).optional(),
     sonarrApiKey: z.string().max(2000).optional(),
+    tradocUrl: z.union([httpUrl, z.literal('')]).optional(),
+    tradocApiKey: z.string().max(2000).optional(),
     prowlarrUrl: z.union([httpUrl, z.literal('')]).optional(),
     prowlarrApiKey: z.string().max(2000).optional(),
     googleBooksApiKey: z
