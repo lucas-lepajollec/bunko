@@ -168,6 +168,7 @@ export function db(): Database.Database {
     });
     migrateV15(connection);
     migrateV16(connection);
+    migrateV17(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -1298,6 +1299,24 @@ export function migrateV16(database: Database.Database) {
           WHERE CASE WHEN json_valid(context) THEN json_array_length(context)>3 ELSE 0 END`);
       database.pragma('user_version=16');
     }
+  })();
+}
+
+/** Translation jobs sent to a TraDoc instance; additive and idempotent. */
+export function migrateV17(database: Database.Database) {
+  database.transaction(() => {
+    database.exec(`CREATE TABLE IF NOT EXISTS translation_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tracked_id INTEGER NOT NULL REFERENCES tracked_media(id) ON DELETE CASCADE,
+      kavita_path TEXT NOT NULL, file_name TEXT NOT NULL,
+      source_lang TEXT NOT NULL, target_lang TEXT NOT NULL, provider TEXT, model TEXT,
+      mode TEXT NOT NULL CHECK(mode IN ('replace','separate')),
+      state TEXT NOT NULL, progress REAL, error TEXT, remote_id TEXT,
+      output_path TEXT, backup_path TEXT, next_check_at INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS translation_jobs_tracked ON translation_jobs(tracked_id);`);
+    if (Number(database.pragma('user_version', { simple: true })) < 17)
+      database.pragma('user_version=17');
   })();
 }
 

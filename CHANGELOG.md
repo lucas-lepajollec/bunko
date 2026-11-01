@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Translate owned books, light novels and web novels through a TraDoc instance: connect it in
+  Settings → Connections, then choose files, languages, model and result on the work's sheet.
+  Either replace the file (Bunko keeps the original outside the library and can restore it) or
+  keep both as a separate series. Jobs survive restarts, retry while TraDoc is unreachable and
+  rescan Kavita when the translation is installed.
+
 - Gather everything that changes how Bunko treats a work on its own settings page, linked under
   the work's details: chapter or volume unit (with a suggestion when Kavita already holds whole
   volumes), the owned-files declaration, automatic downloads, 18+ classification, display title,
