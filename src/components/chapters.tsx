@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChapterVariant, MergedChapter } from '@/types/shared';
 import { useI18n } from '@/i18n/I18nProvider';
 import { cx } from './ui';
@@ -123,7 +123,17 @@ export function ChapterTable({
   const visibleGroups = groups.filter((g) =>
     filter === 'missing' ? missingVolume(g) : filter === 'unread' ? unreadVolume(g) : true,
   );
-  const selectable = byVolume ? visibleGroups.flatMap(([, list]) => list) : visible;
+  // "Select all" covers what can be fetched: missing chapters, or missing volumes as a whole.
+  const selectable = (
+    byVolume
+      ? visibleGroups.filter(([v]) => !ownedVolumes.has(v)).flatMap(([, list]) => list)
+      : visible
+  ).filter((c) => isMissing(c, owned, ownedVolumes));
+  const selectableCount = byVolume
+    ? visibleGroups.filter(
+        ([v, list]) => !ownedVolumes.has(v) && list.some((c) => isMissing(c, owned, ownedVolumes)),
+      ).length
+    : selectable.length;
   const total = byVolume ? visibleGroups.length : visible.length;
   const toggle = (key: string) => {
     const next = new Set(selected);
@@ -207,7 +217,9 @@ export function ChapterTable({
               }}
               className="size-4 accent-[var(--accent)]"
             />
-            {t('chapters.selectAll', { count: n(selectable.length) })}
+            {t(byVolume ? 'volumes.selectAll' : 'chapters.selectAll', {
+              count: n(selectableCount),
+            })}
           </label>
           {/* The range picker stays folded behind a chevron until asked for. */}
           <button
@@ -276,14 +288,6 @@ export function ChapterTable({
           )}
         </div>
       </div>
-      {total > limit && (
-        <p className="text-muted py-2 text-xs" role="status">
-          {t(byVolume ? 'volumes.displayed' : 'chapters.displayed', {
-            shown: Math.min(limit, total),
-            total,
-          })}
-        </p>
-      )}
       {total === 0 && !pending && (
         <p className="text-muted py-6 font-serif text-xl italic">
           {t(
@@ -409,17 +413,8 @@ export function ChapterTable({
               );
             })
           : visible.slice(0, limit).map((c) => row(c))}
-        {total > limit && (
-          <li className="flex justify-center py-4">
-            <button
-              type="button"
-              onClick={() => setLimit((l) => l + MORE)}
-              className="text-mid rounded-full bg-white/[0.06] px-5 py-2 text-sm hover:text-white"
-            >
-              {t('chapters.seeMore', { count: n(total - limit) })}
-            </button>
-          </li>
-        )}
+        {/* Older rows load as the list scrolls; no counter or button needed. */}
+        {total > limit && <MoreRows onVisible={() => setLimit((l) => l + MORE)} />}
       </ul>
     </div>
   );
@@ -482,14 +477,18 @@ function ChapterRow({
         (downloaded || isRead) && !checked && 'opacity-55',
       )}
     >
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={onToggle}
-        aria-label={label}
-        className="size-5 shrink-0 accent-[var(--accent)] md:size-[17px] md:self-center"
-      />
+      {/* Owned rows have nothing to fetch: no box to tick, only a spacer for alignment. */}
+      {downloaded || disabled ? (
+        <span aria-hidden className="size-5 shrink-0 md:size-[17px]" />
+      ) : (
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onToggle}
+          aria-label={label}
+          className="size-5 shrink-0 accent-[var(--accent)] md:size-[17px] md:self-center"
+        />
+      )}
       <span className="flex min-w-0 flex-1 flex-col md:flex-row md:items-baseline md:gap-3.5">
         <span className="shrink-0 font-serif text-[21px] md:w-[150px] md:text-[23px]">{label}</span>
         <span
@@ -564,4 +563,26 @@ function volumes(list: MergedChapter[]): [number | null, MergedChapter[]][] {
   const groups = new Map<number | null, MergedChapter[]>();
   for (const c of list) groups.set(c.volume, [...(groups.get(c.volume) ?? []), c]);
   return [...groups.entries()].sort(([a], [b]) => (a === null ? 1 : b === null ? -1 : b - a));
+}
+
+/** Invisible end-of-list marker: asks for more rows when it scrolls into view. */
+function MoreRows({ onVisible }: { onVisible: () => void }) {
+  const ref = useRef<HTMLLIElement>(null);
+  const latest = useRef(onVisible);
+  useEffect(() => {
+    latest.current = onVisible;
+  });
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) latest.current();
+      },
+      { rootMargin: '400px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return <li ref={ref} aria-hidden className="h-px" />;
 }

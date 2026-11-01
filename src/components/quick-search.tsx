@@ -8,6 +8,11 @@ import { Cover, Skeleton, cx, useMediaMeta } from './ui';
 import { LoadNotice } from './load-notice';
 
 export const OPEN_SEARCH_EVENT = 'bunko:open-search';
+/** Pages whose own content the search field filters. */
+const SCOPES: Record<string, 'library' | 'planning'> = {
+  '/library': 'library',
+  '/planning': 'planning',
+};
 
 function useDebounced(value: string, ms: number) {
   const [debounced, setDebounced] = useState(value);
@@ -34,8 +39,18 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const q = useDebounced(text.trim(), 250);
-  const results = useProgressiveSearch(q);
-  const items = (results.data?.results ?? []).slice(0, 6);
+  // Library and planning filter themselves with the search text (`?q=`); elsewhere it searches
+  // the catalog. Searching everywhere stays one action away.
+  const scope = SCOPES[pathname] ?? null;
+  const results = useProgressiveSearch(scope ? '' : q);
+  const items = scope ? [] : (results.data?.results ?? []).slice(0, 6);
+  useEffect(() => {
+    if (!scope) return;
+    const url = new URL(window.location.href);
+    if (q) url.searchParams.set('q', q);
+    else url.searchParams.delete('q');
+    if (url.href !== window.location.href) window.history.replaceState(null, '', url);
+  }, [scope, q]);
   const actions = [
     {
       key: 'catalog',
@@ -76,7 +91,12 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
   if (pathname !== lastPath) {
     setLastPath(pathname);
     setOpen(false);
-    setText('');
+    // Arriving on a filtered page (e.g. /library?q=…) shows its filter in the field.
+    setText(
+      SCOPES[pathname] && typeof window !== 'undefined'
+        ? (new URL(window.location.href).searchParams.get('q') ?? '')
+        : '',
+    );
   }
 
   const go = (href: string) => {
@@ -96,6 +116,9 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
     } else if (e.key === 'ArrowUp' && show) {
       e.preventDefault();
       setActive((a) => (a <= 0 ? total - 1 : a - 1));
+    } else if (e.key === 'Enter' && scope && active < 0) {
+      e.preventDefault();
+      setOpen(false);
     } else if (e.key === 'Enter' && text.trim().length >= 2) {
       e.preventDefault();
       if (active >= 0 && active < items.length) go(mediaHref(items[active].id));
@@ -116,46 +139,54 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
           : 'mt-3',
       )}
     >
-      <span className="text-muted px-4 pt-3 pb-1 text-[11px] tracking-[0.16em] uppercase">
-        {t('search.catalog')}
-      </span>
-      <LoadNotice
-        pending={results.isLoading || results.refining || q !== text.trim()}
-        partial={results.partial}
-        className="px-4 py-2"
-      />
-      {results.isLoading && !results.data
-        ? Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} className="mx-4 my-2 h-14 rounded-lg" />
-          ))
-        : items.map((m, i) => (
-            <button
-              key={m.id}
-              type="button"
-              role="option"
-              aria-selected={active === i}
-              onMouseEnter={() => setActive(i)}
-              onClick={() => go(mediaHref(m.id))}
-              className={cx(
-                'flex items-center gap-3 px-4 py-2 text-left',
-                active === i && 'bg-white/[0.07]',
-              )}
-            >
-              <Cover src={m.coverUrl} className="w-9 shrink-0 shadow-none" />
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate text-sm font-medium">{m.title}</span>
-                <span className="text-muted truncate text-xs">
-                  {meta(m, true)}
-                  {m.kavita
-                    ? ` · ${t('common.inKavita')}`
-                    : m.trackedId !== null
-                      ? ` · ${t('common.inLibrary')}`
-                      : ''}
+      {scope ? (
+        <p className="text-mid px-4 pt-3 pb-1 text-sm">{t(`search.filtering.${scope}`)}</p>
+      ) : (
+        <span className="text-muted px-4 pt-3 pb-1 text-[11px] tracking-[0.16em] uppercase">
+          {t('search.catalog')}
+        </span>
+      )}
+      {!scope && (
+        <LoadNotice
+          pending={results.isLoading || results.refining || q !== text.trim()}
+          partial={results.partial}
+          className="px-4 py-2"
+        />
+      )}
+      {scope
+        ? null
+        : results.isLoading && !results.data
+          ? Array.from({ length: 3 }, (_, i) => (
+              <Skeleton key={i} className="mx-4 my-2 h-14 rounded-lg" />
+            ))
+          : items.map((m, i) => (
+              <button
+                key={m.id}
+                type="button"
+                role="option"
+                aria-selected={active === i}
+                onMouseEnter={() => setActive(i)}
+                onClick={() => go(mediaHref(m.id))}
+                className={cx(
+                  'flex items-center gap-3 px-4 py-2 text-left',
+                  active === i && 'bg-white/[0.07]',
+                )}
+              >
+                <Cover src={m.coverUrl} className="w-9 shrink-0 shadow-none" />
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-sm font-medium">{m.title}</span>
+                  <span className="text-muted truncate text-xs">
+                    {meta(m, true)}
+                    {m.kavita
+                      ? ` · ${t('common.inKavita')}`
+                      : m.trackedId !== null
+                        ? ` · ${t('common.inLibrary')}`
+                        : ''}
+                  </span>
                 </span>
-              </span>
-            </button>
-          ))}
-      {results.data && !results.refining && !results.partial && items.length === 0 && (
+              </button>
+            ))}
+      {!scope && results.data && !results.refining && !results.partial && items.length === 0 && (
         <p className="text-muted px-4 py-3 font-serif text-lg italic">{t('quick.noCatalog')}</p>
       )}
       <div className="border-line mt-2 flex flex-col border-t py-1.5">
@@ -212,7 +243,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
         aria-expanded={Boolean(show)}
         aria-controls={`quick-${variant}`}
         aria-label={t('nav.search')}
-        placeholder={t('search.placeholderShort')}
+        placeholder={t(scope ? `search.filter.${scope}` : 'search.placeholderShort')}
         value={text}
         onChange={(e) => {
           setText(e.target.value);

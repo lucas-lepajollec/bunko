@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Volume mode hides boxes on owned volumes and "select all" counts missing volumes; the chapter
+  list loads more rows as it scrolls instead of a counter. Loading notices no longer flash and
+  move the sheet during background refreshes. "Refresh from Kavita" rescans a work's folder now.
+  Same-name catalog ties are broken by owned volume/chapter counts, and unlinked works point to
+  the catalog link. The work settings page is wider with a side menu on desktop. The header
+  search filters the library and the planning in place (`?q=`). The planning and the home shelves
+  show one card per work per day with a chapter range instead of every chapter of a bulk upload.
+  Covers retry temporary failures and load four at a time. Latest releases link to the planning.
+
 - Translate owned books, light novels and web novels through a TraDoc instance: connect it in
   Settings → Connections, then choose files, languages, model and result on the work's sheet.
   Either replace the file (Bunko keeps the original outside the library and can restore it) or

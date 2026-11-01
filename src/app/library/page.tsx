@@ -125,9 +125,12 @@ function Library() {
   );
   const ownedVolumes = entries.reduce((sum, e) => sum + (e.ownedVolumes?.length ?? 0), 0);
   const unownedCount = entries.filter((entry) => !hasOwnedFiles(entry)).length;
+  // The header search filters this page (`?q=`, written by the search field).
+  const filterText = (params.get('q') ?? '').trim();
   const filtered = entries
     .filter((entry) => shelf !== 'UNOWNED' || !hasOwnedFiles(entry))
     .filter((e) => !status || shelfOf(e) === status)
+    .filter((e) => matchesFilter(e, filterText))
     .filter(
       (e) =>
         kind === 'all' ||
@@ -164,8 +167,7 @@ function Library() {
         quiet
         pending={
           refreshing ||
-          library.isLoading ||
-          library.isValidating ||
+          (!library.data && library.isLoading) ||
           (shelf === 'KAVITA' && unmatched.isLoading)
         }
         partial={Boolean(refreshFailed || library.error || (shelf === 'KAVITA' && unmatched.error))}
@@ -387,4 +389,16 @@ function Library() {
       )}
     </Page>
   );
+}
+
+const fold = (value: string) => value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
+/** Title, alternative titles or authors contain every word typed. */
+function matchesFilter(entry: TrackedMedia, text: string) {
+  if (!text) return true;
+  const haystack = fold(
+    [entry.title, entry.media.title, ...entry.media.altTitles, ...entry.media.authors].join(' '),
+  );
+  return fold(text)
+    .split(/\s+/)
+    .every((word) => haystack.includes(word));
 }

@@ -122,7 +122,7 @@ function WorkSettings({ media }: { media: MediaDetail }) {
 
   return (
     <main
-      className="mx-auto flex max-w-[760px] flex-col gap-6 px-4 pt-20 pb-28 md:px-8 md:pt-28"
+      className="mx-auto flex max-w-[1400px] flex-col gap-6 px-4 pt-20 pb-28 md:px-10 md:pt-28"
       style={{ ['--accent' as string]: media.color ?? '#9fb6ff' }}
     >
       <Link href={mediaHref(media.id)} className="text-mid self-start text-sm hover:text-white">
@@ -143,88 +143,93 @@ function WorkSettings({ media }: { media: MediaDetail }) {
           </p>
         </div>
       </header>
-      <nav
-        aria-label={t('settings.work.title')}
-        className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:px-0"
-      >
-        {sections.map((s) => (
-          <button
-            key={s}
-            type="button"
-            aria-current={s === section ? 'page' : undefined}
-            onClick={() => go(s)}
-            className={cx(
-              'h-9 shrink-0 rounded-full px-4 text-sm',
-              s === section
-                ? 'bg-fg text-bg font-semibold'
-                : 'bg-white/[0.07] hover:bg-white/[0.1]',
-            )}
-          >
-            {label(s)}
-          </button>
-        ))}
-      </nav>
-      <SaveStatus save={save} />
-      {library.data === undefined ? (
-        <Skeleton className="h-64" />
-      ) : !entry ? (
-        <div className="flex flex-col items-start gap-3 rounded-2xl bg-white/[0.04] p-4">
-          <p className="text-mid">{t('match.trackFirst')}</p>
-          <button
-            type="button"
-            className={smallButton}
-            onClick={() =>
-              run(() => send('/api/tracked', 'POST', { media, status: 'PLANNING', sources }))
-            }
-          >
-            {t('match.addToLibrary')}
-          </button>
+      <div className="flex flex-col gap-6 md:mt-4 md:grid md:grid-cols-[220px_minmax(0,1fr)] md:gap-14">
+        {/* Phones: a row of pills; desktop: a column beside the section, like the app settings. */}
+        <nav
+          aria-label={t('settings.work.title')}
+          className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 md:sticky md:top-28 md:mx-0 md:flex-col md:self-start md:overflow-visible md:px-0"
+        >
+          {sections.map((s) => (
+            <button
+              key={s}
+              type="button"
+              aria-current={s === section ? 'page' : undefined}
+              onClick={() => go(s)}
+              className={cx(
+                'h-9 shrink-0 rounded-full px-4 text-sm md:h-11 md:rounded-xl md:text-left md:text-[15px]',
+                s === section
+                  ? 'bg-fg text-bg font-semibold'
+                  : 'bg-white/[0.07] hover:bg-white/[0.1] md:bg-transparent',
+              )}
+            >
+              {label(s)}
+            </button>
+          ))}
+        </nav>
+        <div className="flex max-w-[960px] min-w-0 flex-col gap-6">
+          <SaveStatus save={save} />
+          {library.data === undefined ? (
+            <Skeleton className="h-64" />
+          ) : !entry ? (
+            <div className="flex flex-col items-start gap-3 rounded-2xl bg-white/[0.04] p-4">
+              <p className="text-mid">{t('match.trackFirst')}</p>
+              <button
+                type="button"
+                className={smallButton}
+                onClick={() =>
+                  run(() => send('/api/tracked', 'POST', { media, status: 'PLANNING', sources }))
+                }
+              >
+                {t('match.addToLibrary')}
+              </button>
+            </div>
+          ) : section === 'general' ? (
+            <GeneralTab entry={entry} media={media} sources={sources} run={run} patch={patch} />
+          ) : section === 'catalog' ? (
+            <CatalogTab
+              entry={entry}
+              media={media}
+              onPick={(m) =>
+                run(async () => {
+                  const u = await patch({ media: m });
+                  router.replace(`${mediaHref(u.media.id)}/settings?s=catalog`);
+                })
+              }
+              onDetach={() =>
+                run(async () => {
+                  const u = await patch({ offCatalog: true });
+                  router.replace(`${mediaHref(u.media.id)}/settings?s=catalog`);
+                })
+              }
+            />
+          ) : section === 'sources' ? (
+            <SourcesTab
+              entry={entry}
+              sources={sources}
+              lanes={scan.lanes}
+              onScan={rescan}
+              onSources={(next) => run(() => patch({ sources: next }))}
+              busy={save?.state === 'saving'}
+            />
+          ) : section === 'kavita' ? (
+            <KavitaTab
+              entry={entry}
+              media={media}
+              onPick={(id) => run(() => patch({ kavitaSeriesId: id }))}
+              onCoverSync={(kavitaCoverSync) => run(() => patch({ kavitaCoverSync }))}
+            />
+          ) : (
+            <CoverTab
+              entry={entry}
+              media={media}
+              onBackdrop={(backdrop) => run(() => patch({ backdrop }))}
+              lanes={scan.lanes}
+              sources={sources}
+              onPick={(cover) => run(() => patch({ cover }))}
+            />
+          )}
         </div>
-      ) : section === 'general' ? (
-        <GeneralTab entry={entry} media={media} sources={sources} run={run} patch={patch} />
-      ) : section === 'catalog' ? (
-        <CatalogTab
-          entry={entry}
-          media={media}
-          onPick={(m) =>
-            run(async () => {
-              const u = await patch({ media: m });
-              router.replace(`${mediaHref(u.media.id)}/settings?s=catalog`);
-            })
-          }
-          onDetach={() =>
-            run(async () => {
-              const u = await patch({ offCatalog: true });
-              router.replace(`${mediaHref(u.media.id)}/settings?s=catalog`);
-            })
-          }
-        />
-      ) : section === 'sources' ? (
-        <SourcesTab
-          entry={entry}
-          sources={sources}
-          lanes={scan.lanes}
-          onScan={rescan}
-          onSources={(next) => run(() => patch({ sources: next }))}
-          busy={save?.state === 'saving'}
-        />
-      ) : section === 'kavita' ? (
-        <KavitaTab
-          entry={entry}
-          media={media}
-          onPick={(id) => run(() => patch({ kavitaSeriesId: id }))}
-          onCoverSync={(kavitaCoverSync) => run(() => patch({ kavitaCoverSync }))}
-        />
-      ) : (
-        <CoverTab
-          entry={entry}
-          media={media}
-          onBackdrop={(backdrop) => run(() => patch({ backdrop }))}
-          lanes={scan.lanes}
-          sources={sources}
-          onPick={(cover) => run(() => patch({ cover }))}
-        />
-      )}
+      </div>
     </main>
   );
 }

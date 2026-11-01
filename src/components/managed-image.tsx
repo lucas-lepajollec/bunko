@@ -1,8 +1,11 @@
 'use client';
 import { useEffect, useRef, useState, type ImgHTMLAttributes } from 'react';
-import { loadCover } from '@/lib/client/cover-loader';
+import { TransientCoverError, loadCover } from '@/lib/client/cover-loader';
 
-/** Same-origin artwork shares two cancellable transfers; offscreen cards do no work. */
+/** Delays before retrying a cover that failed for a temporary reason. */
+const RETRIES = [3_000, 12_000];
+
+/** Same-origin artwork shares a few cancellable transfers; offscreen cards do no work. */
 export function ManagedImage({
   src,
   onLoadError,
@@ -40,6 +43,8 @@ export function ManagedImage({
     let request: AbortController | undefined;
     let objectUrl: string | undefined;
     let disposed = false;
+    let tries = 0;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     const start = () => {
       if (disposed || request || objectUrl) return;
       const transfer = new AbortController();
@@ -72,8 +77,15 @@ export function ManagedImage({
           observer?.disconnect();
           setLoaded(url);
         })
-        .catch(() => {
-          if (!disposed && !transfer.signal.aborted) failure.current?.();
+        .catch((error) => {
+          if (disposed || transfer.signal.aborted) return;
+          // A busy or briefly unreachable server is not a missing cover: try again later.
+          if (error instanceof TransientCoverError && tries < RETRIES.length) {
+            request = undefined;
+            retry = setTimeout(start, RETRIES[tries++]);
+            return;
+          }
+          failure.current?.();
         });
     };
     const observer =
@@ -95,6 +107,7 @@ export function ManagedImage({
     else start();
     return () => {
       disposed = true;
+      clearTimeout(retry);
       observer?.disconnect();
       request?.abort();
       // The displayed image belongs to the component, not this request.

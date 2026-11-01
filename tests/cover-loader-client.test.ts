@@ -15,7 +15,7 @@ it('leaves HTTP connections free while slow covers fill a large library queue', 
       }),
   );
   vi.stubGlobal('fetch', fetcher);
-  const load = createCoverLoader();
+  const load = createCoverLoader(2);
   const controllers = Array.from({ length: 40 }, () => new AbortController());
   const pending = controllers.map((c, i) => load(`/api/covers/${i + 1}`, c.signal));
   const done = Promise.allSettled(pending);

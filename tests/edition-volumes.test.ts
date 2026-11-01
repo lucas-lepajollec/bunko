@@ -325,9 +325,9 @@ it('parses RSS URLs, dates, CDATA, missing numbers; polls cached RSS into releas
   expect(releaseStore().filter((r) => r.provider === 'royalroad')).toHaveLength(3);
   expect(updatesFeed().entries).toHaveLength(3);
   expect(getTracked(t.id)?.newChapters).toBe(2);
-  expect(
-    buildPlanning(releaseStore(), '2026-10-17', now).days.flatMap((d) => d.items),
-  ).toHaveLength(3);
+  // Same-day chapters of one serial share a card; every release is still counted.
+  const planned = buildPlanning(releaseStore(), '2026-10-17', now).days.flatMap((d) => d.items);
+  expect(planned.reduce((sum, item) => sum + (item.count ?? 1), 0)).toBe(3);
 });
 it('matches an exact cached catalog title and its Royal Road link without scraping a search page', () => {
   const t = track({

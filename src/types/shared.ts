@@ -160,6 +160,10 @@ export interface PlanningItem {
   /** `released`: actually published that day; `expected`: usual release day estimated from history. */
   kind: 'released' | 'expected';
   chapter: number | null;
+  /** Several chapters of the work that day: `chapter` is the first, this the last. */
+  chapterTo?: number | null;
+  /** Releases merged into this card (1 when alone). */
+  count?: number;
   /** Local time "HH:MM" when known (released with a timestamp, or a regular expected hour), else null. */
   time: string | null;
   trackedId: number | null;

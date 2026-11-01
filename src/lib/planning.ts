@@ -119,6 +119,8 @@ export function buildPlanning(
           trackedId: latest.trackedId,
         });
   }
+  // A bulk upload (or a chapter split into parts) is one event: one card per work per day.
+  for (const day of days) day.items = groupDay(day.items);
   for (const day of days)
     day.items.sort(
       (a, b) =>
@@ -127,6 +129,29 @@ export function buildPlanning(
         (a.chapter ?? 0) - (b.chapter ?? 0),
     );
   return { start: days[0].date, days };
+}
+/** Merge a day's items of the same work and kind into a chapter range. */
+export function groupDay(items: PlanningItem[]): PlanningItem[] {
+  const groups = new Map<string, PlanningItem>();
+  for (const item of items) {
+    const key = `${item.kind}:${item.media.id}`;
+    const old = groups.get(key);
+    if (!old) {
+      groups.set(key, { ...item, chapterTo: item.chapter, count: 1 });
+      continue;
+    }
+    const numbers = [old.chapter, old.chapterTo, item.chapter].filter(
+      (n): n is number => n !== null && n !== undefined,
+    );
+    groups.set(key, {
+      ...old,
+      chapter: numbers.length ? Math.min(...numbers) : null,
+      chapterTo: numbers.length ? Math.max(...numbers) : null,
+      count: (old.count ?? 1) + 1,
+      time: [old.time, item.time].filter(Boolean).sort()[0] ?? null,
+    });
+  }
+  return [...groups.values()];
 }
 const snapshots = new Map<
   number,
