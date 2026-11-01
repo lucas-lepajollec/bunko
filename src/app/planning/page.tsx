@@ -1,6 +1,7 @@
 'use client';
 import { MediaLink } from '@/components/media-link';
-import { useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { DiscoverKind, PlanningItem, PlanningWeek } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -29,7 +30,19 @@ const shift = (iso: string, days: number) => {
 };
 
 export default function PlanningPage() {
+  return (
+    <Suspense>
+      <Planning />
+    </Suspense>
+  );
+}
+
+const fold = (value: string) => value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
+
+function Planning() {
   const { t, locale } = useI18n();
+  // The header search filters the week (`?q=`, written by the search field).
+  const filterText = fold((useSearchParams().get('q') ?? '').trim());
   const today = isoDay(new Date());
   const [week, setWeek] = useState(today);
   const [kind, setKind] = useState<DiscoverKind>('all');
@@ -41,7 +54,16 @@ export default function PlanningPage() {
     keepPreviousData: true,
     refreshInterval: (data) => (data?.pending ? 1500 : 0),
   });
-  const days = plan.data?.days ?? [];
+  const days = (plan.data?.days ?? []).map((d) =>
+    filterText
+      ? {
+          ...d,
+          items: d.items.filter((item) =>
+            fold([item.media.title, ...item.media.altTitles].join(' ')).includes(filterText),
+          ),
+        }
+      : d,
+  );
   const isCurrent = days.some((d) => d.date === today);
   const [day, setDay] = useState<string | null>(null);
   // Mobile shows one day: today in the current week, otherwise Monday.
@@ -60,7 +82,7 @@ export default function PlanningPage() {
     <Page className="pb-16">
       <PageTitle title={t('planning.title')} aside={range} />
       <LoadNotice
-        pending={plan.isLoading || plan.isValidating || plan.data?.pending}
+        pending={(!plan.data && plan.isLoading) || plan.data?.pending}
         partial={plan.data?.partial}
       />
       <div className="flex flex-col gap-3 md:flex-row md:items-center">
@@ -213,11 +235,20 @@ function PlanningRow({ item }: { item: PlanningItem }) {
             {item.media.title}
           </span>
           <span className={cx('text-xs', expected ? 'text-muted italic' : 'text-mid')}>
-            {item.chapter !== null
-              ? t(expected ? 'planning.expectedChapter' : 'release.chapter', { n: n(item.chapter) })
-              : expected
-                ? t('planning.expected')
-                : t('planning.released')}
+            {item.chapter !== null && item.chapterTo != null && item.chapterTo !== item.chapter
+              ? t('planning.chapterRange', {
+                  from: n(Math.floor(item.chapter)),
+                  to: n(Math.floor(item.chapterTo)),
+                })
+              : item.chapter !== null
+                ? t(expected ? 'planning.expectedChapter' : 'release.chapter', {
+                    n: n(item.chapter),
+                  })
+                : (item.count ?? 1) > 1
+                  ? t('planning.releaseCount', { n: n(item.count ?? 1) })
+                  : expected
+                    ? t('planning.expected')
+                    : t('planning.released')}
           </span>
         </span>
       </MediaLink>

@@ -27,7 +27,9 @@ export function composeHome(releases: ChapterRelease[], top: HomeFeed['top']): H
   for (const r of releases) {
     if (r.releasedAt < since || !visibleMedia(r.media)) continue;
     const kind = mediaKind(r.media);
-    if (latest[kind].length < 12) latest[kind].push(r);
+    // Newest first: one card per work, so a bulk upload does not fill the whole shelf.
+    if (latest[kind].length < 12 && !latest[kind].some((x) => x.media.id === r.media.id))
+      latest[kind].push(r);
     if ((r.media.bannerUrl || r.media.coverUrl) && !seen.has(r.media.id)) {
       const target = r.media.bannerUrl ? banners : covers;
       if (target.length < 8) target.push(r);

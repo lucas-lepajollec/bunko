@@ -1028,6 +1028,23 @@ const en: Dictionary = {
   'translate.removeBackup':
     'Remove this translation from the list? The kept original will be deleted; the translated file stays in your library.',
   'title.nothingToQueue': 'Already owned or in the queue.',
+  'volumes.selectAll': 'Select all missing volumes ({count})',
+  'match.kavitaVolumes': '{library} · {n} vol.',
+  'planning.chapterRange': 'Ch. {from}–{to}',
+  'planning.releaseCount': '{n} releases',
+  'catalog.openPlanning': 'See this week in the planning',
+  'title.offCatalogTitle': 'Not linked to the catalog',
+  'title.offCatalogBody':
+    'Bunko could not tell which catalog work this is (several share its name). Link it to show its universe and recommendations.',
+  'title.offCatalogAction': 'Link to the catalog',
+  'kavita.refresh': 'Refresh from Kavita',
+  'kavita.refreshChanged': 'Kavita’s files are up to date in Bunko.',
+  'kavita.refreshSame':
+    'Nothing new in Kavita yet. If you just added a file, Kavita may still be scanning; try again in a moment.',
+  'search.filter.library': 'Filter my library…',
+  'search.filter.planning': 'Filter this week…',
+  'search.filtering.library': 'The library below shows only the matching works.',
+  'search.filtering.planning': 'The planning below shows only the matching works.',
 };
 
 const fr: Dictionary = {
@@ -2040,6 +2057,24 @@ const fr: Dictionary = {
   'translate.removeBackup':
     'Retirer cette traduction de la liste ? L’original conservé sera supprimé ; le fichier traduit reste dans ta bibliothèque.',
   'title.nothingToQueue': 'Déjà possédé ou déjà en file.',
+  'volumes.selectAll': 'Sélectionner les tomes manquants ({count})',
+  'match.kavitaVolumes': '{library} · {n} tomes',
+  'planning.chapterRange': 'Ch. {from}–{to}',
+  'planning.releaseCount': '{n} sorties',
+  'catalog.openPlanning': 'Voir la semaine dans le planning',
+  'title.offCatalogTitle': 'Pas liée au catalogue',
+  'title.offCatalogBody':
+    'Bunko n’a pas pu savoir de quelle œuvre du catalogue il s’agit (plusieurs portent ce nom). Associe-la pour voir son univers et des recommandations.',
+  'title.offCatalogAction': 'Associer au catalogue',
+  'kavita.refresh': 'Actualiser depuis Kavita',
+  'kavita.refreshChanged': 'Les fichiers de Kavita sont à jour dans Bunko.',
+  'kavita.refreshSame':
+    'Rien de nouveau dans Kavita pour l’instant. Si tu viens d’ajouter un fichier, Kavita est peut-être encore en train de scanner : réessaie dans un instant.',
+  'search.filter.library': 'Filtrer ma bibliothèque…',
+  'search.filter.planning': 'Filtrer la semaine…',
+  'search.filtering.library':
+    'La bibliothèque ci-dessous n’affiche que les œuvres correspondantes.',
+  'search.filtering.planning': 'Le planning ci-dessous n’affiche que les œuvres correspondantes.',
 };
 
 const es: Dictionary = {
@@ -3044,6 +3079,23 @@ const es: Dictionary = {
   'translate.removeBackup':
     '¿Quitar esta traducción de la lista? Se borrará el original conservado; el archivo traducido sigue en tu biblioteca.',
   'title.nothingToQueue': 'Ya disponible o en cola.',
+  'volumes.selectAll': 'Seleccionar los tomos que faltan ({count})',
+  'match.kavitaVolumes': '{library} · {n} tomos',
+  'planning.chapterRange': 'Cap. {from}–{to}',
+  'planning.releaseCount': '{n} lanzamientos',
+  'catalog.openPlanning': 'Ver la semana en la planificación',
+  'title.offCatalogTitle': 'Sin vincular al catálogo',
+  'title.offCatalogBody':
+    'Bunko no pudo saber de qué obra del catálogo se trata (varias comparten el nombre). Vincúlala para ver su universo y recomendaciones.',
+  'title.offCatalogAction': 'Vincular al catálogo',
+  'kavita.refresh': 'Actualizar desde Kavita',
+  'kavita.refreshChanged': 'Los archivos de Kavita están al día en Bunko.',
+  'kavita.refreshSame':
+    'Aún no hay nada nuevo en Kavita. Si acabas de añadir un archivo, Kavita quizá siga escaneando; inténtalo de nuevo en un momento.',
+  'search.filter.library': 'Filtrar mi biblioteca…',
+  'search.filter.planning': 'Filtrar la semana…',
+  'search.filtering.library': 'La biblioteca de abajo solo muestra las obras que coinciden.',
+  'search.filtering.planning': 'La planificación de abajo solo muestra las obras que coinciden.',
 };
 
 const de: Dictionary = {
@@ -4056,6 +4108,23 @@ const de: Dictionary = {
   'translate.removeBackup':
     'Diese Übersetzung aus der Liste entfernen? Das behaltene Original wird gelöscht; die übersetzte Datei bleibt in deiner Bibliothek.',
   'title.nothingToQueue': 'Bereits vorhanden oder in der Warteschlange.',
+  'volumes.selectAll': 'Fehlende Bände auswählen ({count})',
+  'match.kavitaVolumes': '{library} · {n} Bände',
+  'planning.chapterRange': 'Kap. {from}–{to}',
+  'planning.releaseCount': '{n} Veröffentlichungen',
+  'catalog.openPlanning': 'Woche im Planer ansehen',
+  'title.offCatalogTitle': 'Nicht mit dem Katalog verknüpft',
+  'title.offCatalogBody':
+    'Bunko konnte nicht erkennen, welches Katalogwerk das ist (mehrere tragen den Namen). Verknüpfe es, um Universum und Empfehlungen zu sehen.',
+  'title.offCatalogAction': 'Mit dem Katalog verknüpfen',
+  'kavita.refresh': 'Aus Kavita aktualisieren',
+  'kavita.refreshChanged': 'Die Kavita-Dateien sind in Bunko aktuell.',
+  'kavita.refreshSame':
+    'Noch nichts Neues in Kavita. Wenn du gerade eine Datei hinzugefügt hast, scannt Kavita vielleicht noch; versuche es gleich noch einmal.',
+  'search.filter.library': 'Meine Bibliothek filtern…',
+  'search.filter.planning': 'Woche filtern…',
+  'search.filtering.library': 'Die Bibliothek unten zeigt nur passende Werke.',
+  'search.filtering.planning': 'Der Planer unten zeigt nur passende Werke.',
 };
 
 const it: Dictionary = {
@@ -5060,6 +5129,23 @@ const it: Dictionary = {
   'translate.removeBackup':
     'Rimuovere questa traduzione dall’elenco? L’originale conservato verrà eliminato; il file tradotto resta nella tua libreria.',
   'title.nothingToQueue': 'Già posseduto o in coda.',
+  'volumes.selectAll': 'Seleziona i volumi mancanti ({count})',
+  'match.kavitaVolumes': '{library} · {n} vol.',
+  'planning.chapterRange': 'Cap. {from}–{to}',
+  'planning.releaseCount': '{n} uscite',
+  'catalog.openPlanning': 'Vedi la settimana nel planning',
+  'title.offCatalogTitle': 'Non collegata al catalogo',
+  'title.offCatalogBody':
+    'Bunko non ha capito di quale opera del catalogo si tratti (più opere hanno questo nome). Collegala per vedere universo e consigli.',
+  'title.offCatalogAction': 'Collega al catalogo',
+  'kavita.refresh': 'Aggiorna da Kavita',
+  'kavita.refreshChanged': 'I file di Kavita sono aggiornati in Bunko.',
+  'kavita.refreshSame':
+    'Ancora niente di nuovo in Kavita. Se hai appena aggiunto un file, Kavita potrebbe star ancora scansionando: riprova tra poco.',
+  'search.filter.library': 'Filtra la mia libreria…',
+  'search.filter.planning': 'Filtra la settimana…',
+  'search.filtering.library': 'La libreria qui sotto mostra solo le opere corrispondenti.',
+  'search.filtering.planning': 'Il planning qui sotto mostra solo le opere corrispondenti.',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

@@ -423,6 +423,9 @@ function Catalog() {
       />
       {view === 'chapters' && !q ? (
         <>
+          <Link href="/planning" className={cx(smallButton, 'self-start')}>
+            {t('catalog.openPlanning')} →
+          </Link>
           {releases.error && <ErrorNote error={releases.error} />}
           <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-6 md:gap-y-9 xl:grid-cols-8">
             {releaseItems.map((r) => (

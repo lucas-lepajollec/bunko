@@ -780,3 +780,50 @@ export async function refreshScannedSeries(
   // The scan succeeded but indexing is late/unavailable; retain imports and retry durably.
   if (sameConnection()) requestKavitaSync();
 }
+
+/**
+ * Ask Kavita to rescan one followed series' folder, then re-read its volumes until something
+ * changes (Kavita scans asynchronously) or ~12 seconds pass. Other indexed fields are kept.
+ */
+export async function refreshSeriesNow(seriesId: number, parentSignal?: AbortSignal) {
+  const signal = AbortSignal.any([
+    tenantSignal(),
+    ...(parentSignal ? [parentSignal] : []),
+    AbortSignal.timeout(15_000),
+  ]);
+  const old = indexedSeriesById(seriesId);
+  if (!old) throw new AppError('NOT_FOUND', 'Series is not indexed', 404);
+  let scanned = false;
+  if (old.folder)
+    try {
+      const { scanKavitaFolder } = await import('./kavita-client');
+      await scanKavitaFolder(old.folder, signal);
+      scanned = true;
+    } catch {
+      /* Without a scan, re-reading still picks up what Kavita already knows. */
+    }
+  const before = JSON.stringify([old.numbers, old.volumes, old.chapterFiles]);
+  const { setTimeout: pause } = await import('node:timers/promises');
+  let changed = false;
+  for (const delay of scanned ? [500, 1000, 1500, 2500, 3000, 3500] : [0]) {
+    await pause(delay, undefined, { signal });
+    const volumes = await kavitaJson(`/api/Series/volumes?seriesId=${seriesId}`, { signal });
+    const series: IndexedSeries = {
+      ...old,
+      numbers: kavitaChapterNumbers(volumes),
+      chapterFiles: kavitaChapterFiles(volumes),
+      ...kavitaVolumeProgress(volumes),
+      completed: allKavitaRead(volumes),
+    };
+    signal.throwIfAborted();
+    statement('UPDATE kavita_series SET payload=? WHERE series_id=?').run(
+      JSON.stringify(series),
+      seriesId,
+    );
+    if (JSON.stringify([series.numbers, series.volumes, series.chapterFiles]) !== before) {
+      changed = true;
+      break;
+    }
+  }
+  return { scanned, changed };
+}

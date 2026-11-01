@@ -78,12 +78,17 @@ export function MatchesSummary({
       key: 'kavita',
       label: 'Kavita',
       value: media.kavita
-        ? entry?.ownedAsVolumes
-          ? `${media.kavita.libraryName} · ${t('unit.volume')}`
-          : t('match.kavitaShort', {
+        ? entry?.ownedVolumes?.length && !media.kavita.chapters
+          ? t('match.kavitaVolumes', {
               library: media.kavita.libraryName,
-              n: n(media.kavita.chapters),
+              n: n(entry.ownedVolumes.length),
             })
+          : entry?.ownedAsVolumes
+            ? `${media.kavita.libraryName} · ${t('unit.volume')}`
+            : t('match.kavitaShort', {
+                library: media.kavita.libraryName,
+                n: n(media.kavita.chapters),
+              })
         : t('match.kavitaNone'),
       tone: media.kavita ? (entry?.kavitaCover?.state === 'failed' ? 'warn' : 'ok') : 'idle',
     },

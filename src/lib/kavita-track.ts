@@ -50,11 +50,33 @@ export async function catalogMatch(
     }))
     .sort((a, b) => b.score - a.score);
   const best = candidates[0];
-  return !best ||
-    best.score < minimumScore ||
-    (candidates[1] && best.score - candidates[1].score < 0.1)
-    ? null
-    : best.media;
+  if (!best || best.score < minimumScore) return null;
+  if (!candidates[1] || best.score - candidates[1].score >= 0.1) return best.media;
+  return tieBreak(
+    candidates.filter((c) => best.score - c.score < 0.1).map((c) => c.media),
+    series,
+  );
+}
+/**
+ * Several works share the name (e.g. "Monster"): use what the library proves. A catalog work
+ * cannot have fewer volumes/chapters than the files owned; one exact volume count wins.
+ * Anything still ambiguous stays unmatched rather than guessed.
+ */
+export function tieBreak(
+  tied: UnifiedMedia[],
+  series: Pick<IndexedSeries, 'volumes' | 'numbers'>,
+): UnifiedMedia | null {
+  const ownedVolumes = Math.max(0, ...(series.volumes ?? []));
+  const ownedChapters = Math.max(0, ...(series.numbers ?? []));
+  if (!ownedVolumes && !ownedChapters) return null;
+  const possible = tied.filter(
+    (m) =>
+      (!ownedVolumes || (m.volumes !== null && m.volumes >= ownedVolumes)) &&
+      (!ownedChapters || m.chapters === null || m.chapters >= Math.floor(ownedChapters)),
+  );
+  if (possible.length === 1) return possible[0];
+  const exact = possible.filter((m) => ownedVolumes > 0 && m.volumes === ownedVolumes);
+  return exact.length === 1 ? exact[0] : null;
 }
 export async function trackKavitaSeries(seriesId: number, signal?: AbortSignal, automatic = false) {
   const series = indexedSeriesById(seriesId);

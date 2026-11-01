@@ -5,7 +5,7 @@ import { Select } from '@/components/select';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import type {
   ChapterSelection,
   ChaptersResponse,
@@ -14,7 +14,7 @@ import type {
   ReadingStatus,
   TrackedMedia,
 } from '@/types/shared';
-import { batchesInterval, mediaHref, send, useApi } from '@/lib/client/api';
+import { batchesInterval, libraryKeys, mediaHref, send, useApi } from '@/lib/client/api';
 import { useSourceScan } from '@/lib/client/use-source-scan';
 import { trackedFor } from '@/lib/client/tracked-entry';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -81,7 +81,8 @@ export default function TitlePage() {
       key={id}
       media={{
         ...detail.data,
-        pending: !detail.error && (detail.isValidating || detail.data.pending),
+        // Only the server's own "still enriching" flag: a background revalidation is not news.
+        pending: !detail.error && Boolean(detail.data.pending),
         partial: detail.data.partial || Boolean(detail.error),
       }}
     />
@@ -174,7 +175,7 @@ function Title({ media }: { media: MediaDetail }) {
   const missingVolumeCount = new Set(missing.map((c) => c.volume)).size;
   const matching = scan.scanning;
   const checking =
-    matching || chapters.isLoading || chapters.isValidating || Boolean(chapters.data?.pending);
+    matching || (!chapters.data && chapters.isLoading) || Boolean(chapters.data?.pending);
   const incomplete = Boolean(
     scan.failed ||
     chapters.error ||
@@ -453,6 +454,7 @@ function Title({ media }: { media: MediaDetail }) {
                   {t(vol('title.read'), { n: progress.read !== null ? n(progress.read) : '—' })}
                 </span>
                 <OwnedInventory entry={entry} />
+                {media.kavita && <KavitaRefresh trackedId={entry.id} />}
                 <span>
                   {t(vol('title.released'), {
                     n: progress.released !== null ? n(progress.released) : '—',
@@ -467,10 +469,14 @@ function Title({ media }: { media: MediaDetail }) {
             </div>
           )}
 
-          <LoadNotice
-            pending={media.pending || checking || library.isLoading}
-            partial={media.partial || incomplete}
-          />
+          {/* A fixed slot: the notice comes and goes without moving the page. */}
+          <div className="min-h-5">
+            <LoadNotice
+              quiet
+              pending={media.pending || checking || (!library.data && library.isLoading)}
+              partial={media.partial || incomplete}
+            />
+          </div>
           <div className="mt-2 md:hidden">
             <Segmented
               value={tab}
@@ -597,6 +603,23 @@ function Title({ media }: { media: MediaDetail }) {
         </div>
       </div>
 
+      {entry &&
+        !media.relations.length &&
+        !media.recommendations.length &&
+        (entry.identity === 'off-catalog' || media.providers.every((p) => p === 'kavita')) && (
+          <section className="relative mx-auto flex max-w-[1760px] px-4 pb-16 md:px-10">
+            <Notice
+              title={t('title.offCatalogTitle')}
+              action={
+                <Link href={settingsHref('catalog')} className={smallButton}>
+                  {t('title.offCatalogAction')}
+                </Link>
+              }
+            >
+              {t('title.offCatalogBody')}
+            </Notice>
+          </section>
+        )}
       {media.relations.length > 0 && (
         <section className="relative mx-auto flex max-w-[1760px] flex-col gap-5 px-4 pb-12 md:px-10">
           <SectionHeading num={2} title={t('title.universe')} />
@@ -865,5 +888,39 @@ function ReadButton({
         </>
       )}
     </div>
+  );
+}
+
+/** Ask Kavita to rescan this work now (a file added by hand appears without waiting). */
+function KavitaRefresh({ trackedId }: { trackedId: number }) {
+  const { t } = useI18n();
+  const { mutate } = useSWRConfig();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const result = await send<{ changed: boolean }>('/api/kavita/refresh', 'POST', {
+            trackedId,
+          });
+          await mutate(libraryKeys);
+          toast({
+            tone: 'ok',
+            text: t(result.changed ? 'kavita.refreshChanged' : 'kavita.refreshSame'),
+          });
+        } catch (e) {
+          toast({ tone: 'bad', text: errorText(t, e) });
+        } finally {
+          setBusy(false);
+        }
+      }}
+      className="text-mid inline-flex items-center gap-1.5 underline decoration-white/30 underline-offset-4 hover:text-white disabled:opacity-50"
+    >
+      {busy && <Spinner className="size-3" />}
+      {t('kavita.refresh')}
+    </button>
   );
 }
