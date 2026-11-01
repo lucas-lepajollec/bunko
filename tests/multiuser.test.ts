@@ -217,6 +217,7 @@ it('gives members full private settings, redacts secrets, and isolates concurren
     id: 2,
     username: 'Member',
     role: 'member',
+    permissions: ['services', 'extensions', 'downloads', 'translate', 'adult'],
     adultContent: true,
   });
   expect(
@@ -284,7 +285,8 @@ it('partitions every memo: settings, content flags/identities, index/linkage, re
   for (let turn = 0; turn < 4; turn++)
     for (const id of [1, 2])
       inTenant(id, () => {
-        expect(sourceAllowed({ id: '123', name: 'Fixture', lang: 'fr' })).toBe(true);
+        // Account 1 flags the extension 18+ and hides it; account 2 does not.
+        expect(sourceAllowed({ id: '123', name: 'Fixture', lang: 'fr' })).toBe(id !== 1);
         expect(sourceHealth('123').state).toBe(id === 1 ? 'ok' : 'slow');
         expect(adultResolver()(media(55)).adult).toBe(id === 1);
         expect(indexedSeries()[0].libraryName).toBe(`Shelf ${id}`);
@@ -631,3 +633,45 @@ it('requires deletion confirmation, preserves the last admin and revokes only th
   expect(inTenant(3, () => listTracked())).toEqual([]);
   expect(inTenant(3, () => getSettings().suwayomiUrl)).toBe('');
 });
+it('lets an admin take permissions away from a member, checked on every request', async () => {
+  const created = (await (
+    await users.POST(
+      req('/api/users', 'POST', { username: 'Limited', password: pass, role: 'member' }),
+    )
+  ).json()) as { id: number };
+  const memberId = created.id;
+  const limited = (
+    await auth.login(req('/api/auth'), { username: 'Limited', password: pass })
+  ).split(';')[0];
+  const patch = (permissions: string[]) =>
+    users.PATCH(req('/api/users', 'PATCH', { id: memberId, permissions }));
+  expect((await patch(['downloads', 'translate'])).status).toBe(200);
+  const listed = (await (await users.GET(req('/api/users'))).json()) as {
+    id: number;
+    permissions: string[];
+  }[];
+  expect(listed.find((u) => u.id === memberId)?.permissions).toEqual(['downloads', 'translate']);
+  // Connections, extension repositories and 18+ are now refused for the member…
+  const settingsPatch = (value: object) =>
+    settings.PATCH(req('/api/settings', 'PATCH', value, limited));
+  expect((await settingsPatch({ kavitaUrl: 'http://other.invalid' })).status).toBe(403);
+  expect(
+    (await settingsPatch({ extensionRepos: ['https://repo.invalid/index.json'] })).status,
+  ).toBe(403);
+  expect((await me.PATCH(req('/api/me', 'PATCH', { adultContent: true }, limited))).status).toBe(
+    403,
+  );
+  inTenant(memberId, () => expect(getSettings().adultContent).toBe(false));
+  // …personal preferences stay theirs, and admins are never restricted.
+  expect((await settingsPatch({ hideNsfwSources: false })).status).toBe(200);
+  expect(
+    (await settings.PATCH(req('/api/settings', 'PATCH', { hideNsfwSources: true }))).status,
+  ).toBe(200);
+  expect((await patch(['services', 'extensions', 'downloads', 'translate', 'adult'])).status).toBe(
+    200,
+  );
+  expect((await settingsPatch({ kavitaUrl: getSettingsFor(memberId) })).status).toBe(200);
+});
+function getSettingsFor(id: number) {
+  return inTenant(id, () => getSettings().kavitaUrl) || 'http://fixture.invalid';
+}

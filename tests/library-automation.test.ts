@@ -169,7 +169,12 @@ beforeEach(() => {
   coverMime = 'image/jpeg';
   coverSize = 0;
   calls.length = 0;
-  updateSettings({ suwayomiUrl: base, kavitaUrl: base, kavitaApiKey: 'synthetic-key' });
+  updateSettings({
+    suwayomiUrl: base,
+    kavitaUrl: base,
+    kavitaApiKey: 'synthetic-key',
+    progressSource: 'kavita',
+  });
   vi.stubGlobal('fetch', (url: string | URL | Request, init?: RequestInit) => {
     const value = String(url);
     if (value.startsWith(base)) return realFetch(url, init);

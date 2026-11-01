@@ -92,6 +92,7 @@ beforeEach(() => {
   holdMetadata = undefined;
   holdProgress = undefined;
   updateSettings({
+    progressSource: 'kavita',
     suwayomiUrl: 'http://source.invalid',
     kavitaUrl: 'http://kavita.invalid',
     kavitaApiKey: 'synthetic-key',

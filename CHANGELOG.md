@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Admins choose what each member may do (connections, extensions, downloads, translation, 18+).
+  With 18+ off, extensions marked 18+ are hidden everywhere by default (an account option keeps
+  them). Reading progress comes from Suwayomi by default, or Kavita, chosen in Settings; finished
+  chapters are marked read in Suwayomi. Account recovery requires a one-time code from the data
+  folder; login limits apply per account only. Changing the Kavita or Suwayomi server forgets the
+  old server's identifiers. Title-only release matches no longer spread 18+ decisions. Next 16.4.3.
+
 - Volume mode hides boxes on owned volumes and "select all" counts missing volumes; the chapter
   list loads more rows as it scrolls instead of a counter. Loading notices no longer flash and
   move the sheet during background refreshes. "Refresh from Kavita" rescans a work's folder now.

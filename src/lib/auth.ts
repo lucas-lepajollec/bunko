@@ -1,14 +1,16 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { credentials, passwordChange } from './account-validation';
 export { credentials, passwordChange } from './account-validation';
 import { persistentSecret } from './settings';
 import { accountsDb as db } from './accounts-store';
-import { inTenant } from './tenant-context';
+import { accountsDir, inTenant } from './tenant-context';
+import { rmSync } from 'node:fs';
+import path from 'node:path';
 import { getSettings } from './settings';
 import { AppError } from './errors';
 import { hashPassword, verifyPassword } from './passwords';
 import { currentUser } from './user-context';
-import type { UserRole, AuthState, Credentials, PasswordChange } from '@/types/shared';
+import type { UserRole, AuthState, Credentials, PasswordChange, Permission } from '@/types/shared';
 
 const sessionSeconds = 7 * 24 * 60 * 60;
 export interface Account {
@@ -79,6 +81,7 @@ export function authState(request: Request): AuthState {
   const signedOut = {
     authenticated: false,
     setupRequired: !first || !first.password_hash,
+    ...(first && !first.password_hash ? { recovery: true } : {}),
     username: null,
     userId: null,
     role: null,
@@ -97,6 +100,26 @@ export function authState(request: Request): AuthState {
     if (!(error instanceof AppError) || error.code !== 'UNAUTHORIZED') throw error;
     return signedOut;
   }
+}
+/** Permissions an admin took away from this account (none for admins). */
+export function deniedPermissions(userId: number): Set<Permission> {
+  const row = db().prepare('SELECT role FROM users WHERE id=?').get(userId) as
+    { role: string } | undefined;
+  if (!row || row.role === 'admin') return new Set();
+  return new Set(
+    (
+      db().prepare('SELECT permission FROM user_restrictions WHERE user_id=?').all(userId) as {
+        permission: Permission;
+      }[]
+    ).map((r) => r.permission),
+  );
+}
+/** Requests act for the signed-in user; background work (no user) is never restricted. */
+export function requirePermission(permission: Permission) {
+  const user = currentUser();
+  if (!user || user.role === 'admin') return;
+  if (deniedPermissions(user.id).has(permission))
+    throw new AppError('PERMISSION_DENIED', `Not allowed: ${permission}`, 403);
 }
 export function requireAdmin() {
   if (currentUser()?.role !== 'admin')
@@ -123,17 +146,15 @@ function limit(username: string) {
     .transaction(() => {
       const now = Date.now();
       database.prepare('DELETE FROM login_attempts WHERE start<=?').run(now - 60_000);
-      for (const [key, maximum] of [
-        ['*', 20],
-        [username, 10],
-      ] as const) {
+      // Per account only: a shared counter would let anyone lock every user out.
+      for (const [key, maximum] of [[username, 10]] as const) {
         const row = database
           .prepare('SELECT total FROM login_attempts WHERE username=?')
           .get(key) as { total: number } | undefined;
         if ((row?.total ?? 0) >= maximum)
           throw new AppError('RATE_LIMITED', 'Try again in one minute', 429);
       }
-      for (const key of ['*', username])
+      for (const key of [username])
         database
           .prepare(
             `INSERT INTO login_attempts VALUES(?,?,1)
@@ -150,12 +171,27 @@ function sessionCookie(request: Request, userId: number, sessionEpoch: string) {
   const value = `v2.${userId}.${Date.now() + sessionSeconds * 1000}.${sessionEpoch}`;
   return `bunko_session=${value}.${sign(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${sessionSeconds}${new URL(request.url).protocol === 'https:' ? '; Secure' : ''}`;
 }
-export async function setup(request: Request, input: Credentials) {
+/** A recovery (existing admin, emptied password) needs the one-time code from the data volume. */
+function checkRecoveryCode(code: string | undefined) {
+  const row = db().prepare("SELECT value FROM account_state WHERE key='recovery_code'").get() as
+    { value: string } | undefined;
+  if (!row) return;
+  const given = createHash('sha256')
+    .update((code ?? '').trim().toUpperCase())
+    .digest();
+  if (!timingSafeEqual(given, Buffer.from(row.value, 'hex')))
+    throw new AppError('RECOVERY_CODE_INVALID', 'The recovery code is not valid', 401);
+}
+export async function setup(request: Request, input: Credentials & { recoveryCode?: string }) {
   checkOrigin(request);
   const first = firstAdmin();
   if (first?.password_hash)
     throw new AppError('ALREADY_SET_UP', 'Administrator account already exists', 409);
-  const value = credentials.parse(input);
+  if (first) {
+    limit('recovery');
+    checkRecoveryCode(input.recoveryCode);
+  }
+  const value = credentials.parse({ username: input.username, password: input.password });
   const hash = await hashPassword(value.password);
   const sessionEpoch = epoch();
   const id = db()
@@ -165,9 +201,11 @@ export async function setup(request: Request, input: Credentials) {
         throw new AppError('ALREADY_SET_UP', 'Administrator account already exists', 409);
       if (existing) {
         // Recovery keeps the administrator identity, preferences and library intact.
+        checkRecoveryCode(input.recoveryCode);
         db()
           .prepare('UPDATE users SET password_hash=?,session_epoch=? WHERE id=?')
           .run(hash, sessionEpoch, existing.id);
+        db().prepare("DELETE FROM account_state WHERE key='recovery_code'").run();
         return existing.id;
       }
       const result = db()
@@ -181,6 +219,7 @@ export async function setup(request: Request, input: Credentials) {
       return id;
     })
     .immediate();
+  if (first) rmSync(path.join(accountsDir, 'recovery.code'), { force: true });
   inTenant(id, () => getSettings());
   return sessionCookie(request, id, sessionEpoch);
 }

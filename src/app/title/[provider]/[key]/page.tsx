@@ -461,9 +461,11 @@ function Title({ media }: { media: MediaDetail }) {
                   })}
                 </span>
                 <InfoBubble label={t('title.progressInfo')}>
-                  {progress.readSource === 'kavita'
-                    ? t('title.readFromKavita')
-                    : t('title.readUnknown')}
+                  {progress.readSource === 'suwayomi'
+                    ? t('title.readFromSuwayomi')
+                    : progress.readSource === 'kavita'
+                      ? t('title.readFromKavita')
+                      : t('title.readUnknown')}
                 </InfoBubble>
               </span>
             </div>

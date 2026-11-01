@@ -348,6 +348,9 @@ function persistProgress(value: ReaderProgressUpdate) {
       value.number,
       value.mediaId,
     );
+    // A finished source chapter is marked read in Suwayomi too when it is the progress source.
+    if (value.page === value.pageCount - 1 && value.chapterId > 0)
+      void import('./suwayomi-progress').then((m) => m.markReadInSuwayomi(value.chapterId));
   })();
 }
 export async function saveReaderProgress(

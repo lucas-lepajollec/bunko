@@ -1045,6 +1045,25 @@ const en: Dictionary = {
   'search.filter.planning': 'Filter this week…',
   'search.filtering.library': 'The library below shows only the matching works.',
   'search.filtering.planning': 'The planning below shows only the matching works.',
+  'users.permissions': 'What this member may do',
+  'users.permission.services': 'Change connections (Suwayomi, Kavita, TraDoc, *arr, folders)',
+  'users.permission.extensions': 'Manage extensions and repositories',
+  'users.permission.downloads': 'Download (including automatic downloads)',
+  'users.permission.translate': 'Translate books',
+  'users.permission.adult': 'See 18+ content',
+  'error.PERMISSION_DENIED': 'Your administrator has not allowed this for your account.',
+  'settings.hideNsfwSources': 'Also hide 18+ extensions',
+  'settings.hideNsfwSourcesTip':
+    'Extensions their authors mark 18+ are left out of searches and browsing. Some general extensions carry this mark too: turn this off if one you need disappears.',
+  'error.ADULT_HIDDEN': 'This extension is hidden by the 18+ filter.',
+  'settings.progressSource': 'Reading progress from',
+  'settings.progressSourceTip':
+    'Where Bunko picks up what you read outside of it. Suwayomi: chapters marked read there (or in a synced Mihon/Tachiyomi), and Bunko marks the chapters you finish as read in Suwayomi. Kavita: what you read in Kavita’s reader. Bunko’s own reader always counts.',
+  'title.readFromSuwayomi': 'Progress also comes from the chapters marked read in Suwayomi.',
+  'auth.recoveryCode': 'Recovery code',
+  'auth.recoveryHint':
+    'Written to recovery.code in Bunko’s data folder when the account was reset.',
+  'error.RECOVERY_CODE_INVALID': 'This recovery code is not valid.',
 };
 
 const fr: Dictionary = {
@@ -2075,6 +2094,25 @@ const fr: Dictionary = {
   'search.filtering.library':
     'La bibliothèque ci-dessous n’affiche que les œuvres correspondantes.',
   'search.filtering.planning': 'Le planning ci-dessous n’affiche que les œuvres correspondantes.',
+  'users.permissions': 'Ce que ce membre peut faire',
+  'users.permission.services': 'Modifier les connexions (Suwayomi, Kavita, TraDoc, *arr, dossiers)',
+  'users.permission.extensions': 'Gérer les extensions et dépôts',
+  'users.permission.downloads': 'Télécharger (y compris automatiquement)',
+  'users.permission.translate': 'Traduire des livres',
+  'users.permission.adult': 'Voir le contenu 18+',
+  'error.PERMISSION_DENIED': 'Ton administrateur n’a pas autorisé cette action pour ton compte.',
+  'settings.hideNsfwSources': 'Masquer aussi les extensions 18+',
+  'settings.hideNsfwSourcesTip':
+    'Les extensions marquées 18+ par leurs auteurs sont retirées des recherches et de l’exploration. Certaines extensions généralistes portent aussi cette marque : désactive ceci si l’une d’elles te manque.',
+  'error.ADULT_HIDDEN': 'Cette extension est masquée par le filtre 18+.',
+  'settings.progressSource': 'Progression de lecture depuis',
+  'settings.progressSourceTip':
+    'D’où Bunko reprend ce que tu lis en dehors de lui. Suwayomi : les chapitres marqués lus là-bas (ou dans un Mihon/Tachiyomi synchronisé), et Bunko marque comme lus dans Suwayomi les chapitres que tu termines. Kavita : ce que tu lis dans le lecteur de Kavita. Le lecteur de Bunko compte toujours.',
+  'title.readFromSuwayomi': 'La progression vient aussi des chapitres marqués lus dans Suwayomi.',
+  'auth.recoveryCode': 'Code de récupération',
+  'auth.recoveryHint':
+    'Écrit dans recovery.code, dans le dossier de données de Bunko, lors de la réinitialisation du compte.',
+  'error.RECOVERY_CODE_INVALID': 'Ce code de récupération n’est pas valide.',
 };
 
 const es: Dictionary = {
@@ -3096,6 +3134,26 @@ const es: Dictionary = {
   'search.filter.planning': 'Filtrar la semana…',
   'search.filtering.library': 'La biblioteca de abajo solo muestra las obras que coinciden.',
   'search.filtering.planning': 'La planificación de abajo solo muestra las obras que coinciden.',
+  'users.permissions': 'Lo que este miembro puede hacer',
+  'users.permission.services': 'Cambiar conexiones (Suwayomi, Kavita, TraDoc, *arr, carpetas)',
+  'users.permission.extensions': 'Gestionar extensiones y repositorios',
+  'users.permission.downloads': 'Descargar (también automáticamente)',
+  'users.permission.translate': 'Traducir libros',
+  'users.permission.adult': 'Ver contenido +18',
+  'error.PERMISSION_DENIED': 'Tu administrador no ha permitido esta acción para tu cuenta.',
+  'settings.hideNsfwSources': 'Ocultar también las extensiones +18',
+  'settings.hideNsfwSourcesTip':
+    'Las extensiones marcadas +18 por sus autores se excluyen de búsquedas y exploración. Algunas extensiones generales también llevan esa marca: desactívalo si echas una en falta.',
+  'error.ADULT_HIDDEN': 'Esta extensión está oculta por el filtro +18.',
+  'settings.progressSource': 'Progreso de lectura desde',
+  'settings.progressSourceTip':
+    'De dónde toma Bunko lo que lees fuera de él. Suwayomi: capítulos marcados como leídos allí (o en un Mihon/Tachiyomi sincronizado), y Bunko marca como leídos en Suwayomi los capítulos que terminas. Kavita: lo que lees en el lector de Kavita. El lector de Bunko siempre cuenta.',
+  'title.readFromSuwayomi':
+    'El progreso también viene de los capítulos marcados como leídos en Suwayomi.',
+  'auth.recoveryCode': 'Código de recuperación',
+  'auth.recoveryHint':
+    'Escrito en recovery.code, en la carpeta de datos de Bunko, al restablecer la cuenta.',
+  'error.RECOVERY_CODE_INVALID': 'Este código de recuperación no es válido.',
 };
 
 const de: Dictionary = {
@@ -4125,6 +4183,26 @@ const de: Dictionary = {
   'search.filter.planning': 'Woche filtern…',
   'search.filtering.library': 'Die Bibliothek unten zeigt nur passende Werke.',
   'search.filtering.planning': 'Der Planer unten zeigt nur passende Werke.',
+  'users.permissions': 'Was dieses Mitglied darf',
+  'users.permission.services': 'Verbindungen ändern (Suwayomi, Kavita, TraDoc, *arr, Ordner)',
+  'users.permission.extensions': 'Erweiterungen und Repositorys verwalten',
+  'users.permission.downloads': 'Herunterladen (auch automatisch)',
+  'users.permission.translate': 'Bücher übersetzen',
+  'users.permission.adult': '18+-Inhalte sehen',
+  'error.PERMISSION_DENIED': 'Dein Administrator hat das für dein Konto nicht erlaubt.',
+  'settings.hideNsfwSources': 'Auch 18+-Erweiterungen ausblenden',
+  'settings.hideNsfwSourcesTip':
+    'Von ihren Autoren als 18+ markierte Erweiterungen fehlen in Suche und Stöbern. Auch manche allgemeine Erweiterungen tragen diese Markierung: Schalte das aus, wenn dir eine fehlt.',
+  'error.ADULT_HIDDEN': 'Diese Erweiterung ist durch den 18+-Filter ausgeblendet.',
+  'settings.progressSource': 'Lesefortschritt aus',
+  'settings.progressSourceTip':
+    'Woher Bunko übernimmt, was du außerhalb liest. Suwayomi: dort als gelesen markierte Kapitel (oder in einem synchronisierten Mihon/Tachiyomi), und Bunko markiert beendete Kapitel in Suwayomi als gelesen. Kavita: was du im Kavita-Reader liest. Bunkos eigener Reader zählt immer.',
+  'title.readFromSuwayomi':
+    'Der Fortschritt kommt auch von in Suwayomi als gelesen markierten Kapiteln.',
+  'auth.recoveryCode': 'Wiederherstellungscode',
+  'auth.recoveryHint':
+    'Beim Zurücksetzen des Kontos in recovery.code im Datenordner von Bunko gespeichert.',
+  'error.RECOVERY_CODE_INVALID': 'Dieser Wiederherstellungscode ist ungültig.',
 };
 
 const it: Dictionary = {
@@ -5146,6 +5224,28 @@ const it: Dictionary = {
   'search.filter.planning': 'Filtra la settimana…',
   'search.filtering.library': 'La libreria qui sotto mostra solo le opere corrispondenti.',
   'search.filtering.planning': 'Il planning qui sotto mostra solo le opere corrispondenti.',
+  'users.permissions': 'Cosa può fare questo membro',
+  'users.permission.services':
+    'Modificare le connessioni (Suwayomi, Kavita, TraDoc, *arr, cartelle)',
+  'users.permission.extensions': 'Gestire estensioni e repository',
+  'users.permission.downloads': 'Scaricare (anche automaticamente)',
+  'users.permission.translate': 'Tradurre libri',
+  'users.permission.adult': 'Vedere contenuti 18+',
+  'error.PERMISSION_DENIED':
+    'Il tuo amministratore non ha consentito questa azione per il tuo account.',
+  'settings.hideNsfwSources': 'Nascondi anche le estensioni 18+',
+  'settings.hideNsfwSourcesTip':
+    'Le estensioni segnate 18+ dai loro autori sono escluse da ricerche ed esplorazione. Anche alcune estensioni generaliste hanno questo segno: disattivalo se te ne manca una.',
+  'error.ADULT_HIDDEN': 'Questa estensione è nascosta dal filtro 18+.',
+  'settings.progressSource': 'Progressi di lettura da',
+  'settings.progressSourceTip':
+    'Da dove Bunko riprende ciò che leggi fuori da Bunko. Suwayomi: capitoli segnati come letti lì (o in un Mihon/Tachiyomi sincronizzato), e Bunko segna come letti in Suwayomi i capitoli che finisci. Kavita: ciò che leggi nel lettore di Kavita. Il lettore di Bunko conta sempre.',
+  'title.readFromSuwayomi':
+    'I progressi arrivano anche dai capitoli segnati come letti in Suwayomi.',
+  'auth.recoveryCode': 'Codice di recupero',
+  'auth.recoveryHint':
+    'Scritto in recovery.code, nella cartella dati di Bunko, al ripristino dell’account.',
+  'error.RECOVERY_CODE_INVALID': 'Questo codice di recupero non è valido.',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

@@ -287,6 +287,8 @@ export const settingsPatch = z
       )
       .strict()
       .optional(),
+    hideNsfwSources: z.boolean().optional(),
+    progressSource: z.enum(['suwayomi', 'kavita']).optional(),
     favoriteSourceIds: z.array(sourceId).max(100).optional(),
     extensionRepos: z.array(httpUrl).max(20).optional(),
     updateIntervalMinutes: z.number().int().min(5).max(1440).optional(),

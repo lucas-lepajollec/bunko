@@ -100,6 +100,8 @@ function serverSettings(): Settings {
     libraryTargets: {},
     autoImportKavita: true,
     adultContent: false,
+    hideNsfwSources: true,
+    progressSource: 'suwayomi',
     favoriteSourceIds: [],
     extensionRepos: [],
     updateIntervalMinutes: 15,
@@ -184,7 +186,22 @@ export function updateSettings(patch: SettingsPatch) {
       'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
     );
     db().transaction(() => {
+      if (patch.kavitaUrl !== undefined && patch.kavitaUrl !== current.kavitaUrl) {
+        // Series IDs belong to the previous Kavita server: series 7 there is another work here.
+        // Forget them (manual links included) and rebuild the index from the new server.
+        db().exec(`UPDATE tracked_media SET kavita_series_id=NULL,kavita_manual=0;
+          DELETE FROM kavita_series; DELETE FROM kavita_dismissals; DELETE FROM kavita_cover_status;
+          DELETE FROM worker_state WHERE key LIKE 'kavita_cover_hash:%' OR key='kavita_index_revision';`);
+        if (patch.kavitaUrl)
+          db()
+            .prepare(
+              "INSERT OR REPLACE INTO worker_state(key,value) VALUES('kavita_sync_requested','1')",
+            )
+            .run();
+      }
       if (patch.suwayomiUrl !== undefined && patch.suwayomiUrl !== current.suwayomiUrl) {
+        // Chapter IDs from the previous server could name other chapters: forget source positions.
+        db().exec('DELETE FROM reader_progress WHERE chapter_id>0');
         // Numeric manga/source identities from the previous server cannot be reused safely.
         db().exec(`UPDATE tracked_media SET sources_json='[]',source_match_at=NULL,
           media_json=json_set(media_json,'$.sources',json('[]'));

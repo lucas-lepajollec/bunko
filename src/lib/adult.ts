@@ -204,10 +204,21 @@ export function visibleTracked(entries: TrackedMedia[]) {
         return entries.filter((t) => !classify(t.media));
       })();
 }
-/** Extension flags are informational; access depends only on the work. */
-export function sourceAllowed(_source: Source) {
-  void _source;
-  // Retain the tenant guard for callers of this compatibility helper.
-  getSettings();
-  return true;
+/**
+ * With 18+ off and "hide 18+ extensions" on (the default), extensions their authors mark NSFW are
+ * left out of searches, browsing and the local index. Some general extensions carry the flag, so
+ * the account can turn this off; workers (matching, updates) are never filtered.
+ */
+export function nsfwSourceFilter(): (sourceId: string) => boolean {
+  const settings = getSettings();
+  if (settings.adultContent || !settings.hideNsfwSources) return () => true;
+  const flagged = new Set(
+    (statement('SELECT id FROM source_flags WHERE nsfw=1').all() as { id: string }[]).map(
+      (r) => r.id,
+    ),
+  );
+  return (sourceId) => !flagged.has(sourceId);
+}
+export function sourceAllowed(source: Source) {
+  return nsfwSourceFilter()(source.id);
 }

@@ -91,7 +91,11 @@ beforeEach(() => {
     'DELETE FROM tracked_media;DELETE FROM chapter_releases;DELETE FROM metadata_cache;DELETE FROM kavita_series;DELETE FROM settings;DELETE FROM worker_state;DELETE FROM imported_chapters;DELETE FROM update_entries;DELETE FROM download_batches;',
   );
   db().prepare("INSERT INTO worker_state VALUES('release_refresh',?)").run(String(Date.now()));
-  updateSettings({ autoImportKavita: false, suwayomiUrl: 'http://fixture.invalid' });
+  updateSettings({
+    autoImportKavita: false,
+    suwayomiUrl: 'http://fixture.invalid',
+    progressSource: 'kavita',
+  });
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => {

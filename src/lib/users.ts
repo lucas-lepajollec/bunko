@@ -7,13 +7,19 @@ import { inTenant } from './tenant-context';
 import { currentUser } from './user-context';
 import { getSettings, updateSettings } from './settings';
 import { credentials, password } from './account-validation';
-import { requireAdmin } from './auth';
+import { deniedPermissions, requireAdmin } from './auth';
+import { PERMISSIONS, type Permission } from '@/types/shared';
 import { hashPassword } from './passwords';
 import { AppError } from './errors';
 import type { MyAccount, UserAccount, UserCreate, UserPatch, MyAccountPatch } from '@/types/shared';
 
 export const userCreate = credentials.extend({ role: z.enum(['admin', 'member']) });
+const granted = (userId: number): Permission[] => {
+  const denied = deniedPermissions(userId);
+  return PERMISSIONS.filter((p) => !denied.has(p));
+};
 export const userPatch = z.strictObject({
+  permissions: z.array(z.enum(PERMISSIONS)).max(PERMISSIONS.length).optional(),
   id: z.number().int().positive(),
   role: z.enum(['admin', 'member']).optional(),
   password: password.optional(),
@@ -38,6 +44,7 @@ export function myAccount(): MyAccount {
     id: user.id,
     username: user.username,
     role: user.role,
+    permissions: granted(user.id),
     adultContent: getSettings().adultContent,
   };
 }
@@ -47,6 +54,8 @@ export function patchMyAccount(input: MyAccountPatch) {
   accountsDb()
     .transaction(() => renameUser(user.id, input.username))
     .immediate();
+  if (input.adultContent === true && deniedPermissions(user.id).has('adult'))
+    throw new AppError('PERMISSION_DENIED', 'Not allowed: adult', 403);
   if (input.adultContent !== undefined) updateSettings({ adultContent: input.adultContent });
   return myAccount();
 }
@@ -81,6 +90,7 @@ export function listUsers(): UserAccount[] {
     id: r.id,
     username: r.username,
     role: r.role,
+    permissions: granted(r.id),
     createdAt: r.created_at,
     lastSeenAt: r.last_seen_at,
     kavitaLinked: inTenant(r.id, () => {
@@ -141,8 +151,18 @@ export async function patchUser(input: UserPatch) {
         accountsDb()
           .prepare('UPDATE users SET password_hash=?,session_epoch=? WHERE id=?')
           .run(hash, randomBytes(32).toString('hex'), input.id);
+      if (input.permissions !== undefined) {
+        accountsDb().prepare('DELETE FROM user_restrictions WHERE user_id=?').run(input.id);
+        const insert = accountsDb().prepare('INSERT INTO user_restrictions VALUES(?,?)');
+        for (const p of PERMISSIONS) if (!input.permissions.includes(p)) insert.run(input.id, p);
+      }
     })
     .immediate();
+  // Taking away 18+ also switches it off for that account right away.
+  if (input.permissions && !input.permissions.includes('adult'))
+    inTenant(input.id, () => {
+      if (getSettings().adultContent) updateSettings({ adultContent: false });
+    });
   return listUsers().find((u) => u.id === input.id)!;
 }
 export function deleteUser(id: number, confirmDeleteData = false) {

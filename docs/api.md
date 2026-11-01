@@ -287,6 +287,16 @@ The worker uploads queued files (`external_ref` = `bunko:<account>:<job>`; after
 
 The affected folder is then rescanned in Kavita and an index refresh is requested; a failed scan never undoes the file. Unreachable TraDoc or timeouts keep the job's state and retry after two minutes; a rejected key or another failure moves the job to `error` with a safe code (`TRADOC_UNAUTHORIZED`, `TRADOC_ERROR`, `FILE_UNREACHABLE`, …) until `retry`. A TraDoc `failed` job can be resumed. Bunko never deletes the TraDoc project.
 
+## Member permissions, 18+ extensions and progress source
+
+`UserAccount.permissions` and `MyAccount.permissions` list what an account may do: `services` (Suwayomi/Kavita/TraDoc/*arr connections, library targets and media root), `extensions` (extension actions and repositories), `downloads` (enqueue, retry, Arr grab, automatic downloads), `translate` (TraDoc jobs) and `adult` (enabling 18+). Admins always have all of them; new members get all of them. `PATCH /api/users {id, permissions}` sets a member's full list (stored as restrictions in `accounts.db`); a request needing a missing permission returns 403 `PERMISSION_DENIED`. Removing `adult` also switches 18+ off for that account. Background work is never restricted.
+
+`Settings.hideNsfwSources` (default true): while 18+ is off, extensions marked NSFW by their authors are left out of global search lanes, local index results and browsing (`403 ADULT_HIDDEN`). Matching and update checks of followed works still use every extension.
+
+`Settings.progressSource` (`suwayomi`, default, or `kavita`) chooses where outside reading progress comes from. Suwayomi: the highest chapter marked read among a work's linked sources (it only moves forward), and Bunko marks chapters finished in its reader as read in Suwayomi. Kavita: the previous behaviour. Bunko's own reader position always counts. `TrackedMedia.progress.readSource` is `suwayomi`, `kavita` or `none`.
+
+Login attempts are limited per username (10/minute); there is no shared counter that could lock every account out. `BUNKO_RESET_ACCOUNT=true` writes a one-time code to `<data>/recovery.code` (0600); `AuthState.recovery` is true and `POST /api/auth/setup` then requires `recoveryCode`. Changing `kavitaUrl` forgets series IDs, manual links, dismissals and Kavita cover state from the previous server and rebuilds the index; changing `suwayomiUrl` also forgets reader positions of source chapters.
+
 ## Content filter
 
 `PATCH /api/media/adult` accepts `{id:string,adult:boolean|null}` and returns `200 {id,adult:boolean,adultOverride:boolean|null}`. `true` marks a work 18+, `false` clears a provider false positive, and `null` removes the manual decision and restores automatic classification. IDs also accept `googlebooks:<id>`, `bnf:cb…` and `openlibrary:OL…W`. Other IDs use `anilist:<positive int32>`, `mangadex:<UUID>`, `mangaupdates:<positive decimal, up to 20 digits>`, `suwayomi:<positive int32>` or `kavita:<positive int32>`. Malformed IDs, missing fields and nonboolean/non-null decisions return `400 VALIDATION_ERROR`; normal authentication and same-origin mutation protection apply. Unknown works retain the detail endpoint's not-found/upstream errors and do not create a decision.

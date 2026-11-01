@@ -3,7 +3,7 @@ import { ownedChapters, ownedStock } from './owned-chapters';
 import { sourceServerKey } from './source-server';
 import { chapterVolume } from './chapter-volume';
 import { sourceUploadDate } from './source-chapters';
-import { recordSourceFlags } from './adult';
+import { nsfwSourceFilter, recordSourceFlags } from './adult';
 import { sourceResultVisibility } from './source-visibility';
 import type {
   ChapterSelection,
@@ -132,8 +132,12 @@ export async function sourceInfos(signal?: AbortSignal): Promise<SourceInfo[]> {
     .sort((a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity));
 }
 export async function sources(signal?: AbortSignal, all = false): Promise<Source[]> {
-  return (await sourceInfos(signal))
+  const list = await sourceInfos(signal);
+  // After sourceInfos: it records the flags the filter reads.
+  const allowed = nsfwSourceFilter();
+  return list
     .filter((s) => all || s.enabled)
+    .filter((s) => isBackgroundSourceWork() || allowed(s.id))
     .sort((a, b) => compareSourceLanguage(a.lang, b.lang, preferredSourceLanguage()))
     .map(({ id, name, lang, nsfw }) => ({ id, name, lang, nsfw }));
 }
@@ -548,6 +552,8 @@ export async function browseSource(
   signal?: AbortSignal,
 ): Promise<BrowsePage> {
   const source = await sourceInfo(id, signal);
+  if (!nsfwSourceFilter()(source.id))
+    throw new AppError('ADULT_HIDDEN', 'This extension is hidden by the 18+ filter', 403);
   const result = await searchSource(
     source,
     input.query ?? '',
