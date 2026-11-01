@@ -410,6 +410,11 @@ export async function refreshTrackedProgress(tracked: TrackedMedia, signal?: Abo
     .run(progress.read, progress.lastReadAt, volumeRead, tracked.id, id);
 }
 export async function refreshLibraryProgress(signal?: AbortSignal) {
+  // The account chooses where outside reading progress comes from (Suwayomi by default).
+  if (getSettings().progressSource === 'suwayomi') {
+    const { refreshSuwayomiProgress } = await import('./suwayomi-progress');
+    return refreshSuwayomiProgress(signal);
+  }
   if (!getSettings().kavitaApiKey) return;
   // Four requests in flight and a shared total deadline bound on-demand work for large libraries.
   const bounded = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(15_000)]);

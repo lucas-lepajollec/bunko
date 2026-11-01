@@ -59,6 +59,7 @@ function AuthGate({ children }: { children: ReactNode }) {
     return (
       <AuthScreen
         mode={data?.setupRequired ? 'setup' : 'login'}
+        recovery={Boolean(data?.recovery)}
         onDone={async () => {
           // A new session starts from a clean cache, whoever used this browser before.
           clearPersistentCache({ resume: true });
@@ -102,8 +103,18 @@ export function LanguageSelect({ className }: { className?: string }) {
 }
 
 /** First start creates the administrator account; afterwards the same screen signs in. */
-function AuthScreen({ mode, onDone }: { mode: 'setup' | 'login'; onDone: () => Promise<void> }) {
+function AuthScreen({
+  mode,
+  recovery = false,
+  onDone,
+}: {
+  mode: 'setup' | 'login';
+  /** Restoring the first administrator: ask for the one-time code from the data volume. */
+  recovery?: boolean;
+  onDone: () => Promise<void>;
+}) {
   const { t } = useI18n();
+  const [code, setCode] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -119,6 +130,7 @@ function AuthScreen({ mode, onDone }: { mode: 'setup' | 'login'; onDone: () => P
       await send(setup ? '/api/auth/setup' : '/api/auth', 'POST', {
         username: username.trim(),
         password,
+        ...(setup && recovery ? { recoveryCode: code.trim() } : {}),
       });
       await onDone();
     } catch (err) {
@@ -174,6 +186,19 @@ function AuthScreen({ mode, onDone }: { mode: 'setup' | 'login'; onDone: () => P
           />
           {setup && <span className="text-faint text-xs">{t('auth.passwordRule')}</span>}
         </label>
+        {setup && recovery && (
+          <label className="text-muted flex flex-col gap-2 text-sm">
+            {t('auth.recoveryCode')}
+            <input
+              required
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className={cx(field, 'h-12 text-base tracking-[0.2em]')}
+            />
+            <span className="text-faint text-xs">{t('auth.recoveryHint')}</span>
+          </label>
+        )}
         {setup && (
           <label className="text-muted flex flex-col gap-2 text-sm">
             {t('auth.confirm')}

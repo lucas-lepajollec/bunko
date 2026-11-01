@@ -89,7 +89,13 @@ beforeEach(() => {
     'DELETE FROM adult_overrides;DELETE FROM adult_identity_edges;DELETE FROM tracked_media;DELETE FROM settings;DELETE FROM chapter_releases;DELETE FROM source_flags;DELETE FROM metadata_cache;DELETE FROM worker_state;DELETE FROM catalog_fts;DELETE FROM catalog_keys;DELETE FROM kavita_series;',
   );
   db().prepare("INSERT INTO worker_state VALUES('release_refresh',?)").run(String(Date.now()));
-  updateSettings({ suwayomiUrl: 'http://source.invalid', autoImportKavita: false });
+  // Work-level classification is tested with flagged extensions left visible (account choice);
+  // the default hiding of flagged extensions has its own test below.
+  updateSettings({
+    suwayomiUrl: 'http://source.invalid',
+    autoImportKavita: false,
+    hideNsfwSources: false,
+  });
   setSourcePreferences({ enabledSourceIds: [], languages: ['fr'] });
   requests = [];
   vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
@@ -347,6 +353,19 @@ describe('adult visibility on catalog surfaces', () => {
       expect(sync).toContain(nsfw.id);
     });
   }
+  it('hides extensions marked 18+ everywhere by default while 18+ is off', async () => {
+    updateSettings({ adultContent: false, hideNsfwSources: true });
+    expect((await sources()).map((s) => s.id)).toEqual([safe.id]);
+    await expect(browseSource(nsfw.id, { mode: 'POPULAR', page: 1 })).rejects.toMatchObject({
+      code: 'ADULT_HIDDEN',
+    });
+    const stream = await (await streamRoute.GET(request('/api/search/stream?q=Fixture'))).text();
+    expect(stream).not.toContain(nsfw.id);
+    // Matching for followed works is not a browsing surface and keeps every extension.
+    expect(await matchOnSource(nsfw, { title: 'Fixture', altTitles: [] })).toHaveLength(1);
+    updateSettings({ adultContent: true });
+    expect((await sources()).map((s) => s.id)).toEqual([safe.id, nsfw.id]);
+  });
   it('filters locally classified source works and overrides, retaining unknown titles without lookup calls', async () => {
     const { setAdultOverride } = await import('@/lib/adult');
     saveMetadata('detail:local-mapping', { ...adult, title: 'Fixture' });

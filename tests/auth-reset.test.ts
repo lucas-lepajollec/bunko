@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
@@ -92,13 +92,20 @@ it('resets account and sessions at startup once across module bundles, preservin
   expect(restarted.auth.authState(request)).toEqual({
     authenticated: false,
     setupRequired: true,
+    recovery: true,
     username: null,
     userId: null,
     role: null,
   });
+  const codeFile = path.join(directory, 'recovery.code');
   expect(console.info).toHaveBeenCalledExactlyOnceWith(
-    'Bunko: first administrator password and sessions reset; account recovery setup is required.',
+    `Bunko: first administrator password and sessions reset. Enter the one-time code from ${codeFile} on the setup screen.`,
   );
+  const recoveryCode = readFileSync(codeFile, 'utf8').trim();
+  // Without the code from the data volume, nobody can take over the administrator.
+  await expect(restarted.auth.setup(request, credentials)).rejects.toMatchObject({
+    code: 'RECOVERY_CODE_INVALID',
+  });
   expect(restarted.settings.getSettings().kavitaUrl).toBe('http://fixture.invalid');
   expect(restarted.settings.persistentSecret('access.token', 32).toString('hex')).toBe(token);
   expect(() =>
@@ -126,7 +133,10 @@ it('resets account and sessions at startup once across module bundles, preservin
       created_at: '2025-02-01T00:00:00Z',
     },
   ]);
-  const newCookie = (await restarted.auth.setup(request, credentials)).split(';')[0];
+  const newCookie = (await restarted.auth.setup(request, { ...credentials, recoveryCode })).split(
+    ';',
+  )[0];
+  expect(existsSync(codeFile)).toBe(false);
   const nextBundle = await boot('true');
   expect(
     nextBundle.auth.authState(new Request(request, { headers: { Cookie: newCookie } })),

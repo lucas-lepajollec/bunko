@@ -7,7 +7,12 @@ import { enrichNovelRecords, resolvedNovelRecord } from './novels';
 import { searchBooks } from './openlibrary';
 import { isTextKind } from './library-kinds';
 import { sourceFormat } from './library-kinds';
-import { visibleMedia, includeProviderAdults, rememberAdultIdentities } from './adult';
+import {
+  visibleMedia,
+  includeProviderAdults,
+  nsfwSourceFilter,
+  rememberAdultIdentities,
+} from './adult';
 import { mangaUpdates } from './mangaupdates';
 import type { MediaType, Provider, SearchResponse, UnifiedMedia } from '@/types/shared';
 import { db, searchCatalog, listTracked } from './db';
@@ -245,6 +250,7 @@ export async function search(
       run: () => searchHardcover(query),
     });
   const sourceVisible = sourceResultVisibility();
+  const sourceAllowedById = nsfwSourceFilter();
   if (type !== 'ANIME')
     jobs.push({
       provider: 'local',
@@ -260,6 +266,7 @@ export async function search(
           ),
         ...searchCatalog(query)
           .filter(() => type !== 'NOVEL')
+          .filter((r) => sourceAllowedById(r.sourceId))
           .filter((r) => sourceVisible(r.suwayomiMangaId, r.title))
           .map((r) => ({
             ...emptyMedia(`suwayomi:${r.suwayomiMangaId}`, r.title, 'MANGA'),

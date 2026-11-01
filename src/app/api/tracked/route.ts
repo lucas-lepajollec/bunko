@@ -1,4 +1,5 @@
 import { moveReading } from '@/lib/library-matching';
+import { requirePermission } from '@/lib/auth';
 import type { TrackedMedia } from '@/types/shared';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,9 +36,14 @@ export const GET = route(async (r) => {
   if (refresh) await refreshProgressOnDemand();
   return json(visibleTracked(listTracked()));
 });
-export const POST = route(async (r) => json(track(await body(r, trackBody)), 201));
+export const POST = route(async (r) => {
+  const input = await body(r, trackBody);
+  if (input.autoDownload) requirePermission('downloads');
+  return json(track(input), 201);
+});
 export const PATCH = route(async (r) => {
   const input = await body(r, trackPatch);
+  if (input.autoDownload) requirePermission('downloads');
   requireFollowed(input.id);
   if (
     input.favorite !== undefined &&

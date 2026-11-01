@@ -23,6 +23,7 @@ import type {
   ServicesStatus,
   SettingsPatch,
 } from '@/types/shared';
+import { PERMISSIONS } from '@/types/shared';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LanguageSelect, Page } from '@/components/shell';
@@ -501,6 +502,28 @@ function Downloads({ settings, onSaved }: { settings: Settings; onSaved: (s: Set
         </form>
       </Row>
       {error && <p className="text-bad">{error}</p>}
+      <Row label={t('settings.progressSource')} tip={t('settings.progressSourceTip')}>
+        <Select
+          label={t('settings.progressSource')}
+          value={settings.progressSource ?? 'suwayomi'}
+          onChange={async (value) => {
+            setError(null);
+            try {
+              onSaved(
+                await send<Settings>('/api/settings', 'PATCH', {
+                  progressSource: value as Settings['progressSource'],
+                }),
+              );
+            } catch (err) {
+              setError(errorText(t, err));
+            }
+          }}
+          options={[
+            { value: 'suwayomi', label: 'Suwayomi' },
+            { value: 'kavita', label: 'Kavita' },
+          ]}
+        />
+      </Row>
       <Row label={t('settings.format')} tip={t('settings.formatTip')}>
         <span className="text-mid">CBZ + ComicInfo</span>
       </Row>
@@ -830,7 +853,12 @@ function Account() {
         <input
           type="checkbox"
           checked={me.data?.adultContent ?? false}
-          disabled={!me.data}
+          disabled={!me.data || !me.data.permissions.includes('adult')}
+          title={
+            me.data && !me.data.permissions.includes('adult')
+              ? t('error.PERMISSION_DENIED')
+              : undefined
+          }
           onChange={async (e) => {
             const value = e.target.checked;
             if (await patchMe({ adultContent: value }, t('account.saved'))) {
@@ -846,6 +874,7 @@ function Account() {
           className="accent-fg size-[18px]"
         />
       </Row>
+      {!me.data?.adultContent && <HideNsfwSources />}
       <form
         onSubmit={change}
         className="flex flex-col gap-3.5 rounded-[18px] bg-white/[0.045] p-4 md:p-[22px]"
@@ -995,6 +1024,34 @@ function Users() {
               >
                 {t('users.resetPassword')}
               </button>
+              {u.role === 'member' && (
+                <fieldset className="flex w-full flex-wrap gap-x-5 gap-y-2 pt-1">
+                  <legend className="text-muted mb-1 text-xs">{t('users.permissions')}</legend>
+                  {PERMISSIONS.map((p) => (
+                    <label key={p} className="flex min-h-9 items-center gap-2 text-[13px]">
+                      <input
+                        type="checkbox"
+                        disabled={busy}
+                        checked={u.permissions.includes(p)}
+                        onChange={(e) =>
+                          act(
+                            () =>
+                              send('/api/users', 'PATCH', {
+                                id: u.id,
+                                permissions: e.target.checked
+                                  ? [...u.permissions, p]
+                                  : u.permissions.filter((x) => x !== p),
+                              } satisfies UserPatch),
+                            t('users.updated'),
+                          )
+                        }
+                        className="size-4 accent-[var(--accent,#9fb6ff)]"
+                      />
+                      {t(`users.permission.${p}`)}
+                    </label>
+                  ))}
+                </fieldset>
+              )}
               {!self && (
                 <button
                   type="button"
@@ -1273,5 +1330,33 @@ function GoogleBooksHelp() {
       </ol>
       <p className="mt-2">{t('catalogs.googlebooks.serverKey')}</p>
     </details>
+  );
+}
+
+/** While 18+ is off: also leave out extensions marked 18+ by their authors (default on). */
+function HideNsfwSources() {
+  const { t } = useI18n();
+  const { mutate } = useSWRConfig();
+  const settings = useApi<Settings>('/api/settings');
+  return (
+    <Row label={t('settings.hideNsfwSources')} tip={t('settings.hideNsfwSourcesTip')}>
+      <input
+        type="checkbox"
+        checked={settings.data?.hideNsfwSources ?? true}
+        disabled={!settings.data}
+        onChange={async (e) => {
+          try {
+            await send('/api/settings', 'PATCH', { hideNsfwSources: e.target.checked });
+            clearPersistentCache({ resume: true });
+            await mutate((key) => typeof key === 'string' && key.startsWith('/api/'), undefined, {
+              revalidate: true,
+            });
+          } catch (err) {
+            toast({ tone: 'bad', text: errorText(t, err) });
+          }
+        }}
+        className="accent-fg size-[18px]"
+      />
+    </Row>
   );
 }

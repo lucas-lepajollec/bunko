@@ -912,9 +912,13 @@ function snapshotTracked(id?: number) {
           released: known.length ? Math.max(...known) : null,
           unread: [...owned].filter((n) => read === null || n > read).length,
           readSource:
-            linkedProgress && (r.progress_checked || (volumeMode && read !== null))
-              ? 'kavita'
-              : 'none',
+            settings.progressSource === 'suwayomi'
+              ? r.progress_checked && sources.length
+                ? 'suwayomi'
+                : 'none'
+              : linkedProgress && (r.progress_checked || (volumeMode && read !== null))
+                ? 'kavita'
+                : 'none',
         },
         newChapters: seen.filter((n) => !owned.has(n)).length,
       };

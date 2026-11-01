@@ -8,7 +8,9 @@ import {
   closeSync,
   lstatSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { accountsDir, tenantPath } from './tenant-context';
 import { env } from './env';
@@ -41,7 +43,10 @@ export function accountsDb(): Database.Database {
       path TEXT, PRIMARY KEY(user_id,mount));
     CREATE TABLE IF NOT EXISTS account_state (key TEXT PRIMARY KEY,value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS deleted_tenants (id INTEGER PRIMARY KEY);
-    CREATE TABLE IF NOT EXISTS login_attempts (username TEXT PRIMARY KEY, start INTEGER NOT NULL, total INTEGER NOT NULL);`);
+    CREATE TABLE IF NOT EXISTS login_attempts (username TEXT PRIMARY KEY, start INTEGER NOT NULL, total INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS user_restrictions (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, permission TEXT NOT NULL,
+      PRIMARY KEY(user_id,permission));`);
   try {
     initializeCatalogStore(database);
     // The transaction is also a startup lock across independent Next route bundles/processes.
@@ -128,9 +133,23 @@ export function accountsDb(): Database.Database {
           "UPDATE users SET password_hash='',session_epoch=lower(hex(randomblob(32))) WHERE id=(SELECT MIN(id) FROM users WHERE role='admin')",
         )
         .run();
+      // The setup screen asks for a one-time code that only someone with the data volume can
+      // read: an exposed instance is not handed to whoever opens it first.
+      const code = randomBytes(9)
+        .toString('base64url')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, 'X');
+      database
+        .prepare(
+          "INSERT INTO account_state(key,value) VALUES('recovery_code',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        )
+        .run(createHash('sha256').update(code).digest('hex'));
+      const file = path.join(accountsDir, 'recovery.code');
+      rmSync(file, { force: true });
+      writeFileSync(file, `${code}\n`, { flag: 'wx', mode: 0o600 });
       reset.add(accountsDir);
       console.info(
-        'Bunko: first administrator password and sessions reset; account recovery setup is required.',
+        `Bunko: first administrator password and sessions reset. Enter the one-time code from ${file} on the setup screen.`,
       );
     }
     migrateMediaRoots(database);

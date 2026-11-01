@@ -277,7 +277,7 @@ beforeAll(async () => {
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`;
-  updateSettings({ suwayomiUrl: base });
+  updateSettings({ suwayomiUrl: base, progressSource: 'kavita' });
 });
 afterAll(async () => {
   db().close();
@@ -310,6 +310,7 @@ describe('v2 protocol fixtures', () => {
       libraryTargets: { MANGA: { libraryId: 1, folder: '/library/Manga' } },
       autoImportKavita: false,
       suwayomiUrl: base,
+      progressSource: 'kavita',
       kavitaUrl: '',
       kavitaApiKey: '',
       kavitaAuthMode: 'api-key',

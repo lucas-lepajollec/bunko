@@ -68,6 +68,8 @@ export function mediaResolver(catalog: UnifiedMedia[]) {
     if (
       !found ||
       (!direct && m.type === 'NOVEL' && found.format !== m.format) ||
+      // A shared title alone never joins two different kinds of work (manga vs manhwa…).
+      (!direct && found.format && m.format && found.format !== m.format) ||
       (found.anilistId && m.anilistId && found.anilistId !== m.anilistId) ||
       (found.mangadexId && m.mangadexId && found.mangadexId !== m.mangadexId)
     )
@@ -201,7 +203,14 @@ export function saveReleases(input: ChapterRelease[], now = Date.now()) {
       )
         continue;
       const media = resolved.get(r.media.id) ?? resolve(originalMedia);
-      rememberAdultIdentities(media, [r.media.id]);
+      // Only an explicit shared identity becomes a permanent alias: a title-only resolution must
+      // not let an 18+ decision on one work spread to a namesake.
+      const sameIdentity =
+        media.id === originalMedia.id ||
+        Boolean(media.anilistId && media.anilistId === originalMedia.anilistId) ||
+        Boolean(media.mangadexId && media.mangadexId === originalMedia.mangadexId) ||
+        Boolean(media.mangaUpdatesId && media.mangaUpdatesId === originalMedia.mangaUpdatesId);
+      rememberAdultIdentities(media, sameIdentity ? [r.media.id] : []);
       resolved.set(r.media.id, media);
       const value = { ...r, media };
       insert.run(r.id, r.releasedAt, JSON.stringify(value));

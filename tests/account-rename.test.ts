@@ -96,6 +96,7 @@ it('lets an admin rename another account while preserving sessions, login and te
     id: 2,
     username: 'Reader.New-2',
     role: 'member',
+    permissions: ['services', 'extensions', 'downloads', 'translate', 'adult'],
     createdAt: previous.created_at,
     lastSeenAt: previous.last_seen_at,
     kavitaLinked: false,
@@ -136,6 +137,7 @@ it('lets a member rename themselves together with their preference and returns t
     id: 2,
     username: 'Self_Reader',
     role: 'member',
+    permissions: ['services', 'extensions', 'downloads', 'translate', 'adult'],
     adultContent: true,
   });
   expect(account(2)).toEqual({ ...previous, username: 'Self_Reader' });

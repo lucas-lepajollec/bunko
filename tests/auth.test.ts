@@ -224,7 +224,7 @@ describe('account routes', () => {
     }
   });
 
-  it('limits case-insensitive usernames and retains a global 20/minute budget', async () => {
+  it('limits each username to 10/minute without a global lockout', async () => {
     await setup(request('/api/auth/setup', credentials));
     clock += 61_000;
     for (let i = 0; i < 10; i++)
@@ -242,17 +242,13 @@ describe('account routes', () => {
     const calls = vi.mocked(scrypt).mock.calls.length;
     await error(await POST(request('/api/auth', credentials)), 429, 'RATE_LIMITED');
     expect(scrypt).toHaveBeenCalledTimes(calls);
-    for (let i = 0; i < 10; i++)
+    // Other names are not locked out by someone hammering one account (no shared counter).
+    for (let i = 0; i < 12; i++)
       await error(
         await POST(request('/api/auth', { ...credentials, username: `Unknown${i}` })),
         401,
         'INVALID_CREDENTIALS',
       );
-    await error(
-      await POST(request('/api/auth', { ...credentials, username: 'Another' })),
-      429,
-      'RATE_LIMITED',
-    );
     clock += 60_000;
     expect((await POST(request('/api/auth', credentials))).status).toBe(200);
   });

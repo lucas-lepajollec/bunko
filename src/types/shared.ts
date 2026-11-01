@@ -431,6 +431,10 @@ export interface Settings {
    * (see `MyAccount.adultContent`).
    */
   adultContent: boolean;
+  /** With 18+ off, also leave out extensions marked NSFW (default true). */
+  hideNsfwSources: boolean;
+  /** Where outside reading progress is read from (Bunko's own reader always counts). */
+  progressSource: 'suwayomi' | 'kavita';
   favoriteSourceIds: string[];
   extensionRepos: string[];
   /** Worker update-check interval in minutes (5–1440), default 15. */
@@ -589,7 +593,7 @@ export interface LibraryProgress {
   /** Owned chapters above `read`. */
   unread: number;
   /** Where `read` comes from. */
-  readSource: 'kavita' | 'none';
+  readSource: 'kavita' | 'suwayomi' | 'none';
 }
 export interface TrackPatch {
   id: number;
@@ -857,6 +861,8 @@ export interface KavitaIndexStatus {
 export interface AuthState {
   authenticated: boolean;
   setupRequired: boolean;
+  /** Setup restores the first administrator (BUNKO_RESET_ACCOUNT) and asks for its code. */
+  recovery?: boolean;
   username: string | null;
   /** Signed-in user (null when signed out). */
   userId: number | null;
@@ -868,8 +874,16 @@ export interface AuthState {
  */
 export type UserRole = 'admin' | 'member';
 /** GET /api/users (admin). */
+/**
+ * What a member may do (admins can do everything). New accounts get every permission; an admin
+ * takes away what a member should not do.
+ */
+export const PERMISSIONS = ['services', 'extensions', 'downloads', 'translate', 'adult'] as const;
+export type Permission = (typeof PERMISSIONS)[number];
 export interface UserAccount {
   id: number;
+  /** Granted permissions (always all of them for admins). */
+  permissions: Permission[];
   username: string;
   role: UserRole;
   createdAt: string;
@@ -890,9 +904,13 @@ export interface UserPatch {
   password?: string;
   /** Rename the account (same rules as setup; unique). Media root `/library/<username>` follows it. */
   username?: string;
+  /** Members only: the full list of granted permissions. */
+  permissions?: Permission[];
 }
 /** GET/PATCH /api/me — the signed-in user's own preferences. */
 export interface MyAccount {
+  /** What this account may do; the interface hides or explains the rest. */
+  permissions: Permission[];
   id: number;
   username: string;
   role: UserRole;

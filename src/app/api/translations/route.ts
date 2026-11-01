@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { z } from 'zod';
 import { body, json, route } from '@/lib/api';
 import { listTranslations, requestTranslations } from '@/lib/translations';
+import { requirePermission } from '@/lib/auth';
 
 const language = z
   .string()
@@ -18,6 +19,7 @@ export const GET = route((r) => {
 
 /** Queue owned files of a book/novel for translation through TraDoc. */
 export const POST = route(async (r) => {
+  requirePermission('translate');
   const input = await body(
     r,
     z
