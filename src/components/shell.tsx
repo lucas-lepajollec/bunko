@@ -60,6 +60,8 @@ function AuthGate({ children }: { children: ReactNode }) {
       <AuthScreen
         mode={data?.setupRequired ? 'setup' : 'login'}
         onDone={async () => {
+          // A new session starts from a clean cache, whoever used this browser before.
+          clearPersistentCache({ resume: true });
           await mutateAll(() => true, undefined, { revalidate: true });
         }}
       />

@@ -5,6 +5,7 @@ export function sourceMatchQueue() {
   return statement(
     `SELECT id,COALESCE(display_title,title) AS title FROM tracked_media
     WHERE type='MANGA' AND json_array_length(sources_json)=0
+    AND NOT EXISTS(SELECT 1 FROM worker_state WHERE key='source_manual_empty:' || tracked_media.id)
     AND (source_match_at IS NULL OR source_match_at <= ?)
     ORDER BY EXISTS(SELECT 1 FROM worker_state WHERE key='library_catalog_match:' || tracked_media.id) DESC,
       COALESCE(source_match_at,''),id`,

@@ -35,6 +35,7 @@ export function requestLibraryMatching(ids?: number[]) {
       statement(
         'UPDATE tracked_media SET source_match_at=NULL WHERE id=? AND json_array_length(sources_json)=0',
       ).run(entry.id);
+      statement('DELETE FROM worker_state WHERE key=?').run(`source_manual_empty:${entry.id}`);
       statement('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)').run(
         marker(entry.id),
         JSON.stringify({ mediaId: entry.media.id, namespace, language: preferredSourceLanguage() }),
@@ -109,17 +110,7 @@ export async function resolveQueuedCatalog(
       )
         return;
       const oldId = current.media.id;
-      statement(`INSERT INTO reader_progress(media_id,chapter_id,number,page,page_count,updated_at)
-        SELECT ?,chapter_id,number,page,page_count,updated_at FROM reader_progress WHERE media_id=?
-        ON CONFLICT(media_id,chapter_id) DO UPDATE SET number=excluded.number,page=excluded.page,
-        page_count=excluded.page_count,updated_at=excluded.updated_at WHERE excluded.updated_at>reader_progress.updated_at`).run(
-        media.id,
-        oldId,
-      );
-      statement('DELETE FROM reader_progress WHERE media_id=?').run(oldId);
-      statement(
-        `UPDATE local_reader_chapters SET media_id=CASE WHEN media_id=? THEN ? ELSE ? END WHERE media_id IN (?,?)`,
-      ).run(oldId, media.id, `@volume:${media.id}`, oldId, `@volume:${oldId}`);
+      moveReading(oldId, media.id);
       const canonical = { ...media, trackedId: current.id, kavitaSeriesId: series.seriesId };
       statement('UPDATE imported_chapters SET media_json=? WHERE tracked_id=?').run(
         JSON.stringify(canonical),
@@ -150,4 +141,30 @@ export async function resolveQueuedCatalog(
   } finally {
     if (!signal?.aborted && ownsLease()) finishLibraryMatch(entry.id, row.value);
   }
+}
+
+/**
+ * Move reading positions and local reader identities when a followed work changes identity, so
+ * resume and local chapter/volume URLs keep working. Newer positions win on conflicts; a target
+ * that already owns local identities keeps them (those are never merged by guessing).
+ */
+export function moveReading(oldId: string, newId: string) {
+  if (oldId === newId) return;
+  statement(`INSERT INTO reader_progress(media_id,chapter_id,number,page,page_count,updated_at)
+    SELECT ?,chapter_id,number,page,page_count,updated_at FROM reader_progress WHERE media_id=?
+    ON CONFLICT(media_id,chapter_id) DO UPDATE SET number=excluded.number,page=excluded.page,
+    page_count=excluded.page_count,updated_at=excluded.updated_at WHERE excluded.updated_at>reader_progress.updated_at`).run(
+    newId,
+    oldId,
+  );
+  statement('DELETE FROM reader_progress WHERE media_id=?').run(oldId);
+  if (
+    !statement('SELECT 1 FROM local_reader_chapters WHERE media_id IN (?,?) LIMIT 1').get(
+      newId,
+      `@volume:${newId}`,
+    )
+  )
+    statement(
+      `UPDATE local_reader_chapters SET media_id=CASE WHEN media_id=? THEN ? ELSE ? END WHERE media_id IN (?,?)`,
+    ).run(oldId, newId, `@volume:${newId}`, oldId, `@volume:${oldId}`);
 }

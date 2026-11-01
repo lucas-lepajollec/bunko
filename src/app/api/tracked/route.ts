@@ -1,3 +1,4 @@
+import { moveReading } from '@/lib/library-matching';
 import type { TrackedMedia } from '@/types/shared';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -215,6 +216,9 @@ export const PATCH = route(async (r) => {
           Number(identityChanged || input.ownedAsVolumes !== undefined),
           input.id,
         );
+      // A manual catalog change keeps the reader's place and local chapter links.
+      if ((input.media || input.offCatalog) && media.id !== originalIdentity)
+        moveReading(originalIdentity, media.id);
       if (input.ownedAsVolumes === true)
         db().prepare('UPDATE tracked_media SET last_read=NULL WHERE id=?').run(input.id);
       else if (input.ownedAsVolumes === false && previousRead !== null)

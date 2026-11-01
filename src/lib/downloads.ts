@@ -23,6 +23,7 @@ import {
   statement,
   acquireWorker,
   listBatches,
+  batchControl,
   saveBatch,
   sameMedia,
   authoritativeMedia,
@@ -339,7 +340,7 @@ export async function processBatch(batch: DownloadBatch, workerSignal?: AbortSig
   const cancellation = workerValue(`download_cancel:${batch.id}`);
   const controller = new AbortController();
   const checkControl = () => {
-    const current = listBatches().find((b) => b.id === batch.id);
+    const current = batchControl(batch.id);
     if (
       paused() ||
       batch.sourceKey !== sourceServerKey() ||

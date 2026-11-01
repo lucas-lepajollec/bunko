@@ -8,6 +8,19 @@
   keep both as a separate series. Jobs survive restarts, retry while TraDoc is unreachable and
   rescan Kavita when the translation is installed.
 
+- Audit fixes: automatic downloads now follow the work's current settings when a check returns
+  (and a refused lot no longer erases the detected chapters); an update check that exceeds its
+  source budget completes instead of rerunning every half minute; download control reads one lot
+  instead of the whole history ten times a second. Imported archives are readable by a Kavita
+  running under another user. Suwayomi's own download flag no longer hides chapters missing from
+  the library. Changing a work's catalog identity keeps its reading position and local chapters.
+  Removing every source by hand is respected by background matching (an explicit search still
+  links). Browser caches never carry one account's data into another session, and the content
+  filter no longer stops caching. Search opens again between 1024 and 1279 px; hidden reader
+  controls leave the keyboard order; failed sync/sign-out/key removal and no-op downloads are
+  reported; source edits wait for the previous save; books get the Kavita section of their
+  settings.
+
 - Gather everything that changes how Bunko treats a work on its own settings page, linked under
   the work's details: chapter or volume unit (with a suggestion when Kavita already holds whole
   volumes), the owned-files declaration, automatic downloads, 18+ classification, display title,

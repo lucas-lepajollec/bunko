@@ -22,11 +22,13 @@ const rank = (priority: string[], id: string) => {
   const i = priority.indexOf(id);
   return i < 0 ? priority.length : i;
 };
-/** Missing = not in Kavita (by chapter number) and not already downloaded through Suwayomi. */
+/**
+ * Missing = not owned in Kavita (by chapter number or complete volume). Suwayomi's own download
+ * flag is informational: a chapter cached there is not in the library until Bunko imports it.
+ */
 export const isMissing = (c: MergedChapter, owned?: Set<number>, ownedVolumes?: Set<number>) =>
   !(c.volume !== null && ownedVolumes?.has(c.volume)) &&
-  !(c.number !== null && owned?.has(c.number)) &&
-  !c.variants.some((v) => v.isDownloaded);
+  !(c.number !== null && owned?.has(c.number));
 
 /**
  * What "complete the series" fetches. Works followed in volumes only complete numbered volumes:
@@ -235,7 +237,8 @@ export function ChapterTable({
               className="flex items-center gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
-                const a = Number(from.replace(',', '.'));
+                if (!from.trim() && !to.trim()) return;
+                const a = Number((from || to).replace(',', '.'));
                 const b = Number((to || from).replace(',', '.'));
                 if (!Number.isFinite(a) || !Number.isFinite(b)) return;
                 const [lo, hi] = a <= b ? [a, b] : [b, a];

@@ -174,7 +174,7 @@ export function AdultSetting({ media }: { media: MediaDetail }) {
     setBusy(true);
     try {
       await send('/api/media/adult', 'PATCH', { id: media.id, adult: value });
-      clearPersistentCache();
+      clearPersistentCache({ resume: true });
       await mutate((key) => typeof key === 'string' && key !== '/api/settings', undefined, {
         revalidate: true,
       });

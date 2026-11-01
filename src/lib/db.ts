@@ -1037,6 +1037,13 @@ function insertTracked(input: TrackRequest): TrackedMedia {
   wakeWorker();
   return getTracked(id)!;
 }
+/** One batch's control fields, without parsing or cloning the whole history. */
+export function batchControl(id: string): { state: string; error: string | null } | null {
+  const row = statement(
+    "SELECT json_extract(payload,'$.state') AS state, json_extract(payload,'$.error') AS error FROM download_batches WHERE id=?",
+  ).get(id) as { state: string; error: string | null } | undefined;
+  return row ?? null;
+}
 export function saveBatch(batch: DownloadBatch, linkUpdates = true) {
   batch.sourceKey ??= sourceServerKey();
   statement(

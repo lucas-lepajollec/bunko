@@ -39,6 +39,15 @@ export function replaceSources(t: TrackedMedia, sources: ChapterSelection[]) {
         old.sourceId,
         old.suwayomiMangaId,
       );
+  // Removing every source by hand means "none": background matching must not relink another one.
+  // An explicit search (sheet or library action) still can.
+  if (!sources.length && t.sources.length)
+    statement('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)').run(
+      `source_manual_empty:${t.id}`,
+      '1',
+    );
+  else if (sources.length)
+    statement('DELETE FROM worker_state WHERE key=?').run(`source_manual_empty:${t.id}`);
   if (sources.length && JSON.stringify(t.sources) !== JSON.stringify(sources))
     requestSourceRefresh();
   for (const source of sources) {

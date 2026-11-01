@@ -25,6 +25,7 @@ const { libraryActivity } = await import('@/lib/library-activity');
 const { extensionAction } = await import('@/lib/suwayomi');
 const { GET } = await import('@/app/api/media/sources/route');
 const { ChapterTable, missingForUnit } = await import('@/components/chapters');
+const { moveReading, requestLibraryMatching } = await import('@/lib/library-matching');
 const { I18nProvider } = await import('@/i18n/I18nProvider');
 const work = () => ({ ...emptyMedia('anilist:301', 'Source Work', 'MANGA'), anilistId: 301 });
 const sourceList = [
@@ -351,4 +352,31 @@ it('renders a work followed in volumes as whole volumes, with recent loose chapt
     'c3',
   ]);
   expect(missingForUnit(chapters, new Set(), new Set([4]), true)).toEqual([]);
+});
+it('does not relink in the background after every source was removed by hand', () => {
+  const entry = track({ media: work(), sources: [{ ...hit(0), sourceName: 'French fixture' }] });
+  replaceSources(getTracked(entry.id)!, []);
+  db().prepare("UPDATE tracked_media SET sources_json='[]' WHERE id=?").run(entry.id);
+  expect(sourceMatchQueue().some((t) => t.id === entry.id)).toBe(false);
+  // An explicit library action asks again.
+  requestLibraryMatching([entry.id]);
+  expect(sourceMatchQueue().some((t) => t.id === entry.id)).toBe(true);
+});
+it('moves reading positions and local identities with a manual identity change', () => {
+  db().exec('DELETE FROM reader_progress; DELETE FROM local_reader_chapters');
+  db()
+    .prepare(
+      'INSERT INTO reader_progress(media_id,chapter_id,number,page,page_count,updated_at) VALUES(?,?,?,?,?,?)',
+    )
+    .run('kavita:7', -1, 3, 12, 40, '2026-10-01T00:00:00.000Z');
+  db()
+    .prepare('INSERT INTO local_reader_chapters(id,media_id,number) VALUES(?,?,?)')
+    .run(1, 'kavita:7', 3);
+  moveReading('kavita:7', 'anilist:301');
+  expect(db().prepare('SELECT media_id,page FROM reader_progress').all()).toEqual([
+    { media_id: 'anilist:301', page: 12 },
+  ]);
+  expect(db().prepare('SELECT media_id FROM local_reader_chapters').all()).toEqual([
+    { media_id: 'anilist:301' },
+  ]);
 });
