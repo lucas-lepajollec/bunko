@@ -237,13 +237,23 @@ export async function tmdbDetail(kind: TmdbKind, id: number): Promise<MediaDetai
       imdb_id?: string | null;
       recommendations?: { results: TmdbItem[] };
       belongs_to_collection?: { id: number; name: string } | null;
+      credits?: { cast?: { name: string }[]; crew?: { name: string; job?: string }[] };
     }
   >(
     `/${kind}/${id}`,
-    { language: lang, append_to_response: 'external_ids,recommendations' },
+    { language: lang, append_to_response: 'external_ids,recommendations,credits' },
     12 * HOUR,
   );
   const media = fromTmdb(data, kind);
+  // No synopsis in the interface language: TMDB's English one.
+  if (!media.synopsis && lang !== 'en-US') {
+    const english = await tmdbJson<{ overview?: string }>(
+      `/${kind}/${id}`,
+      { language: 'en-US' },
+      12 * HOUR,
+    ).catch(() => null);
+    media.synopsis = english?.overview || null;
+  }
   const today = new Date().toISOString().slice(0, 10);
   let seasons: AnimeSeason[] = [];
   if (kind === 'tv') {
@@ -325,7 +335,12 @@ export async function tmdbDetail(kind: TmdbKind, id: number): Promise<MediaDetai
   }
   return {
     ...media,
-    authors: (data.created_by ?? []).map((c) => c.name),
+    // Series: their creators; films: their directors.
+    authors:
+      kind === 'tv'
+        ? (data.created_by ?? []).map((c) => c.name)
+        : (data.credits?.crew ?? []).filter((c) => c.job === 'Director').map((c) => c.name),
+    credits: { cast: (data.credits?.cast ?? []).slice(0, 10).map((c) => c.name) },
     episodes: kind === 'tv' ? (data.number_of_episodes ?? null) : 1,
     ...(video ? { video } : {}),
     tags: [],

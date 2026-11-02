@@ -194,6 +194,8 @@ export interface VideoDetail {
   }[];
 }
 export interface MediaDetail extends UnifiedMedia, LoadState {
+  /** Series and films: main cast (TMDB credits); directors/creators are in `authors`. */
+  credits?: { cast: string[] };
   video?: VideoDetail;
   jellyfin?: JellyfinPresence | null;
   /** This id is a later season of another work: the client opens that work instead. */

@@ -647,7 +647,50 @@ export async function importJellyfinAnime(signal?: AbortSignal) {
       new Date().toISOString(),
     );
   }
+  await upgradeOffCatalogWorks(signal).catch(() => undefined);
   applyJellyfinProgress();
+}
+
+/**
+ * Works imported off-catalog before they could be identified (no TMDB key yet, id map not
+ * loaded) become their catalog work once it is known: same library entry, progress kept.
+ */
+export async function upgradeOffCatalogWorks(signal?: AbortSignal, budget = 20) {
+  const series = new Map(indexed().map((s) => [s.id, s]));
+  for (const t of listTracked()) {
+    if (signal?.aborted || budget <= 0) return;
+    if (!t.media.id.startsWith('jellyfin:')) continue;
+    const s = series.get(t.media.id.slice('jellyfin:'.length));
+    if (!s) continue;
+    let work: UnifiedMedia | null = null;
+    try {
+      if (s.role === 'series' || s.role === 'movies' || s.role === 'animation') {
+        budget--;
+        work = await tmdbWork(s);
+      } else {
+        const mapped = anilistFromProviders(s.providerIds);
+        if (mapped) {
+          budget--;
+          work = loadedAnime(mapped) ?? (await franchise(mapped, signal)).root;
+        }
+      }
+    } catch {
+      continue;
+    }
+    if (!work) continue;
+    // Another entry already follows that work: leave both as they are (the user decides).
+    if (listTracked().some((x) => x.id !== t.id && x.media.id === work!.id)) continue;
+    statement(
+      'UPDATE tracked_media SET anilist_id=?,title=?,cover_url=?,media_json=?,jellyfin_link=? WHERE id=?',
+    ).run(
+      work.anilistId,
+      work.title,
+      work.coverUrl,
+      JSON.stringify({ ...work, trackedId: null }),
+      JSON.stringify({ seriesId: s.id, season: 1 }),
+      t.id,
+    );
+  }
 }
 
 /** Import progress of the anime libraries: series handled out of all of them. */

@@ -1290,6 +1290,11 @@ const en: Dictionary = {
   'episodes.watchedFilm': 'Watched',
   'episodes.watchTitle': 'Watch',
   'catalog.viewFilms': 'Latest releases',
+  'episodes.markFilm': 'Mark as watched',
+  'episodes.filmWatched': 'Watched ✓',
+  'title.cast': 'Cast',
+  'title.director': 'Director',
+  'title.creator': 'Created by',
 };
 
 const fr: Dictionary = {
@@ -2566,6 +2571,11 @@ const fr: Dictionary = {
   'episodes.watchedFilm': 'Vu',
   'episodes.watchTitle': 'Regarder',
   'catalog.viewFilms': 'Dernières sorties',
+  'episodes.markFilm': 'Marquer comme vu',
+  'episodes.filmWatched': 'Vu ✓',
+  'title.cast': 'Avec',
+  'title.director': 'Réalisation',
+  'title.creator': 'Création',
 };
 
 const es: Dictionary = {
@@ -3834,6 +3844,11 @@ const es: Dictionary = {
   'episodes.watchedFilm': 'Vista',
   'episodes.watchTitle': 'Ver',
   'catalog.viewFilms': 'Últimos estrenos',
+  'episodes.markFilm': 'Marcar como vista',
+  'episodes.filmWatched': 'Vista ✓',
+  'title.cast': 'Reparto',
+  'title.director': 'Dirección',
+  'title.creator': 'Creación',
 };
 
 const de: Dictionary = {
@@ -5111,6 +5126,11 @@ const de: Dictionary = {
   'episodes.watchedFilm': 'Gesehen',
   'episodes.watchTitle': 'Ansehen',
   'catalog.viewFilms': 'Neueste Filme',
+  'episodes.markFilm': 'Als gesehen markieren',
+  'episodes.filmWatched': 'Gesehen ✓',
+  'title.cast': 'Besetzung',
+  'title.director': 'Regie',
+  'title.creator': 'Erfinder',
 };
 
 const it: Dictionary = {
@@ -6379,6 +6399,11 @@ const it: Dictionary = {
   'episodes.watchedFilm': 'Visto',
   'episodes.watchTitle': 'Guarda',
   'catalog.viewFilms': 'Ultime uscite',
+  'episodes.markFilm': 'Segna come visto',
+  'episodes.filmWatched': 'Visto ✓',
+  'title.cast': 'Cast',
+  'title.director': 'Regia',
+  'title.creator': 'Ideata da',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

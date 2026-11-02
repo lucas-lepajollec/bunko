@@ -370,7 +370,16 @@ function Title({ media }: { media: MediaDetail }) {
             .join(' · '),
         ],
     ...(video?.studios.length ? [[t('episodes.facts.studio'), video.studios.join(', ')]] : []),
-    [t('title.facts.authors'), media.authors.slice(0, 3).join(', ')],
+    // Series and films: who made it and who is in it (TMDB credits).
+    ...(media.credits
+      ? [
+          [
+            media.format === 'SERIES' ? t('title.creator') : t('title.director'),
+            media.authors.slice(0, 3).join(', '),
+          ],
+          [t('title.cast'), media.credits.cast.slice(0, 6).join(', ')],
+        ]
+      : [[t('title.facts.authors'), media.authors.slice(0, 3).join(', ')]]),
     [
       t('title.facts.genres'),
       media.genres
@@ -495,13 +504,21 @@ function Title({ media }: { media: MediaDetail }) {
             {video && entry && (
               <button
                 type="button"
-                disabled={watchBusy || nextEpisode === null}
-                onClick={() => setWatched(nextEpisode)}
+                disabled={watchBusy || (!filmSheet && nextEpisode === null)}
+                onClick={() =>
+                  filmSheet
+                    ? setWatched((entry.progress?.read ?? 0) >= 1 ? null : 1)
+                    : setWatched(nextEpisode)
+                }
                 className={primaryButton}
               >
-                {nextEpisode !== null
-                  ? t('episodes.markNext', { n: n(nextEpisode) })
-                  : t('episodes.upToDate')}
+                {filmSheet
+                  ? (entry.progress?.read ?? 0) >= 1
+                    ? t('episodes.filmWatched')
+                    : t('episodes.markFilm')
+                  : nextEpisode !== null
+                    ? t('episodes.markNext', { n: n(nextEpisode) })
+                    : t('episodes.upToDate')}
               </button>
             )}
             <Select
@@ -530,7 +547,7 @@ function Title({ media }: { media: MediaDetail }) {
               }
             />
           </div>
-          {entry && (
+          {entry && !filmSheet && (
             <div className="flex max-w-[560px] flex-col gap-2">
               <ProgressBar progress={progress} className="h-1.5" />
               <span className="text-mid flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]">

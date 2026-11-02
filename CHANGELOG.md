@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Film sheets: "Mark as watched" instead of "Episode 1 watched", no episode progress or counts,
+  a compact watch card (no empty frame without a still, no stray checkbox).
+- TMDB sheets show directors (films) or creators (series), the main cast and the English
+  synopsis when none exists in the interface language.
+- Works imported from Jellyfin before they could be identified (no TMDB key yet, id map not
+  loaded) become their catalog work automatically: same entry, progress and Jellyfin link kept.
+- Work settings search: a video work searches anime, TMDB series and films whatever the kind on
+  screen, video results first, every other kind below.
+- Series, films and animated films homes show their latest releases.
+
 - Subtitles no longer show twice: Jellyfin is always asked not to burn subtitles (except image
   subtitles chosen in the player) and the text track is drawn once by the browser.
 - Jellyfin libraries can be "Animated films" (detected for a films library named Animation /
