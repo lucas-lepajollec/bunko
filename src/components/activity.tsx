@@ -123,8 +123,8 @@ export function ActivityCenter() {
           <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
         </svg>
         {busy && (
-          // A small spinner just above the bell while anything loads.
-          <span aria-hidden className="absolute inset-x-0 top-1 flex justify-center leading-none">
+          // A small spinner at the bell's top-left, touching its edge, while anything loads.
+          <span aria-hidden className="absolute top-[8px] left-[9px] flex leading-none">
             <Spinner className="block size-2.5 border-[1.5px] text-white" />
           </span>
         )}

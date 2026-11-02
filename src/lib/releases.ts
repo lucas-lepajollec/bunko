@@ -33,6 +33,7 @@ export const feedQuery = z.object({
       'anime',
       'series',
       'movies',
+      'animation',
     ])
     .optional(),
   genre: z.string().max(60).optional(),
@@ -43,6 +44,7 @@ export type FeedQuery = z.infer<typeof feedQuery>;
 export function mediaKind(media: UnifiedMedia): Exclude<DiscoverKind, 'all'> {
   if (media.format === 'SERIES') return 'series';
   if (media.format === 'MOVIE') return 'movies';
+  if (media.format === 'ANIMATION_FILM') return 'animation';
   if (media.type === 'ANIME') return 'anime';
   if (media.format === 'COMIC') return 'comic';
   if (media.format === 'LIGHT_NOVEL') return 'lightnovel';

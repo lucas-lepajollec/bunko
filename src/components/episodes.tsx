@@ -14,6 +14,7 @@ const FIRST = 48;
  */
 export function EpisodeList({
   title,
+  artwork,
   anilistId,
   video,
   jellyfin,
@@ -23,6 +24,8 @@ export function EpisodeList({
 }: {
   /** Work title (shown in the player). */
   title: string;
+  /** The work's banner or cover, for episodes without their own still. */
+  artwork?: string | null;
   /** AniList id of the work, for a single-season work without season entries. */
   anilistId: number | null;
   video: VideoDetail;
@@ -253,19 +256,27 @@ export function EpisodeList({
                   title={upcoming ? undefined : t('player.playEpisode', { n: n(e.number) })}
                   className="relative block aspect-video w-full disabled:cursor-default"
                 >
-                  {e.thumbnail ? (
+                  {e.thumbnail || artwork ? (
                     // eslint-disable-next-line @next/next/no-img-element -- public stills, lazy and decorative
                     <img
-                      src={e.thumbnail}
+                      src={(e.thumbnail ?? artwork)!}
                       alt=""
                       loading="lazy"
                       referrerPolicy="no-referrer"
-                      className={cx('size-full object-cover', seen && 'opacity-50')}
+                      className={cx(
+                        'size-full object-cover',
+                        !e.thumbnail && 'brightness-[0.45]',
+                        seen && 'opacity-50',
+                      )}
                     />
-                  ) : (
+                  ) : null}
+                  {!e.thumbnail && (
                     <span
                       aria-hidden
-                      className="text-faint flex size-full items-center justify-center font-serif text-3xl italic"
+                      className={cx(
+                        'absolute inset-0 flex items-center justify-center font-serif text-4xl italic',
+                        artwork ? 'text-white/85' : 'text-faint',
+                      )}
                     >
                       {n(e.number)}
                     </span>

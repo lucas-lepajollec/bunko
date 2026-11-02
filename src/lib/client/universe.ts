@@ -16,6 +16,7 @@ export const UNIVERSES: Universe[] = [
   'anime',
   'series',
   'movies',
+  'animation',
 ];
 /** Universes that have reading sources (Suwayomi extensions). */
 export const SOURCE_UNIVERSES: DiscoverKind[] = ['all', 'manga', 'manhwa', 'manhua', 'comic'];
@@ -47,6 +48,7 @@ export function useUniverse() {
 export function kindOf(media: Pick<UnifiedMedia, 'type' | 'format' | 'origin'>): Universe {
   if (media.format === 'SERIES') return 'series';
   if (media.format === 'MOVIE') return 'movies';
+  if (media.format === 'ANIMATION_FILM') return 'animation';
   if (media.type === 'ANIME') return 'anime';
   if (media.format === 'COMIC') return 'comic';
   if (media.format === 'LIGHT_NOVEL') return 'lightnovel';
@@ -67,7 +69,7 @@ export type SearchType = 'MANGA' | 'NOVEL' | 'ANIME' | 'TV' | 'MOVIE';
 /** The provider media type a universe searches (AniList searches manga unless told). */
 export function searchTypeOf(kind: DiscoverKind | undefined): SearchType | undefined {
   if (!kind || kind === 'all') return undefined;
-  if (kind === 'anime') return 'ANIME';
+  if (kind === 'anime' || kind === 'animation') return 'ANIME';
   if (kind === 'series') return 'TV';
   if (kind === 'movies') return 'MOVIE';
   if (['lightnovel', 'webnovel', 'novel', 'book'].includes(kind)) return 'NOVEL';

@@ -37,6 +37,7 @@ const KINDS: DiscoverKind[] = [
   'anime',
   'series',
   'movies',
+  'animation',
 ];
 const SORTS: DiscoverSort[] = ['trending', 'popular', 'score', 'new'];
 
@@ -269,7 +270,7 @@ function Catalog() {
                 ] as const
               )
                 // Series and films have no release feed yet: catalog and newest only.
-                .filter(([v]) => v !== 'chapters' || !tmdbKind)
+                .filter(([v]) => v !== 'chapters' || (!tmdbKind && kind !== 'animation'))
                 .map(([v, label]) => (
                   <button
                     key={v}

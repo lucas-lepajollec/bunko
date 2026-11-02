@@ -734,11 +734,13 @@ export function requestUpdateCheck() {
 function enabledKinds() {
   return getSettings().universes ?? [];
 }
+const VIDEO_KINDS = ['anime', 'series', 'movies', 'animation'];
 function readingEnabled() {
   const kinds = enabledKinds();
-  return !kinds.length || kinds.some((k) => k !== 'anime');
+  return !kinds.length || kinds.some((k) => !VIDEO_KINDS.includes(k));
 }
+/** Jellyfin and anime works: any video kind enabled. */
 function animeEnabled() {
   const kinds = enabledKinds();
-  return !kinds.length || kinds.includes('anime');
+  return !kinds.length || kinds.some((k) => VIDEO_KINDS.includes(k));
 }

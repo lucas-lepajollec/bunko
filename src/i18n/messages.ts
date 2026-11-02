@@ -1281,6 +1281,10 @@ const en: Dictionary = {
   'home.latestKind.movies': 'Latest films',
   'home.trendingKicker': 'Trending this week · {meta}',
   'home.newEpisodeKicker': 'New episode · {when} · {meta}',
+  'kind.animation': 'Animated films',
+  'universe.desc.animation': 'Anime films and western animated films, together.',
+  'home.latestKind.animation': 'Latest animated films',
+  'format.ANIMATION_FILM': 'Animated film',
 };
 
 const fr: Dictionary = {
@@ -2548,6 +2552,10 @@ const fr: Dictionary = {
   'home.latestKind.movies': 'Derniers films',
   'home.trendingKicker': 'Tendance de la semaine · {meta}',
   'home.newEpisodeKicker': 'Nouvel épisode · {when} · {meta}',
+  'kind.animation': 'Films d’animation',
+  'universe.desc.animation': 'Films d’anime et films d’animation occidentaux, ensemble.',
+  'home.latestKind.animation': 'Derniers films d’animation',
+  'format.ANIMATION_FILM': 'Film d’animation',
 };
 
 const es: Dictionary = {
@@ -3807,6 +3815,10 @@ const es: Dictionary = {
   'home.latestKind.movies': 'Últimas películas',
   'home.trendingKicker': 'Tendencia de la semana · {meta}',
   'home.newEpisodeKicker': 'Nuevo episodio · {when} · {meta}',
+  'kind.animation': 'Películas de animación',
+  'universe.desc.animation': 'Películas de anime y de animación occidental, juntas.',
+  'home.latestKind.animation': 'Últimas películas de animación',
+  'format.ANIMATION_FILM': 'Película de animación',
 };
 
 const de: Dictionary = {
@@ -5075,6 +5087,10 @@ const de: Dictionary = {
   'home.latestKind.movies': 'Neueste Filme',
   'home.trendingKicker': 'Trend der Woche · {meta}',
   'home.newEpisodeKicker': 'Neue Folge · {when} · {meta}',
+  'kind.animation': 'Animationsfilme',
+  'universe.desc.animation': 'Anime-Filme und westliche Animationsfilme zusammen.',
+  'home.latestKind.animation': 'Neueste Animationsfilme',
+  'format.ANIMATION_FILM': 'Animationsfilm',
 };
 
 const it: Dictionary = {
@@ -6334,6 +6350,10 @@ const it: Dictionary = {
   'home.latestKind.movies': 'Ultimi film',
   'home.trendingKicker': 'Di tendenza questa settimana · {meta}',
   'home.newEpisodeKicker': 'Nuovo episodio · {when} · {meta}',
+  'kind.animation': 'Film d’animazione',
+  'universe.desc.animation': 'Film anime e film d’animazione occidentali, insieme.',
+  'home.latestKind.animation': 'Ultimi film d’animazione',
+  'format.ANIMATION_FILM': 'Film d’animazione',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

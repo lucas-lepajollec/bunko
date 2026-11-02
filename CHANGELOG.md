@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Player: playback was reopened (new Jellyfin session and transcode) every time the page
+  refreshed in the background; it now opens once per episode and stream choice (verified against
+  a real Jellyfin: 1 playback request instead of 5 in 25 s).
+- Animated films are their own kind: anime films (AniList) and western animated films (TMDB),
+  interleaved; the anime kind keeps series and OVAs, the films kind keeps live action.
+- Kind lists saved before series, films and animated films existed now include them; Jellyfin
+  series and films libraries are imported into the library (TMDB works by TMDB id when the key is
+  set, otherwise the Jellyfin item), and the import progress counts them.
+- Opening a later season shows a skeleton and moves to the whole work at once (manual links and
+  the offline id map are used before any AniList request). Joining works refreshes both sheets
+  immediately, so the joined part appears next to the seasons.
+- Episodes without their own still use the work's banner with the episode number. The activity
+  spinner sits at the bell's top-left corner.
+
 - Series and films (TMDB): two new universes with catalog (trending, popular, best rated,
   newest), search (series and films also appear in the everything search, e.g. western
   animation), sheets with seasons and episodes (or one part for a film), film sagas, and the home

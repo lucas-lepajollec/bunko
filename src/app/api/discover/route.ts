@@ -2,7 +2,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 import { json, route } from '@/lib/api';
 import { discoverQuery } from '@/lib/validation';
-import { progressiveDiscover, withTracking } from '@/lib/catalog';
+import { discoverAniList, progressiveDiscover, withTracking } from '@/lib/catalog';
+import type { UnifiedMedia } from '@/types/shared';
 import { groupAnimeSeasons } from '@/lib/anime-works';
 import { discoverTmdb, tmdbConfigured } from '@/lib/tmdb';
 export const GET = route(async (r) => {
@@ -16,6 +17,26 @@ export const GET = route(async (r) => {
       q.page ?? 1,
     );
     return json({ ...page, items: withTracking(page.items) });
+  }
+  // Animated films: anime films (AniList) and western animation films (TMDB), interleaved.
+  if (q.kind === 'animation') {
+    const [anime, western] = await Promise.all([
+      discoverAniList({ ...q, kind: 'animation' }, r.signal).catch(() => null),
+      tmdbConfigured()
+        ? discoverTmdb('movie', q.sort ?? 'trending', q.page ?? 1, 'only').catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    const a = anime?.items ?? [];
+    const w = western?.items ?? [];
+    const items = Array.from({ length: Math.max(a.length, w.length) }, (_, i) =>
+      [a[i], w[i]].filter((m): m is UnifiedMedia => Boolean(m)),
+    ).flat();
+    return json({
+      items: withTracking(items),
+      page: q.page ?? 1,
+      hasNextPage: Boolean(anime?.hasNextPage || western?.hasNextPage),
+      partial: !anime || (tmdbConfigured() && !western),
+    });
   }
   const page = await progressiveDiscover(q, r.signal);
   // Anime are listed as works: a trending later season shows its whole work once.
