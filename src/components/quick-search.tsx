@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMediaPreview } from '@/lib/client/media-navigation';
 import { mediaHref, useProgressiveSearch } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
+import { inUniverse, useUniverse } from '@/lib/client/universe';
 import { Cover, Skeleton, cx, useMediaMeta } from './ui';
 import { LoadNotice } from './load-notice';
 
@@ -42,8 +43,20 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
   // Library and planning filter themselves with the search text (`?q=`); elsewhere it searches
   // the catalog. Searching everywhere stays one action away.
   const scope = SCOPES[pathname] ?? null;
-  const results = useProgressiveSearch(scope ? '' : q);
-  const items = scope ? [] : (results.data?.results ?? []).slice(0, 6);
+  // A chosen universe searches only its own kind (and asks only those providers).
+  const universe = useUniverse();
+  const type =
+    universe.active === 'all'
+      ? undefined
+      : universe.active === 'anime'
+        ? 'ANIME'
+        : ['lightnovel', 'webnovel', 'novel', 'book'].includes(universe.active)
+          ? 'NOVEL'
+          : 'MANGA';
+  const results = useProgressiveSearch(scope ? '' : q, type);
+  const items = scope
+    ? []
+    : (results.data?.results ?? []).filter((m) => inUniverse(universe.active, m)).slice(0, 6);
   useEffect(() => {
     if (!scope) return;
     const url = new URL(window.location.href);

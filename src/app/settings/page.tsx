@@ -24,6 +24,7 @@ import type {
   SettingsPatch,
 } from '@/types/shared';
 import { PERMISSIONS } from '@/types/shared';
+import { UNIVERSES } from '@/lib/client/universe';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LanguageSelect, Page } from '@/components/shell';
@@ -849,6 +850,7 @@ function Account() {
       <Row label={t('settings.language')} tip={t('settings.languageTip')}>
         <LanguageSelect className="h-11 pr-3 pl-4" />
       </Row>
+      <UniverseSettings />
       <Row label={t('settings.adult')} tip={t('settings.adultTip')}>
         <input
           type="checkbox"
@@ -1358,5 +1360,65 @@ function HideNsfwSources() {
         className="accent-fg size-[18px]"
       />
     </Row>
+  );
+}
+
+/** Which universes the switcher offers, and whether "Everything" (all together) is one of them. */
+function UniverseSettings() {
+  const { t } = useI18n();
+  const { mutate } = useSWRConfig();
+  const settings = useApi<Settings>('/api/settings');
+  const data = settings.data;
+  const enabled = data?.universes?.length ? data.universes : UNIVERSES;
+  async function save(patch: Partial<Settings>) {
+    try {
+      await send('/api/settings', 'PATCH', patch);
+      await mutate('/api/settings');
+    } catch (err) {
+      toast({ tone: 'bad', text: errorText(t, err) });
+    }
+  }
+  return (
+    <div className="flex flex-col gap-3 rounded-[18px] bg-white/[0.045] p-4 text-sm md:p-[22px]">
+      <span className="font-semibold">{t('universe.settingsTitle')}</span>
+      <p className="text-mid leading-relaxed">{t('universe.settingsHint')}</p>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('universe.settingsTitle')}>
+        {UNIVERSES.map((k) => {
+          const on = enabled.includes(k);
+          return (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={on}
+              disabled={!data || (on && enabled.length === 1)}
+              onClick={() =>
+                void save({
+                  universes: on ? enabled.filter((x) => x !== k) : [...enabled, k],
+                })
+              }
+              className={cx(
+                'h-9 rounded-full px-3.5 disabled:opacity-60',
+                on ? 'bg-fg text-bg font-semibold' : 'text-mid bg-white/[0.06] hover:text-white',
+              )}
+            >
+              {t(`kind.${k}`)}
+            </button>
+          );
+        })}
+      </div>
+      <label className="flex min-h-11 items-center justify-between gap-4">
+        <span className="flex flex-col gap-0.5">
+          <span>{t('universe.allOption')}</span>
+          <span className="text-muted text-xs">{t('universe.allOptionHint')}</span>
+        </span>
+        <input
+          type="checkbox"
+          disabled={!data}
+          checked={data?.showAllUniverse ?? true}
+          onChange={(e) => void save({ showAllUniverse: e.target.checked })}
+          className="accent-fg size-[18px] shrink-0"
+        />
+      </label>
+    </div>
   );
 }

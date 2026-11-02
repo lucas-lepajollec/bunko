@@ -1,4 +1,5 @@
 'use client';
+import { SourcesUniverseGate } from '@/components/universe-sources';
 import { ManagedImage } from '@/components/managed-image';
 import { Select } from '@/components/select';
 import Link from 'next/link';
@@ -23,6 +24,14 @@ type Values = Record<string, unknown>;
 const keyOf = (path: number[]) => path.join('.');
 
 export default function SourcePage() {
+  return (
+    <SourcesUniverseGate>
+      <SourcePageContent />
+    </SourcesUniverseGate>
+  );
+}
+
+function SourcePageContent() {
   const { id } = useParams<{ id: string }>();
   const { t, n } = useI18n();
   const sources = useApi<SourceInfo[]>('/api/sources');

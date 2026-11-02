@@ -4,6 +4,7 @@ import { Suspense, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { DiscoverKind, PlanningItem, PlanningWeek } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
+import { useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from '@/components/load-notice';
 import { Page } from '@/components/shell';
@@ -46,12 +47,15 @@ function Planning() {
   const filterText = fold((useSearchParams().get('q') ?? '').trim());
   const today = isoDay(new Date());
   const [week, setWeek] = useState(today);
-  const [kind, setKind] = useState<DiscoverKind>('all');
+  const universe = useUniverse();
+  const [chosenKind, setKind] = useState<DiscoverKind>('all');
+  // A chosen universe fixes the kind; "everything" keeps the kind pills.
+  const kind = universe.active !== 'all' ? universe.active : chosenKind;
   const [mine, setMine] = useState(false);
   const query = new URLSearchParams({ week });
   if (kind !== 'all') query.set('kind', kind);
   if (mine) query.set('library', '1');
-  const plan = useApi<PlanningWeek>(`/api/planning?${query}`, {
+  const plan = useApi<PlanningWeek>(universe.ready ? `/api/planning?${query}` : null, {
     keepPreviousData: true,
     refreshInterval: (data) => (data?.pending ? 1500 : 0),
   });
@@ -88,7 +92,10 @@ function Planning() {
       />
       <div className="flex flex-col gap-3 md:flex-row md:items-center">
         <div
-          className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:px-0"
+          className={cx(
+            'no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:px-0',
+            universe.active !== 'all' && 'hidden',
+          )}
           role="group"
           aria-label={t('catalog.kind')}
         >

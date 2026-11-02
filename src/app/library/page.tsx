@@ -5,6 +5,7 @@ import { Select } from '@/components/select';
 import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useUniverse } from '@/lib/client/universe';
 import type {
   KavitaSeriesSummary,
   LibraryActivity,
@@ -110,7 +111,10 @@ function Library() {
   // Reading statuses live in a dropdown next to the sort instead of a row of tabs.
   const [status, setStatus] = useState<Shelf | ''>('');
   const unmatched = useApi<KavitaSeriesSummary[]>('/api/kavita/series?unmatched=1');
-  const [kind, setKind] = useState<Kind>('all');
+  // The library keeps every kind one tap away, but opens on the current universe.
+  const universe = useUniverse();
+  const [chosenKind, setKind] = useState<Kind | null>(null);
+  const kind: Kind = chosenKind ?? universe.active;
   const [sort, setSort] = useState<Sort>('news');
   const updates = useApi<UpdatesFeed>('/api/updates');
   // Never hide titles silently: say how many the 18+ setting keeps out of view.

@@ -307,6 +307,37 @@ export const settingsPatch = z
       .optional(),
     hideNsfwSources: z.boolean().optional(),
     progressSource: z.enum(['suwayomi', 'kavita']).optional(),
+    universe: z
+      .enum([
+        'all',
+        'manga',
+        'manhwa',
+        'manhua',
+        'comic',
+        'lightnovel',
+        'webnovel',
+        'novel',
+        'book',
+        'anime',
+      ])
+      .optional(),
+    universes: z
+      .array(
+        z.enum([
+          'manga',
+          'manhwa',
+          'manhua',
+          'comic',
+          'lightnovel',
+          'webnovel',
+          'novel',
+          'book',
+          'anime',
+        ]),
+      )
+      .max(9)
+      .optional(),
+    showAllUniverse: z.boolean().optional(),
     favoriteSourceIds: z.array(sourceId).max(100).optional(),
     extensionRepos: z.array(httpUrl).max(20).optional(),
     updateIntervalMinutes: z.number().int().min(5).max(1440).optional(),

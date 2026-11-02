@@ -1106,6 +1106,20 @@ const en: Dictionary = {
   'watchStatus.PAUSED': 'Paused',
   'watchStatus.COMPLETED': 'Watched',
   'watchStatus.DROPPED': 'Dropped',
+  'universe.all': 'Everything',
+  'universe.label': 'Universe',
+  'universe.hint': 'The whole interface shows only this kind.',
+  'universe.settingsTitle': 'Universes',
+  'universe.settingsHint':
+    'Choose the kinds you use. The switcher in the header (bottom bar on phones) changes the whole interface to one of them and loads only it; the library keeps every kind one tap away.',
+  'universe.allOption': 'Offer “Everything”',
+  'universe.allOptionHint':
+    'Everything together, with a kind menu on the catalog, planning and library.',
+  'universe.noSourcesTitle': 'No reading sources for {kind}',
+  'universe.noSourcesBody':
+    'Suwayomi extensions cover manga, manhwa, manhua and comics. Switch universe to browse them.',
+  'home.latestKind.anime': 'Latest episodes',
+  'catalog.tagsNone': 'No tag matches.',
 };
 
 const fr: Dictionary = {
@@ -2197,6 +2211,20 @@ const fr: Dictionary = {
   'watchStatus.PAUSED': 'En pause',
   'watchStatus.COMPLETED': 'Vu',
   'watchStatus.DROPPED': 'Abandonné',
+  'universe.all': 'Tout',
+  'universe.label': 'Univers',
+  'universe.hint': 'Toute l’interface n’affiche que ce type.',
+  'universe.settingsTitle': 'Univers',
+  'universe.settingsHint':
+    'Choisis les types que tu utilises. Le sélecteur de l’en-tête (barre du bas sur téléphone) bascule toute l’interface sur l’un d’eux et ne charge que lui ; la bibliothèque garde tous les types à portée de main.',
+  'universe.allOption': 'Proposer « Tout »',
+  'universe.allOptionHint':
+    'Tout ensemble, avec un menu des types dans le catalogue, le planning et la bibliothèque.',
+  'universe.noSourcesTitle': 'Pas de sources de lecture pour : {kind}',
+  'universe.noSourcesBody':
+    'Les extensions Suwayomi couvrent les mangas, manhwas, manhuas et BD. Change d’univers pour les parcourir.',
+  'home.latestKind.anime': 'Derniers épisodes',
+  'catalog.tagsNone': 'Aucun tag ne correspond.',
 };
 
 const es: Dictionary = {
@@ -3280,6 +3308,20 @@ const es: Dictionary = {
   'watchStatus.PAUSED': 'En pausa',
   'watchStatus.COMPLETED': 'Visto',
   'watchStatus.DROPPED': 'Abandonado',
+  'universe.all': 'Todo',
+  'universe.label': 'Universo',
+  'universe.hint': 'Toda la interfaz muestra solo este tipo.',
+  'universe.settingsTitle': 'Universos',
+  'universe.settingsHint':
+    'Elige los tipos que usas. El selector de la cabecera (barra inferior en el móvil) cambia toda la interfaz a uno de ellos y solo carga ese; la biblioteca mantiene todos los tipos a mano.',
+  'universe.allOption': 'Ofrecer «Todo»',
+  'universe.allOptionHint':
+    'Todo junto, con un menú de tipos en el catálogo, la planificación y la biblioteca.',
+  'universe.noSourcesTitle': 'No hay fuentes de lectura para: {kind}',
+  'universe.noSourcesBody':
+    'Las extensiones de Suwayomi cubren manga, manhwa, manhua y cómics. Cambia de universo para explorarlas.',
+  'home.latestKind.anime': 'Últimos episodios',
+  'catalog.tagsNone': 'Ninguna etiqueta coincide.',
 };
 
 const de: Dictionary = {
@@ -4372,6 +4414,20 @@ const de: Dictionary = {
   'watchStatus.PAUSED': 'Pausiert',
   'watchStatus.COMPLETED': 'Gesehen',
   'watchStatus.DROPPED': 'Abgebrochen',
+  'universe.all': 'Alles',
+  'universe.label': 'Bereich',
+  'universe.hint': 'Die ganze Oberfläche zeigt nur diese Art.',
+  'universe.settingsTitle': 'Bereiche',
+  'universe.settingsHint':
+    'Wähle die Arten, die du nutzt. Der Umschalter in der Kopfzeile (unten auf dem Handy) stellt die ganze Oberfläche auf eine davon um und lädt nur sie; die Bibliothek behält alle Arten griffbereit.',
+  'universe.allOption': '„Alles“ anbieten',
+  'universe.allOptionHint':
+    'Alles zusammen, mit einem Artenmenü in Katalog, Planer und Bibliothek.',
+  'universe.noSourcesTitle': 'Keine Lesequellen für: {kind}',
+  'universe.noSourcesBody':
+    'Suwayomi-Erweiterungen decken Manga, Manhwa, Manhua und Comics ab. Wechsle den Bereich, um sie zu durchsuchen.',
+  'home.latestKind.anime': 'Neueste Folgen',
+  'catalog.tagsNone': 'Kein passender Tag.',
 };
 
 const it: Dictionary = {
@@ -5457,6 +5513,19 @@ const it: Dictionary = {
   'watchStatus.PAUSED': 'In pausa',
   'watchStatus.COMPLETED': 'Visto',
   'watchStatus.DROPPED': 'Abbandonato',
+  'universe.all': 'Tutto',
+  'universe.label': 'Universo',
+  'universe.hint': 'Tutta l’interfaccia mostra solo questo tipo.',
+  'universe.settingsTitle': 'Universi',
+  'universe.settingsHint':
+    'Scegli i tipi che usi. Il selettore nell’intestazione (barra in basso sul telefono) porta tutta l’interfaccia su uno di essi e carica solo quello; la libreria tiene tutti i tipi a portata di mano.',
+  'universe.allOption': 'Proporre «Tutto»',
+  'universe.allOptionHint': 'Tutto insieme, con un menu dei tipi in catalogo, planning e libreria.',
+  'universe.noSourcesTitle': 'Nessuna fonte di lettura per: {kind}',
+  'universe.noSourcesBody':
+    'Le estensioni Suwayomi coprono manga, manhwa, manhua e fumetti. Cambia universo per esplorarle.',
+  'home.latestKind.anime': 'Ultimi episodi',
+  'catalog.tagsNone': 'Nessun tag corrisponde.',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

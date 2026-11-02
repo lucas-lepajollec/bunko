@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Universes: a switcher in the header (hover) and in the phone bottom bar narrows the whole
+  interface to one kind (manga, manhwa, manhua, comics, light/web novels, novels, books or anime)
+  and loads only it: home, catalog, planning, search and source pages follow it; the library opens
+  on it and keeps every kind one tap away; sheets stay reachable. Settings → Account chooses the
+  universes offered and whether "Everything" (all together, with kind menus) is one of them.
+- Releases and planning show official catalog releases only; chapters seen on linked sources are
+  library news, never release dates. The home gets a "Latest episodes" shelf for anime.
+- Tag picker: wider, a clear search field, tags in the interface language where a translation
+  exists, sorted alphabetically; genres sorted too. Opening a menu closes any other one.
+
 - Anime, phase 1: an Anime kind in the catalog, library and planning (AniList). Anime sheets list
   episodes with titles and stills, the next airing date, studio and duration, and keep the place
   by hand ("Watched episode N", tick an episode to mark everything up to it). The planning adds
