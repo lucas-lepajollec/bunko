@@ -5,6 +5,8 @@ import { useSyncExternalStore } from 'react';
 export interface PageNotice {
   pending: boolean;
   partial: boolean;
+  /** Named work with progress (e.g. a source search on the page): shown as a task. */
+  task?: { label: string; done: number; total: number | null };
 }
 const notices = new Map<string, PageNotice>();
 const listeners = new Set<() => void>();
@@ -22,7 +24,13 @@ export function setNotice(id: string, notice: PageNotice | null) {
     }
     return;
   }
-  if (old && old.pending === notice.pending && old.partial === notice.partial) return;
+  if (
+    old &&
+    old.pending === notice.pending &&
+    old.partial === notice.partial &&
+    JSON.stringify(old.task) === JSON.stringify(notice.task)
+  )
+    return;
   notices.set(id, notice);
   emit();
 }

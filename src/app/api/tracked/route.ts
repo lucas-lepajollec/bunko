@@ -77,7 +77,14 @@ export const PATCH = route(async (r) => {
   if (input.offCatalog) {
     const seriesId =
       input.kavitaSeriesId === undefined ? current.kavitaSeriesId : input.kavitaSeriesId;
-    if (seriesId !== null) media = kavitaMedia(seriesId);
+    const jellyfinSeries =
+      current.type === 'ANIME'
+        ? (await import('@/lib/jellyfin')).jellyfinPresence(current.media, current.jellyfinLink)
+            ?.seriesId
+        : undefined;
+    // Anime leave the catalog for their Jellyfin series (title, poster, seasons).
+    if (jellyfinSeries) media = (await import('@/lib/jellyfin')).jellyfinWorkOf(jellyfinSeries);
+    else if (seriesId !== null) media = kavitaMedia(seriesId);
     else if (sources[0]) media = await suwayomiDetail(sources[0].suwayomiMangaId, r.signal);
     else
       throw new AppError(

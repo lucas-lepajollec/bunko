@@ -1,5 +1,14 @@
 import { listTracked, statement, untrack } from './db';
-import { franchise, knownFranchise, seasonOffset, seasonRef } from './anime-franchise';
+import type { UnifiedMedia } from '@/types/shared';
+import {
+  franchise,
+  knownFranchise,
+  loadedAnime,
+  prefetchNodes,
+  seasonOffset,
+  seasonRef,
+} from './anime-franchise';
+import { animeIdsReady, firstSeason, idsOfAnilist } from './anime-ids';
 
 /** AniList ids of every season of the followed anime works, mapped to the library entry. */
 export function followedSeasons(): Map<number, { trackedId: number; season: number }> {
@@ -60,4 +69,58 @@ export async function normalizeAnimeWorks(signal?: AbortSignal, budget = 4) {
     // The work under its own id too (airing lookups use the followed id).
     await franchise(root.anilistId, signal).catch(() => undefined);
   }
+}
+
+/**
+ * Lists show anime works, not their seasons: a later TV season becomes its first season (the
+ * work), loaded in one batched request when needed, and duplicates collapse. Films, OVAs and
+ * anything the offline id map does not know stay as they are.
+ */
+export async function groupAnimeSeasons<T extends UnifiedMedia>(
+  items: T[],
+  signal?: AbortSignal,
+): Promise<(T | UnifiedMedia)[]> {
+  if (!items.some((m) => m.type === 'ANIME' && m.anilistId)) return items;
+  // Never wait for the id map download: until it is there, only known works regroup.
+  const mapped = animeIdsReady();
+  const rootOf = (m: UnifiedMedia) => {
+    if (m.type !== 'ANIME' || !m.anilistId) return null;
+    const known = seasonRef(m.anilistId)?.root.anilistId;
+    if (known) return known;
+    if (!mapped) return null;
+    const ids = idsOfAnilist(m.anilistId);
+    if (!ids || !['TV', 'ONA'].includes(ids.type ?? '')) return null;
+    return firstSeason(m.anilistId);
+  };
+  const roots = items.map(rootOf);
+  const missing = items
+    .map((m, i) => (roots[i] && roots[i] !== m.anilistId ? roots[i]! : null))
+    .filter((id): id is number => id !== null && !loadedAnime(id) && !seasonRef(id));
+  // Missing first seasons load in one batch; a page waits at most 2.5 s for it.
+  if (missing.length)
+    await Promise.race([
+      prefetchNodes(missing, signal).catch(() => undefined),
+      new Promise((resolve) => setTimeout(resolve, 2500)),
+    ]);
+  const seen = new Set<string>();
+  const out: (T | UnifiedMedia)[] = [];
+  items.forEach((m, i) => {
+    const root = roots[i];
+    let shown: T | UnifiedMedia = m;
+    if (root && root !== m.anilistId) {
+      const work = loadedAnime(root) ?? seasonRef(m.anilistId!)?.root ?? null;
+      if (work) shown = { ...work, trackedId: null };
+    }
+    if (seen.has(shown.id)) return;
+    seen.add(shown.id);
+    out.push(shown);
+  });
+  return out;
+}
+/** Same work as `anilistId` (another season of it). */
+export function sameAnimeWork(a: number, b: number) {
+  if (a === b) return true;
+  const ra = seasonRef(a)?.root.anilistId ?? firstSeason(a);
+  const rb = seasonRef(b)?.root.anilistId ?? firstSeason(b);
+  return ra === rb;
 }

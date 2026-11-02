@@ -1,15 +1,17 @@
 'use client';
-import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { useUniverse } from '@/lib/client/universe';
 import { useNotices } from '@/lib/client/notices';
 import { useSWRConfig } from 'swr';
-import type { LibraryActivity } from '@/types/shared';
+import type { ActivityTask, LibraryActivity } from '@/types/shared';
 import { useApi, libraryKeys, releaseViewKey, progressViewKey } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { useRelativeTime } from './time';
 import { Spinner, cx } from './ui';
 
 const busy = (a: LibraryActivity | undefined) =>
+  Boolean(a?.tasks?.length) ||
   Boolean(
     a &&
     (a.activeDownloads ||
@@ -54,79 +56,52 @@ export function useLibraryActivity({ sync = false }: { sync?: boolean } = {}) {
   return activity.data;
 }
 
-function describe(
-  t: (k: string, v?: Record<string, string | number>) => string,
-  a: LibraryActivity,
-) {
-  if (a.matching.current || a.matching.queued > 0)
-    return a.matching.current
-      ? t('activity.matchingTitle', { title: a.matching.current, count: a.matching.queued })
-      : t('activity.matching', { count: a.matching.queued });
-  if (a.refresh.running)
-    return t('activity.refreshing', { done: a.refresh.done, total: a.refresh.total });
-  if (a.jellyfinImport)
-    return t('activity.jellyfinImport', {
-      done: a.jellyfinImport.done,
-      total: a.jellyfinImport.total,
-    });
-  return null;
-}
-
-/** Header pill, only while something runs. */
-export function ActivityPill() {
-  const { t } = useI18n();
-  const a = useLibraryActivity({ sync: true });
-  const text = a && describe(t, a);
-  if (!text) return null;
-  return (
-    <Link
-      href="/library"
-      title={text}
-      className="text-mid hidden h-9 max-w-[260px] items-center gap-2 rounded-full bg-white/[0.06] px-3 text-xs hover:text-white xl:flex"
-    >
-      <Spinner />
-      <span className="truncate">{text}</span>
-    </Link>
-  );
-}
-
-/** Library status line: what is running now, or when releases were last checked. */
-export function ActivityLine({ className }: { className?: string }) {
-  const { t } = useI18n();
-  const relative = useRelativeTime();
-  const a = useLibraryActivity();
-  if (!a) return null;
-  const text = describe(t, a);
-  return (
-    <p className={cx('text-muted flex items-center gap-2 text-sm', className)} aria-live="polite">
-      {text ? (
-        <>
-          <Spinner className="text-fg" />
-          <span className="text-mid">{text}</span>
-        </>
-      ) : a.refresh.lastAt ? (
-        <span>
-          {t('activity.idle', { when: relative(a.refresh.lastAt) })}
-          {a.refresh.nextAt && ` · ${t('activity.next', { when: relative(a.refresh.nextAt) })}`}
-        </span>
-      ) : null}
-    </p>
-  );
-}
-
 /**
- * Header bell for general page status (still loading, some providers or sources unreachable).
- * Silent when everything is fine; a dot shows the state and the panel explains it.
+ * The one place that says what Bunko is doing: background tasks (downloads, source search,
+ * release checks, Jellyfin import, translations) with their progress, page loads and partial
+ * results. The bell spins while something runs and shows a dot for warnings; pages stay quiet.
  */
-export function NoticeBell() {
-  const { t } = useI18n();
+export function ActivityCenter() {
+  const { t, n } = useI18n();
+  const relative = useRelativeTime();
+  const universe = useUniverse();
+  const a = useLibraryActivity({ sync: true });
   const notices = useNotices();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const partial = notices.some((n) => n.partial);
-  const pending = notices.some((n) => n.pending);
-  if (!partial && !pending) return null;
+  const root = useRef<HTMLDivElement>(null);
+  const tasks = useMemo(() => {
+    const list = a?.tasks ?? [];
+    // The side of the app on screen first (reading or video).
+    const scope = universe.active === 'anime' ? 'video' : 'reading';
+    return [...list].sort((x, y) => Number(y.scope === scope) - Number(x.scope === scope));
+  }, [a?.tasks, universe.active]);
+  const loading = notices.some((x) => x.pending);
+  const partial = notices.some((x) => x.partial);
+  const busy = tasks.length > 0 || loading;
+  // Navigating closes the panel.
+  const [lastPath, setLastPath] = useState(pathname);
+  if (lastPath !== pathname) {
+    setLastPath(pathname);
+    setOpen(false);
+  }
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: Event) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  const percent = (task: ActivityTask) =>
+    task.total ? Math.min(100, Math.round((task.done / task.total) * 100)) : null;
   return (
-    <div className="relative">
+    <div ref={root} className="relative">
       <button
         type="button"
         aria-label={t('notices.label')}
@@ -144,28 +119,95 @@ export function NoticeBell() {
           strokeLinecap="round"
           aria-hidden
         >
-          <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+          <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+          <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
         </svg>
-        <span
-          aria-hidden
-          className={cx(
-            'absolute top-2.5 right-2.5 size-2 rounded-full',
-            partial ? 'bg-warn' : 'animate-pulse bg-white/70',
-          )}
-        />
+        {busy && (
+          // A small spinner just above the bell while anything loads.
+          <span aria-hidden className="absolute top-1 left-1/2 -translate-x-1/2">
+            <Spinner className="size-2.5 text-white" />
+          </span>
+        )}
+        {partial && !busy && (
+          <span aria-hidden className="bg-warn absolute top-2.5 right-2.5 size-2 rounded-full" />
+        )}
       </button>
       {open && (
         <div
-          role="status"
-          className="border-line absolute top-12 right-0 z-50 flex w-[320px] flex-col gap-2 rounded-2xl border bg-[#141210] p-4 text-sm shadow-[0_24px_60px_rgba(0,0,0,0.55)]"
+          role="dialog"
+          aria-label={t('notices.label')}
+          className="border-line fixed inset-x-3 top-[68px] z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-2xl border bg-[#141210]/97 p-4 text-sm shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl md:absolute md:inset-x-auto md:top-full md:right-0 md:mt-2 md:w-[360px]"
         >
-          {pending && (
-            <p className="text-mid flex items-start gap-2">
-              <Spinner className="mt-0.5 size-3.5 shrink-0" />
-              {t('loading.more')}
-            </p>
+          <span className="font-display text-lg font-bold">{t('notices.title')}</span>
+          {tasks.map((task) => {
+            const p = percent(task);
+            return (
+              <div key={task.id} className="flex flex-col gap-1.5">
+                <span className="flex items-baseline justify-between gap-3">
+                  <span className="font-medium">{t(`activity.task.${task.kind}`)}</span>
+                  <span className="text-mid shrink-0 text-xs tabular-nums">
+                    {p !== null
+                      ? `${p} % · ${n(Math.floor(task.done))}/${n(task.total!)}`
+                      : task.total
+                        ? n(task.total)
+                        : ''}
+                  </span>
+                </span>
+                {task.detail && <span className="text-muted truncate text-xs">{task.detail}</span>}
+                <span className="h-1 overflow-hidden rounded-full bg-white/10">
+                  <span
+                    className={cx(
+                      'bg-fg block h-full rounded-full transition-[width] duration-500',
+                      p === null && 'w-1/3 animate-pulse',
+                    )}
+                    style={p !== null ? { width: `${Math.max(3, p)}%` } : undefined}
+                  />
+                </span>
+              </div>
+            );
+          })}
+          {notices
+            .filter((x) => x.task && x.pending)
+            .map((x, i) => {
+              const task = x.task!;
+              const p = task.total
+                ? Math.min(100, Math.round((task.done / task.total) * 100))
+                : null;
+              return (
+                <div key={`page-${i}`} className="flex flex-col gap-1.5">
+                  <span className="flex items-baseline justify-between gap-3">
+                    <span className="font-medium">{task.label}</span>
+                    {p !== null && (
+                      <span className="text-mid shrink-0 text-xs tabular-nums">
+                        {p} % · {n(task.done)}/{n(task.total!)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="h-1 overflow-hidden rounded-full bg-white/10">
+                    <span
+                      className={cx(
+                        'bg-fg block h-full rounded-full transition-[width] duration-500',
+                        p === null && 'w-1/3 animate-pulse',
+                      )}
+                      style={p !== null ? { width: `${Math.max(3, p)}%` } : undefined}
+                    />
+                  </span>
+                </div>
+              );
+            })}
+          {notices.some((x) => x.pending && !x.task) && (
+            <span className="text-mid flex items-center gap-2">
+              <Spinner /> {t('loading.more')}
+            </span>
           )}
-          {partial && <p className="text-warn">{t('loading.partial')}</p>}
+          {partial && <span className="text-warn">{t('loading.partial')}</span>}
+          {!busy && !partial && <span className="text-mid">{t('notices.idle')}</span>}
+          {a?.refresh.lastAt && (
+            <span className="border-line text-muted border-t pt-3 text-xs">
+              {t('activity.idle', { when: relative(a.refresh.lastAt) })}
+              {a.refresh.nextAt && ` · ${t('activity.next', { when: relative(a.refresh.nextAt) })}`}
+            </span>
+          )}
         </div>
       )}
     </div>

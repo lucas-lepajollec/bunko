@@ -161,7 +161,6 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
       )}
       {!scope && (
         <LoadNotice
-          inline
           pending={results.isLoading || results.refining || q !== text.trim()}
           partial={results.partial}
           className="px-4 py-2"

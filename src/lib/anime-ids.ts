@@ -133,6 +133,12 @@ export async function ensureAnimeIds(): Promise<boolean> {
   return Boolean(runtime.__bunkoAnimeIds);
 }
 const index = () => runtime.__bunkoAnimeIds?.index ?? null;
+/** Loaded already (no wait), else start loading in the background and answer false. */
+export function animeIdsReady() {
+  if (runtime.__bunkoAnimeIds) return true;
+  void ensureAnimeIds();
+  return false;
+}
 
 export function idsOfAnilist(anilistId: number): AnimeIds | null {
   return index()?.byAnilist.get(anilistId) ?? null;

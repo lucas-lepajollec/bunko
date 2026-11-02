@@ -90,12 +90,20 @@ export interface PlaybackInfo {
   itemId: string;
   mediaSourceId: string;
   playSessionId: string;
+  /** Proxied URL to play: the original file (direct) or Jellyfin's HLS transcode. */
+  playUrl: string;
+  playMethod: 'direct' | 'transcode';
+  /** Streams this playback was opened with. */
+  audioIndex: number | null;
+  subtitleIndex: number | null;
   title: string;
   series: string | null;
   season: number | null;
   episode: number | null;
   durationMs: number | null;
   resumeMs: number;
+  /** Where this playback starts (resume point, or the position of a stream change). */
+  startMs: number;
   /** Source video height, to offer the qualities at or below it. */
   height: number | null;
   audio: { index: number; label: string; language: string | null; default: boolean }[];
@@ -106,6 +114,8 @@ export interface PlaybackInfo {
     default: boolean;
     /** Text subtitles become a WebVTT track; image ones are burned into the video. */
     text: boolean;
+    /** Proxied WebVTT address of a text subtitle. */
+    url: string | null;
   }[];
 }
 /** A video extension (Stremio addon protocol) as configured. */
@@ -706,7 +716,22 @@ export interface TrackedMedia {
   sourceMatch: 'linked' | 'queued' | 'searching' | 'not-found';
 }
 /** GET /api/library/activity — what Bunko is doing in the background, for progress indicators. */
+/**
+ * One piece of background work as the notification panel shows it: what runs, for which side of
+ * the app (reading or video), and how far it is (done / total; null total = indeterminate).
+ */
+export interface ActivityTask {
+  id: string;
+  kind: 'downloads' | 'matching' | 'releases' | 'jellyfin' | 'translations' | 'kavita';
+  scope: 'reading' | 'video';
+  done: number;
+  total: number | null;
+  /** Title being worked on, when there is one. */
+  detail: string | null;
+}
 export interface LibraryActivity {
+  /** Everything running now, for the header indicator and notification panel. */
+  tasks?: ActivityTask[];
   /** Tenant library revision; clients invalidate stale sheets/lists when background writes land. */
   revision?: number;
   /** Separate durable domains avoid reloading source lists after page turns or release ingestion. */

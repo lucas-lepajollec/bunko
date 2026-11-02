@@ -14,8 +14,11 @@ async function resolveBanner(m: UnifiedMedia): Promise<UnifiedMedia | null> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        query: `query($id: Int, $search: String) { Page(perPage: 5) { media(type: MANGA, id: $id, search: $search) { ${aniFields} } } }`,
-        variables: m.anilistId ? { id: m.anilistId } : { search: m.title },
+        query: `query($id: Int, $search: String, $type: MediaType) { Page(perPage: 5) { media(type: $type, id: $id, search: $search) { ${aniFields} } } }`,
+        variables: {
+          ...(m.anilistId ? { id: m.anilistId } : { search: m.title }),
+          type: m.type === 'ANIME' ? 'ANIME' : 'MANGA',
+        },
       }),
     },
     4000,

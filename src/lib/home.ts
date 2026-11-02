@@ -53,11 +53,15 @@ export function composeHome(
 }
 /** Episodes aired in the last week, newest first, as release cards (followed shows first). */
 async function recentEpisodes(): Promise<ChapterRelease[]> {
+  // A 15-minute window end keeps the airing cache key stable between home refreshes.
+  const to = new Date(Math.ceil(Date.now() / 900_000) * 900_000);
+  return episodeReleases(new Date(to.getTime() - 7 * 86400_000), to);
+}
+/** Episodes aired between two dates as release cards, newest first (works, with seasons). */
+export async function episodeReleases(from: Date, to: Date): Promise<ChapterRelease[]> {
   const { animeAiring } = await import('./catalog');
   const { followedSeasons } = await import('./anime-works');
   const followed = new Map([...followedSeasons()].map(([id, f]) => [id, f.trackedId]));
-  const to = new Date();
-  const from = new Date(to.getTime() - 7 * 86400_000);
   const airing = await Promise.race([
     animeAiring(from, to, [...followed.keys()], false).catch(() => []),
     new Promise<[]>((resolve) => setTimeout(() => resolve([]), 2500)),
@@ -84,7 +88,8 @@ async function recentEpisodes(): Promise<ChapterRelease[]> {
  * and its hero. Without a kind it is the mixed home of every reading kind plus anime.
  */
 export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<HomeFeed> {
-  void refreshReleases().catch(() => {});
+  // Reading releases are not anime: the anime home never starts their ingestion.
+  if (kind !== 'anime') void refreshReleases().catch(() => {});
   const key = kind
     ? `home:top:${kind}:${includeProviderAdults()}`
     : `home:top:${includeProviderAdults()}`;

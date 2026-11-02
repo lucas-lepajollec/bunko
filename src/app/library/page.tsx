@@ -14,7 +14,6 @@ import type {
   UpdatesFeed,
 } from '@/types/shared';
 import { KavitaUnmatched } from '@/components/kavita';
-import { ActivityLine } from '@/components/activity';
 import { LibraryUpdates } from '@/components/updates';
 import { api, useApi } from '@/lib/client/api';
 import { send } from '@/lib/client/api';
@@ -51,7 +50,8 @@ type Kind =
   | 'novel'
   | 'book'
   | 'anime';
-type Sort = 'news' | 'recent' | 'title' | 'added' | 'unlinked';
+type Sort =
+  'news' | 'recent' | 'title' | 'added' | 'released' | 'score' | 'popular' | 'unread' | 'unlinked';
 
 const caughtUp = (e: TrackedMedia) =>
   e.status === 'READING' &&
@@ -188,6 +188,19 @@ function Library() {
       return b.newChapters - a.newChapters || (b.progress?.unread ?? 0) - (a.progress?.unread ?? 0);
     if (sort === 'recent') return (b.lastReadAt ?? '').localeCompare(a.lastReadAt ?? '');
     if (sort === 'title') return a.title.localeCompare(b.title);
+    // Newest publication / first airing first; undated works last.
+    if (sort === 'released')
+      return (
+        (b.media.startDate ?? String(b.media.year ?? '')).localeCompare(
+          a.media.startDate ?? String(a.media.year ?? ''),
+        ) || a.title.localeCompare(b.title)
+      );
+    if (sort === 'score') return (b.media.score ?? -1) - (a.media.score ?? -1);
+    if (sort === 'popular') return (b.media.popularity ?? -1) - (a.media.popularity ?? -1);
+    if (sort === 'unread')
+      return (
+        (b.progress?.unread ?? 0) - (a.progress?.unread ?? 0) || a.title.localeCompare(b.title)
+      );
     return b.createdAt.localeCompare(a.createdAt);
   });
   return (
@@ -210,7 +223,6 @@ function Library() {
             : undefined
         }
       />
-      <ActivityLine className="-mt-4" />
       <LoadNotice
         quiet
         pending={
@@ -368,9 +380,17 @@ function Library() {
                     value={sort}
                     onChange={(v) => setSort(v as Sort)}
                     options={(
-                      (video
-                        ? ['news', 'recent', 'title', 'added']
-                        : ['news', 'recent', 'title', 'added', 'unlinked']) as Sort[]
+                      [
+                        'news',
+                        'recent',
+                        'unread',
+                        'released',
+                        'score',
+                        'popular',
+                        'title',
+                        'added',
+                        ...(video ? [] : ['unlinked']),
+                      ] as Sort[]
                     ).map((x) => ({
                       value: x,
                       label:

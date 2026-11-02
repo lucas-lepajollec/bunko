@@ -196,13 +196,8 @@ function Planning() {
               </h2>
               {d.items.length === 0 ? (
                 <p className="text-faint px-1 py-6 text-center font-serif text-sm italic">
-                  {t(
-                    plan.data?.pending
-                      ? 'loading.more'
-                      : plan.data?.partial
-                        ? 'loading.partial'
-                        : 'planning.empty',
-                  )}
+                  {/* Loading and partial results are in the activity panel. */}
+                  {plan.data?.pending ? '' : t('planning.empty')}
                 </p>
               ) : (
                 <ul className="flex flex-col gap-1">

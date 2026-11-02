@@ -402,6 +402,12 @@ function jellyfinWork(s: IndexedJellyfinSeries): UnifiedMedia {
     coverUrl: `/api/jellyfin/image?id=${s.id}`,
   };
 }
+/** The off-catalog work of an indexed Jellyfin series. */
+export function jellyfinWorkOf(seriesId: string): UnifiedMedia {
+  const s = indexed().find((x) => x.id === seriesId);
+  if (!s) throw new AppError('NOT_FOUND', 'Jellyfin series is not indexed', 404);
+  return jellyfinWork(s);
+}
 /** An off-catalog anime work straight from a Jellyfin series (no catalog match). */
 export function jellyfinMedia(seriesId: string): MediaDetail {
   const s = indexed().find((x) => x.id === seriesId);
