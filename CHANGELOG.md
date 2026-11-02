@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The catalog shows its filters as a visible row on every screen: genre, AniList tags (with
+  search; demographics are tags), status, year, season and minimum score, offered only where the
+  selected kind supports them. With 18+ shown, 18+ genres and tags and an "18+ only" switch are
+  added. Open Library covers load the medium size for faster cards.
+
 - Admins choose what each member may do (connections, extensions, downloads, translation, 18+).
   With 18+ off, extensions marked 18+ are hidden everywhere by default (an account option keeps
   them). Reading progress comes from Suwayomi by default, or Kavita, chosen in Settings; finished

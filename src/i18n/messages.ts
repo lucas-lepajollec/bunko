@@ -1064,6 +1064,19 @@ const en: Dictionary = {
   'auth.recoveryHint':
     'Written to recovery.code in Bunko’s data folder when the account was reset.',
   'error.RECOVERY_CODE_INVALID': 'This recovery code is not valid.',
+  'catalog.anyGenre': 'All genres',
+  'catalog.tags': 'Tags',
+  'catalog.tagsCount': 'Tags · {n}',
+  'catalog.tagsHint':
+    'Every chosen tag must apply (up to 10). Demographics such as Shounen or Seinen are tags too.',
+  'catalog.tagsSearch': 'Find a tag…',
+  'catalog.tagsPicked': '{n} selected',
+  'catalog.applyTags': 'Apply',
+  'catalog.removeTag': 'Remove {tag}',
+  'catalog.minScore': 'Minimum score',
+  'catalog.anyScore': 'Any score',
+  'catalog.scoreAtLeast': '{n}% and more',
+  'catalog.adultOnly': '18+ only',
 };
 
 const fr: Dictionary = {
@@ -2113,6 +2126,19 @@ const fr: Dictionary = {
   'auth.recoveryHint':
     'Écrit dans recovery.code, dans le dossier de données de Bunko, lors de la réinitialisation du compte.',
   'error.RECOVERY_CODE_INVALID': 'Ce code de récupération n’est pas valide.',
+  'catalog.anyGenre': 'Tous les genres',
+  'catalog.tags': 'Tags',
+  'catalog.tagsCount': 'Tags · {n}',
+  'catalog.tagsHint':
+    'Chaque tag choisi doit s’appliquer (10 au maximum). Les publics comme Shōnen ou Seinen sont aussi des tags.',
+  'catalog.tagsSearch': 'Chercher un tag…',
+  'catalog.tagsPicked': '{n} sélectionné(s)',
+  'catalog.applyTags': 'Appliquer',
+  'catalog.removeTag': 'Retirer {tag}',
+  'catalog.minScore': 'Note minimale',
+  'catalog.anyScore': 'Toutes les notes',
+  'catalog.scoreAtLeast': '{n} % et plus',
+  'catalog.adultOnly': '18+ uniquement',
 };
 
 const es: Dictionary = {
@@ -3154,6 +3180,19 @@ const es: Dictionary = {
   'auth.recoveryHint':
     'Escrito en recovery.code, en la carpeta de datos de Bunko, al restablecer la cuenta.',
   'error.RECOVERY_CODE_INVALID': 'Este código de recuperación no es válido.',
+  'catalog.anyGenre': 'Todos los géneros',
+  'catalog.tags': 'Etiquetas',
+  'catalog.tagsCount': 'Etiquetas · {n}',
+  'catalog.tagsHint':
+    'Cada etiqueta elegida debe aplicarse (hasta 10). Los públicos como Shōnen o Seinen también son etiquetas.',
+  'catalog.tagsSearch': 'Buscar una etiqueta…',
+  'catalog.tagsPicked': '{n} seleccionada(s)',
+  'catalog.applyTags': 'Aplicar',
+  'catalog.removeTag': 'Quitar {tag}',
+  'catalog.minScore': 'Nota mínima',
+  'catalog.anyScore': 'Cualquier nota',
+  'catalog.scoreAtLeast': '{n} % o más',
+  'catalog.adultOnly': 'Solo +18',
 };
 
 const de: Dictionary = {
@@ -4203,6 +4242,19 @@ const de: Dictionary = {
   'auth.recoveryHint':
     'Beim Zurücksetzen des Kontos in recovery.code im Datenordner von Bunko gespeichert.',
   'error.RECOVERY_CODE_INVALID': 'Dieser Wiederherstellungscode ist ungültig.',
+  'catalog.anyGenre': 'Alle Genres',
+  'catalog.tags': 'Tags',
+  'catalog.tagsCount': 'Tags · {n}',
+  'catalog.tagsHint':
+    'Jeder gewählte Tag muss zutreffen (bis zu 10). Zielgruppen wie Shōnen oder Seinen sind auch Tags.',
+  'catalog.tagsSearch': 'Tag suchen…',
+  'catalog.tagsPicked': '{n} ausgewählt',
+  'catalog.applyTags': 'Anwenden',
+  'catalog.removeTag': '{tag} entfernen',
+  'catalog.minScore': 'Mindestbewertung',
+  'catalog.anyScore': 'Jede Bewertung',
+  'catalog.scoreAtLeast': 'ab {n} %',
+  'catalog.adultOnly': 'Nur 18+',
 };
 
 const it: Dictionary = {
@@ -5246,6 +5298,19 @@ const it: Dictionary = {
   'auth.recoveryHint':
     'Scritto in recovery.code, nella cartella dati di Bunko, al ripristino dell’account.',
   'error.RECOVERY_CODE_INVALID': 'Questo codice di recupero non è valido.',
+  'catalog.anyGenre': 'Tutti i generi',
+  'catalog.tags': 'Tag',
+  'catalog.tagsCount': 'Tag · {n}',
+  'catalog.tagsHint':
+    'Ogni tag scelto deve valere (fino a 10). Anche i target come Shōnen o Seinen sono tag.',
+  'catalog.tagsSearch': 'Cerca un tag…',
+  'catalog.tagsPicked': '{n} selezionati',
+  'catalog.applyTags': 'Applica',
+  'catalog.removeTag': 'Rimuovi {tag}',
+  'catalog.minScore': 'Voto minimo',
+  'catalog.anyScore': 'Qualsiasi voto',
+  'catalog.scoreAtLeast': '{n}% e oltre',
+  'catalog.adultOnly': 'Solo 18+',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

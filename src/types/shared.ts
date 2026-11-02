@@ -106,8 +106,26 @@ export interface DiscoverQuery {
   season?: Season;
   /** Restrict to titles whose publication started in this year (alone or with `season`). */
   year?: number;
+  /** AniList tags that must all apply (demographics such as Shounen are tags too). */
+  tags?: string[];
+  /** Minimum average score, 0–100. */
+  minScore?: number;
+  /** Only 18+ works (honoured only when the account shows 18+). */
+  adultOnly?: boolean;
   page?: number;
   perPage?: number;
+}
+/** GET /api/catalog/filters?kind= — what the catalog can filter for this kind and account. */
+export interface CatalogFilters {
+  genres: string[];
+  /** AniList tags grouped by category; 18+ tags only when the account shows 18+. */
+  tags: { category: string; names: string[] }[];
+  status: boolean;
+  year: boolean;
+  season: boolean;
+  score: boolean;
+  /** The account shows 18+: the "18+ only" filter is available. */
+  adult: boolean;
 }
 /* ---- Releases feed, weekly planning, home (contract for /api/releases, /api/planning, /api/home) ---- */
 /** One chapter release, newest first in feeds. */

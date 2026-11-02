@@ -297,6 +297,10 @@ The affected folder is then rescanned in Kavita and an index refresh is requeste
 
 Login attempts are limited per username (10/minute); there is no shared counter that could lock every account out. `BUNKO_RESET_ACCOUNT=true` writes a one-time code to `<data>/recovery.code` (0600); `AuthState.recovery` is true and `POST /api/auth/setup` then requires `recoveryCode`. Changing `kavitaUrl` forgets series IDs, manual links, dismissals and Kavita cover state from the previous server and rebuilds the index; changing `suwayomiUrl` also forgets reader positions of source chapters.
 
+## Catalog filters
+
+`GET /api/catalog/filters?kind=` returns `CatalogFilters`: genres (AniList list, Hentai only with 18+ shown; a built-in list when AniList is unreachable), AniList tags grouped by category (18+ tags only with 18+ shown) and which of status, year, season, score and "18+ only" the kind supports. `GET /api/discover` accepts `tags` (comma-separated, up to 10, all must apply), `minScore` (0–100) and `adultOnly=1` (ignored unless the account shows 18+); AniList lanes honour them, other lanes ignore what they cannot filter. Open Library genres map to lower-case subjects.
+
 ## Content filter
 
 `PATCH /api/media/adult` accepts `{id:string,adult:boolean|null}` and returns `200 {id,adult:boolean,adultOverride:boolean|null}`. `true` marks a work 18+, `false` clears a provider false positive, and `null` removes the manual decision and restores automatic classification. IDs also accept `googlebooks:<id>`, `bnf:cb…` and `openlibrary:OL…W`. Other IDs use `anilist:<positive int32>`, `mangadex:<UUID>`, `mangaupdates:<positive decimal, up to 20 digits>`, `suwayomi:<positive int32>` or `kavita:<positive int32>`. Malformed IDs, missing fields and nonboolean/non-null decisions return `400 VALIDATION_ERROR`; normal authentication and same-origin mutation protection apply. Unknown works retain the detail endpoint's not-found/upstream errors and do not create a decision.

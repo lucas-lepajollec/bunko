@@ -1,6 +1,6 @@
 'use client';
 import { Select } from '@/components/select';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import useSWRInfinite from 'swr/infinite';
 import Link from 'next/link';
@@ -12,14 +12,15 @@ import type {
   ReleasesPage,
   Season,
 } from '@/types/shared';
-import { SEASONS, formatStartDate, seasonOf } from '@/lib/client/season';
-import { api, useApi, useProgressiveSearch } from '@/lib/client/api';
+import { SEASONS, formatStartDate } from '@/lib/client/season';
+import { api, useProgressiveSearch } from '@/lib/client/api';
 import { catalogLoading } from '@/lib/client/catalog-loading';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { PosterCard } from '@/components/media';
 import { ReleaseCard } from '@/components/releases';
 import { LoadNotice } from '@/components/load-notice';
+import { CatalogFilterBar, type FilterValues } from '@/components/catalog-filters';
 import { Empty, ErrorNote, PageTitle, PosterSkeletons, cx, smallButton } from '@/components/ui';
 
 const KINDS: DiscoverKind[] = [
@@ -73,12 +74,18 @@ function Catalog() {
   const season = (SEASONS.includes(params.get('season') as Season) ? params.get('season') : '') as
     Season | '';
   const year = /^\d{4}$/.test(params.get('year') ?? '') ? Number(params.get('year')) : null;
+  const tags = (params.get('tags') ?? '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+  const minScore = /^\d{1,2}$/.test(params.get('minScore') ?? '')
+    ? Number(params.get('minScore'))
+    : null;
+  const adultOnly = params.get('adultOnly') === '1';
+  const filterValues: FilterValues = { genre, tags, status, year, season, minScore, adultOnly };
   const { locale } = useI18n();
-  const thisYear = seasonOf().year;
   const searched = useProgressiveSearch(q);
-  // Filters panel (genres, season, year, status) stays folded until asked for.
-  const [allGenres, setAllGenres] = useState(false);
-  const genres = useApi<string[]>('/api/genres');
   const set = (key: string, value: string, extra?: Record<string, string>) => {
     const next = new URLSearchParams(params);
     for (const [k, v] of Object.entries({ [key]: value, ...extra })) {
@@ -99,6 +106,9 @@ function Catalog() {
     if (status) q.set('status', status);
     if (year) q.set('year', String(year));
     if (season && year) q.set('season', season);
+    if (tags.length) q.set('tags', tags.join(','));
+    if (minScore) q.set('minScore', String(minScore));
+    if (adultOnly) q.set('adultOnly', '1');
     return `/api/discover?${q}`;
   };
   const pages = useSWRInfinite<DiscoverPage>(
@@ -184,7 +194,6 @@ function Catalog() {
   const searchItems = (searched.data?.results ?? []).filter(
     (m) => kind === 'all' || (m.format ? KIND_FORMATS[kind].includes(m.format) : kind === 'manga'),
   );
-  const activeFilters = [genre, season, year, status].filter(Boolean).length;
   const dated = sort === 'new' || Boolean(season) || Boolean(year);
 
   return (
@@ -267,36 +276,6 @@ function Catalog() {
               ))}
             </div>
             <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                aria-expanded={allGenres}
-                onClick={() => setAllGenres((v) => !v)}
-                className={cx(
-                  'flex h-9 items-center gap-2 rounded-full px-3.5',
-                  allGenres || activeFilters > 0
-                    ? 'bg-white/[0.12] text-white'
-                    : 'bg-white/[0.06] text-mid hover:text-white',
-                )}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  aria-hidden
-                >
-                  <path d="M4 6h16M7 12h10M10 18h4" />
-                </svg>
-                {t('catalog.filters')}
-                {activeFilters > 0 && (
-                  <span className="bg-fg text-bg flex size-5 items-center justify-center rounded-full text-[11px] font-bold">
-                    {activeFilters}
-                  </span>
-                )}
-              </button>
               {view !== 'chapters' && (
                 <Select
                   label={t('catalog.sort')}
@@ -307,100 +286,15 @@ function Catalog() {
               )}
             </div>
           </div>
-          {allGenres && (
-            <div className="flex flex-col gap-4 rounded-2xl bg-white/[0.04] p-4 text-sm">
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('catalog.genres')}>
-                {(genres.data ?? []).map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    aria-pressed={genre === g}
-                    onClick={() => set('genre', genre === g ? '' : g)}
-                    className={cx(
-                      'h-8 rounded-full px-3',
-                      genre === g
-                        ? 'bg-fg text-bg font-semibold'
-                        : 'text-mid bg-white/[0.06] hover:text-white',
-                    )}
-                  >
-                    {t(`genre.${g}`) === `genre.${g}` ? g : t(`genre.${g}`)}
-                  </button>
-                ))}
-              </div>
-              {view !== 'chapters' && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Select
-                    label={t('catalog.season')}
-                    value={season}
-                    onChange={(v) =>
-                      set('season', v, v && !year ? { year: String(thisYear) } : undefined)
-                    }
-                    options={[
-                      { value: '', label: t('catalog.anySeason') },
-                      ...SEASONS.map((x) => ({ value: x, label: t(`season.${x}`) })),
-                    ]}
-                  />
-                  <Select
-                    label={t('catalog.year')}
-                    value={year ? String(year) : ''}
-                    onChange={(v) => set('year', v, v ? undefined : { season: '' })}
-                    options={[
-                      { value: '', label: t('catalog.anyYear') },
-                      ...Array.from({ length: thisYear - 1979 }, (_, i) =>
-                        String(thisYear - i),
-                      ).map((y) => ({ value: y, label: y })),
-                    ]}
-                  />
-                  <Select
-                    label={t('catalog.status')}
-                    value={status}
-                    onChange={(v) => set('status', v)}
-                    options={[
-                      { value: '', label: t('catalog.statusAll') },
-                      { value: 'RELEASING', label: t('status.releasing') },
-                      { value: 'FINISHED', label: t('status.finished') },
-                    ]}
-                  />
-                  {activeFilters > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => set('genre', '', { season: '', year: '', status: '' })}
-                      className="text-muted ml-auto hover:text-white"
-                    >
-                      {t('catalog.clearFilters')}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-          {!allGenres && activeFilters > 0 && (
-            <div className="flex flex-wrap gap-1.5 text-sm">
-              {[
-                genre && {
-                  key: 'genre',
-                  label: t(`genre.${genre}`) === `genre.${genre}` ? genre : t(`genre.${genre}`),
-                },
-                season && { key: 'season', label: t(`season.${season}`) },
-                year && { key: 'year', label: String(year) },
-                status && { key: 'status', label: t(`status.${status.toLowerCase()}`) },
-              ]
-                .filter((x): x is { key: string; label: string } => Boolean(x))
-                .map((f) => (
-                  <button
-                    key={f.key}
-                    type="button"
-                    onClick={() => set(f.key, '', f.key === 'year' ? { season: '' } : undefined)}
-                    className="flex h-8 items-center gap-1.5 rounded-full bg-white/[0.08] px-3 hover:bg-white/[0.12]"
-                  >
-                    {f.label}
-                    <span aria-hidden className="text-muted">
-                      ✕
-                    </span>
-                  </button>
-                ))}
-            </div>
-          )}
+          <CatalogFilterBar
+            kind={kind}
+            values={filterValues}
+            releasesView={view === 'chapters'}
+            onChange={(patch) => {
+              const [first, ...rest] = Object.entries(patch);
+              set(first[0], first[1], Object.fromEntries(rest));
+            }}
+          />
         </>
       )}
       {pages.error && <ErrorNote error={pages.error} />}

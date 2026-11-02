@@ -22,7 +22,13 @@ import {
   recordSourceFlags,
 } from './adult';
 import { mangaUpdates } from './mangaupdates';
-import type { DiscoverPage, DiscoverQuery, MediaDetail, UnifiedMedia } from '@/types/shared';
+import type {
+  CatalogFilters,
+  DiscoverPage,
+  DiscoverQuery,
+  MediaDetail,
+  UnifiedMedia,
+} from '@/types/shared';
 import { requestJson } from './http';
 import { createHash } from 'node:crypto';
 import { getSettings } from './settings';
@@ -227,6 +233,9 @@ export async function discoverAniList(
   if (kind === 'manhua') variables.country = 'CN';
   if (q.genre) variables.genre = q.genre;
   if (q.status) variables.status = q.status;
+  if (q.tags?.length) variables.tags = q.tags;
+  if (q.minScore) variables.minScore = q.minScore;
+  if (q.adultOnly && getSettings().adultContent) variables.adult = true;
   if (q.year !== undefined) {
     // FuzzyDateInt stores unknown month/day as 00. Include partial dates in the
     // selected year/month, but keep the next quarter's partial dates outside.
@@ -254,16 +263,25 @@ export async function discoverAniList(
       const result = await anilist<{
         Page: { pageInfo: { hasNextPage: boolean }; media: AniMedia[] };
       }>(
-        `query($adult: Boolean, $page: Int, $perPage: Int, $sort: [MediaSort], $format: MediaFormat, $formatNot: MediaFormat, $country: CountryCode, $genre: String, $status: MediaStatus, $popularity: Int, $startDateGreater: FuzzyDateInt, $startDateLesser: FuzzyDateInt) {
+        `query($adult: Boolean, $page: Int, $perPage: Int, $sort: [MediaSort], $format: MediaFormat, $formatNot: MediaFormat, $country: CountryCode, $genre: String, $status: MediaStatus, $popularity: Int, $startDateGreater: FuzzyDateInt, $startDateLesser: FuzzyDateInt, $tags: [String], $minScore: Int) {
         Page(page: $page, perPage: $perPage) {
           pageInfo { hasNextPage }
-          media(type: MANGA, isAdult: $adult, sort: $sort, format: $format, format_not: $formatNot, countryOfOrigin: $country, genre: $genre, status: $status, popularity_greater: $popularity, startDate_greater: $startDateGreater, startDate_lesser: $startDateLesser) { ${aniFields} }
+          media(type: MANGA, isAdult: $adult, sort: $sort, format: $format, format_not: $formatNot, countryOfOrigin: $country, genre: $genre, status: $status, popularity_greater: $popularity, startDate_greater: $startDateGreater, startDate_lesser: $startDateLesser, tag_in: $tags, averageScore_greater: $minScore) { ${aniFields} }
         }
       }`,
         variables,
         undefined,
       );
-      if (!result.Page.media.length && page === 1 && !q.genre && !q.status && !q.year)
+      if (
+        !result.Page.media.length &&
+        page === 1 &&
+        !q.genre &&
+        !q.status &&
+        !q.year &&
+        !q.tags?.length &&
+        !q.minScore &&
+        !variables.adult
+      )
         throw new AppError('METADATA_UNAVAILABLE', 'Catalog is temporarily unavailable', 502);
       return result;
     },
@@ -276,6 +294,76 @@ export async function discoverAniList(
       : withTracking(data.Page.media.map(fromAniList)).filter(visibleMedia),
     page,
     hasNextPage: data.Page.pageInfo.hasNextPage,
+  };
+}
+const BOOK_KINDS = new Set(['novel', 'book']);
+const FALLBACK_GENRES = [
+  'Action',
+  'Adventure',
+  'Comedy',
+  'Drama',
+  'Ecchi',
+  'Fantasy',
+  'Hentai',
+  'Horror',
+  'Mahou Shoujo',
+  'Mecha',
+  'Music',
+  'Mystery',
+  'Psychological',
+  'Romance',
+  'Sci-Fi',
+  'Slice of Life',
+  'Sports',
+  'Supernatural',
+  'Thriller',
+];
+/** Filters each catalog lane can honour, for this account's 18+ choice. */
+export async function catalogFilters(
+  kind: DiscoverQuery['kind'] = 'all',
+  signal?: AbortSignal,
+): Promise<CatalogFilters> {
+  const adult = getSettings().adultContent;
+  const anilistLane = !['comic', 'webnovel', 'novel', 'book'].includes(kind);
+  let tagCollection: {
+    MediaTagCollection: { name: string; category: string; isAdult: boolean }[];
+  } = { MediaTagCollection: [] };
+  if (anilistLane)
+    try {
+      tagCollection = await cached('anilist-tags', 24 * 3600_000, () =>
+        anilist<typeof tagCollection>(
+          'query { MediaTagCollection { name category isAdult } }',
+          {},
+          signal,
+        ),
+      );
+    } catch {
+      /* AniList unreachable: genres still filter; tags come back with the next load. */
+    }
+  const groups = new Map<string, string[]>();
+  for (const tag of tagCollection?.MediaTagCollection ?? []) {
+    if (tag.isAdult && !adult) continue;
+    // "Cast-Main Cast" → "Cast": broad categories keep the picker short.
+    const category = tag.category.split('-')[0] || 'Other';
+    groups.set(category, [...(groups.get(category) ?? []), tag.name]);
+  }
+  return {
+    // AniList unreachable: its stable genre list keeps the filters usable.
+    genres: await (async () => {
+      try {
+        return await genres(signal);
+      } catch {
+        return FALLBACK_GENRES.filter((g) => adult || g !== 'Hentai');
+      }
+    })(),
+    tags: [...groups.entries()]
+      .map(([category, names]) => ({ category, names: names.sort() }))
+      .sort((a, b) => a.category.localeCompare(b.category)),
+    status: !BOOK_KINDS.has(kind),
+    year: true,
+    season: anilistLane,
+    score: anilistLane,
+    adult: adult && anilistLane,
   };
 }
 export async function genres(signal?: AbortSignal): Promise<string[]> {
