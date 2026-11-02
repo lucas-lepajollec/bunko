@@ -216,3 +216,15 @@ it('detects library roles and uses only anime libraries for anime', async () => 
   await jellyfin.syncJellyfinIndex();
   expect(jellyfin.jellyfinPresence(anime(9, 'Office Drama'))).toMatchObject({ seriesId: 'C' });
 });
+it('shows import progress and disconnects, removing only what Jellyfin added', async () => {
+  const mine = track({ media: anime(42, 'Hand Picked'), status: 'PLANNING' });
+  updateSettings({ autoImportJellyfin: true });
+  await jellyfin.syncJellyfinIndex();
+  // Two anime-library series, both handled in one batch.
+  expect(jellyfin.jellyfinImportProgress()).toEqual({ done: 2, total: 2 });
+  expect(jellyfin.jellyfinImportedIds()).toHaveLength(2);
+  expect(jellyfin.disconnectJellyfin(true)).toEqual({ removed: 2 });
+  expect(listTracked().map((t) => t.id)).toEqual([mine.id]);
+  expect(publicSettings()).toMatchObject({ jellyfinUrl: '' });
+  expect(jellyfin.jellyfinConfigured()).toBe(false);
+});

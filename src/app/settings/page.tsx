@@ -443,6 +443,82 @@ function JellyfinOptions({
       >
         {busy ? t('common.working') : t('jellyfin.syncNow')}
       </button>
+      <JellyfinDisconnect onSaved={onSaved} />
+    </div>
+  );
+}
+
+/** Disconnect Jellyfin, asking whether the works it added should leave the library too. */
+function JellyfinDisconnect({ onSaved }: { onSaved: () => Promise<unknown> }) {
+  const { t, n } = useI18n();
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const imported = useApi<{ imported: number }>(asking ? '/api/jellyfin/disconnect' : null);
+  const go = async (removeImported: boolean) => {
+    setBusy(true);
+    try {
+      const done = await send<{ removed: number }>('/api/jellyfin/disconnect', 'POST', {
+        removeImported,
+      });
+      toast({
+        tone: 'ok',
+        text: removeImported
+          ? t('jellyfin.disconnectedRemoved', { n: n(done.removed) })
+          : t('jellyfin.disconnected'),
+      });
+      setAsking(false);
+      await onSaved();
+    } catch (err) {
+      toast({ tone: 'bad', text: errorText(t, err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!asking)
+    return (
+      <button
+        type="button"
+        onClick={() => setAsking(true)}
+        className={cx(smallButton, 'text-mid self-start')}
+      >
+        {t('jellyfin.disconnect')}
+      </button>
+    );
+  const count = imported.data?.imported;
+  return (
+    <div className="flex flex-col gap-2.5 rounded-2xl bg-white/[0.04] p-3">
+      <span className="font-medium">{t('jellyfin.disconnectTitle')}</span>
+      <span className="text-muted text-xs leading-relaxed">
+        {count === undefined ? t('common.working') : t('jellyfin.disconnectHint', { n: n(count) })}
+      </span>
+      <span className="flex flex-wrap gap-2">
+        {Boolean(count) && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void go(true)}
+            className={smallButton}
+          >
+            {t('jellyfin.disconnectRemove', { n: n(count!) })}
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void go(false)}
+          className={smallButton}
+        >
+          {t('jellyfin.disconnectKeep')}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setAsking(false)}
+          className={cx(smallButton, 'text-mid')}
+        >
+          {t('common.cancel')}
+        </button>
+      </span>
     </div>
   );
 }

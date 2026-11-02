@@ -11,7 +11,12 @@ import { Spinner, cx } from './ui';
 
 const busy = (a: LibraryActivity | undefined) =>
   Boolean(
-    a && (a.activeDownloads || a.matching.queued > 0 || a.matching.current || a.refresh.running),
+    a &&
+    (a.activeDownloads ||
+      a.matching.queued > 0 ||
+      a.matching.current ||
+      a.refresh.running ||
+      a.jellyfinImport),
   );
 
 /**
@@ -59,6 +64,11 @@ function describe(
       : t('activity.matching', { count: a.matching.queued });
   if (a.refresh.running)
     return t('activity.refreshing', { done: a.refresh.done, total: a.refresh.total });
+  if (a.jellyfinImport)
+    return t('activity.jellyfinImport', {
+      done: a.jellyfinImport.done,
+      total: a.jellyfinImport.total,
+    });
   return null;
 }
 

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Jellyfin import shows its progress in the header activity ("Adding Jellyfin anime… 35/120")
+  and runs a batch every minute. Settings → Jellyfin → "Disconnect Jellyfin" forgets the server
+  and can remove the works it added (works followed by hand stay).
+
 - Anime are whole works: the TV seasons linked on AniList (sequel/prequel) form one sheet with a
   season picker, progress counts episodes across seasons, and opening a later season opens its
   work on that season. Following a season follows its work; entries followed per season before are

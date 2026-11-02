@@ -9,12 +9,12 @@ import type {
   JellyfinSeriesSummary,
   UnifiedMedia,
 } from '@/types/shared';
-import { db, listTracked, statement, track } from './db';
+import { db, listTracked, statement, track, untrack } from './db';
 import { AppError } from './errors';
 import { endpoint } from './http';
 import { emptyMedia, normalizeTitle } from './media';
 import { franchise, knownFranchise, seasonOffset, workVideo } from './anime-franchise';
-import { getSettings } from './settings';
+import { getSettings, updateSettings } from './settings';
 import { tenantSignal } from './tenant-lifecycle';
 
 /** One Jellyfin series as indexed: names, provider ids and its episodes by season. */
@@ -30,9 +30,9 @@ interface IndexedJellyfinSeries {
   seasons: Record<string, { n: number; id: string; played: boolean }[]>;
 }
 const SYNC_EVERY_MS = 15 * 60_000;
-const IMPORTS_PER_SYNC = 12;
-/** While works remain to import, a new batch every 2 minutes (AniList allows ~30 requests/min). */
-const IMPORT_EVERY_MS = 2 * 60_000;
+const IMPORTS_PER_SYNC = 10;
+/** While works remain to import, a new batch every minute (AniList allows ~30 requests/min). */
+const IMPORT_EVERY_MS = 60_000;
 
 export const jellyfinConfigured = () => {
   const s = getSettings();
@@ -484,6 +484,10 @@ export async function importJellyfinAnime(signal?: AbortSignal) {
       }[]
     ).map((r) => r.key.slice('jellyfin_import_tried:'.length)),
   );
+  const mark = statement('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)');
+  // Series already in the library count as imported (import progress shows them done).
+  for (const id of linked)
+    if (!tried.has(id)) mark.run(`jellyfin_import_tried:${id}`, new Date().toISOString());
   const candidates = indexed()
     .filter((s) => (s.role ?? 'anime') === 'anime' && !linked.has(s.id) && !tried.has(s.id))
     .slice(0, IMPORTS_PER_SYNC);
@@ -505,6 +509,7 @@ export async function importJellyfinAnime(signal?: AbortSignal) {
       ? listTracked().find((t) => t.anilistId === work!.anilistId)
       : undefined;
     const entry = existing ?? track({ media: work ?? jellyfinWork(s), status });
+    if (!existing) mark.run(`jellyfin_imported:${entry.id}`, s.id);
     if (work && (!existing || !existing.jellyfinLink))
       statement('UPDATE tracked_media SET jellyfin_link=? WHERE id=?').run(
         JSON.stringify({ seriesId: s.id, season: 1 }),
@@ -516,4 +521,54 @@ export async function importJellyfinAnime(signal?: AbortSignal) {
     );
   }
   applyJellyfinProgress();
+}
+
+/** Import progress of the anime libraries: series handled out of all of them. */
+export function jellyfinImportProgress(): { done: number; total: number } | null {
+  if (!jellyfinConfigured() || !getSettings().autoImportJellyfin) return null;
+  const anime = indexed().filter((s) => (s.role ?? 'anime') === 'anime');
+  if (!anime.length) return null;
+  const tried = new Set(
+    (
+      statement("SELECT key FROM worker_state WHERE key LIKE 'jellyfin_import_tried:%'").all() as {
+        key: string;
+      }[]
+    ).map((r) => r.key.slice('jellyfin_import_tried:'.length)),
+  );
+  return { done: anime.filter((s) => tried.has(s.id)).length, total: anime.length };
+}
+/** Library entries Bunko added from Jellyfin (not the ones followed by hand). */
+export function jellyfinImportedIds(): number[] {
+  const recorded = new Set(
+    (
+      statement("SELECT key FROM worker_state WHERE key LIKE 'jellyfin_imported:%'").all() as {
+        key: string;
+      }[]
+    ).map((r) => Number(r.key.slice('jellyfin_imported:'.length))),
+  );
+  const tried = new Set(
+    (
+      statement("SELECT key FROM worker_state WHERE key LIKE 'jellyfin_import_tried:%'").all() as {
+        key: string;
+      }[]
+    ).map((r) => r.key.slice('jellyfin_import_tried:'.length)),
+  );
+  return listTracked()
+    .filter(
+      (t) =>
+        t.type === 'ANIME' &&
+        (recorded.has(t.id) ||
+          t.media.id.startsWith('jellyfin:') ||
+          // Imports made before entries were recorded: the import set this link.
+          (t.jellyfinLink && t.jellyfinLink !== 'none' && tried.has(t.jellyfinLink.seriesId))),
+    )
+    .map((t) => t.id);
+}
+/** Forget the Jellyfin server; optionally remove what was added from it. */
+export function disconnectJellyfin(removeImported: boolean) {
+  const removed = removeImported ? jellyfinImportedIds() : [];
+  for (const id of removed) untrack(id);
+  updateSettings({ jellyfinUrl: '', jellyfinApiKey: '', jellyfinUser: '', jellyfinLibraries: {} });
+  statement("DELETE FROM worker_state WHERE key LIKE 'jellyfin_imported:%'").run();
+  return { removed: removed.length };
 }

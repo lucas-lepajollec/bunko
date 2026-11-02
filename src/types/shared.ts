@@ -669,6 +669,8 @@ export interface LibraryActivity {
   hiddenAdult: number;
   /** Followed comics waiting for automatic source matching, and the one being searched now. */
   matching: { queued: number; current: string | null };
+  /** Jellyfin anime still being added to the library (series handled / all). */
+  jellyfinImport?: { done: number; total: number } | null;
   /** Release refresh across linked sources (latest chapters, thumbnails). */
   refresh: {
     running: boolean;
