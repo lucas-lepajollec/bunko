@@ -173,6 +173,7 @@ export const discoverQuery = z
         'anime',
         'series',
         'movies',
+        'animation',
       ])
       .optional(),
     sort: z.enum(['trending', 'popular', 'score', 'new']).optional(),
@@ -341,6 +342,7 @@ export const settingsPatch = z
         'anime',
         'series',
         'movies',
+        'animation',
       ])
       .optional(),
     universes: z
@@ -357,6 +359,7 @@ export const settingsPatch = z
           'anime',
           'series',
           'movies',
+          'animation',
         ]),
       )
       .max(9)

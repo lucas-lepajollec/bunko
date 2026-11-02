@@ -12,7 +12,13 @@ import { catalogSettingsRows, writeCatalogSettings } from './catalog-settings-st
 import { currentUser } from './user-context';
 import { requireAdmin } from './auth';
 import { catalogSettingKeys, type CatalogSetting } from '@/types/shared';
-import type { PublicSettings, SecretSetting, Settings, SettingsPatch } from '@/types/shared';
+import type {
+  DiscoverKind,
+  PublicSettings,
+  SecretSetting,
+  Settings,
+  SettingsPatch,
+} from '@/types/shared';
 export const secretKeys: SecretSetting[] = [
   'suwayomiPassword',
   'kavitaApiKey',
@@ -27,6 +33,19 @@ export const secretKeys: SecretSetting[] = [
   'rakutenApplicationId',
   'rakutenAccessKey',
   'hardcoverToken',
+];
+const LATER_KINDS: Exclude<DiscoverKind, 'all'>[] = ['series', 'movies', 'animation'];
+const ALL_KINDS: Exclude<DiscoverKind, 'all'>[] = [
+  'manga',
+  'manhwa',
+  'manhua',
+  'comic',
+  'lightnovel',
+  'webnovel',
+  'novel',
+  'book',
+  'anime',
+  ...LATER_KINDS,
 ];
 export function persistentSecret(name: string, bytes: number): Buffer {
   if (!['access.token', 'settings.key'].includes(name))
@@ -113,6 +132,7 @@ function serverSettings(): Settings {
     progressSource: 'suwayomi',
     universe: 'all',
     universes: [],
+    universesKnown: [],
     showAllUniverse: true,
     favoriteSourceIds: [],
     extensionRepos: [],
@@ -130,6 +150,11 @@ function serverSettings(): Settings {
     });
   }
   result.updateIntervalMinutes = Math.max(5, Math.min(1440, result.updateIntervalMinutes));
+  // A list chosen before series, films or animation films existed: those start enabled.
+  if (result.universes.length)
+    for (const kind of LATER_KINDS)
+      if (!result.universesKnown.includes(kind) && !result.universes.includes(kind))
+        result.universes = [...result.universes, kind];
   if (!db().inTransaction) state.snapshot = { version, value: result };
   return result;
 }
@@ -178,6 +203,8 @@ export function publicSettings(): PublicSettings {
   } as PublicSettings;
 }
 export function updateSettings(patch: SettingsPatch) {
+  // Saving the kind list records which kinds the user has seen (none is re-enabled later).
+  if (patch.universes) patch = { ...patch, universesKnown: ALL_KINDS };
   const shared = Object.entries(patch).filter(([key]) =>
     catalogSettingKeys.includes(key as CatalogSetting),
   );

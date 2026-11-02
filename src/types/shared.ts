@@ -19,7 +19,9 @@ export type MediaFormat =
   /** TV series from TMDB (live action or western animation; anime come from AniList). */
   | 'SERIES'
   /** Film from TMDB. */
-  | 'MOVIE';
+  | 'MOVIE'
+  /** Animated film: anime films (AniList) and western animation films (TMDB). */
+  | 'ANIMATION_FILM';
 export interface SourceMatch {
   sourceId: string;
   sourceName: string;
@@ -201,7 +203,8 @@ export type DiscoverKind =
   | 'book'
   | 'anime'
   | 'series'
-  | 'movies';
+  | 'movies'
+  | 'animation';
 /** "new" = most recent publication start first, never future or undated titles. */
 export type DiscoverSort = 'trending' | 'popular' | 'score' | 'new';
 /** Quarter-based seasons, AniList convention: WINTER Jan–Mar, SPRING Apr–Jun, SUMMER Jul–Sep, FALL Oct–Dec. */
@@ -587,6 +590,8 @@ export interface Settings {
   universe: DiscoverKind;
   /** Universes offered in the switcher (empty = every kind). */
   universes: Exclude<DiscoverKind, 'all'>[];
+  /** Kinds that existed when `universes` was last saved (later kinds start enabled). */
+  universesKnown: Exclude<DiscoverKind, 'all'>[];
   /** Offer "Everything" in the switcher (default true). */
   showAllUniverse: boolean;
   /** Where outside reading progress is read from (Bunko's own reader always counts). */

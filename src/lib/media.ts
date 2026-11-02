@@ -126,7 +126,9 @@ export function fromAniList(m: AniMedia): UnifiedMedia {
     providers: ['anilist'],
     format:
       type === 'ANIME'
-        ? null
+        ? m.format === 'MOVIE'
+          ? 'ANIMATION_FILM'
+          : null
         : formatFor(novel ? 'novel' : m.format === 'ONE_SHOT' ? 'oneshot' : 'comic', origin),
     origin,
     year: m.startDate?.year ?? null,

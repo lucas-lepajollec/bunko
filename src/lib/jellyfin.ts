@@ -343,9 +343,16 @@ export function matchJellyfin(media: UnifiedMedia, link?: JellyfinLink | null) {
     return s ? { series: s, manual: false } : null;
   }
   // Each kind comes from its own libraries: anime, series (TMDB) or films (TMDB).
-  const role: JellyfinRole =
-    media.format === 'SERIES' ? 'series' : media.format === 'MOVIE' ? 'movies' : 'anime';
-  const all = everything.filter((s) => (s.role ?? 'anime') === role);
+  // Animated films may sit in an anime library or a films library.
+  const roles: JellyfinRole[] =
+    media.format === 'SERIES'
+      ? ['series']
+      : media.format === 'MOVIE'
+        ? ['movies']
+        : media.format === 'ANIMATION_FILM'
+          ? ['anime', 'movies']
+          : ['anime'];
+  const all = everything.filter((s) => roles.includes(s.role ?? 'anime'));
   const tmdb = /^tmdb(?:tv|movie):(\d+)$/.exec(media.id)?.[1];
   if (tmdb) {
     const byTmdb = all.find((s) =>
@@ -428,6 +435,8 @@ export function jellyfinSeriesList(query = ''): JellyfinSeriesSummary[] {
 function jellyfinWork(s: IndexedJellyfinSeries): UnifiedMedia {
   return {
     ...emptyMedia(`jellyfin:${s.id}`, s.name, 'ANIME'),
+    // Series and films libraries give series and films (anime keep no format).
+    format: s.role === 'series' ? 'SERIES' : s.role === 'movies' ? 'MOVIE' : null,
     altTitles: s.names.filter((n) => n !== s.name),
     year: s.year,
     coverUrl: `/api/jellyfin/image?id=${s.id}`,
@@ -485,6 +494,14 @@ function applyJellyfinProgress() {
   }
 }
 
+/** A series or film of the series/films libraries as its TMDB work (needs the TMDB key). */
+async function tmdbWork(s: IndexedJellyfinSeries): Promise<UnifiedMedia | null> {
+  const id = Number(Object.entries(s.providerIds).find(([k]) => k.toLowerCase() === 'tmdb')?.[1]);
+  const { tmdbConfigured, tmdbJson, fromTmdb } = await import('./tmdb');
+  if (!Number.isInteger(id) || id <= 0 || !tmdbConfigured()) return null;
+  const kind = s.role === 'movies' ? 'movie' : 'tv';
+  return fromTmdb(await tmdbJson(`/${kind}/${id}`, {}, 12 * 3600_000), kind);
+}
 /** The catalog work of a Jellyfin series: plugin id, else one clear AniList title match. */
 async function catalogWork(s: IndexedJellyfinSeries, signal?: AbortSignal) {
   // Jellyfin already identified the series (TVDB, TMDB, IMDb, AniDB, AniList plugin): the
@@ -553,9 +570,30 @@ export async function importJellyfinAnime(signal?: AbortSignal) {
   // Series already in the library count as imported (import progress shows them done).
   for (const id of linked)
     if (!tried.has(id)) mark.run(`jellyfin_import_tried:${id}`, new Date().toISOString());
-  const candidates = indexed().filter(
-    (s) => (s.role ?? 'anime') === 'anime' && !linked.has(s.id) && !tried.has(s.id),
-  );
+  const all = indexed().filter((s) => !linked.has(s.id) && !tried.has(s.id));
+  // Series and films libraries: TMDB works by their TMDB id (or the Jellyfin item itself).
+  for (const s of all.filter((x) => x.role === 'series' || x.role === 'movies')) {
+    if (signal?.aborted || !getSettings().autoImportJellyfin) return;
+    let work: UnifiedMedia | null = null;
+    try {
+      work = await tmdbWork(s);
+    } catch {
+      continue; // TMDB unreachable: next pass.
+    }
+    const existing = work ? listTracked().find((t) => t.media.id === work!.id) : undefined;
+    const played = Object.values(s.seasons).some((list) => list.some((e) => e.played));
+    const entry =
+      existing ??
+      track({ media: work ?? jellyfinWork(s), status: played ? 'READING' : 'PLANNING' });
+    if (!existing) mark.run(`jellyfin_imported:${entry.id}`, s.id);
+    if (work && (!existing || !existing.jellyfinLink))
+      statement('UPDATE tracked_media SET jellyfin_link=? WHERE id=?').run(
+        JSON.stringify({ seriesId: s.id, season: 1 }),
+        entry.id,
+      );
+    mark.run(`jellyfin_import_tried:${s.id}`, new Date().toISOString());
+  }
+  const candidates = all.filter((s) => (s.role ?? 'anime') === 'anime');
   await ensureAnimeIds();
   // Every identified series and its other seasons in a few batched AniList requests.
   const mapped = candidates
@@ -607,7 +645,7 @@ export async function importJellyfinAnime(signal?: AbortSignal) {
 /** Import progress of the anime libraries: series handled out of all of them. */
 export function jellyfinImportProgress(): { done: number; total: number } | null {
   if (!jellyfinConfigured() || !getSettings().autoImportJellyfin) return null;
-  const anime = indexed().filter((s) => (s.role ?? 'anime') === 'anime');
+  const anime = indexed().filter((s) => ['anime', 'series', 'movies'].includes(s.role ?? 'anime'));
   if (!anime.length) return null;
   const tried = new Set(
     (

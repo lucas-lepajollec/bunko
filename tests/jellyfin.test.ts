@@ -184,7 +184,7 @@ it('follows every anime of the anime libraries, off-catalog when no clear match'
   updateSettings({ autoImportJellyfin: true });
   await jellyfin.syncJellyfinIndex();
   const tracked = listTracked();
-  // Plugin id: the catalog work. No match: the Jellyfin series itself. TV library: untouched.
+  // Plugin id: the catalog work. No match: the Jellyfin series itself. TV library: a series.
   expect(tracked.find((t) => t.anilistId === 777)).toMatchObject({
     jellyfinLink: { seriesId: 'B' },
   });
@@ -192,7 +192,8 @@ it('follows every anime of the anime libraries, off-catalog when no clear match'
     status: 'READING',
     progress: { read: 2 },
   });
-  expect(tracked.some((t) => t.title === 'Office Drama')).toBe(false);
+  // The TV library's series is followed as a series (no TMDB key here: the Jellyfin item).
+  expect(tracked.find((t) => t.title === 'Office Drama')?.media.format).toBe('SERIES');
   // TVDB id from Jellyfin: the work through the offline id map, no title search.
   expect(tracked.find((t) => t.anilistId === 900)).toMatchObject({
     jellyfinLink: { seriesId: 'D' },
@@ -234,10 +235,10 @@ it('shows import progress and disconnects, removing only what Jellyfin added', a
   const mine = track({ media: anime(42, 'Hand Picked'), status: 'PLANNING' });
   updateSettings({ autoImportJellyfin: true });
   await jellyfin.syncJellyfinIndex();
-  // Three anime-library series, all handled in one pass.
-  expect(jellyfin.jellyfinImportProgress()).toEqual({ done: 3, total: 3 });
-  expect(jellyfin.jellyfinImportedIds()).toHaveLength(3);
-  expect(jellyfin.disconnectJellyfin(true)).toEqual({ removed: 3 });
+  // Three anime-library series and one TV series, all handled in one pass.
+  expect(jellyfin.jellyfinImportProgress()).toEqual({ done: 4, total: 4 });
+  expect(jellyfin.jellyfinImportedIds()).toHaveLength(4);
+  expect(jellyfin.disconnectJellyfin(true)).toEqual({ removed: 4 });
   expect(listTracked().map((t) => t.id)).toEqual([mine.id]);
   expect(publicSettings()).toMatchObject({ jellyfinUrl: '' });
   expect(jellyfin.jellyfinConfigured()).toBe(false);

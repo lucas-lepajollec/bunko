@@ -78,7 +78,8 @@ export default function TitlePage() {
         </Empty>
       </main>
     );
-  if (!detail.data)
+  // While moving to the whole work, never flash the season's own sheet.
+  if (!detail.data || otherSeason)
     return (
       <main className="mx-auto flex max-w-[1760px] flex-col gap-4 px-4 pt-[300px] md:flex-row md:items-end md:gap-12 md:px-10 md:pt-[220px]">
         <Skeleton className="aspect-[2/3] w-28 md:w-[250px]" />
@@ -598,6 +599,7 @@ function Title({ media }: { media: MediaDetail }) {
                 <SectionHeading id="toc" num={1} title={t('episodes.title')} />
                 <EpisodeList
                   title={media.title}
+                  artwork={media.bannerUrl ?? media.coverUrl}
                   anilistId={media.anilistId}
                   video={seasonParam ? { ...video, focus: seasonParam } : video}
                   jellyfin={media.jellyfin}

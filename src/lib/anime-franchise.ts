@@ -300,4 +300,9 @@ export function setWorkLink(root: number, member: number, joined: boolean) {
   statement(
     "DELETE FROM metadata_cache WHERE key LIKE 'anime-franchise:%' OR key LIKE 'anime-season-of:%'",
   ).run();
+  // Both sheets show the new parts at once (their cached details held the old seasons).
+  statement('DELETE FROM metadata_cache WHERE key IN (?,?)').run(
+    `detail:anilist:${root}`,
+    `detail:anilist:${member}`,
+  );
 }

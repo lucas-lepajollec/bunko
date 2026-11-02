@@ -42,7 +42,8 @@ export function UniverseMenu() {
     timer.current = setTimeout(() => setOpen(false), 160);
   };
   if (!universe.ready) return null;
-  const isVideo = (k: DiscoverKind) => k === 'anime' || k === 'series' || k === 'movies';
+  const isVideo = (k: DiscoverKind) =>
+    k === 'anime' || k === 'series' || k === 'movies' || k === 'animation';
   const reading = universe.enabled.filter((k) => !isVideo(k));
   const video = universe.enabled.filter(isVideo);
   if (reading.length + video.length + (universe.allowAll ? 1 : 0) < 2) return null;

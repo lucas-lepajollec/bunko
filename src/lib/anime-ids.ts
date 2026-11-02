@@ -133,6 +133,10 @@ export async function ensureAnimeIds(): Promise<boolean> {
   return Boolean(runtime.__bunkoAnimeIds);
 }
 const index = () => runtime.__bunkoAnimeIds?.index ?? null;
+/** Loaded already, without starting a download. */
+export function animeIdsLoaded() {
+  return Boolean(runtime.__bunkoAnimeIds);
+}
 /** Loaded already (no wait), else start loading in the background and answer false. */
 export function animeIdsReady() {
   if (runtime.__bunkoAnimeIds) return true;

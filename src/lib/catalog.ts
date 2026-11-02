@@ -229,10 +229,13 @@ export async function discoverAniList(
     perPage,
     sort: sorts[sort],
     adult: includeProviderAdults() ? undefined : false,
-    type: kind === 'anime' ? 'ANIME' : 'MANGA',
+    type: kind === 'anime' || kind === 'animation' ? 'ANIME' : 'MANGA',
   };
   if (kind === 'lightnovel') variables.format = 'NOVEL';
-  else if (kind !== 'all' && kind !== 'anime') variables.formatNot = 'NOVEL';
+  // Anime films are their own kind (animation films); the anime kind keeps series and OVAs.
+  else if (kind === 'animation') variables.format = 'MOVIE';
+  else if (kind === 'anime') variables.formatNot = 'MOVIE';
+  else if (kind !== 'all') variables.formatNot = 'NOVEL';
   if (kind === 'manga') variables.country = 'JP';
   if (kind === 'manhwa') variables.country = 'KR';
   if (kind === 'manhua') variables.country = 'CN';

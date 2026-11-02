@@ -12,6 +12,7 @@ const kinds: Record<Exclude<DiscoverKind, 'all'>, true> = {
   book: true,
   series: true,
   movies: true,
+  animation: true,
   anime: true,
 };
 /** Accept older persisted feeds without allowing a missing shelf to reach a consumer. */

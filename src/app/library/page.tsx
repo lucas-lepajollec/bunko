@@ -51,7 +51,8 @@ type Kind =
   | 'book'
   | 'anime'
   | 'series'
-  | 'movies';
+  | 'movies'
+  | 'animation';
 type Sort =
   'news' | 'recent' | 'title' | 'added' | 'released' | 'score' | 'popular' | 'unread' | 'unlinked';
 
@@ -73,6 +74,7 @@ const KIND_FORMATS: Record<Exclude<Kind, 'all'>, MediaFormat[]> = {
   anime: [],
   series: ['SERIES'],
   movies: ['MOVIE'],
+  animation: ['ANIMATION_FILM'],
 };
 
 const ALL_KINDS: Kind[] = [
@@ -88,12 +90,13 @@ const ALL_KINDS: Kind[] = [
   'anime',
   'series',
   'movies',
+  'animation',
 ];
 function ofKind(e: TrackedMedia, kind: Kind) {
   return (
     kind === 'all' ||
     (kind === 'anime'
-      ? e.type === 'ANIME' && e.media.format !== 'SERIES' && e.media.format !== 'MOVIE'
+      ? e.type === 'ANIME' && !e.media.format
       : e.media.format
         ? KIND_FORMATS[kind].includes(e.media.format)
         : kind === 'manga' && e.type === 'MANGA')
@@ -144,7 +147,7 @@ function Library() {
   const [chosenKind, setKind] = useState<Kind | null>(null);
   const kind: Kind = chosenKind ?? universe.active;
   // Anime speaks of episodes and watching; every label follows the kind on screen.
-  const video = kind === 'anime' || kind === 'series' || kind === 'movies';
+  const video = ['anime', 'series', 'movies', 'animation'].includes(kind);
   const vt = (key: string, vars?: Record<string, string | number>) =>
     video && t(`${key}.video`) !== `${key}.video` ? t(`${key}.video`, vars) : t(key, vars);
   const shownShelf: View = video ? 'ALL' : shelf;
@@ -314,6 +317,7 @@ function Library() {
                   'anime',
                   'series',
                   'movies',
+                  'animation',
                 ] as Kind[]
               ).map((k) => (
                 <button

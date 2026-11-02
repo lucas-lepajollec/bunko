@@ -105,7 +105,13 @@ export function fromTmdb(m: TmdbItem, kind: TmdbKind, genres = new Map<number, s
   const date = (kind === 'tv' ? m.first_air_date : m.release_date) || null;
   const media: UnifiedMedia = {
     ...emptyMedia(`${kind === 'tv' ? 'tmdbtv' : 'tmdbmovie'}:${m.id}`, title, 'ANIME'),
-    format: kind === 'tv' ? 'SERIES' : 'MOVIE',
+    // Animated films (western animation; anime films come from AniList) are their own kind.
+    format:
+      kind === 'tv'
+        ? 'SERIES'
+        : (m.genre_ids ?? m.genres?.map((g) => g.id) ?? []).includes(16)
+          ? 'ANIMATION_FILM'
+          : 'MOVIE',
     altTitles: original && original !== title ? [original] : [],
     synopsis: m.overview || null,
     coverUrl: image(m.poster_path, 'w500'),
@@ -129,18 +135,36 @@ export async function discoverTmdb(
   kind: TmdbKind,
   sort: DiscoverSort,
   page: number,
+  /** Films: `only` = animated films (their own kind), `exclude` = live-action films. */
+  animation: 'only' | 'exclude' = 'exclude',
 ): Promise<DiscoverPage> {
   const today = new Date().toISOString().slice(0, 10);
   const params: Record<string, string> = { language: language(), page: String(page) };
-  const path =
-    sort === 'trending'
+  const onlyAnimation = kind === 'movie' && animation === 'only';
+  if (onlyAnimation) {
+    params.with_genres = '16';
+    params.sort_by =
+      sort === 'score'
+        ? 'vote_average.desc'
+        : sort === 'new'
+          ? 'primary_release_date.desc'
+          : 'popularity.desc';
+    if (sort === 'score') params['vote_count.gte'] = '300';
+  }
+  const path = onlyAnimation
+    ? '/discover/movie'
+    : sort === 'trending'
       ? `/trending/${kind}/week`
       : sort === 'popular'
         ? `/${kind}/popular`
         : sort === 'score'
           ? `/${kind}/top_rated`
           : `/discover/${kind}`;
-  if (sort === 'new') {
+  if (onlyAnimation && sort === 'new') {
+    params['primary_release_date.lte'] = today;
+    params['vote_count.gte'] = '20';
+  }
+  if (sort === 'new' && !onlyAnimation) {
     params.sort_by = kind === 'tv' ? 'first_air_date.desc' : 'primary_release_date.desc';
     params[kind === 'tv' ? 'first_air_date.lte' : 'primary_release_date.lte'] = today;
     params['vote_count.gte'] = '20';
@@ -150,7 +174,15 @@ export async function discoverTmdb(
     genreNames(kind),
   ]);
   return {
-    items: data.results.filter((m) => !isAnime(m)).map((m) => fromTmdb(m, kind, genres)),
+    items: data.results
+      .filter((m) => !isAnime(m))
+      .filter(
+        (m) =>
+          kind !== 'movie' ||
+          onlyAnimation ||
+          !(m.genre_ids ?? m.genres?.map((g) => g.id) ?? []).includes(16),
+      )
+      .map((m) => fromTmdb(m, kind, genres)),
     page: data.page,
     hasNextPage: data.page < Math.min(data.total_pages, 50),
   };

@@ -18,6 +18,7 @@ const kind = z
     'anime',
     'series',
     'movies',
+    'animation',
   ])
   .optional();
 /** `?kind=` limits the home to one universe (and loads only it). */

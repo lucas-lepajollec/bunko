@@ -22,6 +22,7 @@ export function composeHome(
     lightnovel: [],
     series: [],
     movies: [],
+    animation: [],
     webnovel: [],
     novel: [],
     book: [],
@@ -90,7 +91,7 @@ export async function episodeReleases(from: Date, to: Date): Promise<ChapterRele
  * and its hero. Without a kind it is the mixed home of every reading kind plus anime.
  */
 export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<HomeFeed> {
-  const video = kind === 'anime' || kind === 'series' || kind === 'movies';
+  const video = kind === 'anime' || kind === 'series' || kind === 'movies' || kind === 'animation';
   // Reading releases are not video: those homes never start their ingestion.
   if (!video) void refreshReleases().catch(() => {});
   const key = kind

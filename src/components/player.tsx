@@ -81,9 +81,11 @@ export function Player({
         : null,
   );
   // A new episode (next) starts from its own best source.
-  const [current, setCurrent] = useState(episode);
-  if (current !== episode) {
-    setCurrent(episode);
+  // Parents rebuild the episode object on every refresh: only a different episode resets.
+  const episodeKey = `${episode.title}|${episode.label}|${episode.jellyfinItemId ?? ''}`;
+  const [current, setCurrent] = useState(episodeKey);
+  if (current !== episodeKey) {
+    setCurrent(episodeKey);
     setSource(episode.jellyfinItemId ? { kind: 'jellyfin', itemId: episode.jellyfinItemId } : null);
     setPicking(!episode.jellyfinItemId);
   }
@@ -281,11 +283,12 @@ function Screen({
     subtitleId: number;
   } | null>(null);
 
+  const jellyfinItem = source.kind === 'jellyfin' ? source.itemId : null;
   useEffect(() => {
-    if (source.kind !== 'jellyfin') return;
+    if (!jellyfinItem) return;
     let live = true;
     send<PlaybackInfo>('/api/jellyfin/playback', 'PUT', {
-      itemId: source.itemId,
+      itemId: jellyfinItem,
       profile: deviceProfile(),
       maxBitrate: request.bitrate,
       ...(request.startMs !== undefined ? { startMs: Math.round(request.startMs) } : {}),
@@ -302,7 +305,8 @@ function Screen({
     return () => {
       live = false;
     };
-  }, [source, request, t]);
+    // Only the item and the requested streams matter: a re-render never reopens playback.
+  }, [jellyfinItem, request, t]);
   const audioIndex = p?.audioIndex ?? p?.audio.find((a) => a.default)?.index ?? null;
   // VOSTFR by default: subtitles in the interface language when the audio is in another one.
   const codes = LANGUAGE_CODES[language] ?? [];

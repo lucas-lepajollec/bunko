@@ -22,6 +22,7 @@ const KINDS: DiscoverKind[] = [
   'anime',
   'series',
   'movies',
+  'animation',
 ];
 
 /** ISO date (YYYY-MM-DD) in local time. */

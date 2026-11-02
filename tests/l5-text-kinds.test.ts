@@ -313,6 +313,7 @@ it('keeps LN/WN and book/novel releases separate in all home keys', () => {
       'anime',
       'series',
       'movies',
+      'animation',
     ].sort(),
   );
   expect(home.latest.lightnovel).toHaveLength(1);
