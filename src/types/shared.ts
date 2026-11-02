@@ -453,6 +453,8 @@ export interface Settings {
   jellyfinUrl: string;
   jellyfinApiKey: string;
   jellyfinUser: string;
+  /** Role per Jellyfin library id; libraries not listed use the detected role. */
+  jellyfinLibraries: Record<string, JellyfinRole>;
   /** Follow Jellyfin anime automatically (matched to AniList when unambiguous). Default true. */
   autoImportJellyfin: boolean;
   /** TraDoc integration API address, e.g. `http://tradoc.local:2507/api/v1`; empty = unused. */
@@ -545,6 +547,16 @@ export interface JellyfinPresence {
   episodeIds: Record<number, string>;
   url: string;
   manual: boolean;
+}
+/** What a Jellyfin library holds for Bunko (anime now; series and films in later phases). */
+export type JellyfinRole = 'anime' | 'series' | 'movies' | 'ignore';
+export interface JellyfinLibrary {
+  id: string;
+  name: string;
+  collectionType: string | null;
+  /** Effective role: the account's choice, else the detected one. */
+  role: JellyfinRole;
+  detected: JellyfinRole;
 }
 export interface JellyfinSeriesSummary {
   id: string;

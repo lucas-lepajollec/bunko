@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import type {
+  JellyfinLibrary,
+  JellyfinRole,
   JellyfinLink,
   JellyfinPresence,
   JellyfinSeriesSummary,
@@ -18,6 +20,8 @@ interface IndexedJellyfinSeries {
   name: string;
   names: string[];
   year: number | null;
+  /** Role of the Jellyfin library the series lives in. */
+  role: JellyfinRole;
   providerIds: Record<string, string>;
   /** season → episodes (number, item id, played by the chosen user). */
   seasons: Record<string, { n: number; id: string; played: boolean }[]>;
@@ -114,43 +118,90 @@ async function allItems(uid: string, query: string, signal?: AbortSignal) {
   return items;
 }
 
-/** Rebuild the index: every series with its episodes and the user's watched flags. */
+/** A library's role from its type and name: "Anime" in a TV library means anime. */
+export function detectRole(name: string, collectionType: string | null): JellyfinRole {
+  const anime = /anim/i.test(name);
+  if (collectionType === 'tvshows') return anime ? 'anime' : 'series';
+  if (collectionType === 'movies') return anime ? 'anime' : 'movies';
+  if (!collectionType || collectionType === 'mixed') return anime ? 'anime' : 'ignore';
+  return 'ignore';
+}
+export async function jellyfinLibraries(signal?: AbortSignal): Promise<JellyfinLibrary[]> {
+  const folders = z
+    .array(
+      z
+        .object({
+          Name: z.string(),
+          ItemId: z.string(),
+          CollectionType: z.string().nullable().optional(),
+        })
+        .passthrough(),
+    )
+    .parse(await jellyfin('/Library/VirtualFolders', signal));
+  const chosen = getSettings().jellyfinLibraries ?? {};
+  return folders.map((f) => {
+    const detected = detectRole(f.Name, f.CollectionType ?? null);
+    return {
+      id: f.ItemId,
+      name: f.Name,
+      collectionType: f.CollectionType ?? null,
+      detected,
+      role: chosen[f.ItemId] ?? detected,
+    };
+  });
+}
+
+/** Rebuild the index: series of the anime (and series) libraries, episodes and watched flags. */
 export async function syncJellyfinIndex(signal?: AbortSignal) {
   if (!jellyfinConfigured()) return;
   const uid = await userId(signal);
-  const series = z
-    .array(
-      z
-        .object({
-          Id: z.string(),
-          Name: z.string(),
-          OriginalTitle: z.string().nullable().optional(),
-          SortName: z.string().nullable().optional(),
-          ProductionYear: z.number().nullable().optional(),
-          ProviderIds: z.record(z.string(), z.string().nullable()).nullable().optional(),
-        })
-        .passthrough(),
-    )
-    .parse(
+  const libraries = (await jellyfinLibraries(signal)).filter(
+    (l) => l.role === 'anime' || l.role === 'series',
+  );
+  const seriesSchema = z.array(
+    z
+      .object({
+        Id: z.string(),
+        Name: z.string(),
+        OriginalTitle: z.string().nullable().optional(),
+        SortName: z.string().nullable().optional(),
+        ProductionYear: z.number().nullable().optional(),
+        ProviderIds: z.record(z.string(), z.string().nullable()).nullable().optional(),
+      })
+      .passthrough(),
+  );
+  const episodeSchema = z.array(
+    z
+      .object({
+        Id: z.string(),
+        SeriesId: z.string().nullable().optional(),
+        ParentIndexNumber: z.number().nullable().optional(),
+        IndexNumber: z.number().nullable().optional(),
+        UserData: z.object({ Played: z.boolean().optional() }).partial().nullable().optional(),
+      })
+      .passthrough(),
+  );
+  const series: (z.infer<typeof seriesSchema>[number] & { role: JellyfinRole })[] = [];
+  const episodes: z.infer<typeof episodeSchema> = [];
+  for (const library of libraries) {
+    const found = seriesSchema.parse(
       await allItems(
         uid,
-        'IncludeItemTypes=Series&Fields=ProviderIds,OriginalTitle,SortName,ProductionYear',
+        `ParentId=${library.id}&IncludeItemTypes=Series&Fields=ProviderIds,OriginalTitle,SortName,ProductionYear`,
         signal,
       ),
     );
-  const episodes = z
-    .array(
-      z
-        .object({
-          Id: z.string(),
-          SeriesId: z.string().nullable().optional(),
-          ParentIndexNumber: z.number().nullable().optional(),
-          IndexNumber: z.number().nullable().optional(),
-          UserData: z.object({ Played: z.boolean().optional() }).partial().nullable().optional(),
-        })
-        .passthrough(),
-    )
-    .parse(await allItems(uid, 'IncludeItemTypes=Episode&EnableUserData=true', signal));
+    series.push(...found.map((s) => ({ ...s, role: library.role })));
+    episodes.push(
+      ...episodeSchema.parse(
+        await allItems(
+          uid,
+          `ParentId=${library.id}&IncludeItemTypes=Episode&EnableUserData=true`,
+          signal,
+        ),
+      ),
+    );
+  }
   const bySeries = new Map<string, IndexedJellyfinSeries['seasons']>();
   for (const e of episodes) {
     if (!e.SeriesId || e.IndexNumber == null) continue;
@@ -173,6 +224,7 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
         name: s.Name,
         names: [...new Set([s.Name, s.OriginalTitle, s.SortName].filter((n): n is string => !!n))],
         year: s.ProductionYear ?? null,
+        role: s.role,
         providerIds: Object.fromEntries(
           Object.entries(s.ProviderIds ?? {}).filter((e): e is [string, string] => Boolean(e[1])),
         ),
@@ -219,11 +271,13 @@ export function seasonOf(title: string): { base: string; season: number | null }
  */
 export function matchJellyfin(media: UnifiedMedia, link?: JellyfinLink | null) {
   if (media.type !== 'ANIME' || link === 'none') return null;
-  const all = indexed();
+  const everything = indexed();
   if (link) {
-    const s = all.find((x) => x.id === link.seriesId);
+    const s = everything.find((x) => x.id === link.seriesId);
     return s ? { series: s, season: link.season, manual: true } : null;
   }
+  // Anime come from the libraries marked (or detected) as anime.
+  const all = everything.filter((s) => (s.role ?? 'anime') === 'anime');
   const byProvider = media.anilistId
     ? all.find((s) => s.providerIds.AniList === String(media.anilistId))
     : undefined;
@@ -311,7 +365,7 @@ async function importJellyfinAnime(signal?: AbortSignal) {
     ).map((r) => r.key.slice('jellyfin_import_tried:'.length)),
   );
   const candidates = indexed()
-    .filter((s) => !linked.has(s.id) && !tried.has(s.id))
+    .filter((s) => (s.role ?? 'anime') === 'anime' && !linked.has(s.id) && !tried.has(s.id))
     .slice(0, IMPORTS_PER_SYNC);
   if (!candidates.length) return;
   const { search } = await import('./search-engine');
@@ -323,6 +377,20 @@ async function importJellyfinAnime(signal?: AbortSignal) {
       new Date().toISOString(),
     );
     try {
+      // The Jellyfin AniList plugin already knows the work: no title guessing needed.
+      const anilistId = Number(s.providerIds.AniList);
+      if (Number.isInteger(anilistId) && anilistId > 0) {
+        const { mediaDetail } = await import('./catalog');
+        const media = await mediaDetail(`anilist:${anilistId}`, signal);
+        if (media.type === 'ANIME' && !listTracked().some((t) => t.anilistId === anilistId)) {
+          const created = track({ media, status: 'PLANNING' });
+          statement('UPDATE tracked_media SET jellyfin_link=? WHERE id=?').run(
+            JSON.stringify({ seriesId: s.id, season: 1 }),
+            created.id,
+          );
+        }
+        continue;
+      }
       const results = (await search(s.name, 'ANIME', signal)).results.filter(
         (m) => m.type === 'ANIME' && m.id.startsWith('anilist:'),
       );

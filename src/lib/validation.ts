@@ -218,6 +218,9 @@ export const settingsPatch = z
     jellyfinApiKey: z.string().max(2000).optional(),
     jellyfinUser: z.string().trim().max(100).optional(),
     autoImportJellyfin: z.boolean().optional(),
+    jellyfinLibraries: z
+      .record(z.string().min(1).max(100), z.enum(['anime', 'series', 'movies', 'ignore']))
+      .optional(),
     tradocUrl: z.union([httpUrl, z.literal('')]).optional(),
     tradocApiKey: z.string().max(2000).optional(),
     prowlarrUrl: z.union([httpUrl, z.literal('')]).optional(),

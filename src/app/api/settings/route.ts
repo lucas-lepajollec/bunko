@@ -26,6 +26,7 @@ const SERVICE_KEYS = [
   'jellyfinUrl',
   'jellyfinApiKey',
   'jellyfinUser',
+  'jellyfinLibraries',
 ];
 export const PATCH = route(async (r) => {
   const patch = await body(r, settingsPatch);

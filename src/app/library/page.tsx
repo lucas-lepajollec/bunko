@@ -115,6 +115,11 @@ function Library() {
   const universe = useUniverse();
   const [chosenKind, setKind] = useState<Kind | null>(null);
   const kind: Kind = chosenKind ?? universe.active;
+  // Anime speaks of episodes and watching; every label follows the kind on screen.
+  const video = kind === 'anime';
+  const vt = (key: string, vars?: Record<string, string | number>) =>
+    video && t(`${key}.video`) !== `${key}.video` ? t(`${key}.video`, vars) : t(key, vars);
+  const shownShelf: View = video ? 'ALL' : shelf;
   const [sort, setSort] = useState<Sort>('news');
   const updates = useApi<UpdatesFeed>('/api/updates');
   // Never hide titles silently: say how many the 18+ setting keeps out of view.
@@ -142,7 +147,7 @@ function Library() {
   // The header search filters this page (`?q=`, written by the search field).
   const filterText = (params.get('q') ?? '').trim();
   const filtered = entries
-    .filter((entry) => shelf !== 'UNOWNED' || !hasOwnedFiles(entry))
+    .filter((entry) => shownShelf !== 'UNOWNED' || !hasOwnedFiles(entry))
     .filter((e) => !status || shelfOf(e) === status)
     .filter((e) => matchesFilter(e, filterText))
     .filter(
@@ -170,7 +175,7 @@ function Library() {
         title={t('library.title')}
         aside={
           library.data
-            ? t('library.inventory', {
+            ? vt('library.inventory', {
                 series: n(entries.length),
                 chapters: n(ownedChapters),
                 volumes: n(ownedVolumes),
@@ -184,9 +189,11 @@ function Library() {
         pending={
           refreshing ||
           (!library.data && library.isLoading) ||
-          (shelf === 'KAVITA' && unmatched.isLoading)
+          (shownShelf === 'KAVITA' && unmatched.isLoading)
         }
-        partial={Boolean(refreshFailed || library.error || (shelf === 'KAVITA' && unmatched.error))}
+        partial={Boolean(
+          refreshFailed || library.error || (shownShelf === 'KAVITA' && unmatched.error),
+        )}
       />
       {(activity.data?.hiddenAdult ?? 0) > 0 && (
         <p className="text-mid -mt-2 flex flex-wrap items-center gap-x-2 text-sm">
@@ -197,32 +204,43 @@ function Library() {
         </p>
       )}
       <Tabs
-        value={shelf}
+        value={shownShelf}
         onChange={setShelf}
         label={t('library.statusLabel')}
         items={[
           { id: 'ALL' as View, label: t('library.all'), count: entries.length },
-          { id: 'UNOWNED' as View, label: t('library.unowned'), count: unownedCount },
-          {
-            id: 'UPDATES' as View,
-            label: t('library.updates'),
-            count: pendingUpdates || undefined,
-          },
-          ...(unmatched.data?.length
-            ? [{ id: 'KAVITA' as View, label: t('library.inKavita'), count: unmatched.data.length }]
-            : []),
+          // Owned files, chapter updates and Kavita belong to reading kinds.
+          ...(video
+            ? []
+            : [
+                { id: 'UNOWNED' as View, label: t('library.unowned'), count: unownedCount },
+                {
+                  id: 'UPDATES' as View,
+                  label: t('library.updates'),
+                  count: pendingUpdates || undefined,
+                },
+                ...(unmatched.data?.length
+                  ? [
+                      {
+                        id: 'KAVITA' as View,
+                        label: t('library.inKavita'),
+                        count: unmatched.data.length,
+                      },
+                    ]
+                  : []),
+              ]),
         ]}
       />
-      {shelf === 'UPDATES' ? (
+      {shownShelf === 'UPDATES' ? (
         <LibraryUpdates />
-      ) : shelf === 'KAVITA' ? (
+      ) : shownShelf === 'KAVITA' ? (
         <KavitaUnmatched
           series={unmatched.data}
           onTracked={() => Promise.all([unmatched.mutate(), library.mutate()])}
         />
       ) : (
         <>
-          {shelf === 'UNOWNED' && (
+          {shownShelf === 'UNOWNED' && (
             <p className="text-muted text-sm">
               {t('library.unownedHint')}{' '}
               <Link href="/catalog" className="underline hover:text-white">
@@ -308,7 +326,7 @@ function Library() {
                         'COMPLETED',
                         'DROPPED',
                       ] as Shelf[]
-                    ).map((x) => ({ value: x, label: `${t(`shelf.${x}`)} · ${n(counts[x])}` })),
+                    ).map((x) => ({ value: x, label: `${vt(`shelf.${x}`)} · ${n(counts[x])}` })),
                   ]}
                 />
                 <div className="text-muted flex items-center gap-2">
@@ -317,15 +335,17 @@ function Library() {
                     label={t('catalog.sort')}
                     value={sort}
                     onChange={(v) => setSort(v as Sort)}
-                    options={(['news', 'recent', 'title', 'added', 'unlinked'] as Sort[]).map(
-                      (x) => ({
-                        value: x,
-                        label:
-                          x === 'unlinked'
-                            ? `${t('library.sort.unlinked')} · ${n(withoutSources.length)}`
-                            : t(`library.sort.${x}`),
-                      }),
-                    )}
+                    options={(
+                      (video
+                        ? ['news', 'recent', 'title', 'added']
+                        : ['news', 'recent', 'title', 'added', 'unlinked']) as Sort[]
+                    ).map((x) => ({
+                      value: x,
+                      label:
+                        x === 'unlinked'
+                          ? `${t('library.sort.unlinked')} · ${n(withoutSources.length)}`
+                          : vt(`library.sort.${x}`),
+                    }))}
                   />
                 </div>
               </div>
@@ -383,13 +403,18 @@ function Library() {
                 <span className="text-muted -mt-1 hidden truncate text-xs md:block">
                   {e.progress?.read != null && (
                     <>
-                      {t(e.unit === 'volume' ? 'library.readNVol' : 'library.readN', {
-                        n: n(e.progress.read),
-                      })}
-                      {' · '}
+                      {t(
+                        e.type === 'ANIME'
+                          ? 'library.watchedN'
+                          : e.unit === 'volume'
+                            ? 'library.readNVol'
+                            : 'library.readN',
+                        { n: n(e.progress.read) },
+                      )}
+                      {e.type !== 'ANIME' && ' · '}
                     </>
                   )}
-                  <OwnedInventory entry={e} compact />
+                  {e.type !== 'ANIME' && <OwnedInventory entry={e} compact />}
                   {Boolean(e.progress?.released) && (
                     <>
                       {' · '}

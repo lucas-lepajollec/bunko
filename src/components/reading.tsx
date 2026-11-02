@@ -34,7 +34,7 @@ export function ReadingCard({ entry, className }: { entry: TrackedMedia; classNa
                 position?.unit === 'volume' ? 'chapters.volume' : 'chapters.number',
                 position?.unit === 'volume' ? { v: n(number) } : { n: n(number) },
               )
-            : t('profile.resume')}
+            : t(entry.type === 'ANIME' ? 'profile.resumeWatching' : 'profile.resume')}
         </span>
         <span className="text-muted text-xs">
           {position

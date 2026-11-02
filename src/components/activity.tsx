@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useNotices } from '@/lib/client/notices';
 import { useSWRConfig } from 'swr';
 import type { LibraryActivity } from '@/types/shared';
 import { useApi, libraryKeys, releaseViewKey, progressViewKey } from '@/lib/client/api';
@@ -100,5 +101,63 @@ export function ActivityLine({ className }: { className?: string }) {
         </span>
       ) : null}
     </p>
+  );
+}
+
+/**
+ * Header bell for general page status (still loading, some providers or sources unreachable).
+ * Silent when everything is fine; a dot shows the state and the panel explains it.
+ */
+export function NoticeBell() {
+  const { t } = useI18n();
+  const notices = useNotices();
+  const [open, setOpen] = useState(false);
+  const partial = notices.some((n) => n.partial);
+  const pending = notices.some((n) => n.pending);
+  if (!partial && !pending) return null;
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label={t('notices.label')}
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="text-mid relative flex size-11 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          aria-hidden
+        >
+          <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+        </svg>
+        <span
+          aria-hidden
+          className={cx(
+            'absolute top-2.5 right-2.5 size-2 rounded-full',
+            partial ? 'bg-warn' : 'animate-pulse bg-white/70',
+          )}
+        />
+      </button>
+      {open && (
+        <div
+          role="status"
+          className="border-line absolute top-12 right-0 z-50 flex w-[320px] flex-col gap-2 rounded-2xl border bg-[#141210] p-4 text-sm shadow-[0_24px_60px_rgba(0,0,0,0.55)]"
+        >
+          {pending && (
+            <p className="text-mid flex items-start gap-2">
+              <Spinner className="mt-0.5 size-3.5 shrink-0" />
+              {t('loading.more')}
+            </p>
+          )}
+          {partial && <p className="text-warn">{t('loading.partial')}</p>}
+        </div>
+      )}
+    </div>
   );
 }

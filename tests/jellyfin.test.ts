@@ -46,15 +46,32 @@ const server: Server = createServer((req, res) => {
       { Id: 'u1', Name: 'Other', Policy: { IsAdministrator: false } },
       { Id: 'u2', Name: 'Admin', Policy: { IsAdministrator: true } },
     ]);
+  if (url.pathname === '/Library/VirtualFolders')
+    return send([
+      { Name: 'Anime', ItemId: 'L1', CollectionType: 'tvshows' },
+      { Name: 'TV', ItemId: 'L2', CollectionType: 'tvshows' },
+      { Name: 'Movies', ItemId: 'L3', CollectionType: 'movies' },
+    ]);
   if (url.pathname === '/Users/u2/Items') {
+    const parent = url.searchParams.get('ParentId');
     if (url.searchParams.get('IncludeItemTypes') === 'Series')
       return send({
-        Items: [
-          { Id: 'A', Name: 'Fixture Quest', ProductionYear: 2023, ProviderIds: {} },
-          { Id: 'B', Name: 'Plugin Show', ProductionYear: 2020, ProviderIds: { AniList: '777' } },
-        ],
+        Items:
+          parent === 'L1'
+            ? [
+                { Id: 'A', Name: 'Fixture Quest', ProductionYear: 2023, ProviderIds: {} },
+                {
+                  Id: 'B',
+                  Name: 'Plugin Show',
+                  ProductionYear: 2020,
+                  ProviderIds: { AniList: '777' },
+                },
+              ]
+            : parent === 'L2'
+              ? [{ Id: 'C', Name: 'Office Drama', ProductionYear: 2005, ProviderIds: {} }]
+              : [],
       });
-    return send({ Items: episodes });
+    return send({ Items: parent === 'L1' ? episodes : [] });
   }
   res.writeHead(404);
   res.end();
@@ -73,6 +90,7 @@ beforeEach(() => {
     jellyfinApiKey: 'jf-key',
     jellyfinUser: '',
     autoImportJellyfin: false,
+    jellyfinLibraries: {},
   });
 });
 afterAll(async () => {
@@ -117,8 +135,22 @@ it('forgets everything from a previous server', async () => {
       .jellyfinSeriesList()
       .map((s) => s.id)
       .sort(),
-  ).toEqual(['A', 'B']);
+  ).toEqual(['A', 'B', 'C']);
   updateSettings({ jellyfinUrl: 'http://other.invalid' });
   expect(jellyfin.jellyfinSeriesList()).toEqual([]);
   expect(listTracked()).toEqual([]);
+});
+it('detects library roles and uses only anime libraries for anime', async () => {
+  const libraries = await jellyfin.jellyfinLibraries();
+  expect(libraries.map((l) => [l.name, l.role])).toEqual([
+    ['Anime', 'anime'],
+    ['TV', 'series'],
+    ['Movies', 'movies'],
+  ]);
+  await jellyfin.syncJellyfinIndex();
+  // A TV series with the same title is never taken for an anime.
+  expect(jellyfin.jellyfinPresence(anime(9, 'Office Drama'))).toBeNull();
+  updateSettings({ jellyfinLibraries: { L2: 'anime' } });
+  await jellyfin.syncJellyfinIndex();
+  expect(jellyfin.jellyfinPresence(anime(9, 'Office Drama'))).toMatchObject({ seriesId: 'C' });
 });
