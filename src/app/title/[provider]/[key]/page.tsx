@@ -456,6 +456,19 @@ function Title({ media }: { media: MediaDetail }) {
                         : t('title.noSource')}
               </button>
             )}
+            {video && media.jellyfin && (
+              <a
+                href={media.jellyfin.url}
+                target="_blank"
+                rel="noreferrer"
+                className={cx(ghostButton, 'gap-2')}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M7 4v16l13-8Z" />
+                </svg>
+                {t('jellyfin.open')}
+              </a>
+            )}
             {video && entry && (
               <button
                 type="button"
@@ -504,6 +517,9 @@ function Title({ media }: { media: MediaDetail }) {
                   })}
                 </span>
                 {!video && <OwnedInventory entry={entry} />}
+                {video && media.jellyfin && (
+                  <span>{t('jellyfin.owned', { n: n(media.jellyfin.owned.length) })}</span>
+                )}
                 {media.kavita && <KavitaRefresh trackedId={entry.id} />}
                 <span>
                   {video
@@ -565,6 +581,7 @@ function Title({ media }: { media: MediaDetail }) {
                 <SectionHeading id="toc" num={1} title={t('episodes.title')} />
                 <EpisodeList
                   video={video}
+                  jellyfin={media.jellyfin}
                   entry={entry}
                   busy={watchBusy}
                   onWatched={(w) => void setWatched(w)}

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Jellyfin: connect it in Settings → Connections (address, API key, the user whose watched state
+  counts). Bunko indexes series and episodes every 15 minutes (or on demand), links anime by the
+  AniList id (Jellyfin AniList plugin) or by title, picks the season from titles like "Season 2",
+  shows owned episodes and "Open/Play in Jellyfin" on anime sheets, moves watched progress forward
+  and can follow Jellyfin anime automatically when AniList recognises them clearly. The anime's
+  settings get a Jellyfin tab to choose the series and season or keep it unlinked (schema v18).
+- The universe switcher looks like the other header links and opens a two-group panel (reading,
+  video) with a short description per kind. Wide banners keep their own proportions over a soft
+  blurred fill instead of being stretched (no more zoomed, blurry heroes).
+
 - Universes: a switcher in the header (hover) and in the phone bottom bar narrows the whole
   interface to one kind (manga, manhwa, manhua, comics, light/web novels, novels, books or anime)
   and loads only it: home, catalog, planning, search and source pages follow it; the library opens

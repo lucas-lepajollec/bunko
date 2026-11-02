@@ -267,7 +267,7 @@ function Connections({
 }) {
   const { t } = useI18n();
   const services: {
-    key: 'suwayomi' | 'kavita' | 'tradoc';
+    key: 'suwayomi' | 'kavita' | 'tradoc' | 'jellyfin';
     fields: {
       name: keyof SettingsPatch;
       label: string;
@@ -309,6 +309,21 @@ function Connections({
       ],
     },
     {
+      key: 'jellyfin',
+      state: status?.jellyfin?.state,
+      detail: status?.jellyfin?.version ? `v${status.jellyfin.version}` : null,
+      fields: [
+        { name: 'jellyfinUrl', label: t('settings.address'), type: 'url' },
+        {
+          name: 'jellyfinApiKey',
+          label: t('settings.apiKey'),
+          type: 'password',
+          secret: 'jellyfinApiKey',
+        },
+        { name: 'jellyfinUser', label: t('settings.jellyfinUser') },
+      ],
+    },
+    {
       key: 'tradoc',
       state: status?.tradoc?.state,
       detail: status?.tradoc?.version ? `v${status.tradoc.version}` : null,
@@ -326,17 +341,70 @@ function Connections({
   return (
     <>
       {services.map((s) => (
-        <ServiceCard
-          key={s.key}
-          name={s.key}
-          state={s.state}
-          detail={s.detail}
-          fields={s.fields}
-          settings={settings}
-          onSaved={onSaved}
-        />
+        <div key={s.key} className="flex flex-col gap-3">
+          <ServiceCard
+            name={s.key}
+            state={s.state}
+            detail={s.detail}
+            fields={s.fields}
+            settings={settings}
+            onSaved={onSaved}
+          />
+          {s.key === 'jellyfin' && s.state && s.state !== 'unconfigured' && (
+            <JellyfinOptions settings={settings} onSaved={onSaved} />
+          )}
+        </div>
       ))}
     </>
+  );
+}
+
+/** Automatic import of Jellyfin anime, and an immediate re-read of the library. */
+function JellyfinOptions({
+  settings,
+  onSaved,
+}: {
+  settings: Settings;
+  onSaved: () => Promise<unknown>;
+}) {
+  const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="flex flex-col gap-2 px-1 text-sm">
+      <Row label={t('jellyfin.autoImport')} tip={t('jellyfin.autoImportTip')}>
+        <input
+          type="checkbox"
+          checked={settings.autoImportJellyfin ?? true}
+          onChange={async (e) => {
+            try {
+              await send('/api/settings', 'PATCH', { autoImportJellyfin: e.target.checked });
+              await onSaved();
+            } catch (err) {
+              toast({ tone: 'bad', text: errorText(t, err) });
+            }
+          }}
+          className="accent-fg size-[18px]"
+        />
+      </Row>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            await send('/api/jellyfin/sync', 'POST');
+            toast({ tone: 'ok', text: t('jellyfin.synced') });
+          } catch (err) {
+            toast({ tone: 'bad', text: errorText(t, err) });
+          } finally {
+            setBusy(false);
+          }
+        }}
+        className={cx(smallButton, 'self-start')}
+      >
+        {busy ? t('common.working') : t('jellyfin.syncNow')}
+      </button>
+    </div>
   );
 }
 
@@ -348,7 +416,7 @@ function ServiceCard({
   settings,
   onSaved,
 }: {
-  name: 'suwayomi' | 'kavita' | 'tradoc';
+  name: 'suwayomi' | 'kavita' | 'tradoc' | 'jellyfin';
   state: string | undefined;
   detail?: string | null;
   fields: {

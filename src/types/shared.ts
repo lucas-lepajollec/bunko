@@ -101,6 +101,7 @@ export interface VideoDetail {
 }
 export interface MediaDetail extends UnifiedMedia, LoadState {
   video?: VideoDetail;
+  jellyfin?: JellyfinPresence | null;
   tags: string[];
   relations: RelatedMedia[];
   recommendations: UnifiedMedia[];
@@ -448,6 +449,12 @@ export interface Settings {
   sonarrApiKey: string;
   prowlarrUrl: string;
   prowlarrApiKey: string;
+  /** Jellyfin server address and API key; `jellyfinUser` names whose watched state counts. */
+  jellyfinUrl: string;
+  jellyfinApiKey: string;
+  jellyfinUser: string;
+  /** Follow Jellyfin anime automatically (matched to AniList when unambiguous). Default true. */
+  autoImportJellyfin: boolean;
   /** TraDoc integration API address, e.g. `http://tradoc.local:2507/api/v1`; empty = unused. */
   tradocUrl: string;
   /** TraDoc connection key (`tdk_…`), created in TraDoc → Settings → Integrations. */
@@ -500,6 +507,7 @@ export type SecretSetting =
   | 'sonarrApiKey'
   | 'prowlarrApiKey'
   | 'tradocApiKey'
+  | 'jellyfinApiKey'
   | 'googleBooksApiKey'
   | 'metronApiToken'
   | 'metronPassword'
@@ -523,8 +531,31 @@ export const catalogSettingKeys = [
 ] as const satisfies readonly (keyof Settings)[];
 export type CatalogSetting = (typeof catalogSettingKeys)[number];
 export type SettingsPatch = Partial<Settings>;
+/** A work's manual Jellyfin link: a series (and season), or `none` to keep it unlinked. */
+export type JellyfinLink = { seriesId: string; season: number } | 'none';
+/** What Jellyfin holds for an anime (owned and watched episodes of the linked season). */
+export interface JellyfinPresence {
+  seriesId: string;
+  name: string;
+  season: number;
+  seasons: number[];
+  owned: number[];
+  played: number[];
+  /** Episode number → Jellyfin item id, for "play in Jellyfin" links. */
+  episodeIds: Record<number, string>;
+  url: string;
+  manual: boolean;
+}
+export interface JellyfinSeriesSummary {
+  id: string;
+  name: string;
+  year: number | null;
+  seasons: number[];
+  episodes: number;
+}
 export interface TrackedMedia {
   id: number;
+  jellyfinLink?: JellyfinLink | null;
   /** Personal like, independent of reading status and owning/downloading the work. */
   favorite?: boolean;
   anilistId: number | null;
@@ -702,6 +733,8 @@ export interface ServicesStatus {
     /** The API key belongs to a Kavita admin (needed for scans and cover uploads); null if unknown. */
     admin: boolean | null;
   };
+  /** Jellyfin media server; `version` when reachable. */
+  jellyfin: { state: ServiceState; version: string | null };
   /** TraDoc translation engine; `version` is TraDoc's own version when reachable. */
   tradoc: { state: ServiceState; version: string | null };
 }

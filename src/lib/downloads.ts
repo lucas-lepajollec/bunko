@@ -42,6 +42,7 @@ import {
 import { sharedConcurrencyGate } from './concurrency';
 import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
 import { processTranslations } from './translations';
+import { maybeSyncJellyfin } from './jellyfin';
 import { targetFor } from './library-paths';
 import { env } from '@/lib/env';
 import { sourceServerKey } from './source-server';
@@ -582,6 +583,7 @@ async function workerTickBackground() {
           if (kavitaSyncRequested()) await syncKavitaIndex(signal);
           if (ownsLease() && updateCheckDue()) await runUpdateCheck(createBatch, signal, ownsLease);
           if (ownsLease()) await processTranslations(signal);
+          if (ownsLease()) await maybeSyncJellyfin(signal).catch(() => undefined);
         } catch (error) {
           maintenanceError = error;
         }

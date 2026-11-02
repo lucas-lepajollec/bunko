@@ -214,6 +214,10 @@ export const settingsPatch = z
     kavitaAuthMode: z.enum(['api-key', 'jwt']).optional(),
     sonarrUrl: z.union([httpUrl, z.literal('')]).optional(),
     sonarrApiKey: z.string().max(2000).optional(),
+    jellyfinUrl: z.union([httpUrl, z.literal('')]).optional(),
+    jellyfinApiKey: z.string().max(2000).optional(),
+    jellyfinUser: z.string().trim().max(100).optional(),
+    autoImportJellyfin: z.boolean().optional(),
     tradocUrl: z.union([httpUrl, z.literal('')]).optional(),
     tradocApiKey: z.string().max(2000).optional(),
     prowlarrUrl: z.union([httpUrl, z.literal('')]).optional(),
@@ -400,6 +404,18 @@ export const trackPatch = z
       .optional(),
     /** Set progress by hand (episodes watched for anime); may go back. */
     read: z.number().min(0).max(100_000).nullable().optional(),
+    jellyfinLink: z
+      .union([
+        z.literal('none'),
+        z
+          .object({
+            seriesId: z.string().min(1).max(100),
+            season: z.number().int().min(0).max(1000),
+          })
+          .strict(),
+      ])
+      .nullable()
+      .optional(),
     status: readingStatus.optional(),
     autoDownload: z.boolean().optional(),
     kavitaSeriesId: id.nullable().optional(),

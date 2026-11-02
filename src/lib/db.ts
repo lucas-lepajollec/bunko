@@ -169,6 +169,7 @@ export function db(): Database.Database {
     migrateV15(connection);
     migrateV16(connection);
     migrateV17(connection);
+    migrateV18(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -880,6 +881,7 @@ function snapshotTracked(id?: number) {
         coverUrl,
         coverChoice,
         kavitaCoverSync: Boolean(r.kavita_cover_sync),
+        jellyfinLink: r.jellyfin_link ? JSON.parse(String(r.jellyfin_link)) : null,
         kavitaCover:
           !r.kavita_cover_sync || !kavita || !coverUrl
             ? { state: 'none', error: null }
@@ -1313,6 +1315,19 @@ export function migrateV16(database: Database.Database) {
   })();
 }
 
+/** Jellyfin index (one row per series) and a per-work manual link; additive and idempotent. */
+export function migrateV18(database: Database.Database) {
+  database.transaction(() => {
+    database.exec(
+      'CREATE TABLE IF NOT EXISTS jellyfin_series (series_id TEXT PRIMARY KEY, payload TEXT NOT NULL);',
+    );
+    const columns = database.pragma('table_info(tracked_media)') as { name: string }[];
+    if (columns.length && !columns.some((c) => c.name === 'jellyfin_link'))
+      database.exec('ALTER TABLE tracked_media ADD COLUMN jellyfin_link TEXT');
+    if (Number(database.pragma('user_version', { simple: true })) < 18)
+      database.pragma('user_version=18');
+  })();
+}
 /** Translation jobs sent to a TraDoc instance; additive and idempotent. */
 export function migrateV17(database: Database.Database) {
   database.transaction(() => {

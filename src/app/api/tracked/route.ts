@@ -231,6 +231,10 @@ export const PATCH = route(async (r) => {
         db()
           .prepare('UPDATE tracked_media SET last_read=MAX(COALESCE(last_read,0),?) WHERE id=?')
           .run(previousRead, input.id);
+      if (input.jellyfinLink !== undefined)
+        db()
+          .prepare('UPDATE tracked_media SET jellyfin_link=? WHERE id=?')
+          .run(input.jellyfinLink === null ? null : JSON.stringify(input.jellyfinLink), input.id);
       if (input.read !== undefined)
         db()
           .prepare(

@@ -18,7 +18,7 @@ import { Cover, Dot, Skeleton, Spinner, cx, primaryButton, smallButton } from '.
 
 export type { Lane };
 /** Sections of the work settings page (`/title/…/settings?s=`). */
-export type Section = 'general' | 'catalog' | 'sources' | 'kavita' | 'cover';
+export type Section = 'general' | 'catalog' | 'sources' | 'kavita' | 'jellyfin' | 'cover';
 export type Save =
   { state: 'saving' } | { state: 'saved' } | { state: 'error'; text: string } | null;
 

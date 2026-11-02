@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import type { TrackedMedia, VideoDetail } from '@/types/shared';
+import type { JellyfinPresence, TrackedMedia, VideoDetail } from '@/types/shared';
 import { useI18n } from '@/i18n/I18nProvider';
 import { cx } from './ui';
 
@@ -13,18 +13,24 @@ const FIRST = 24;
  */
 export function EpisodeList({
   video,
+  jellyfin,
   entry,
   busy,
   onWatched,
 }: {
   video: VideoDetail;
+  /** What the Jellyfin library holds for this season (owned, watched, item ids). */
+  jellyfin?: JellyfinPresence | null;
   entry: TrackedMedia | undefined;
   busy: boolean;
   /** New number of episodes watched (null = none). */
   onWatched: (watched: number | null) => void;
 }) {
   const { t, n, locale } = useI18n();
-  const watched = entry?.progress?.read ?? 0;
+  const played = new Set(jellyfin?.played ?? []);
+  const owned = new Set(jellyfin?.owned ?? []);
+  const watched = Math.max(entry?.progress?.read ?? 0, ...(jellyfin?.played ?? [0]));
+  const jellyfinBase = jellyfin?.url.split('/web/')[0];
   const [limit, setLimit] = useState(FIRST);
   const [newestFirst, setNewestFirst] = useState(false);
   const aired = video.aired ?? video.list.length;
@@ -72,7 +78,8 @@ export function EpisodeList({
       </div>
       <ul className="md:max-h-[68vh] md:overflow-y-auto md:pr-2">
         {rows.slice(0, limit).map((e) => {
-          const seen = e.number <= watched;
+          const seen = e.number <= watched || played.has(e.number);
+          const inJellyfin = owned.has(e.number);
           const upcoming = e.number > aired;
           return (
             <li
@@ -112,14 +119,30 @@ export function EpisodeList({
                 {e.title && <span className="text-muted truncate text-[13px]">{e.title}</span>}
               </span>
               <span className="text-mid w-28 shrink-0 text-right text-xs md:w-40 md:text-[13px]">
-                {upcoming
-                  ? video.nextEpisode?.number === e.number
-                    ? date.format(new Date(video.nextEpisode.airingAt))
-                    : t('episodes.upcoming')
-                  : seen
-                    ? t('episodes.watched')
-                    : t('episodes.aired')}
+                {inJellyfin && !seen
+                  ? t('episodes.inJellyfin')
+                  : upcoming
+                    ? video.nextEpisode?.number === e.number
+                      ? date.format(new Date(video.nextEpisode.airingAt))
+                      : t('episodes.upcoming')
+                    : seen
+                      ? t('episodes.watched')
+                      : t('episodes.aired')}
               </span>
+              {inJellyfin && jellyfinBase && jellyfin?.episodeIds[e.number] && (
+                <a
+                  href={`${jellyfinBase}/web/#/details?id=${jellyfin.episodeIds[e.number]}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={t('episodes.playInJellyfin', { n: n(e.number) })}
+                  title={t('episodes.playInJellyfin', { n: n(e.number) })}
+                  className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M7 4v16l13-8Z" />
+                  </svg>
+                </a>
+              )}
             </li>
           );
         })}

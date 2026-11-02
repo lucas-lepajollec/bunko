@@ -19,6 +19,7 @@ export const secretKeys: SecretSetting[] = [
   'sonarrApiKey',
   'prowlarrApiKey',
   'tradocApiKey',
+  'jellyfinApiKey',
   'googleBooksApiKey',
   'metronApiToken',
   'metronPassword',
@@ -87,6 +88,10 @@ function serverSettings(): Settings {
     sonarrApiKey: '',
     prowlarrUrl: '',
     prowlarrApiKey: '',
+    jellyfinUrl: '',
+    jellyfinApiKey: '',
+    jellyfinUser: '',
+    autoImportJellyfin: true,
     tradocUrl: '',
     tradocApiKey: '',
     googleBooksApiKey: '',
@@ -202,6 +207,11 @@ export function updateSettings(patch: SettingsPatch) {
             )
             .run();
       }
+      if (patch.jellyfinUrl !== undefined && patch.jellyfinUrl !== current.jellyfinUrl)
+        // Item IDs belong to the previous server.
+        db().exec(
+          "DELETE FROM jellyfin_series; UPDATE tracked_media SET jellyfin_link=NULL; DELETE FROM worker_state WHERE key='jellyfin_synced_at' OR key LIKE 'jellyfin_import_tried:%';",
+        );
       if (patch.suwayomiUrl !== undefined && patch.suwayomiUrl !== current.suwayomiUrl) {
         // Chapter IDs from the previous server could name other chapters: forget source positions.
         db().exec('DELETE FROM reader_progress WHERE chapter_id>0');
@@ -255,6 +265,8 @@ function seedEnvironment() {
           sonarrApiKey: 'SONARR_API_KEY',
           prowlarrUrl: 'PROWLARR_URL',
           prowlarrApiKey: 'PROWLARR_API_KEY',
+          jellyfinUrl: 'JELLYFIN_URL',
+          jellyfinApiKey: 'JELLYFIN_API_KEY',
           tradocUrl: 'TRADOC_URL',
           tradocApiKey: 'TRADOC_API_KEY',
         };
