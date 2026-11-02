@@ -85,6 +85,49 @@ export interface LoadState {
   /** One or more upstream refreshes failed; retained items may be incomplete. */
   partial?: boolean;
 }
+/** A Jellyfin episode ready to play: its streams and where it was left. */
+export interface PlaybackInfo {
+  itemId: string;
+  mediaSourceId: string;
+  playSessionId: string;
+  title: string;
+  series: string | null;
+  season: number | null;
+  episode: number | null;
+  durationMs: number | null;
+  resumeMs: number;
+  /** Source video height, to offer the qualities at or below it. */
+  height: number | null;
+  audio: { index: number; label: string; language: string | null; default: boolean }[];
+  subtitles: {
+    index: number;
+    label: string;
+    language: string | null;
+    default: boolean;
+    /** Text subtitles become a WebVTT track; image ones are burned into the video. */
+    text: boolean;
+  }[];
+}
+/** A video extension (Stremio addon protocol) as configured. */
+export interface VideoAddon {
+  url: string;
+  name: string | null;
+  description: string | null;
+  error: string | null;
+}
+/** One stream offered by a video extension for an episode. */
+export interface VideoStream {
+  addon: string;
+  name: string;
+  title: string;
+  /** Direct link the browser can play (HTTP file or HLS). */
+  url: string | null;
+  /** Torrent or external page: listed, not playable in the browser. */
+  kind: 'direct' | 'hls' | 'torrent' | 'external';
+  externalUrl: string | null;
+  /** Matches the preferred languages (VOSTFR/VF… from the interface language). */
+  preferred: boolean;
+}
 /** One season of an anime work (AniList lists each season as its own entry). */
 export interface AnimeSeason {
   number: number;
@@ -476,6 +519,8 @@ export interface Settings {
   jellyfinUrl: string;
   jellyfinApiKey: string;
   jellyfinUser: string;
+  /** Video extensions: Stremio addon manifest URLs. */
+  videoAddons: string[];
   /** Role per Jellyfin library id; libraries not listed use the detected role. */
   jellyfinLibraries: Record<string, JellyfinRole>;
   /** Follow Jellyfin anime automatically (matched to AniList when unambiguous). Default true. */
