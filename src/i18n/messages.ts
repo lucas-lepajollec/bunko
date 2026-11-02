@@ -1285,6 +1285,11 @@ const en: Dictionary = {
   'universe.desc.animation': 'Anime films and western animated films, together.',
   'home.latestKind.animation': 'Latest animated films',
   'format.ANIMATION_FILM': 'Animated film',
+  'jellyfin.role.animation': 'Animated films',
+  'player.playFilm': 'Play the film',
+  'episodes.watchedFilm': 'Watched',
+  'episodes.watchTitle': 'Watch',
+  'catalog.viewFilms': 'Latest releases',
 };
 
 const fr: Dictionary = {
@@ -2556,6 +2561,11 @@ const fr: Dictionary = {
   'universe.desc.animation': 'Films d’anime et films d’animation occidentaux, ensemble.',
   'home.latestKind.animation': 'Derniers films d’animation',
   'format.ANIMATION_FILM': 'Film d’animation',
+  'jellyfin.role.animation': 'Films d’animation',
+  'player.playFilm': 'Lire le film',
+  'episodes.watchedFilm': 'Vu',
+  'episodes.watchTitle': 'Regarder',
+  'catalog.viewFilms': 'Dernières sorties',
 };
 
 const es: Dictionary = {
@@ -3819,6 +3829,11 @@ const es: Dictionary = {
   'universe.desc.animation': 'Películas de anime y de animación occidental, juntas.',
   'home.latestKind.animation': 'Últimas películas de animación',
   'format.ANIMATION_FILM': 'Película de animación',
+  'jellyfin.role.animation': 'Películas de animación',
+  'player.playFilm': 'Reproducir la película',
+  'episodes.watchedFilm': 'Vista',
+  'episodes.watchTitle': 'Ver',
+  'catalog.viewFilms': 'Últimos estrenos',
 };
 
 const de: Dictionary = {
@@ -5091,6 +5106,11 @@ const de: Dictionary = {
   'universe.desc.animation': 'Anime-Filme und westliche Animationsfilme zusammen.',
   'home.latestKind.animation': 'Neueste Animationsfilme',
   'format.ANIMATION_FILM': 'Animationsfilm',
+  'jellyfin.role.animation': 'Animationsfilme',
+  'player.playFilm': 'Film abspielen',
+  'episodes.watchedFilm': 'Gesehen',
+  'episodes.watchTitle': 'Ansehen',
+  'catalog.viewFilms': 'Neueste Filme',
 };
 
 const it: Dictionary = {
@@ -6354,6 +6374,11 @@ const it: Dictionary = {
   'universe.desc.animation': 'Film anime e film d’animazione occidentali, insieme.',
   'home.latestKind.animation': 'Ultimi film d’animazione',
   'format.ANIMATION_FILM': 'Film d’animazione',
+  'jellyfin.role.animation': 'Film d’animazione',
+  'player.playFilm': 'Riproduci il film',
+  'episodes.watchedFilm': 'Visto',
+  'episodes.watchTitle': 'Guarda',
+  'catalog.viewFilms': 'Ultime uscite',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

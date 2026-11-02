@@ -319,7 +319,12 @@ function Screen({
   const subtitleIndex =
     subtitle !== undefined
       ? subtitle
-      : (p?.subtitleIndex ?? p?.subtitles.find((s) => s.default && s.text)?.index ?? preferredSub);
+      : // Jellyfin's default only when it is a text track (image ones need a burned stream).
+        (p?.subtitles.find(
+          (s) => s.index === p.subtitleIndex && (s.text || request.burn === s.index),
+        )?.index ??
+        p?.subtitles.find((s) => s.default && s.text)?.index ??
+        preferredSub);
   const textSubtitles = p?.subtitles.filter((s) => s.text && s.url) ?? [];
   const url = source.kind === 'stream' ? source.stream.url : (p?.playUrl ?? null);
   const isHls =
@@ -686,9 +691,7 @@ function Screen({
                       ]}
                       onChange={(v) => {
                         const next = v === 'off' ? null : Number(v);
-                        const burned = p.subtitles.some(
-                          (s) => s.index === p.subtitleIndex && !s.text,
-                        );
+                        const burned = request.burn != null;
                         const willBurn = p.subtitles.some((s) => s.index === next && !s.text);
                         setSubtitle(next);
                         // Image subtitles are drawn into the video by Jellyfin: a new stream.

@@ -10,17 +10,19 @@ import { Cover, PosterSkeletons, cx } from './ui';
 export function useChapterLabel() {
   const { t, n } = useI18n();
   return (r: Pick<ChapterRelease, 'chapter' | 'volume' | 'label' | 'unit' | 'season'>) =>
-    r.unit === 'episode' && r.chapter !== null
-      ? r.season
-        ? t('episodes.seasonShort', { s: n(r.season), n: n(r.chapter) })
-        : t('episodes.short', { n: n(r.chapter) })
-      : r.chapter !== null
-        ? r.volume !== null
-          ? t('release.volChapter', { v: n(r.volume), n: n(r.chapter) })
-          : t('release.chapter', { n: n(r.chapter) })
-        : r.volume !== null
-          ? t('release.volume', { v: n(r.volume) })
-          : r.label;
+    r.unit === 'film'
+      ? t('episodes.film')
+      : r.unit === 'episode' && r.chapter !== null
+        ? r.season
+          ? t('episodes.seasonShort', { s: n(r.season), n: n(r.chapter) })
+          : t('episodes.short', { n: n(r.chapter) })
+        : r.chapter !== null
+          ? r.volume !== null
+            ? t('release.volChapter', { v: n(r.volume), n: n(r.chapter) })
+            : t('release.chapter', { n: n(r.chapter) })
+          : r.volume !== null
+            ? t('release.volume', { v: n(r.volume) })
+            : r.label;
 }
 
 /** One chapter release: the series cover with the chapter on it, title, time and group. */

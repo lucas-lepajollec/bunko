@@ -223,3 +223,43 @@ export async function withAnimeAiring(
   }
   return { ...week, days };
 }
+
+/**
+ * Series episodes and film releases of the week (TMDB): followed series episode by episode,
+ * shows on the air, films out that week. Bounded wait; the cache fills for the next look.
+ */
+export async function withTmdbReleases(
+  week: PlanningWeek,
+  q: z.infer<typeof planningQuery>,
+): Promise<PlanningWeek> {
+  const kind = q.kind ?? 'all';
+  if (!['all', 'series', 'movies', 'animation'].includes(kind)) return week;
+  const { tmdbReleases } = await import('./tmdb-releases');
+  const from = dateFromDay(week.start);
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(from);
+  to.setDate(to.getDate() + 6);
+  const releases = await Promise.race([
+    tmdbReleases(kind as 'all' | 'series' | 'movies' | 'animation', from, to).catch(() => []),
+    new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
+  ]);
+  const wanted = q.library ? releases.filter((r) => r.trackedId !== null) : releases;
+  if (!wanted.length) return week;
+  const today = localDate(new Date());
+  const days = week.days.map((d) => ({ ...d, items: [...d.items] }));
+  const byDay = new Map(days.map((d) => [d.date, d]));
+  for (const r of wanted) {
+    const day = byDay.get(r.releasedAt.slice(0, 10));
+    if (!day) continue;
+    day.items.push({
+      media: r.media,
+      kind: r.releasedAt.slice(0, 10) <= today ? 'released' : 'expected',
+      chapter: r.chapter,
+      season: r.season ?? null,
+      unit: r.unit === 'film' ? 'film' : 'episode',
+      time: null,
+      trackedId: r.trackedId,
+    });
+  }
+  return { ...week, days };
+}

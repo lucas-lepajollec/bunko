@@ -45,7 +45,10 @@ export function useUniverse() {
 }
 
 /** Client copy of the server's kind rule (formats first, then origin). */
-export function kindOf(media: Pick<UnifiedMedia, 'type' | 'format' | 'origin'>): Universe {
+export function kindOf(
+  media: Pick<UnifiedMedia, 'type' | 'format' | 'origin'> & { kindOverride?: Universe },
+): Universe {
+  if (media.kindOverride) return media.kindOverride;
   if (media.format === 'SERIES') return 'series';
   if (media.format === 'MOVIE') return 'movies';
   if (media.format === 'ANIMATION_FILM') return 'animation';

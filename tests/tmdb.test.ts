@@ -81,6 +81,18 @@ const routes: Record<string, unknown> = {
     air_date: '2099-01-01',
     episodes: [{ episode_number: 1, name: 'Future', air_date: '2099-01-01' }],
   },
+  '/3/tv/on_the_air': { results: [] },
+  '/3/discover/movie': {
+    results: [
+      {
+        id: 900,
+        title: 'New Film',
+        release_date: '2021-11-05',
+        genre_ids: [18],
+        original_language: 'en',
+      },
+    ],
+  },
   '/3/movie/550': {
     id: 550,
     title: 'Fight Club',
@@ -137,4 +149,20 @@ it('makes a film a one-part sheet', async () => {
     aired: 1,
     ids: { imdb: 'tt0137523', kind: 'movie' },
   });
+});
+
+it('lists the week of followed series episodes and film releases', async () => {
+  const { track } = await import('@/lib/db');
+  const arcane = await tmdb.tmdbDetail('tv', 94605);
+  track({ media: { ...arcane, video: undefined } as never, status: 'READING' });
+  const { tmdbReleases } = await import('@/lib/tmdb-releases');
+  const series = await tmdbReleases('series', new Date('2021-11-01'), new Date('2021-11-10'));
+  expect(series.map((r) => [r.media.title, r.season, r.chapter, r.unit])).toEqual([
+    ['Arcane', 1, 1, 'episode'],
+    ['Arcane', 1, 2, 'episode'],
+  ]);
+  const films = await tmdbReleases('movies', new Date('2021-11-01'), new Date('2021-11-10'));
+  expect(films.map((r) => [r.media.title, r.unit, r.releasedAt])).toEqual([
+    ['New Film', 'film', '2021-11-05'],
+  ]);
 });

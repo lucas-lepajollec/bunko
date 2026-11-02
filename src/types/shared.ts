@@ -1,7 +1,7 @@
 /** Browser-safe API contract. No database/server imports in this file. */
 export type MediaType = 'MANGA' | 'NOVEL' | 'ANIME';
 /** `kavita` = a series known only from Kavita (no catalog match). */
-export type Provider = 'anilist' | 'mangadex' | 'mangaupdates' | 'local' | 'kavita';
+export type Provider = 'anilist' | 'mangadex' | 'mangaupdates' | 'local' | 'kavita' | 'tmdb';
 /** Reading format derived from provider format and country of origin. */
 export type MediaFormat =
   | 'MANGA'
@@ -31,6 +31,8 @@ export interface SourceMatch {
   lang: string;
 }
 export interface UnifiedMedia {
+  /** The user's choice of kind for this work, over the provider's (e.g. a series kept as anime). */
+  kindOverride?: Exclude<DiscoverKind, 'all'>;
   id: string;
   type: MediaType;
   title: string;
@@ -159,7 +161,12 @@ export interface AnimeSeason {
   aired: number | null;
   duration: number | null;
   nextEpisode: { number: number; airingAt: string } | null;
-  list: { number: number; title: string | null; thumbnail: string | null }[];
+  list: {
+    number: number;
+    title: string | null;
+    thumbnail: string | null;
+    airDate?: string | null;
+  }[];
 }
 /** Anime facts from AniList (episodes are the unit; seasons are separate AniList entries). */
 export interface VideoDetail {
@@ -179,7 +186,12 @@ export interface VideoDetail {
   /** Episodes aired so far (next episode − 1, or the total once finished). */
   aired: number | null;
   /** Per-episode titles and stills when AniList lists them. */
-  list: { number: number; title: string | null; thumbnail: string | null }[];
+  list: {
+    number: number;
+    title: string | null;
+    thumbnail: string | null;
+    airDate?: string | null;
+  }[];
 }
 export interface MediaDetail extends UnifiedMedia, LoadState {
   video?: VideoDetail;
@@ -266,8 +278,9 @@ export interface ChapterRelease {
     | 'rakuten'
     | 'anilist'
     | 'tmdb';
-  /** `volume` = a new tome/edition (books, LN volumes, BD albums); `episode` = anime airing. */
-  unit?: 'chapter' | 'volume' | 'episode';
+  /** `volume` = a new tome/edition (books, LN volumes, BD albums); `episode` = an episode airing;
+   *  `film` = a film released. */
+  unit?: 'chapter' | 'volume' | 'episode' | 'film';
   /** Anime season of the episode, when known. */
   season?: number | null;
   /** Followed title in the library, if any. */
@@ -301,7 +314,7 @@ export interface PlanningItem {
   /** Releases merged into this card (1 when alone). */
   count?: number;
   /** `episode` for anime airings; chapters otherwise. */
-  unit?: 'chapter' | 'episode';
+  unit?: 'chapter' | 'episode' | 'film';
   /** Local time "HH:MM" when known (released with a timestamp, or a regular expected hour), else null. */
   time: string | null;
   trackedId: number | null;
@@ -654,7 +667,7 @@ export interface JellyfinPresence {
   manual: boolean;
 }
 /** What a Jellyfin library holds for Bunko (anime now; series and films in later phases). */
-export type JellyfinRole = 'anime' | 'series' | 'movies' | 'ignore';
+export type JellyfinRole = 'anime' | 'series' | 'movies' | 'animation' | 'ignore';
 export interface JellyfinLibrary {
   id: string;
   name: string;

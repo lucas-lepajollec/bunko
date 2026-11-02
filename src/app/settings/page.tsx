@@ -378,7 +378,7 @@ function JellyfinOptions({
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const libraries = useApi<JellyfinLibrary[]>('/api/jellyfin/libraries');
-  const roles: JellyfinRole[] = ['anime', 'series', 'movies', 'ignore'];
+  const roles: JellyfinRole[] = ['anime', 'series', 'movies', 'animation', 'ignore'];
   return (
     <div className="flex flex-col gap-2 px-1 text-sm">
       {libraries.data && libraries.data.length > 0 && (

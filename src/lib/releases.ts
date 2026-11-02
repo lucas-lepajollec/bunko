@@ -42,6 +42,7 @@ export const feedQuery = z.object({
 });
 export type FeedQuery = z.infer<typeof feedQuery>;
 export function mediaKind(media: UnifiedMedia): Exclude<DiscoverKind, 'all'> {
+  if (media.kindOverride) return media.kindOverride;
   if (media.format === 'SERIES') return 'series';
   if (media.format === 'MOVIE') return 'movies';
   if (media.format === 'ANIMATION_FILM') return 'animation';

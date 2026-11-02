@@ -16,6 +16,8 @@ export function localImageUrl(value: string): boolean {
     if (url.origin !== 'http://bunko.invalid' || !value.startsWith(url.pathname + '?'))
       return false;
     const keys = [...url.searchParams.keys()];
+    if (url.pathname === '/api/jellyfin/image')
+      return keys.length === 1 && /^[0-9a-f]{32}$/i.test(url.searchParams.get('id') ?? '');
     if (url.pathname === '/api/kavita/image' || url.pathname === '/api/metron/cover')
       return (
         keys.length === 1 &&

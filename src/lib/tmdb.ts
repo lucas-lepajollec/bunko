@@ -125,6 +125,7 @@ export function fromTmdb(m: TmdbItem, kind: TmdbKind, genres = new Map<number, s
       m.genres?.map((g) => g.name) ?? (m.genre_ids ?? []).flatMap((id) => genres.get(id) ?? []),
     adult: Boolean(m.adult),
     webUrl: `https://www.themoviedb.org/${kind}/${m.id}`,
+    providers: ['tmdb'],
     status: m.status ?? null,
   };
   return media;
@@ -283,6 +284,7 @@ export async function tmdbDetail(kind: TmdbKind, id: number): Promise<MediaDetai
             number: e.episode_number,
             title: e.name ?? null,
             thumbnail: image(e.still_path, 'w300'),
+            airDate: e.air_date ?? null,
           })),
         };
       });
