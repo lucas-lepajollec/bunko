@@ -21,7 +21,18 @@ import { AppError, errorCode } from './errors';
 const DAY = 86400_000;
 export const feedQuery = z.object({
   kind: z
-    .enum(['all', 'manga', 'manhwa', 'manhua', 'comic', 'lightnovel', 'webnovel', 'novel', 'book'])
+    .enum([
+      'all',
+      'manga',
+      'manhwa',
+      'manhua',
+      'comic',
+      'lightnovel',
+      'webnovel',
+      'novel',
+      'book',
+      'anime',
+    ])
     .optional(),
   genre: z.string().max(60).optional(),
   library: z.literal('1').optional(),
@@ -29,6 +40,7 @@ export const feedQuery = z.object({
 });
 export type FeedQuery = z.infer<typeof feedQuery>;
 export function mediaKind(media: UnifiedMedia): Exclude<DiscoverKind, 'all'> {
+  if (media.type === 'ANIME') return 'anime';
   if (media.format === 'COMIC') return 'comic';
   if (media.format === 'LIGHT_NOVEL') return 'lightnovel';
   if (media.format === 'WEB_NOVEL') return 'webnovel';

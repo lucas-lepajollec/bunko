@@ -10,6 +10,7 @@ const kinds: Record<Exclude<DiscoverKind, 'all'>, true> = {
   webnovel: true,
   novel: true,
   book: true,
+  anime: true,
 };
 /** Accept older persisted feeds without allowing a missing shelf to reach a consumer. */
 export function normalizeHome(value: unknown): HomeFeed {

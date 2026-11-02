@@ -19,11 +19,13 @@ import {
   rememberAdultIdentities,
   includeProviderAdults,
   visibleMedia,
+  mediaVisibility,
   recordSourceFlags,
 } from './adult';
 import { mangaUpdates } from './mangaupdates';
 import type {
   CatalogFilters,
+  VideoDetail,
   DiscoverPage,
   DiscoverQuery,
   MediaDetail,
@@ -225,9 +227,10 @@ export async function discoverAniList(
     perPage,
     sort: sorts[sort],
     adult: includeProviderAdults() ? undefined : false,
+    type: kind === 'anime' ? 'ANIME' : 'MANGA',
   };
   if (kind === 'lightnovel') variables.format = 'NOVEL';
-  else if (kind !== 'all') variables.formatNot = 'NOVEL';
+  else if (kind !== 'all' && kind !== 'anime') variables.formatNot = 'NOVEL';
   if (kind === 'manga') variables.country = 'JP';
   if (kind === 'manhwa') variables.country = 'KR';
   if (kind === 'manhua') variables.country = 'CN';
@@ -263,10 +266,10 @@ export async function discoverAniList(
       const result = await anilist<{
         Page: { pageInfo: { hasNextPage: boolean }; media: AniMedia[] };
       }>(
-        `query($adult: Boolean, $page: Int, $perPage: Int, $sort: [MediaSort], $format: MediaFormat, $formatNot: MediaFormat, $country: CountryCode, $genre: String, $status: MediaStatus, $popularity: Int, $startDateGreater: FuzzyDateInt, $startDateLesser: FuzzyDateInt, $tags: [String], $minScore: Int) {
+        `query($adult: Boolean, $page: Int, $perPage: Int, $sort: [MediaSort], $format: MediaFormat, $formatNot: MediaFormat, $country: CountryCode, $genre: String, $status: MediaStatus, $popularity: Int, $startDateGreater: FuzzyDateInt, $startDateLesser: FuzzyDateInt, $tags: [String], $minScore: Int, $type: MediaType) {
         Page(page: $page, perPage: $perPage) {
           pageInfo { hasNextPage }
-          media(type: MANGA, isAdult: $adult, sort: $sort, format: $format, format_not: $formatNot, countryOfOrigin: $country, genre: $genre, status: $status, popularity_greater: $popularity, startDate_greater: $startDateGreater, startDate_lesser: $startDateLesser, tag_in: $tags, averageScore_greater: $minScore) { ${aniFields} }
+          media(type: $type, isAdult: $adult, sort: $sort, format: $format, format_not: $formatNot, countryOfOrigin: $country, genre: $genre, status: $status, popularity_greater: $popularity, startDate_greater: $startDateGreater, startDate_lesser: $startDateLesser, tag_in: $tags, averageScore_greater: $minScore) { ${aniFields} }
         }
       }`,
         variables,
@@ -374,7 +377,40 @@ export async function genres(signal?: AbortSignal): Promise<string[]> {
   const include = getSettings().adultContent;
   return data.GenreCollection.filter((g) => include || g !== 'Hentai');
 }
+function videoDetail(m: AniDetail): VideoDetail {
+  const next = m.nextAiringEpisode;
+  const total = m.episodes ?? null;
+  const aired = next ? Math.max(0, next.episode - 1) : m.status === 'FINISHED' ? total : null;
+  const byNumber = new Map<number, VideoDetail['list'][number]>();
+  for (const e of m.streamingEpisodes ?? []) {
+    const n = Number(e.title?.match(/(?:episode|ep\.?|épisode)\s*(\d+)/i)?.[1]);
+    if (!Number.isInteger(n) || n < 1 || byNumber.has(n)) continue;
+    byNumber.set(n, {
+      number: n,
+      title: e.title?.replace(/^.*?(?:episode|ep\.?|épisode)\s*\d+\s*[-:–]\s*/i, '') || null,
+      thumbnail: e.thumbnail ?? null,
+    });
+  }
+  const count = Math.max(total ?? 0, aired ?? 0, ...byNumber.keys());
+  return {
+    episodes: total,
+    duration: m.duration ?? null,
+    studios: (m.studios?.nodes ?? []).map((s) => s.name),
+    nextEpisode: next
+      ? { number: next.episode, airingAt: new Date(next.airingAt * 1000).toISOString() }
+      : null,
+    aired,
+    list: Array.from(
+      { length: Math.min(count, 2000) },
+      (_, i) => byNumber.get(i + 1) ?? { number: i + 1, title: null, thumbnail: null },
+    ),
+  };
+}
 interface AniDetail extends AniMedia {
+  duration?: number | null;
+  studios?: { nodes: { name: string }[] };
+  nextAiringEpisode?: { episode: number; airingAt: number } | null;
+  streamingEpisodes?: { title: string | null; thumbnail: string | null }[];
   tags: { name: string; rank: number; isMediaSpoiler: boolean }[];
   relations: { edges: { relationType: string; node: AniMedia }[] };
   recommendations: { nodes: { mediaRecommendation: AniMedia | null }[] };
@@ -388,6 +424,10 @@ async function anilistDetail(id: number, signal?: AbortSignal): Promise<MediaDet
         tags { name rank isMediaSpoiler }
         relations { edges { relationType node { ${aniFields} } } }
         recommendations(perPage: 18, sort: RATING_DESC) { nodes { mediaRecommendation { ${aniFields} isAdult } } }
+        duration
+        studios(isMain: true) { nodes { name } }
+        nextAiringEpisode { episode airingAt }
+        streamingEpisodes { title thumbnail }
       } }`,
     { id },
     signal,
@@ -395,10 +435,11 @@ async function anilistDetail(id: number, signal?: AbortSignal): Promise<MediaDet
   if (!m) throw new AppError('NOT_FOUND', 'Title not found', 404);
   return {
     ...fromAniList(m),
+    ...(m.type === 'ANIME' ? { video: videoDetail(m) } : {}),
     tags: m.tags.filter((t) => !t.isMediaSpoiler && t.rank >= 60).map((t) => t.name),
     relations: m.relations.edges
-      // Reading-first: anime adaptations stay out until the video module returns.
-      .filter((e) => e.node.type === 'MANGA')
+      // Manga, novels and anime of the same universe link to each other.
+      .filter((e) => e.node.type === 'MANGA' || e.node.type === 'ANIME')
       .map((e) => ({ relation: e.relationType, media: fromAniList(e.node) })),
     recommendations: m.recommendations.nodes
       .map((n) => n.mediaRecommendation)
@@ -635,4 +676,68 @@ export async function mediaDetail(
 export async function suwayomiDetail(id: number, signal?: AbortSignal): Promise<MediaDetail> {
   signal?.throwIfAborted();
   return cached(detailCacheKey(`suwayomi:${id}`), 30 * 60_000, () => loadSuwayomiDetail(id));
+}
+
+export interface AnimeAiring {
+  media: UnifiedMedia;
+  episode: number;
+  airingAt: string;
+}
+/**
+ * Episodes airing between two dates: every followed anime, plus (unless `onlyIds`) the season's
+ * popular shows so the planning is not empty before anything is followed. Cached 30 minutes.
+ */
+export async function animeAiring(
+  from: Date,
+  to: Date,
+  followed: number[],
+  onlyIds: boolean,
+): Promise<AnimeAiring[]> {
+  const range = { from: Math.floor(from.getTime() / 1000), to: Math.floor(to.getTime() / 1000) };
+  type Row = { episode: number; airingAt: number; media: AniMedia & { popularity?: number } };
+  const query = `query($from: Int, $to: Int, $page: Int, $ids: [Int]) {
+    Page(page: $page, perPage: 50) {
+      pageInfo { hasNextPage }
+      airingSchedules(airingAt_greater: $from, airingAt_lesser: $to, mediaId_in: $ids, sort: TIME) {
+        episode airingAt media { ${aniFields} popularity isAdult }
+      }
+    }
+  }`;
+  const load = async (ids: number[] | undefined) => {
+    const rows: Row[] = [];
+    for (let page = 1; page <= (ids ? 4 : 3); page++) {
+      const data = await anilist<{
+        Page: { pageInfo: { hasNextPage: boolean }; airingSchedules: Row[] };
+      }>(query, { ...range, page, ...(ids ? { ids } : {}) });
+      rows.push(...data.Page.airingSchedules);
+      if (!data.Page.pageInfo.hasNextPage) break;
+    }
+    return rows;
+  };
+  const key = `anime-airing:${range.from}:${range.to}`;
+  const [mine, popular] = await Promise.all([
+    followed.length
+      ? cached(`${key}:${[...followed].sort((a, b) => a - b).join(',')}`, 30 * 60_000, () =>
+          load(followed.slice(0, 200)),
+        )
+      : Promise.resolve([] as Row[]),
+    onlyIds
+      ? Promise.resolve([] as Row[])
+      : cached(`${key}:popular`, 30 * 60_000, () => load(undefined)),
+  ]);
+  const seen = new Set<string>();
+  const visible = mediaVisibility();
+  return [...mine, ...popular.filter((r) => (r.media.popularity ?? 0) >= 20_000)]
+    .filter((r) => {
+      const k = `${r.media.id}:${r.episode}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .map((r) => ({
+      media: fromAniList(r.media),
+      episode: r.episode,
+      airingAt: new Date(r.airingAt * 1000).toISOString(),
+    }))
+    .filter((a) => visible(a.media));
 }

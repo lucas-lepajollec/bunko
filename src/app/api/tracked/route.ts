@@ -231,6 +231,12 @@ export const PATCH = route(async (r) => {
         db()
           .prepare('UPDATE tracked_media SET last_read=MAX(COALESCE(last_read,0),?) WHERE id=?')
           .run(previousRead, input.id);
+      if (input.read !== undefined)
+        db()
+          .prepare(
+            "UPDATE tracked_media SET last_read=?,last_read_at=?,progress_checked=1,status=CASE WHEN status='PLANNING' AND ? IS NOT NULL THEN 'READING' ELSE status END WHERE id=?",
+          )
+          .run(input.read, new Date().toISOString(), input.read, input.id);
       if (input.favorite !== undefined)
         db()
           .prepare('UPDATE tracked_media SET favorite=? WHERE id=?')

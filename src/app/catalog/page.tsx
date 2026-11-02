@@ -33,6 +33,7 @@ const KINDS: DiscoverKind[] = [
   'webnovel',
   'novel',
   'book',
+  'anime',
 ];
 const SORTS: DiscoverSort[] = ['trending', 'popular', 'score', 'new'];
 const KIND_FORMATS: Record<Exclude<DiscoverKind, 'all'>, MediaFormat[]> = {
@@ -44,6 +45,7 @@ const KIND_FORMATS: Record<Exclude<DiscoverKind, 'all'>, MediaFormat[]> = {
   webnovel: ['WEB_NOVEL'],
   novel: ['NOVEL'],
   book: ['BOOK'],
+  anime: [],
 };
 
 export default function CatalogPage() {

@@ -85,14 +85,38 @@ export interface LoadState {
   /** One or more upstream refreshes failed; retained items may be incomplete. */
   partial?: boolean;
 }
+/** Anime facts from AniList (episodes are the unit; seasons are separate AniList entries). */
+export interface VideoDetail {
+  /** Planned episode count when known. */
+  episodes: number | null;
+  /** Minutes per episode. */
+  duration: number | null;
+  studios: string[];
+  /** Next episode to air, when the show is airing. */
+  nextEpisode: { number: number; airingAt: string } | null;
+  /** Episodes aired so far (next episode − 1, or the total once finished). */
+  aired: number | null;
+  /** Per-episode titles and stills when AniList lists them. */
+  list: { number: number; title: string | null; thumbnail: string | null }[];
+}
 export interface MediaDetail extends UnifiedMedia, LoadState {
+  video?: VideoDetail;
   tags: string[];
   relations: RelatedMedia[];
   recommendations: UnifiedMedia[];
 }
 /** `novel` = romans (fiction books), `book` = livres (non-fiction); LN and WN are separate. */
 export type DiscoverKind =
-  'all' | 'manga' | 'manhwa' | 'manhua' | 'comic' | 'lightnovel' | 'webnovel' | 'novel' | 'book';
+  | 'all'
+  | 'manga'
+  | 'manhwa'
+  | 'manhua'
+  | 'comic'
+  | 'lightnovel'
+  | 'webnovel'
+  | 'novel'
+  | 'book'
+  | 'anime';
 /** "new" = most recent publication start first, never future or undated titles. */
 export type DiscoverSort = 'trending' | 'popular' | 'score' | 'new';
 /** Quarter-based seasons, AniList convention: WINTER Jan–Mar, SPRING Apr–Jun, SUMMER Jul–Sep, FALL Oct–Dec. */
@@ -182,6 +206,8 @@ export interface PlanningItem {
   chapterTo?: number | null;
   /** Releases merged into this card (1 when alone). */
   count?: number;
+  /** `episode` for anime airings; chapters otherwise. */
+  unit?: 'chapter' | 'episode';
   /** Local time "HH:MM" when known (released with a timestamp, or a regular expected hour), else null. */
   time: string | null;
   trackedId: number | null;

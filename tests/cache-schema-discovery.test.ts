@@ -69,6 +69,7 @@ it('loads an unversioned old-shaped home cache with every current shelf and arra
   expect(feed.hero).toEqual([]);
   expect(feed.top).toHaveLength(1);
   expect(Object.keys(feed.latest).sort()).toEqual([
+    'anime',
     'book',
     'comic',
     'lightnovel',

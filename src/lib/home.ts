@@ -19,6 +19,7 @@ export function composeHome(releases: ChapterRelease[], top: HomeFeed['top']): H
     webnovel: [],
     novel: [],
     book: [],
+    anime: [],
   };
   const banners: ChapterRelease[] = [];
   const covers: ChapterRelease[] = [];
