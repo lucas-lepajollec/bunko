@@ -1,4 +1,5 @@
 'use client';
+import { SourcesUniverseGate } from '@/components/universe-sources';
 import Link from 'next/link';
 import { MediaLink } from '@/components/media-link';
 import { emptyMedia } from '@/lib/media';
@@ -22,6 +23,14 @@ interface Lane {
 }
 
 export default function SearchPage() {
+  return (
+    <SourcesUniverseGate>
+      <SearchPageContent />
+    </SourcesUniverseGate>
+  );
+}
+
+function SearchPageContent() {
   return (
     <Suspense>
       <Search />

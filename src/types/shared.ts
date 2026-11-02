@@ -175,9 +175,10 @@ export interface ChapterRelease {
     | 'bnf'
     | 'royalroad'
     | 'metron'
-    | 'rakuten';
-  /** `volume` = a new tome/edition (books, LN volumes, BD albums); otherwise a chapter. */
-  unit?: 'chapter' | 'volume';
+    | 'rakuten'
+    | 'anilist';
+  /** `volume` = a new tome/edition (books, LN volumes, BD albums); `episode` = anime airing. */
+  unit?: 'chapter' | 'volume' | 'episode';
   /** Followed title in the library, if any. */
   trackedId: number | null;
 }
@@ -477,6 +478,15 @@ export interface Settings {
   adultContent: boolean;
   /** With 18+ off, also leave out extensions marked NSFW (default true). */
   hideNsfwSources: boolean;
+  /**
+   * The interface's universe: one kind (only that kind everywhere) or `all` (everything together,
+   * with a kind menu on each page). Default `all`.
+   */
+  universe: DiscoverKind;
+  /** Universes offered in the switcher (empty = every kind). */
+  universes: Exclude<DiscoverKind, 'all'>[];
+  /** Offer "Everything" in the switcher (default true). */
+  showAllUniverse: boolean;
   /** Where outside reading progress is read from (Bunko's own reader always counts). */
   progressSource: 'suwayomi' | 'kavita';
   favoriteSourceIds: string[];

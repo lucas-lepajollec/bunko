@@ -9,14 +9,16 @@ import { Cover, PosterSkeletons, cx } from './ui';
 /** "Ch. 1130", "Vol. 3 Ch. 12", or the label as published. */
 export function useChapterLabel() {
   const { t, n } = useI18n();
-  return (r: Pick<ChapterRelease, 'chapter' | 'volume' | 'label'>) =>
-    r.chapter !== null
-      ? r.volume !== null
-        ? t('release.volChapter', { v: n(r.volume), n: n(r.chapter) })
-        : t('release.chapter', { n: n(r.chapter) })
-      : r.volume !== null
-        ? t('release.volume', { v: n(r.volume) })
-        : r.label;
+  return (r: Pick<ChapterRelease, 'chapter' | 'volume' | 'label' | 'unit'>) =>
+    r.unit === 'episode' && r.chapter !== null
+      ? t('episodes.short', { n: n(r.chapter) })
+      : r.chapter !== null
+        ? r.volume !== null
+          ? t('release.volChapter', { v: n(r.volume), n: n(r.chapter) })
+          : t('release.chapter', { n: n(r.chapter) })
+        : r.volume !== null
+          ? t('release.volume', { v: n(r.volume) })
+          : r.label;
 }
 
 /** One chapter release: the series cover with the chapter on it, title, time and group. */

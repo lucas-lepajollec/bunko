@@ -6,6 +6,7 @@ import type { ChapterRelease, HomeFeed, TrackedMedia } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { continueReading } from '@/lib/client/reading';
 import { ReadingCard } from '@/components/reading';
+import { inUniverse, useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from '@/components/load-notice';
 import { Backdrop } from '@/components/backdrop';
@@ -24,20 +25,36 @@ import {
   useMediaMeta,
 } from '@/components/ui';
 
-// Formats with chapter releases (romans and livres have none).
-const KINDS = ['manga', 'manhwa', 'manhua', 'comic', 'lightnovel', 'webnovel'] as const;
+// Formats with dated releases (romans and livres have none); anime shows aired episodes.
+const KINDS = ['manga', 'manhwa', 'manhua', 'comic', 'lightnovel', 'webnovel', 'anime'] as const;
 
 export default function HomePage() {
   const { t } = useI18n();
   // A fresh install warms its feeds in the background: poll until they have content.
-  const feed = useApi<HomeFeed>('/api/home', {
-    refreshInterval: (d) => (d?.pending ? 1500 : 300_000),
-  });
+  const universe = useUniverse();
+  // One universe loads only its own home; "everything" loads the mixed one.
+  const feed = useApi<HomeFeed>(
+    !universe.ready
+      ? null
+      : universe.active === 'all'
+        ? '/api/home'
+        : `/api/home?kind=${universe.active}`,
+    {
+      refreshInterval: (d) => (d?.pending ? 1500 : 300_000),
+    },
+  );
+  const shelves = KINDS.filter((k) => universe.active === 'all' || k === universe.active);
   const library = useApi<TrackedMedia[]>('/api/tracked', {
     revalidateOnMount: true,
     dedupingInterval: 0,
   });
-  const resume = useMemo(() => continueReading(library.data ?? []).slice(0, 8), [library.data]);
+  const resume = useMemo(
+    () =>
+      continueReading(library.data ?? [])
+        .filter((e) => inUniverse(universe.active, e.media))
+        .slice(0, 8),
+    [library.data, universe.active],
+  );
   let n = 0;
   return (
     <main className="relative">
@@ -69,7 +86,7 @@ export default function HomePage() {
             num={++n}
             title={t('home.topWeek')}
             aside={t('home.topWeekAside')}
-            href="/catalog"
+            href={universe.active === 'all' ? '/catalog' : `/catalog?kind=${universe.active}`}
             linkLabel={t('home.allShelf')}
           />
           {feed.error ? (
@@ -78,13 +95,13 @@ export default function HomePage() {
             <TopRow items={feed.data?.top.length ? feed.data.top : undefined} />
           )}
         </section>
-        {KINDS.map((k) => (
+        {shelves.map((k) => (
           <section key={k} className="flex flex-col gap-4 md:gap-5">
             <SectionHeading
               num={++n}
               title={t(`home.latestKind.${k}`)}
               aside={t('home.latestKindAside')}
-              href={`/catalog?view=chapters&kind=${k}`}
+              href={k === 'anime' ? '/planning' : `/catalog?view=chapters&kind=${k}`}
               linkLabel={t('home.allReleases')}
             />
             {feed.data && !feed.data.pending && (feed.data.latest?.[k]?.length ?? 0) === 0 ? (

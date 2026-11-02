@@ -7,6 +7,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { seasonOf } from '@/lib/client/season';
 import { Select } from './select';
 import { cx } from './ui';
+import { tagLabel } from '@/i18n/tags';
 
 export interface FilterValues {
   genre: string;
@@ -41,7 +42,7 @@ export function CatalogFilterBar({
   releasesView: boolean;
   onChange: (patch: Record<string, string>) => void;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const filters = useApi<CatalogFilters>(`/api/catalog/filters?kind=${kind}`);
   const f = filters.data;
   const thisYear = seasonOf().year;
@@ -62,7 +63,9 @@ export function CatalogFilterBar({
           onChange={(v) => onChange({ genre: v })}
           options={[
             { value: '', label: t('catalog.anyGenre') },
-            ...(f?.genres ?? []).map((g) => ({ value: g, label: genreLabel(g) })),
+            ...(f?.genres ?? [])
+              .map((g) => ({ value: g, label: genreLabel(g) }))
+              .sort((a, b) => a.label.localeCompare(b.label, language)),
           ]}
           className={control}
         />
@@ -183,7 +186,7 @@ export function CatalogFilterBar({
               className="flex h-8 items-center gap-1.5 rounded-full bg-white/[0.08] px-3 hover:bg-white/[0.12]"
               aria-label={t('catalog.removeTag', { tag })}
             >
-              {tag}
+              {tagLabel(tag, language)}
               <span aria-hidden className="text-muted">
                 ✕
               </span>
@@ -217,15 +220,25 @@ function TagPicker({
   onClose: () => void;
   onApply: (tags: string[]) => void;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<string[]>(selected);
+  const collator = useMemo(() => new Intl.Collator(language), [language]);
+  // Labels in the interface language where a translation exists, sorted alphabetically.
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return groups
-      .map((g) => ({ ...g, names: g.names.filter((n) => !q || n.toLowerCase().includes(q)) }))
-      .filter((g) => g.names.length);
-  }, [groups, query]);
+      .map((g) => ({
+        category: g.category,
+        tags: g.names
+          .map((name) => ({ name, label: tagLabel(name, language) }))
+          .filter(
+            (x) => !q || x.label.toLowerCase().includes(q) || x.name.toLowerCase().includes(q),
+          )
+          .sort((a, b) => collator.compare(a.label, b.label)),
+      }))
+      .filter((g) => g.tags.length);
+  }, [groups, query, language, collator]);
   const toggle = (name: string) =>
     setPicked((p) =>
       p.includes(name) ? p.filter((x) => x !== name) : p.length >= 10 ? p : [...p, name],
@@ -234,57 +247,76 @@ function TagPicker({
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="bg-bg border-line fixed top-1/2 left-1/2 z-50 flex max-h-[85dvh] w-[min(720px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-3xl border p-5 outline-none md:p-7">
-          <div className="flex items-start gap-3">
-            <div className="flex flex-1 flex-col gap-1">
-              <Dialog.Title className="font-display text-[26px] leading-none font-extrabold tracking-[-0.03em]">
-                {t('catalog.tags')}
-              </Dialog.Title>
-              <Dialog.Description className="text-muted text-sm">
-                {t('catalog.tagsHint')}
-              </Dialog.Description>
+        <Dialog.Content className="bg-bg border-line fixed inset-x-3 top-[6dvh] bottom-[6dvh] z-50 mx-auto flex max-w-[960px] flex-col rounded-3xl border outline-none">
+          <div className="flex flex-col gap-4 p-5 pb-4 md:p-7 md:pb-5">
+            <div className="flex items-start gap-3">
+              <div className="flex flex-1 flex-col gap-1">
+                <Dialog.Title className="font-display text-[26px] leading-none font-extrabold tracking-[-0.03em]">
+                  {t('catalog.tags')}
+                </Dialog.Title>
+                <Dialog.Description className="text-muted text-sm">
+                  {t('catalog.tagsHint')}
+                </Dialog.Description>
+              </div>
+              <Dialog.Close
+                className="text-mid -mt-2 -mr-2 flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08]"
+                aria-label={t('common.close')}
+              >
+                ✕
+              </Dialog.Close>
             </div>
-            <Dialog.Close
-              className="text-mid -mt-2 -mr-2 flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08]"
-              aria-label={t('common.close')}
-            >
-              ✕
-            </Dialog.Close>
+            <label className="flex h-12 items-center gap-3 rounded-full bg-white/[0.08] px-4 focus-within:bg-white/[0.12]">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden
+                className="text-muted shrink-0"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+              <input
+                type="text"
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t('catalog.tagsSearch')}
+                aria-label={t('catalog.tagsSearch')}
+                className="placeholder:text-mid min-w-0 flex-1 bg-transparent text-[15px] outline-none"
+              />
+            </label>
           </div>
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('catalog.tagsSearch')}
-            aria-label={t('catalog.tagsSearch')}
-            className="border-line bg-raised h-11 rounded-full border px-4 text-sm outline-none"
-          />
-          <div className="-mx-1 flex flex-1 flex-col gap-4 overflow-y-auto px-1">
+          <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 md:px-7">
             {shown.map((g) => (
               <section key={g.category} className="flex flex-col gap-2">
                 <h3 className="text-muted text-xs tracking-[0.14em] uppercase">{g.category}</h3>
                 <div className="flex flex-wrap gap-1.5">
-                  {g.names.map((name) => (
+                  {g.tags.map((tag) => (
                     <button
-                      key={name}
+                      key={tag.name}
                       type="button"
-                      aria-pressed={picked.includes(name)}
-                      onClick={() => toggle(name)}
+                      aria-pressed={picked.includes(tag.name)}
+                      onClick={() => toggle(tag.name)}
                       className={cx(
-                        'h-8 rounded-full px-3 text-sm',
-                        picked.includes(name)
+                        'h-9 rounded-full px-3.5 text-sm',
+                        picked.includes(tag.name)
                           ? 'bg-fg text-bg font-semibold'
                           : 'text-mid bg-white/[0.06] hover:text-white',
                       )}
                     >
-                      {name}
+                      {tag.label}
                     </button>
                   ))}
                 </div>
               </section>
             ))}
+            {!shown.length && <p className="text-muted text-sm">{t('catalog.tagsNone')}</p>}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="border-line flex items-center gap-3 border-t p-4 md:px-7">
             <span className="text-muted text-sm">
               {t('catalog.tagsPicked', { n: picked.length })}
             </span>

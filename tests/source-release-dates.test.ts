@@ -86,12 +86,9 @@ it('does not turn a newly linked back catalogue into releases, planning or updat
     chapter(8, String(now.getTime() + 86400000)),
   );
   await runUpdateCheck(create);
-  expect(releasesPage({}).items).toMatchObject([
-    { chapter: 5, releasedAt: '2026-10-17T10:00:00.000Z', provider: 'source' },
-  ]);
-  expect(planning({}).days.flatMap((d) => d.items)).toMatchObject([
-    { chapter: 5, kind: 'released' },
-  ]);
+  // A new upload is library news, not an official release: feeds and planning stay empty.
+  expect(releasesPage({}).items).toEqual([]);
+  expect(planning({}).days.flatMap((d) => d.items)).toEqual([]);
   expect(updatesFeed().entries.map((e) => e.chapters)).toEqual([[5]]);
   expect(
     db().prepare('SELECT COUNT(*) n FROM observed_chapters WHERE tracked_id=?').get(t.id),
@@ -115,7 +112,7 @@ it('establishes each new source independently, including empty and previously fa
   await runUpdateCheck(vi.fn());
   expect(updatesFeed().entries).toEqual([]);
 });
-it('replaces unknown dates on later refresh, invalidates a warmed feed, and never falls back to observation time', () => {
+it('never lists source uploads as releases, whatever their dates', () => {
   const t = track({ media: emptyMedia('anilist:1', 'Dates', 'MANGA') });
   const c = {
     id: 1,
@@ -129,10 +126,7 @@ it('replaces unknown dates on later refresh, invalidates a warmed feed, and neve
     isDownloaded: false,
   };
   observeChapters(t.id, [c]);
-  expect(releasesPage({}).items).toEqual([]);
   observeChapters(t.id, [{ ...c, uploadDate: String(now.getTime() - 1000) }]);
-  expect(releasesPage({}).items).toHaveLength(1);
-  observeChapters(t.id, [{ ...c, uploadDate: '2010-01-01' }]);
   expect(releasesPage({}).items).toEqual([]);
 });
 it('migrates bad source rows once while retaining observations, provider rows and batch history', () => {

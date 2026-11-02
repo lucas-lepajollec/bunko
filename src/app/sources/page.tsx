@@ -1,4 +1,5 @@
 'use client';
+import { SourcesUniverseGate } from '@/components/universe-sources';
 import { ManagedImage } from '@/components/managed-image';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -23,6 +24,14 @@ import {
 type View = 'sources' | 'updates' | 'catalog' | 'repos';
 
 export default function SourcesPage() {
+  return (
+    <SourcesUniverseGate>
+      <SourcesPageContent />
+    </SourcesUniverseGate>
+  );
+}
+
+function SourcesPageContent() {
   const { t } = useI18n();
   const [view, setView] = useState<View>('sources');
   const sources = useApi<SourceInfo[]>('/api/sources');

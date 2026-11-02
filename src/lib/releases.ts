@@ -1,4 +1,3 @@
-import { sourceServerKey } from './source-server';
 import { fetchRakutenReleases } from './rakuten';
 import { fetchMetronReleases } from './metron';
 import { fetchGoogleEditions, fetchBnfEditions, type EditionRelease } from './edition-feeds';
@@ -356,7 +355,6 @@ export function releaseStore(now = new Date(), includeExpected = false): Chapter
   if (snapshot?.key === key && now.getTime() - snapshot.at < 60_000 && now.getTime() >= snapshot.at)
     return snapshot.items;
   const tracked = listTracked();
-  const byId = new Map(tracked.map((t) => [t.id, t]));
   const resolve = mediaResolver(tracked.map((t) => t.media));
   const version = writeVersion('releases');
   const raw =
@@ -374,42 +372,8 @@ export function releaseStore(now = new Date(), includeExpected = false): Chapter
   const releases = raw.items.filter(
     (r) => Date.parse(r.releasedAt) >= now.getTime() - 42 * DAY && r.provider !== 'source',
   );
-  const observations = statement(`SELECT o.*,d.uploaded_at AS at FROM observation_dates d
-    JOIN observed_chapters o ON o.tracked_id=d.tracked_id AND o.chapter_id=d.chapter_id AND o.namespace=d.namespace
-    WHERE d.namespace=? AND d.uploaded_at>=? AND d.uploaded_at<=? ORDER BY d.uploaded_at DESC LIMIT 30000`).all(
-    sourceServerKey(),
-    new Date(now.getTime() - 30 * DAY).toISOString(),
-    now.toISOString(),
-  ) as {
-    tracked_id: number;
-    chapter_id: number;
-    number: number | null;
-    volume: number | null;
-    source_name: string;
-    at: string;
-  }[];
-  for (const o of observations) {
-    const t = byId.get(o.tracked_id);
-    if (t)
-      releases.push({
-        id: `source:${t.id}:${o.chapter_id}`,
-        media: t.media,
-        chapter: o.number,
-        volume: o.volume,
-        unit: o.number === null && o.volume !== null ? 'volume' : 'chapter',
-        label:
-          o.number === null
-            ? o.volume !== null
-              ? `Vol. ${o.volume}`
-              : `Special ${o.chapter_id}`
-            : `c.${o.number}`,
-        group: o.source_name,
-        releasedAt: o.at,
-        hasTime: true,
-        provider: 'source',
-        trackedId: t.id,
-      });
-  }
+  // Feeds and planning show official catalog releases only. Chapters seen on linked sources
+  // belong to the library's "New" view, never to release dates (an upload is not a release).
   const resolvedMedia = new Map(
     [...distinctMedia(releases.map((r) => r.media))].map(([id, m]) => [id, resolve(m)]),
   );

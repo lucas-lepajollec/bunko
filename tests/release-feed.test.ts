@@ -181,7 +181,7 @@ describe('release store and cursor API', () => {
       'Invalid release cursor',
     );
   });
-  it('applies kind, genre and library filters and retains follow identity in provider and observed releases', () => {
+  it('applies kind, genre and library filters; source uploads are never releases', () => {
     const followed = track({ media: work() });
     const manhwa = { ...work(2), format: 'MANHWA' as const, origin: 'KR' };
     feed.saveReleases([
@@ -204,16 +204,17 @@ describe('release store and cursor API', () => {
         isDownloaded: false,
       },
     ]);
-    expect(feed.releasesPage({ library: '1' }).items).toHaveLength(2);
+    // Only the official release counts; the chapter seen on a linked source does not.
+    expect(feed.releasesPage({ library: '1' }).items).toHaveLength(1);
     expect(
       feed.releasesPage({ library: '1' }).items.every((r) => r.trackedId === followed.id),
     ).toBe(true);
     for (const kind of ['manhwa', 'manhua', 'lightnovel'] as const)
       expect(feed.releasesPage({ kind }).items).toHaveLength(1);
-    expect(feed.releasesPage({ kind: 'manga', genre: 'action' }).items).toHaveLength(2);
+    expect(feed.releasesPage({ kind: 'manga', genre: 'action' }).items).toHaveLength(1);
     expect(feed.releasesPage({ genre: 'Drama' }).items[0].media.type).toBe('NOVEL');
     expect(feed.releasesPage({ library: '1' }).items.some((r) => r.provider === 'source')).toBe(
-      true,
+      false,
     );
   });
   it('resolves unique catalog-cache title matches to openable catalog media and keeps cold MangaUpdates details', async () => {

@@ -1,14 +1,18 @@
 import { normalizeHome } from './home-shape';
 import { heroArtwork } from './hero-artwork';
-import type { ChapterRelease, HomeFeed } from '@/types/shared';
+import type { ChapterRelease, DiscoverKind, HomeFeed } from '@/types/shared';
 import { releaseStore, refreshReleases, mediaKind, releaseLoadingState } from './releases';
-import { discoverAniList, withTracking } from './catalog';
+import { discover, discoverAniList, withTracking } from './catalog';
 import { cached, storedMetadata, metadataStatus } from './metadata-cache';
 import { mediaVisibility, includeProviderAdults } from './adult';
 import { tenantState } from './tenant-context';
 const rankingFailures = tenantState(() => new Set<string>());
 
-export function composeHome(releases: ChapterRelease[], top: HomeFeed['top']): HomeFeed {
+export function composeHome(
+  releases: ChapterRelease[],
+  top: HomeFeed['top'],
+  kind?: Exclude<DiscoverKind, 'all'>,
+): HomeFeed {
   const visibleMedia = mediaVisibility();
   const latest: HomeFeed['latest'] = {
     manga: [],
@@ -41,14 +45,52 @@ export function composeHome(releases: ChapterRelease[], top: HomeFeed['top']): H
     hero: banners.length ? banners : covers,
     top: withTracking(top)
       .filter(visibleMedia)
-      .filter((m) => !['novel', 'book'].includes(mediaKind(m)))
+      // The mixed home ranks comics/LN/anime; a books universe shows its own books.
+      .filter((m) => (kind ? mediaKind(m) === kind : !['novel', 'book'].includes(mediaKind(m))))
       .slice(0, 10),
     latest,
   };
 }
-export async function homeFeed(): Promise<HomeFeed> {
+/** Episodes aired in the last week, newest first, as release cards (followed shows first). */
+async function recentEpisodes(): Promise<ChapterRelease[]> {
+  const { animeAiring } = await import('./catalog');
+  const { listTracked } = await import('./db');
+  const followed = new Map(
+    listTracked()
+      .filter((t) => t.type === 'ANIME' && t.anilistId)
+      .map((t) => [t.anilistId!, t.id]),
+  );
+  const to = new Date();
+  const from = new Date(to.getTime() - 7 * 86400_000);
+  const airing = await Promise.race([
+    animeAiring(from, to, [...followed.keys()], false).catch(() => []),
+    new Promise<[]>((resolve) => setTimeout(() => resolve([]), 2500)),
+  ]);
+  return airing
+    .map((a) => ({
+      id: `anilist:${a.media.id}:${a.episode}`,
+      media: a.media,
+      chapter: a.episode,
+      volume: null,
+      unit: 'episode' as const,
+      label: `Ep. ${a.episode}`,
+      group: null,
+      releasedAt: a.airingAt,
+      hasTime: true,
+      provider: 'anilist' as const,
+      trackedId: a.media.anilistId ? (followed.get(a.media.anilistId) ?? null) : null,
+    }))
+    .sort((a, b) => b.releasedAt.localeCompare(a.releasedAt));
+}
+/**
+ * Home for one universe (`kind`) loads only that kind: its trending titles, its latest releases
+ * and its hero. Without a kind it is the mixed home of every reading kind plus anime.
+ */
+export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<HomeFeed> {
   void refreshReleases().catch(() => {});
-  const key = `home:top:${includeProviderAdults()}`;
+  const key = kind
+    ? `home:top:${kind}:${includeProviderAdults()}`
+    : `home:top:${includeProviderAdults()}`;
   const stored = storedMetadata<HomeFeed['top'] | HomeFeed>(key)?.value;
   const top = Array.isArray(stored) ? stored : normalizeHome(stored).top;
   void cached<HomeFeed['top']>(
@@ -56,7 +98,14 @@ export async function homeFeed(): Promise<HomeFeed> {
     5 * 60_000,
     async () => {
       const items = (
-        await discoverAniList({ sort: 'trending', kind: 'all', perPage: 20 }, undefined, true, true)
+        await (kind && ['novel', 'book', 'webnovel', 'comic'].includes(kind)
+          ? discover({ sort: 'trending', kind, perPage: 20 }, undefined, true)
+          : discoverAniList(
+              { sort: 'trending', kind: kind ?? 'all', perPage: 20 },
+              undefined,
+              true,
+              true,
+            ))
       ).items;
       if (items.length) rankingFailures().delete(key);
       else rankingFailures().add(key);
@@ -71,8 +120,14 @@ export async function homeFeed(): Promise<HomeFeed> {
   ).catch(() => {});
   const releases = releaseLoadingState(),
     ranking = metadataStatus(key);
+  const reading = !kind || kind !== 'anime' ? releaseStore() : [];
+  // Aired episodes: the anime universe, or the mixed home once anime are followed.
+  const followsAnime =
+    !kind && (await import('./db')).listTracked().some((t) => t.type === 'ANIME');
+  const episodes = kind === 'anime' || followsAnime ? await recentEpisodes() : [];
+  const pool = [...reading, ...episodes].filter((r) => !kind || mediaKind(r.media) === kind);
   return {
-    ...normalizeHome(composeHome(heroArtwork(releaseStore()), top)),
+    ...normalizeHome(composeHome(heroArtwork(pool), top, kind)),
     pending: releases.pending || ranking.pending,
     partial: releases.partial || ranking.partial || rankingFailures().has(key),
   };

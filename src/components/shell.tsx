@@ -1,4 +1,5 @@
 'use client';
+import { UniverseMenu, UniverseTab } from './universe-switch';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -279,6 +280,7 @@ function Header() {
           {PRODUCT_NAME}
         </span>
       </Link>
+      <UniverseMenu />
       <nav
         aria-label={t('nav.label')}
         className="hidden gap-4 text-[13px] md:flex xl:gap-7 xl:text-[15px]"
@@ -494,8 +496,9 @@ function TabBar() {
   return (
     <nav
       aria-label={t('nav.label')}
-      className="border-line fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-[#100f0e]/95 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),12px)] backdrop-blur-md md:hidden"
+      className="border-line fixed inset-x-0 bottom-0 z-40 grid auto-cols-fr grid-flow-col border-t bg-[#100f0e]/95 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),12px)] backdrop-blur-md md:hidden"
     >
+      <UniverseTab />
       {TABS.map((tab) => {
         const active =
           tab.href === '/downloads'

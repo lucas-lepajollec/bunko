@@ -8,13 +8,13 @@ import type {
   DiscoverKind,
   DiscoverPage,
   DiscoverSort,
-  MediaFormat,
   ReleasesPage,
   Season,
 } from '@/types/shared';
 import { SEASONS, formatStartDate } from '@/lib/client/season';
 import { api, useProgressiveSearch } from '@/lib/client/api';
 import { catalogLoading } from '@/lib/client/catalog-loading';
+import { inUniverse, useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { PosterCard } from '@/components/media';
@@ -36,17 +36,6 @@ const KINDS: DiscoverKind[] = [
   'anime',
 ];
 const SORTS: DiscoverSort[] = ['trending', 'popular', 'score', 'new'];
-const KIND_FORMATS: Record<Exclude<DiscoverKind, 'all'>, MediaFormat[]> = {
-  manga: ['MANGA', 'ONE_SHOT'],
-  manhwa: ['MANHWA'],
-  manhua: ['MANHUA'],
-  comic: ['COMIC'],
-  lightnovel: ['LIGHT_NOVEL'],
-  webnovel: ['WEB_NOVEL'],
-  novel: ['NOVEL'],
-  book: ['BOOK'],
-  anime: [],
-};
 
 export default function CatalogPage() {
   return (
@@ -61,8 +50,14 @@ function Catalog() {
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const universe = useUniverse();
+  // A chosen universe fixes the kind; "everything" keeps the per-page kind menu.
   const kind = (
-    KINDS.includes(params.get('kind') as DiscoverKind) ? params.get('kind') : 'all'
+    universe.active !== 'all'
+      ? universe.active
+      : KINDS.includes(params.get('kind') as DiscoverKind)
+        ? params.get('kind')
+        : 'all'
   ) as DiscoverKind;
   const sort = (
     SORTS.includes(params.get('sort') as DiscoverSort) ? params.get('sort') : 'trending'
@@ -70,7 +65,12 @@ function Catalog() {
   const genre = params.get('genre') ?? '';
   // Default view is the catalog as before; two visible switches show chapter releases or new series.
   const view: 'catalog' | 'chapters' | 'new' =
-    params.get('view') === 'chapters' ? 'chapters' : sort === 'new' ? 'new' : 'catalog';
+    // Anime has no chapter feed: aired episodes live in the planning and on the home.
+    params.get('view') === 'chapters' && kind !== 'anime'
+      ? 'chapters'
+      : sort === 'new'
+        ? 'new'
+        : 'catalog';
   const status = params.get('status') ?? '';
   const q = params.get('q')?.trim() ?? '';
   const season = (SEASONS.includes(params.get('season') as Season) ? params.get('season') : '') as
@@ -115,7 +115,10 @@ function Catalog() {
   };
   const pages = useSWRInfinite<DiscoverPage>(
     (index, previous: DiscoverPage | null) =>
-      q || view === 'chapters' || (previous && !previous.hasNextPage) ? null : query(index + 1),
+      // Wait for the universe so a single kind never loads "everything" first.
+      !universe.ready || q || view === 'chapters' || (previous && !previous.hasNextPage)
+        ? null
+        : query(index + 1),
     (path: string) => api<DiscoverPage>(path),
     {
       revalidateFirstPage: false,
@@ -123,7 +126,8 @@ function Catalog() {
   );
   const releases = useSWRInfinite<ReleasesPage>(
     (index, previous: ReleasesPage | null) => {
-      if (q || view !== 'chapters' || (previous && !previous.nextCursor)) return null;
+      if (!universe.ready || q || view !== 'chapters' || (previous && !previous.nextCursor))
+        return null;
       const r = new URLSearchParams();
       if (kind !== 'all') r.set('kind', kind);
       if (genre) r.set('genre', genre);
@@ -193,9 +197,7 @@ function Catalog() {
   const loadingMore =
     pages.isLoading ||
     (pages.size > 0 && pages.data && typeof pages.data[pages.size - 1] === 'undefined');
-  const searchItems = (searched.data?.results ?? []).filter(
-    (m) => kind === 'all' || (m.format ? KIND_FORMATS[kind].includes(m.format) : kind === 'manga'),
-  );
+  const searchItems = (searched.data?.results ?? []).filter((m) => inUniverse(kind, m));
   const dated = sort === 'new' || Boolean(season) || Boolean(year);
 
   return (
@@ -212,7 +214,10 @@ function Catalog() {
       />
       {/* Same calm toolbar as the library: formats, then one row with view, filters and sort. */}
       <div
-        className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0"
+        className={cx(
+          'no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0',
+          universe.active !== 'all' && 'hidden',
+        )}
         role="group"
         aria-label={t('catalog.kind')}
       >
@@ -258,24 +263,26 @@ function Catalog() {
                   ['chapters', t('catalog.viewChapters')],
                   ['new', t('catalog.viewNew')],
                 ] as const
-              ).map(([v, label]) => (
-                <button
-                  key={v}
-                  type="button"
-                  aria-pressed={view === v}
-                  onClick={() =>
-                    v === 'chapters'
-                      ? set('view', 'chapters', { sort: '' })
-                      : set('sort', v === 'new' ? 'new' : '', { view: '' })
-                  }
-                  className={cx(
-                    'h-8 rounded-full px-3 whitespace-nowrap',
-                    view === v ? 'bg-fg text-bg font-semibold' : 'text-mid hover:text-white',
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
+              )
+                .filter(([v]) => v !== 'chapters' || kind !== 'anime')
+                .map(([v, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={view === v}
+                    onClick={() =>
+                      v === 'chapters'
+                        ? set('view', 'chapters', { sort: '' })
+                        : set('sort', v === 'new' ? 'new' : '', { view: '' })
+                    }
+                    className={cx(
+                      'h-8 rounded-full px-3 whitespace-nowrap',
+                      view === v ? 'bg-fg text-bg font-semibold' : 'text-mid hover:text-white',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
             </div>
             <div className="ml-auto flex items-center gap-2">
               {view !== 'chapters' && (

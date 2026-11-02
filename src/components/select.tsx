@@ -1,6 +1,6 @@
 'use client';
 import * as RS from '@radix-ui/react-select';
-import { useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { cx } from './ui';
 
 /** Radix items cannot use an empty value; '' (e.g. "All") is mapped to this sentinel. */
@@ -18,6 +18,18 @@ export type SelectOption = {
  * Styled dropdown that looks the same in every browser (native popups are white in Brave/Chrome on
  * Windows and zoom on iOS). Keyboard and screen-reader behaviour come from Radix.
  */
+const MENU_EVENT = 'bunko:menu-open';
+/** Tell every other menu that `id` just opened. */
+export function announceMenu(id: string) {
+  window.dispatchEvent(new CustomEvent(MENU_EVENT, { detail: id }));
+}
+/** Run `close(otherId)` whenever another menu opens; returns the unsubscribe. */
+export function onMenuOpened(close: (id: string) => void) {
+  const listener = (e: Event) => close((e as CustomEvent<string>).detail);
+  window.addEventListener(MENU_EVENT, listener);
+  return () => window.removeEventListener(MENU_EVENT, listener);
+}
+
 export function Select({
   value,
   onChange,
@@ -38,10 +50,16 @@ export function Select({
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const closingTap = useRef(false);
+  const id = useId();
+  // One menu at a time: opening this one closes any other (selects and header menus).
+  useEffect(() => onMenuOpened((other) => other !== id && setOpen(false)), [id]);
   return (
     <RS.Root
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(next) => {
+        if (next) announceMenu(id);
+        setOpen(next);
+      }}
       value={value === '' ? EMPTY : value}
       onValueChange={(v) => onChange(v === EMPTY ? '' : v)}
     >

@@ -114,8 +114,9 @@ export function openStream(
  * Catalog search in two steps: the fast answer (local catalog + cached providers) shows at once,
  * the next snapshots add each completed provider without waiting for the slowest.
  */
-export function useProgressiveSearch(q: string) {
-  const path = q.length >= 2 ? `/api/search?q=${encodeURIComponent(q)}` : null;
+export function useProgressiveSearch(q: string, type?: 'MANGA' | 'NOVEL' | 'ANIME') {
+  const path =
+    q.length >= 2 ? `/api/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ''}` : null;
   // Retaining a previous query lets its full answer mask the new query's fast results.
   const fast = useApi<SearchResponse>(path && `${path}&fast=1`);
   const full = useApi<SearchResponse>(path, {
