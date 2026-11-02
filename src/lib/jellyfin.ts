@@ -13,7 +13,14 @@ import { db, listTracked, statement, track, untrack } from './db';
 import { AppError } from './errors';
 import { endpoint } from './http';
 import { emptyMedia, normalizeTitle } from './media';
-import { franchise, knownFranchise, seasonOffset, workVideo } from './anime-franchise';
+import {
+  franchise,
+  knownFranchise,
+  prefetchNodes,
+  seasonOffset,
+  workVideo,
+} from './anime-franchise';
+import { anilistFromProviders, ensureAnimeIds, idsOfAnilist, tvdbSeasons } from './anime-ids';
 import { getSettings, updateSettings } from './settings';
 import { tenantSignal } from './tenant-lifecycle';
 
@@ -430,8 +437,10 @@ function applyJellyfinProgress() {
 
 /** The catalog work of a Jellyfin series: plugin id, else one clear AniList title match. */
 async function catalogWork(s: IndexedJellyfinSeries, signal?: AbortSignal) {
-  const plugin = Number(s.providerIds.AniList);
-  if (Number.isInteger(plugin) && plugin > 0) return (await franchise(plugin, signal)).root;
+  // Jellyfin already identified the series (TVDB, TMDB, IMDb, AniDB, AniList plugin): the
+  // offline id map turns that into the AniList work without guessing from the title.
+  const mapped = anilistFromProviders(s.providerIds);
+  if (mapped) return (await franchise(mapped, signal)).root;
   const { search, deduplicate } = await import('./search-engine');
   const { titleScore } = await import('./matching');
   const results = [];
@@ -488,19 +497,35 @@ export async function importJellyfinAnime(signal?: AbortSignal) {
   // Series already in the library count as imported (import progress shows them done).
   for (const id of linked)
     if (!tried.has(id)) mark.run(`jellyfin_import_tried:${id}`, new Date().toISOString());
-  const candidates = indexed()
-    .filter((s) => (s.role ?? 'anime') === 'anime' && !linked.has(s.id) && !tried.has(s.id))
-    .slice(0, IMPORTS_PER_SYNC);
+  const candidates = indexed().filter(
+    (s) => (s.role ?? 'anime') === 'anime' && !linked.has(s.id) && !tried.has(s.id),
+  );
+  await ensureAnimeIds();
+  // Every identified series and its other seasons in a few batched AniList requests.
+  const mapped = candidates
+    .map((s) => anilistFromProviders(s.providerIds))
+    .filter((id): id is number => id !== null);
+  const groups = mapped.flatMap((id) => {
+    const tvdb = idsOfAnilist(id)?.tvdb;
+    return [id, ...(tvdb ? tvdbSeasons(tvdb).map((e) => e.anilist) : [])];
+  });
+  await prefetchNodes(groups, signal).catch(() => undefined);
+  // Title searches cost several requests each: a few per pass for the series nothing identifies.
+  let searches = IMPORTS_PER_SYNC;
   statement(
     "INSERT INTO worker_state(key,value) VALUES('jellyfin_import_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
   ).run(new Date().toISOString());
   for (const s of candidates) {
     if (signal?.aborted || !getSettings().autoImportJellyfin) return;
+    const identified = anilistFromProviders(s.providerIds) !== null;
+    if (!identified && searches-- <= 0) continue;
     let work: UnifiedMedia | null;
     try {
       work = await catalogWork(s, signal);
     } catch {
-      break; // AniList busy or unreachable: the next pass continues from here.
+      if (identified) continue; // Retried next pass.
+      searches = 0; // AniList busy: searches resume next pass.
+      continue;
     }
     const status = Object.values(s.seasons).some((list) => list.some((e) => e.played))
       ? 'READING'

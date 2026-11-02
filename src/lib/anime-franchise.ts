@@ -3,6 +3,7 @@ import { AppError } from './errors';
 import { requestJson } from './http';
 import { aniFields, fromAniList, type AniMedia } from './media';
 import { cached, saveMetadata, storedMetadata } from './metadata-cache';
+import { idsOfAnilist, tvdbSeasons } from './anime-ids';
 
 /** AniList formats that make the seasons of one show (films, OVAs and specials stay apart). */
 const SEASON_FORMATS = new Set(['TV', 'TV_SHORT', 'ONA']);
@@ -25,6 +26,42 @@ export interface Franchise {
   index: Record<number, number>;
 }
 
+const NODE_FIELDS = `${aniFields} duration
+  nextAiringEpisode { episode airingAt }
+  streamingEpisodes { title thumbnail }
+  relations { edges { relationType node { id type format } } }`;
+/**
+ * Load many seasons in a few requests (AniList pages hold 50): imports and works with many
+ * seasons cost one request per 50 entries instead of one each. Already cached ids are skipped.
+ */
+export async function prefetchNodes(ids: number[], signal?: AbortSignal) {
+  const missing = [...new Set(ids)].filter((id) => {
+    const hit = storedMetadata<AniNode>(`anime-node:${id}`);
+    return !hit || Date.now() - hit.at >= DAY;
+  });
+  for (let i = 0; i < missing.length; i += 50) {
+    const chunk = missing.slice(i, i + 50);
+    const result = await requestJson<{
+      data?: { Page: { media: AniNode[] } };
+      errors?: unknown[];
+    }>(
+      'https://graphql.anilist.co',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `query($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: ANIME) { ${NODE_FIELDS} } } }`,
+          variables: { ids: chunk },
+        }),
+        signal,
+      },
+      15_000,
+    );
+    if (!result.data?.Page || result.errors?.length)
+      throw new AppError('METADATA_UNAVAILABLE', 'AniList rejected the request', 502);
+    for (const m of result.data.Page.media) saveMetadata(`anime-node:${m.id}`, m);
+  }
+}
 async function node(id: number, signal?: AbortSignal): Promise<AniNode> {
   return cached(`anime-node:${id}`, DAY, async () => {
     const result = await requestJson<{ data?: { Media: AniNode | null }; errors?: unknown[] }>(
@@ -33,10 +70,7 @@ async function node(id: number, signal?: AbortSignal): Promise<AniNode> {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: `query($id: Int) { Media(id: $id) { ${aniFields} duration
-            nextAiringEpisode { episode airingAt }
-            streamingEpisodes { title thumbnail }
-            relations { edges { relationType node { id type format } } } } }`,
+          query: `query($id: Int) { Media(id: $id) { ${NODE_FIELDS} } }`,
           variables: { id },
         }),
         signal,
@@ -99,20 +133,34 @@ export interface SeasonRef {
  */
 export async function franchise(anilistId: number, signal?: AbortSignal): Promise<Franchise> {
   return cached(`anime-franchise:${anilistId}`, DAY / 2, async () => {
+    // The offline id map already knows the show's other seasons: load them all at once.
+    const known = idsOfAnilist(anilistId);
+    await prefetchNodes(
+      [anilistId, ...(known?.tvdb ? tvdbSeasons(known.tvdb).map((e) => e.anilist) : [])],
+      signal,
+    );
     const first = await node(anilistId, signal);
     const seen = new Map<number, AniNode>([[first.id, first]]);
     if (SEASON_FORMATS.has(first.format ?? '')) {
-      const queue = [first];
-      while (queue.length && seen.size < MAX_SEASONS) {
-        const current = queue.shift()!;
-        for (const edge of current.relations?.edges ?? []) {
-          if (!['SEQUEL', 'PREQUEL'].includes(edge.relationType)) continue;
-          if (edge.node.type !== 'ANIME' || !SEASON_FORMATS.has(edge.node.format ?? '')) continue;
-          if (seen.has(edge.node.id)) continue;
-          const next = await node(edge.node.id, signal);
-          seen.set(next.id, next);
-          queue.push(next);
+      let frontier = [first];
+      while (frontier.length && seen.size < MAX_SEASONS) {
+        const next = frontier
+          .flatMap((current) => current.relations?.edges ?? [])
+          .filter(
+            (edge) =>
+              ['SEQUEL', 'PREQUEL'].includes(edge.relationType) &&
+              edge.node.type === 'ANIME' &&
+              SEASON_FORMATS.has(edge.node.format ?? '') &&
+              !seen.has(edge.node.id),
+          )
+          .map((edge) => edge.node.id);
+        await prefetchNodes(next, signal);
+        frontier = [];
+        for (const id of new Set(next)) {
           if (seen.size >= MAX_SEASONS) break;
+          const n = await node(id, signal);
+          seen.set(n.id, n);
+          frontier.push(n);
         }
       }
     }

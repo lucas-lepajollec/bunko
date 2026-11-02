@@ -365,9 +365,12 @@ function MobileMenu() {
     setLastPath(pathname);
     setOpen(false);
   }
+  // Activity (downloads, updates) lives here on phones, with its count.
+  const activity = useActivity();
+  const badge = activity.active + activity.failed;
   const links = [
     { href: '/profile', label: t('profile.title') },
-    { href: '/downloads', label: t('nav.downloads') },
+    { href: '/downloads', label: t('nav.activity'), badge },
     { href: '/sources', label: t('nav.sources') },
     { href: '/settings', label: t('nav.settings') },
   ];
@@ -375,7 +378,7 @@ function MobileMenu() {
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger
         aria-label={t('nav.menu')}
-        className="flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08] md:hidden"
+        className="relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08] md:hidden"
       >
         <svg
           width="20"
@@ -389,6 +392,12 @@ function MobileMenu() {
         >
           <path d="M4 7h16M4 12h16M4 17h16" />
         </svg>
+        {badge > 0 && (
+          <span
+            aria-hidden
+            className="bg-fg absolute top-2 right-2 size-2 rounded-full ring-2 ring-[#100f0e]"
+          />
+        )}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
@@ -418,7 +427,14 @@ function MobileMenu() {
                   isActive(pathname, l.href) ? 'font-semibold text-white' : 'text-mid',
                 )}
               >
-                {l.label}
+                <span className="flex items-center gap-2.5">
+                  {l.label}
+                  {'badge' in l && Boolean(l.badge) && (
+                    <span className="bg-fg text-bg flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold">
+                      {l.badge}
+                    </span>
+                  )}
+                </span>
                 <span aria-hidden className="text-muted">
                   ›
                 </span>
@@ -486,14 +502,11 @@ const TABS = [
     key: 'nav.libraryShort',
     icon: 'M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2Zm4-12h6',
   },
-  { href: '/downloads', key: 'nav.activity', icon: 'M12 4v11m-5-5 5 5 5-5M5 20h14' },
 ];
 
 function TabBar() {
   const { t } = useI18n();
   const pathname = usePathname();
-  const activity = useActivity();
-  const badge = activity.active + activity.failed;
   return (
     <nav
       aria-label={t('nav.label')}
@@ -501,10 +514,7 @@ function TabBar() {
     >
       <UniverseTab />
       {TABS.map((tab) => {
-        const active =
-          tab.href === '/downloads'
-            ? /^\/(downloads|updates|sources)/.test(pathname)
-            : isActive(pathname, tab.href);
+        const active = isActive(pathname, tab.href);
         if (tab.href === '/search')
           return (
             <button
@@ -553,11 +563,6 @@ function TabBar() {
               <path d={tab.icon} />
             </svg>
             {t(tab.key)}
-            {tab.href === '/downloads' && badge > 0 && (
-              <span className="bg-fg text-bg absolute top-0 left-1/2 ml-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold">
-                {badge}
-              </span>
-            )}
           </Link>
         );
       })}
