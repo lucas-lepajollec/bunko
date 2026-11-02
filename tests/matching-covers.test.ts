@@ -951,6 +951,7 @@ it('exposes authenticated local activity, searching and refresh progress; stale 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       hiddenAdult: 0,
+      jellyfinImport: null,
       revision: expect.any(Number),
       revisions: {
         content: expect.any(Number),

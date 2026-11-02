@@ -1184,6 +1184,16 @@ const en: Dictionary = {
   'episodes.seasonShort': 'S{s} · Ep. {n}',
   'episodes.seasonN': 'Season {n}',
   'episodes.seasonsLabel': 'Seasons',
+  'common.cancel': 'Cancel',
+  'activity.jellyfinImport': 'Adding Jellyfin anime… {done}/{total}',
+  'jellyfin.disconnect': 'Disconnect Jellyfin',
+  'jellyfin.disconnectTitle': 'Disconnect Jellyfin from this account?',
+  'jellyfin.disconnectHint':
+    '{n} works were added to the library from Jellyfin. You can remove them too; works you followed yourself stay.',
+  'jellyfin.disconnectRemove': 'Disconnect and remove {n} works',
+  'jellyfin.disconnectKeep': 'Disconnect, keep the works',
+  'jellyfin.disconnected': 'Jellyfin disconnected',
+  'jellyfin.disconnectedRemoved': 'Jellyfin disconnected, {n} works removed',
 };
 
 const fr: Dictionary = {
@@ -2354,6 +2364,16 @@ const fr: Dictionary = {
   'episodes.seasonShort': 'S{s} · Ép. {n}',
   'episodes.seasonN': 'Saison {n}',
   'episodes.seasonsLabel': 'Saisons',
+  'common.cancel': 'Annuler',
+  'activity.jellyfinImport': 'Ajout des animes Jellyfin… {done}/{total}',
+  'jellyfin.disconnect': 'Déconnecter Jellyfin',
+  'jellyfin.disconnectTitle': 'Déconnecter Jellyfin de ce compte ?',
+  'jellyfin.disconnectHint':
+    '{n} œuvres ont été ajoutées à la bibliothèque depuis Jellyfin. Tu peux les retirer aussi ; celles que tu as suivies toi-même restent.',
+  'jellyfin.disconnectRemove': 'Déconnecter et retirer {n} œuvres',
+  'jellyfin.disconnectKeep': 'Déconnecter, garder les œuvres',
+  'jellyfin.disconnected': 'Jellyfin déconnecté',
+  'jellyfin.disconnectedRemoved': 'Jellyfin déconnecté, {n} œuvres retirées',
 };
 
 const es: Dictionary = {
@@ -3516,6 +3536,16 @@ const es: Dictionary = {
   'episodes.seasonShort': 'T{s} · Ep. {n}',
   'episodes.seasonN': 'Temporada {n}',
   'episodes.seasonsLabel': 'Temporadas',
+  'common.cancel': 'Cancelar',
+  'activity.jellyfinImport': 'Añadiendo anime de Jellyfin… {done}/{total}',
+  'jellyfin.disconnect': 'Desconectar Jellyfin',
+  'jellyfin.disconnectTitle': '¿Desconectar Jellyfin de esta cuenta?',
+  'jellyfin.disconnectHint':
+    'Se añadieron {n} obras a la biblioteca desde Jellyfin. Puedes quitarlas también; las que seguiste tú se quedan.',
+  'jellyfin.disconnectRemove': 'Desconectar y quitar {n} obras',
+  'jellyfin.disconnectKeep': 'Desconectar, conservar las obras',
+  'jellyfin.disconnected': 'Jellyfin desconectado',
+  'jellyfin.disconnectedRemoved': 'Jellyfin desconectado, {n} obras quitadas',
 };
 
 const de: Dictionary = {
@@ -4687,6 +4717,16 @@ const de: Dictionary = {
   'episodes.seasonShort': 'St. {s} · Fl. {n}',
   'episodes.seasonN': 'Staffel {n}',
   'episodes.seasonsLabel': 'Staffeln',
+  'common.cancel': 'Abbrechen',
+  'activity.jellyfinImport': 'Jellyfin-Anime werden hinzugefügt… {done}/{total}',
+  'jellyfin.disconnect': 'Jellyfin trennen',
+  'jellyfin.disconnectTitle': 'Jellyfin von diesem Konto trennen?',
+  'jellyfin.disconnectHint':
+    '{n} Werke wurden aus Jellyfin zur Bibliothek hinzugefügt. Du kannst sie mit entfernen; selbst gefolgte bleiben.',
+  'jellyfin.disconnectRemove': 'Trennen und {n} Werke entfernen',
+  'jellyfin.disconnectKeep': 'Trennen, Werke behalten',
+  'jellyfin.disconnected': 'Jellyfin getrennt',
+  'jellyfin.disconnectedRemoved': 'Jellyfin getrennt, {n} Werke entfernt',
 };
 
 const it: Dictionary = {
@@ -5849,6 +5889,16 @@ const it: Dictionary = {
   'episodes.seasonShort': 'S{s} · Ep. {n}',
   'episodes.seasonN': 'Stagione {n}',
   'episodes.seasonsLabel': 'Stagioni',
+  'common.cancel': 'Annulla',
+  'activity.jellyfinImport': 'Aggiunta anime Jellyfin… {done}/{total}',
+  'jellyfin.disconnect': 'Disconnetti Jellyfin',
+  'jellyfin.disconnectTitle': 'Disconnettere Jellyfin da questo account?',
+  'jellyfin.disconnectHint':
+    '{n} opere sono state aggiunte alla libreria da Jellyfin. Puoi rimuoverle; quelle seguite da te restano.',
+  'jellyfin.disconnectRemove': 'Disconnetti e rimuovi {n} opere',
+  'jellyfin.disconnectKeep': 'Disconnetti, mantieni le opere',
+  'jellyfin.disconnected': 'Jellyfin disconnesso',
+  'jellyfin.disconnectedRemoved': 'Jellyfin disconnesso, {n} opere rimosse',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

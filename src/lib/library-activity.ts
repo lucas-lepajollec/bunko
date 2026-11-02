@@ -4,6 +4,7 @@ import { workerValue, refreshRunning } from './updates';
 import { getSettings } from './settings';
 import { listTracked, listBatches, writeVersion } from './db';
 import { visibleTracked } from './adult';
+import { jellyfinImportProgress } from './jellyfin';
 
 export function libraryActivity(): LibraryActivity {
   const entries = listTracked();
@@ -22,6 +23,10 @@ export function libraryActivity(): LibraryActivity {
       releases: writeVersion('releases'),
     },
     hiddenAdult: entries.length - visible.length,
+    jellyfinImport: (() => {
+      const p = jellyfinImportProgress();
+      return p && p.done < p.total ? p : null;
+    })(),
     matching: {
       queued: sourceMatchQueue().filter((t) => ids.has(t.id) && t.id !== current?.id).length,
       current: current?.title ?? null,
