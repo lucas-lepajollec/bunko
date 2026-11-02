@@ -18,6 +18,7 @@ const KINDS: DiscoverKind[] = [
   'comic',
   'lightnovel',
   'webnovel',
+  'anime',
 ];
 
 /** ISO date (YYYY-MM-DD) in local time. */
@@ -235,20 +236,24 @@ function PlanningRow({ item }: { item: PlanningItem }) {
             {item.media.title}
           </span>
           <span className={cx('text-xs', expected ? 'text-muted italic' : 'text-mid')}>
-            {item.chapter !== null && item.chapterTo != null && item.chapterTo !== item.chapter
-              ? t('planning.chapterRange', {
-                  from: n(Math.floor(item.chapter)),
-                  to: n(Math.floor(item.chapterTo)),
-                })
-              : item.chapter !== null
-                ? t(expected ? 'planning.expectedChapter' : 'release.chapter', {
-                    n: n(item.chapter),
+            {item.unit === 'episode' && item.chapter !== null
+              ? item.chapterTo != null && item.chapterTo !== item.chapter
+                ? t('planning.episodeRange', { from: n(item.chapter), to: n(item.chapterTo) })
+                : t('episodes.short', { n: n(item.chapter) })
+              : item.chapter !== null && item.chapterTo != null && item.chapterTo !== item.chapter
+                ? t('planning.chapterRange', {
+                    from: n(Math.floor(item.chapter)),
+                    to: n(Math.floor(item.chapterTo)),
                   })
-                : (item.count ?? 1) > 1
-                  ? t('planning.releaseCount', { n: n(item.count ?? 1) })
-                  : expected
-                    ? t('planning.expected')
-                    : t('planning.released')}
+                : item.chapter !== null
+                  ? t(expected ? 'planning.expectedChapter' : 'release.chapter', {
+                      n: n(item.chapter),
+                    })
+                  : (item.count ?? 1) > 1
+                    ? t('planning.releaseCount', { n: n(item.count ?? 1) })
+                    : expected
+                      ? t('planning.expected')
+                      : t('planning.released')}
           </span>
         </span>
       </MediaLink>

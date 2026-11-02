@@ -28,6 +28,7 @@ import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import { FavoriteButton } from '@/components/favorite';
 import { OwnedInventory } from '@/components/owned-inventory';
 import { Translations } from '@/components/translations';
+import { EpisodeList } from '@/components/episodes';
 import {
   Cover,
   Dot,
@@ -101,6 +102,8 @@ function Title({ media }: { media: MediaDetail }) {
   const [choice, setChoice] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const isComic = media.type === 'MANGA';
+  const video = media.type === 'ANIME' ? media.video : undefined;
+  const [watchBusy, setWatchBusy] = useState(false);
   const fromDetail: ChapterSelection[] = media.sources.map((s) => ({
     suwayomiMangaId: s.suwayomiMangaId,
     sourceId: s.sourceId,
@@ -256,6 +259,24 @@ function Title({ media }: { media: MediaDetail }) {
       toast({ tone: 'bad', text: errorText(t, e) });
     }
   }
+  async function setWatched(watched: number | null) {
+    if (!entry) return;
+    setWatchBusy(true);
+    try {
+      await send('/api/tracked', 'PATCH', { id: entry.id, read: watched });
+      await library.mutate();
+    } catch (e) {
+      toast({ tone: 'bad', text: errorText(t, e) });
+    } finally {
+      setWatchBusy(false);
+    }
+  }
+  const nextEpisode = video
+    ? (() => {
+        const n = (entry?.progress?.read ?? 0) + 1;
+        return n <= (video.aired ?? video.list.length) ? n : null;
+      })()
+    : null;
   const missingKeys = new Set(
     missingForUnit(chapters.data?.chapters ?? [], owned, ownedVolumes, false).map((c) => c.key),
   );
@@ -304,16 +325,28 @@ function Title({ media }: { media: MediaDetail }) {
         .filter(Boolean)
         .join(' · '),
     ],
-    [
-      t('title.facts.publication'),
-      [
-        media.status ? t(`status.${statusKey(media.status)}`) : null,
-        chapterReleased ? t('title.chaptersCount', { count: n(chapterReleased) }) : null,
-        media.volumes ? t('title.volumesCount', { count: n(media.volumes) }) : null,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    ],
+    video
+      ? [
+          t('episodes.facts.airing'),
+          [
+            media.status ? t(`status.${statusKey(media.status)}`) : null,
+            video.episodes ? t('episodes.count', { n: n(video.episodes) }) : null,
+            video.duration ? t('episodes.duration', { n: n(video.duration) }) : null,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        ]
+      : [
+          t('title.facts.publication'),
+          [
+            media.status ? t(`status.${statusKey(media.status)}`) : null,
+            chapterReleased ? t('title.chaptersCount', { count: n(chapterReleased) }) : null,
+            media.volumes ? t('title.volumesCount', { count: n(media.volumes) }) : null,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        ],
+    ...(video?.studios.length ? [[t('episodes.facts.studio'), video.studios.join(', ')]] : []),
     [t('title.facts.authors'), media.authors.slice(0, 3).join(', ')],
     [
       t('title.facts.genres'),
@@ -423,13 +456,28 @@ function Title({ media }: { media: MediaDetail }) {
                         : t('title.noSource')}
               </button>
             )}
+            {video && entry && (
+              <button
+                type="button"
+                disabled={watchBusy || nextEpisode === null}
+                onClick={() => setWatched(nextEpisode)}
+                className={primaryButton}
+              >
+                {nextEpisode !== null
+                  ? t('episodes.markNext', { n: n(nextEpisode) })
+                  : t('episodes.upToDate')}
+              </button>
+            )}
             <Select
               label={t('title.readingStatus')}
               value={entry?.status ?? 'NONE'}
               onChange={(v) => setStatus(v as ReadingStatus | 'NONE')}
               options={[
                 { value: 'NONE', label: t('title.notInLibrary') },
-                ...STATUSES.map((x) => ({ value: x, label: t(`status.${x}`) })),
+                ...STATUSES.map((x) => ({
+                  value: x,
+                  label: t(video ? `watchStatus.${x}` : `status.${x}`),
+                })),
               ]}
               size="lg"
               className="h-12 justify-center gap-3 bg-white/[0.14] px-5 sm:justify-between"
@@ -451,14 +499,18 @@ function Title({ media }: { media: MediaDetail }) {
               <ProgressBar progress={progress} className="h-1.5" />
               <span className="text-mid flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]">
                 <span>
-                  {t(vol('title.read'), { n: progress.read !== null ? n(progress.read) : '—' })}
+                  {t(video ? 'episodes.watchedCount' : vol('title.read'), {
+                    n: progress.read !== null ? n(progress.read) : '—',
+                  })}
                 </span>
-                <OwnedInventory entry={entry} />
+                {!video && <OwnedInventory entry={entry} />}
                 {media.kavita && <KavitaRefresh trackedId={entry.id} />}
                 <span>
-                  {t(vol('title.released'), {
-                    n: progress.released !== null ? n(progress.released) : '—',
-                  })}
+                  {video
+                    ? t('episodes.airedCount', { n: video.aired !== null ? n(video.aired) : '—' })
+                    : t(vol('title.released'), {
+                        n: progress.released !== null ? n(progress.released) : '—',
+                      })}
                 </span>
                 <InfoBubble label={t('title.progressInfo')}>
                   {progress.readSource === 'suwayomi'
@@ -487,7 +539,11 @@ function Title({ media }: { media: MediaDetail }) {
               items={[
                 {
                   id: 'chapters',
-                  label: isComic ? t('title.tab.chapters') : t('title.tab.reading'),
+                  label: video
+                    ? t('episodes.title')
+                    : isComic
+                      ? t('title.tab.chapters')
+                      : t('title.tab.reading'),
                 },
                 { id: 'info', label: t('title.tab.info') },
               ]}
@@ -504,7 +560,17 @@ function Title({ media }: { media: MediaDetail }) {
               tab === 'chapters' ? 'flex' : 'hidden md:flex',
             )}
           >
-            {isComic ? (
+            {video ? (
+              <>
+                <SectionHeading id="toc" num={1} title={t('episodes.title')} />
+                <EpisodeList
+                  video={video}
+                  entry={entry}
+                  busy={watchBusy}
+                  onWatched={(w) => void setWatched(w)}
+                />
+              </>
+            ) : isComic ? (
               <>
                 <SectionHeading
                   id="toc"

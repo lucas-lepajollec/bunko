@@ -301,7 +301,17 @@ it('keeps LN/WN and book/novel releases separate in all home keys', () => {
   saveReleases(releases);
   const home = composeHome(releaseStore(), media);
   expect(Object.keys(home.latest).sort()).toEqual(
-    ['manga', 'manhwa', 'manhua', 'comic', 'lightnovel', 'webnovel', 'novel', 'book'].sort(),
+    [
+      'manga',
+      'manhwa',
+      'manhua',
+      'comic',
+      'lightnovel',
+      'webnovel',
+      'novel',
+      'book',
+      'anime',
+    ].sort(),
   );
   expect(home.latest.lightnovel).toHaveLength(1);
   expect(home.latest.webnovel).toHaveLength(1);

@@ -40,7 +40,16 @@ import {
 type Shelf = 'READING' | 'CAUGHT_UP' | 'PLANNING' | 'PAUSED' | 'COMPLETED' | 'DROPPED';
 type View = 'ALL' | 'KAVITA' | 'UPDATES' | 'UNOWNED';
 type Kind =
-  'all' | 'manga' | 'manhwa' | 'manhua' | 'comic' | 'lightnovel' | 'webnovel' | 'novel' | 'book';
+  | 'all'
+  | 'manga'
+  | 'manhwa'
+  | 'manhua'
+  | 'comic'
+  | 'lightnovel'
+  | 'webnovel'
+  | 'novel'
+  | 'book'
+  | 'anime';
 type Sort = 'news' | 'recent' | 'title' | 'added' | 'unlinked';
 
 const caughtUp = (e: TrackedMedia) =>
@@ -58,6 +67,7 @@ const KIND_FORMATS: Record<Exclude<Kind, 'all'>, MediaFormat[]> = {
   webnovel: ['WEB_NOVEL'],
   novel: ['NOVEL'],
   book: ['BOOK'],
+  anime: [],
 };
 
 export default function LibraryPage() {
@@ -134,9 +144,11 @@ function Library() {
     .filter(
       (e) =>
         kind === 'all' ||
-        (e.media.format
-          ? KIND_FORMATS[kind].includes(e.media.format)
-          : kind === 'manga' && e.type === 'MANGA'),
+        (kind === 'anime'
+          ? e.type === 'ANIME'
+          : e.media.format
+            ? KIND_FORMATS[kind].includes(e.media.format)
+            : kind === 'manga' && e.type === 'MANGA'),
     );
   const withoutSources = filtered.filter(
     (entry) => entry.type === 'MANGA' && !entry.sources.length,
@@ -231,6 +243,7 @@ function Library() {
                   'webnovel',
                   'novel',
                   'book',
+                  'anime',
                 ] as Kind[]
               ).map((k) => (
                 <button

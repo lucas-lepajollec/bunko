@@ -166,6 +166,7 @@ export const discoverQuery = z
         'webnovel',
         'novel',
         'book',
+        'anime',
       ])
       .optional(),
     sort: z.enum(['trending', 'popular', 'score', 'new']).optional(),
@@ -366,6 +367,8 @@ export const trackPatch = z
           .strict(),
       ])
       .optional(),
+    /** Set progress by hand (episodes watched for anime); may go back. */
+    read: z.number().min(0).max(100_000).nullable().optional(),
     status: readingStatus.optional(),
     autoDownload: z.boolean().optional(),
     kavitaSeriesId: id.nullable().optional(),

@@ -173,3 +173,53 @@ export function planning(q: z.infer<typeof planningQuery>): PlanningWeek {
   snapshot.values.set(key, result);
   return { ...result, ...releaseLoadingState() };
 }
+
+/**
+ * Adds anime episodes airing that week (followed shows, plus popular ones unless only the
+ * library is shown). A slow AniList never holds the planning: after 2.5 s it answers without
+ * them and the cache fills for the next look.
+ */
+export async function withAnimeAiring(
+  week: PlanningWeek,
+  q: z.infer<typeof planningQuery>,
+): Promise<PlanningWeek> {
+  if (q.kind && q.kind !== 'all' && q.kind !== 'anime') return week;
+  const { animeAiring } = await import('./catalog');
+  const { listTracked } = await import('./db');
+  const tracked = listTracked().filter((t) => t.type === 'ANIME' && t.anilistId);
+  const byAniList = new Map(tracked.map((t) => [t.anilistId!, t.id]));
+  const from = dateFromDay(week.start);
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(from);
+  to.setDate(to.getDate() + 7);
+  const airing = await Promise.race([
+    animeAiring(from, to, [...byAniList.keys()], Boolean(q.library)).catch(() => []),
+    new Promise<[]>((resolve) => setTimeout(() => resolve([]), 2500)),
+  ]);
+  if (!airing.length) return week;
+  const now = Date.now();
+  const days = week.days.map((d) => ({ ...d, items: [...d.items] }));
+  const byDay = new Map(days.map((d) => [d.date, d]));
+  for (const a of airing) {
+    const at = new Date(a.airingAt);
+    const day = byDay.get(localDate(at));
+    if (!day) continue;
+    day.items.push({
+      media: a.media,
+      kind: at.getTime() <= now ? 'released' : 'expected',
+      chapter: a.episode,
+      unit: 'episode',
+      time: `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`,
+      trackedId: a.media.anilistId ? (byAniList.get(a.media.anilistId) ?? null) : null,
+    });
+  }
+  for (const day of days) {
+    day.items = groupDay(day.items);
+    day.items.sort(
+      (a, b) =>
+        (a.time ?? '99:99').localeCompare(b.time ?? '99:99') ||
+        a.media.title.localeCompare(b.media.title),
+    );
+  }
+  return { ...week, days };
+}

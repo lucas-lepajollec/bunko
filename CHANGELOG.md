@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Anime, phase 1: an Anime kind in the catalog, library and planning (AniList). Anime sheets list
+  episodes with titles and stills, the next airing date, studio and duration, and keep the place
+  by hand ("Watched episode N", tick an episode to mark everything up to it). The planning adds
+  the week's airing episodes of followed anime and popular shows. The universe now links manga,
+  novels and anime both ways. No player yet.
+
 - The catalog shows its filters as a visible row on every screen: genre, AniList tags (with
   search; demographics are tags), status, year, season and minimum score, offered only where the
   selected kind supports them. With 18+ shown, 18+ genres and tags and an "18+ only" switch are

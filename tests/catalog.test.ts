@@ -278,6 +278,7 @@ describe('discovery publication ranges over local AniList fixture', () => {
       page: 1,
       perPage: 24,
       sort: ['TRENDING_DESC', 'POPULARITY_DESC'],
+      type: 'MANGA',
     });
   });
   it('caps new at tomorrow UTC, excludes unknown dates and lowers the popularity floor', async () => {
