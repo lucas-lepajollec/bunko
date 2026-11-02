@@ -218,3 +218,9 @@ export function seasonOffset(seasons: AnimeSeason[], number: number) {
     .filter((s) => s.number < number)
     .reduce((sum, s) => sum + Math.max(s.episodes ?? 0, s.aired ?? 0, s.list.length), 0);
 }
+
+/** A season as loaded by `prefetchNodes`, without any request (null when not loaded). */
+export function loadedAnime(anilistId: number): UnifiedMedia | null {
+  const hit = storedMetadata<AniNode>(`anime-node:${anilistId}`);
+  return hit ? fromAniList(hit.value) : null;
+}

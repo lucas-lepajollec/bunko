@@ -16,6 +16,7 @@ import { emptyMedia, normalizeTitle } from './media';
 import {
   franchise,
   knownFranchise,
+  loadedAnime,
   prefetchNodes,
   seasonOffset,
   workVideo,
@@ -452,7 +453,13 @@ async function catalogWork(s: IndexedJellyfinSeries, signal?: AbortSignal) {
   // Jellyfin already identified the series (TVDB, TMDB, IMDb, AniDB, AniList plugin): the
   // offline id map turns that into the AniList work without guessing from the title.
   const mapped = anilistFromProviders(s.providerIds);
-  if (mapped) return (await franchise(mapped, signal)).root;
+  if (mapped) {
+    // Loaded in the batch before the import: the first season is the work (regrouped later if
+    // AniList's relations disagree). Not loaded yet: the next pass retries.
+    const loaded = loadedAnime(mapped);
+    if (loaded) return loaded;
+    return (await franchise(mapped, signal)).root;
+  }
   const { search, deduplicate } = await import('./search-engine');
   const { titleScore } = await import('./matching');
   const results = [];

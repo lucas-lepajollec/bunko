@@ -29,11 +29,15 @@ const SERVICE_KEYS = [
   'jellyfinLibraries',
   'videoAddons',
 ];
+import { wakeWorker } from '@/lib/worker-events';
 export const PATCH = route(async (r) => {
   const patch = await body(r, settingsPatch);
   if (Object.keys(patch).some((k) => SERVICE_KEYS.includes(k))) requirePermission('services');
   if (patch.extensionRepos) requirePermission('extensions');
   const result = updateSettings(patch);
   if (patch.extensionRepos) await configureRepos(patch.extensionRepos);
+  // Jellyfin connected or retuned: index and import now, not at the next scheduled cycle.
+  if (Object.keys(patch).some((k) => k.startsWith('jellyfin') || k === 'autoImportJellyfin'))
+    wakeWorker();
   return json(result);
 });
