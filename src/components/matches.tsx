@@ -8,15 +8,18 @@ import type {
   CoverOption,
   MediaDetail,
   TrackedMedia,
+  UnifiedMedia,
 } from '@/types/shared';
-import { useApi } from '@/lib/client/api';
+import { toast } from './notify';
+import { libraryKeys, send, useApi } from '@/lib/client/api';
+import { useSWRConfig } from 'swr';
 import { useI18n } from '@/i18n/I18nProvider';
 import { rankSourceCandidates } from '@/lib/client/source-ranking';
 import { useRelativeTime } from './time';
 import type { Lane } from '@/lib/client/use-source-scan';
 import { CatalogPicker, KavitaPicker } from './relink';
 import { kindOf } from '@/lib/client/universe';
-import { Cover, Dot, Skeleton, Spinner, cx, primaryButton, smallButton } from './ui';
+import { Cover, Dot, Skeleton, Spinner, cx, errorText, primaryButton, smallButton } from './ui';
 
 export type { Lane };
 /** Sections of the work settings page (`/title/…/settings?s=`). */
@@ -271,6 +274,67 @@ export function CatalogTab({
         {off ? t('match.attachCatalog') : t('match.changeWork')}
       </span>
       <CatalogPicker initial={entry.title} onPick={onPick} kind={kindOf(media)} />
+      {media.type === 'ANIME' && media.anilistId && <WorkParts root={media.anilistId} />}
+    </div>
+  );
+}
+
+/**
+ * Join other anime into this work by hand (a sequel series AniList keeps apart, films): they
+ * become parts of this sheet, the library merges them and lists stop showing them apart.
+ */
+function WorkParts({ root }: { root: number }) {
+  const { t } = useI18n();
+  const parts = useApi<UnifiedMedia[]>(`/api/works/links?root=anilist:${root}`);
+  const { mutate } = useSWRConfig();
+  const [busy, setBusy] = useState(false);
+  const change = async (member: UnifiedMedia, joined: boolean) => {
+    if (!member.anilistId) return;
+    setBusy(true);
+    try {
+      await send('/api/works/links', 'POST', {
+        root: `anilist:${root}`,
+        member: `anilist:${member.anilistId}`,
+        joined,
+      });
+      await Promise.all([parts.mutate(), mutate(libraryKeys)]);
+      toast({ tone: 'ok', text: joined ? t('works.joined') : t('works.separated') });
+    } catch (err) {
+      toast({ tone: 'bad', text: errorText(t, err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-6 flex flex-col gap-3">
+      <span className="text-muted text-xs tracking-[0.14em] uppercase">{t('works.title')}</span>
+      <Hint>{t('works.hint')}</Hint>
+      {(parts.data ?? []).map((m) => (
+        <div key={m.id} className="flex items-center gap-3 rounded-2xl bg-white/[0.04] p-3 text-sm">
+          <Cover src={m.coverUrl} className="w-10 shrink-0 shadow-none" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate font-medium">{m.title}</span>
+            <span className="text-muted text-xs">
+              {[m.format ? t(`format.${m.format}`) : null, m.year].filter(Boolean).join(' · ')}
+            </span>
+          </span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void change(m, false)}
+            className={cx(smallButton, 'text-mid shrink-0')}
+          >
+            {t('works.separate')}
+          </button>
+        </div>
+      ))}
+      <CatalogPicker
+        initial=""
+        kind="anime"
+        onPick={(m) => {
+          if (m.anilistId && m.anilistId !== root) void change(m, true);
+        }}
+      />
     </div>
   );
 }

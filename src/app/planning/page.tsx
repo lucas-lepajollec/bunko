@@ -20,6 +20,8 @@ const KINDS: DiscoverKind[] = [
   'lightnovel',
   'webnovel',
   'anime',
+  'series',
+  'movies',
 ];
 
 /** ISO date (YYYY-MM-DD) in local time. */

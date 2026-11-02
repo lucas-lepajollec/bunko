@@ -575,6 +575,10 @@ async function loadDetail(id: string, signal?: AbortSignal): Promise<MediaDetail
     detail = { ...kavitaMedia(Number(key)), tags: [], relations: [], recommendations: [] };
   else if (provider === 'anilist' && /^[1-9]\d{0,9}$/.test(key))
     detail = await anilistDetail(Number(key), signal);
+  else if ((provider === 'tmdbtv' || provider === 'tmdbmovie') && /^[1-9]\d{0,9}$/.test(key))
+    detail = await (
+      await import('./tmdb')
+    ).tmdbDetail(provider === 'tmdbtv' ? 'tv' : 'movie', Number(key));
   else if (provider === 'jellyfin' && /^[0-9a-f]{32}$/i.test(key))
     detail = (await import('./jellyfin')).jellyfinMedia(key);
   else if (provider === 'mangadex' && /^[0-9a-f-]{36}$/i.test(key))
@@ -734,7 +738,8 @@ export async function animeAiring(
   }`;
   const load = async (ids: number[] | undefined) => {
     const rows: Row[] = [];
-    for (let page = 1; page <= (ids ? 4 : 3); page++) {
+    // A week airs several hundred episodes: read up to 8 pages (400) of the week's schedule.
+    for (let page = 1; page <= (ids ? 4 : 8); page++) {
       const data = await anilist<{
         Page: { pageInfo: { hasNextPage: boolean }; airingSchedules: Row[] };
       }>(query, { ...range, page, ...(ids ? { ids } : {}) });
@@ -756,7 +761,8 @@ export async function animeAiring(
   ]);
   const seen = new Set<string>();
   const visible = mediaVisibility();
-  return [...mine, ...popular.filter((r) => (r.media.popularity ?? 0) >= 20_000)]
+  // Every reasonably known show, not only the most popular ones.
+  return [...mine, ...popular.filter((r) => (r.media.popularity ?? 0) >= 2_000)]
     .filter((r) => {
       const k = `${r.media.id}:${r.episode}`;
       if (seen.has(k)) return false;

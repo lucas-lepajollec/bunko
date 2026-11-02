@@ -5,7 +5,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { cx } from './ui';
 import { Player, type PlayerEpisode } from './player';
 
-const FIRST = 24;
+const FIRST = 48;
 
 /**
  * Episodes of an anime with what has been watched. Ticking an episode marks everything up to it
@@ -57,6 +57,7 @@ export function EpisodeList({
       .reduce((sum, x) => sum + Math.max(x.episodes ?? 0, x.aired ?? 0, x.list.length), 0),
   );
   const read = entry?.progress?.read ?? 0;
+  const film = video.ids?.kind === 'movie';
   const resume = Math.max(
     0,
     offsets.findLastIndex((o) => o <= read && read > 0),
@@ -88,11 +89,18 @@ export function EpisodeList({
     const jf = jellyfin?.bySeason.find((x) => x.season === s.number);
     return {
       title,
-      label:
-        seasons.length > 1
+      label: film
+        ? t('episodes.film')
+        : seasons.length > 1
           ? t('episodes.seasonShort', { s: n(s.number), n: n(at.episode) })
           : t('episodes.short', { n: n(at.episode) }),
       seasonAnilistId: s.anilistId ?? anilistId,
+      imdb: video.ids?.imdb
+        ? {
+            id: video.ids.imdb,
+            season: video.ids.kind === 'movie' ? null : (s.tmdbSeason ?? s.number),
+          }
+        : null,
       episode: at.episode,
       jellyfinItemId: jf?.episodeIds[at.episode] ?? null,
     };
@@ -155,7 +163,7 @@ export function EpisodeList({
               : 'text-mid bg-white/[0.06] hover:text-white',
           )}
         >
-          {t('episodes.seasonN', { n: n(x.number) })}
+          {x.label ?? t('episodes.seasonN', { n: n(x.number) })}
         </button>
       ))}
     </div>
@@ -217,78 +225,99 @@ export function EpisodeList({
           {newestFirst ? t('episodes.oldestFirst') : t('episodes.newestFirst')}
         </button>
       </div>
-      <ul className="md:max-h-[68vh] md:overflow-y-auto md:pr-2">
+      {/* A grid of episode cards; a few rows show, the rest scrolls inside the panel. */}
+      <ul className="grid max-h-[620px] grid-cols-2 gap-3 overflow-y-auto pt-4 pr-1 sm:grid-cols-3 xl:grid-cols-4">
         {rows.slice(0, limit).map((e) => {
           const absolute = offset + e.number;
           const seen = absolute <= read || played.has(e.number);
           const inJellyfin = owned.has(e.number);
           const upcoming = e.number > aired;
+          const state =
+            inJellyfin && !seen
+              ? t('episodes.inJellyfin')
+              : upcoming
+                ? season.nextEpisode?.number === e.number
+                  ? date.format(new Date(season.nextEpisode.airingAt))
+                  : t('episodes.upcoming')
+                : seen
+                  ? t('episodes.watched')
+                  : t('episodes.aired');
           return (
-            <li
-              key={e.number}
-              className={cx(
-                'border-line flex items-center gap-3 border-b py-2.5 md:gap-4',
-                seen && 'opacity-60',
-              )}
-            >
-              <input
-                type="checkbox"
-                checked={seen}
-                disabled={!entry || busy || upcoming}
-                onChange={() => onWatched(seen ? (absolute > 1 ? absolute - 1 : null) : absolute)}
-                aria-label={t('episodes.markWatched', { n: n(e.number) })}
-                className="size-5 shrink-0 accent-[var(--accent)] md:size-[17px]"
-              />
-              {e.thumbnail ? (
-                // eslint-disable-next-line @next/next/no-img-element -- public stills, lazy and decorative
-                <img
-                  src={e.thumbnail}
-                  alt=""
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                  className="hidden aspect-video w-28 shrink-0 rounded object-cover md:block"
-                />
-              ) : (
-                <span
-                  aria-hidden
-                  className="hidden aspect-video w-28 shrink-0 rounded bg-white/[0.06] md:block"
-                />
-              )}
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="font-serif text-[21px] md:text-[23px]">
-                  {t('episodes.number', { n: n(e.number) })}
+            <li key={e.number} className="group flex min-w-0 flex-col gap-2">
+              <div className="relative overflow-hidden rounded-xl bg-white/[0.06]">
+                <button
+                  type="button"
+                  disabled={upcoming}
+                  onClick={() => setPlaying({ season: index, episode: e.number })}
+                  aria-label={t('player.playEpisode', { n: n(e.number) })}
+                  title={upcoming ? undefined : t('player.playEpisode', { n: n(e.number) })}
+                  className="relative block aspect-video w-full disabled:cursor-default"
+                >
+                  {e.thumbnail ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- public stills, lazy and decorative
+                    <img
+                      src={e.thumbnail}
+                      alt=""
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      className={cx('size-full object-cover', seen && 'opacity-50')}
+                    />
+                  ) : (
+                    <span
+                      aria-hidden
+                      className="text-faint flex size-full items-center justify-center font-serif text-3xl italic"
+                    >
+                      {n(e.number)}
+                    </span>
+                  )}
+                  {!upcoming && (
+                    <span
+                      aria-hidden
+                      className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100"
+                    >
+                      <span className="flex size-11 items-center justify-center rounded-full bg-white text-black">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M7 4v16l13-8Z" />
+                        </svg>
+                      </span>
+                    </span>
+                  )}
+                </button>
+                <label className="absolute top-2 left-2 flex size-8 items-center justify-center rounded-full bg-black/55 backdrop-blur-sm">
+                  <input
+                    type="checkbox"
+                    checked={seen}
+                    disabled={!entry || busy || upcoming}
+                    onChange={() =>
+                      onWatched(seen ? (absolute > 1 ? absolute - 1 : null) : absolute)
+                    }
+                    aria-label={t('episodes.markWatched', { n: n(e.number) })}
+                    className="size-4 accent-[var(--accent)]"
+                  />
+                </label>
+                {seen && <span className="bg-fg absolute inset-x-0 bottom-0 h-1" aria-hidden />}
+              </div>
+              <span className="flex min-w-0 flex-col px-0.5">
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="font-serif text-[18px]">
+                    {film ? t('episodes.film') : t('episodes.number', { n: n(e.number) })}
+                  </span>
+                  <span
+                    className={cx(
+                      'shrink-0 text-[11px]',
+                      inJellyfin && !seen ? 'text-fg' : 'text-muted',
+                    )}
+                  >
+                    {state}
+                  </span>
                 </span>
                 {e.title && <span className="text-muted truncate text-[13px]">{e.title}</span>}
               </span>
-              <span className="text-mid w-28 shrink-0 text-right text-xs md:w-40 md:text-[13px]">
-                {inJellyfin && !seen
-                  ? t('episodes.inJellyfin')
-                  : upcoming
-                    ? season.nextEpisode?.number === e.number
-                      ? date.format(new Date(season.nextEpisode.airingAt))
-                      : t('episodes.upcoming')
-                    : seen
-                      ? t('episodes.watched')
-                      : t('episodes.aired')}
-              </span>
-              {!upcoming && (
-                <button
-                  type="button"
-                  onClick={() => setPlaying({ season: index, episode: e.number })}
-                  aria-label={t('player.playEpisode', { n: n(e.number) })}
-                  title={t('player.playEpisode', { n: n(e.number) })}
-                  className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                    <path d="M7 4v16l13-8Z" />
-                  </svg>
-                </button>
-              )}
             </li>
           );
         })}
         {rows.length > limit && (
-          <li className="flex justify-center py-4">
+          <li className="col-span-full flex justify-center py-4">
             <button
               type="button"
               onClick={() => setLimit((l) => l + 100)}

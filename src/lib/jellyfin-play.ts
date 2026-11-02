@@ -4,6 +4,7 @@ import type { PlaybackInfo } from '@/types/shared';
 import { jellyfin, userId } from './jellyfin';
 
 const TICKS_PER_MS = 10_000;
+const TEXT_CODECS = new Set(['subrip', 'srt', 'ass', 'ssa', 'vtt', 'webvtt', 'mov_text', 'text']);
 export const DEVICE_ID = 'bunko-web';
 
 const itemSchema = z
@@ -100,6 +101,8 @@ export async function playbackInfo(
     startMs?: number;
     audioIndex?: number | null;
     subtitleIndex?: number | null;
+    /** The browser failed on the original file: ask for a transcode (jellyfin-web's retry). */
+    noDirect?: boolean;
   },
   signal?: AbortSignal,
 ): Promise<PlaybackInfo> {
@@ -126,13 +129,14 @@ export async function playbackInfo(
           MaxStreamingBitrate: options.maxBitrate,
           StartTimeTicks: Math.round(startMs * TICKS_PER_MS),
           ...(options.audioIndex != null ? { AudioStreamIndex: options.audioIndex } : {}),
-          ...(options.subtitleIndex != null
-            ? { SubtitleStreamIndex: options.subtitleIndex }
-            : { SubtitleStreamIndex: -1 }),
+          // Unset: Jellyfin applies the user's subtitle preferences; null: subtitles off.
+          ...(options.subtitleIndex !== undefined
+            ? { SubtitleStreamIndex: options.subtitleIndex ?? -1 }
+            : {}),
           IsPlayback: true,
           AutoOpenLiveStream: true,
-          EnableDirectPlay: true,
-          EnableDirectStream: true,
+          EnableDirectPlay: !options.noDirect,
+          EnableDirectStream: !options.noDirect,
           EnableTranscoding: true,
           AllowVideoStreamCopy: true,
           AllowAudioStreamCopy: true,
@@ -145,7 +149,8 @@ export async function playbackInfo(
   const streams = source.MediaStreams ?? [];
   const label = (s: (typeof streams)[number]) =>
     s.DisplayTitle || s.Title || s.Language || `#${s.Index}`;
-  const direct = Boolean(source.SupportsDirectPlay || source.SupportsDirectStream);
+  const direct =
+    !options.noDirect && Boolean(source.SupportsDirectPlay || source.SupportsDirectStream);
   const container = (source.Container ?? 'mp4').split(',')[0];
   const playUrl = direct
     ? `/api/jellyfin/stream/Videos/${itemId}/stream.${container}?${new URLSearchParams({
@@ -187,15 +192,25 @@ export async function playbackInfo(
       })),
     subtitles: streams
       .filter((s) => s.Type === 'Subtitle')
-      .map((s) => ({
-        index: s.Index,
-        label: label(s),
-        language: s.Language ?? null,
-        default: Boolean(s.IsDefault),
-        // External text tracks load as WebVTT; the rest is burned in by a new PlaybackInfo.
-        text: s.DeliveryMethod === 'External' && Boolean(s.DeliveryUrl),
-        url: s.DeliveryMethod === 'External' && s.DeliveryUrl ? proxied(s.DeliveryUrl) : null,
-      })),
+      .map((s) => {
+        // Text subtitles (SRT, ASS…) load as WebVTT, which Jellyfin converts on the fly; image
+        // ones (PGS, VobSub) are burned into the video by a new PlaybackInfo.
+        const text =
+          (s.DeliveryMethod === 'External' && Boolean(s.DeliveryUrl)) ||
+          TEXT_CODECS.has((s.Codec ?? '').toLowerCase());
+        return {
+          index: s.Index,
+          label: label(s),
+          language: s.Language ?? null,
+          default: Boolean(s.IsDefault),
+          text,
+          url: !text
+            ? null
+            : s.DeliveryMethod === 'External' && s.DeliveryUrl && /\.vtt(\?|$)/i.test(s.DeliveryUrl)
+              ? proxied(s.DeliveryUrl)
+              : `/api/jellyfin/stream/Videos/${itemId}/${source.Id}/Subtitles/${s.Index}/0/Stream.vtt`,
+        };
+      }),
   };
 }
 

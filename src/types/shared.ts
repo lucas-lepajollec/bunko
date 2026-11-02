@@ -15,7 +15,11 @@ export type MediaFormat =
   /** Novel (fiction book: "roman"), distinct from LN/WN. */
   | 'NOVEL'
   /** Non-fiction book ("livre": essays, history, science, manuals…). */
-  | 'BOOK';
+  | 'BOOK'
+  /** TV series from TMDB (live action or western animation; anime come from AniList). */
+  | 'SERIES'
+  /** Film from TMDB. */
+  | 'MOVIE';
 export interface SourceMatch {
   sourceId: string;
   sourceName: string;
@@ -141,6 +145,10 @@ export interface VideoStream {
 /** One season of an anime work (AniList lists each season as its own entry). */
 export interface AnimeSeason {
   number: number;
+  /** Named part instead of "Season N" (a film, or a work joined by hand). */
+  label?: string;
+  /** TMDB season number of a series season (video extensions look episodes up with it). */
+  tmdbSeason?: number;
   anilistId: number | null;
   title: string;
   year: number | null;
@@ -157,6 +165,8 @@ export interface VideoDetail {
   seasons?: AnimeSeason[];
   /** The season the page was opened from (a sequel's link opens the whole work there). */
   focus?: number;
+  /** Series and films: ids video extensions and Jellyfin know them by. */
+  ids?: { imdb: string | null; tmdb: number; kind: 'tv' | 'movie' };
   /** Planned episode count when known. */
   episodes: number | null;
   /** Minutes per episode. */
@@ -189,7 +199,9 @@ export type DiscoverKind =
   | 'webnovel'
   | 'novel'
   | 'book'
-  | 'anime';
+  | 'anime'
+  | 'series'
+  | 'movies';
 /** "new" = most recent publication start first, never future or undated titles. */
 export type DiscoverSort = 'trending' | 'popular' | 'score' | 'new';
 /** Quarter-based seasons, AniList convention: WINTER Jan–Mar, SPRING Apr–Jun, SUMMER Jul–Sep, FALL Oct–Dec. */
@@ -249,7 +261,8 @@ export interface ChapterRelease {
     | 'royalroad'
     | 'metron'
     | 'rakuten'
-    | 'anilist';
+    | 'anilist'
+    | 'tmdb';
   /** `volume` = a new tome/edition (books, LN volumes, BD albums); `episode` = anime airing. */
   unit?: 'chapter' | 'volume' | 'episode';
   /** Anime season of the episode, when known. */
@@ -547,6 +560,8 @@ export interface Settings {
   autoImportKavita: boolean;
   /** Shared optional catalog credentials, managed by admins; empty = unused or keyless mode. */
   googleBooksApiKey: string;
+  /** TMDB API key (v3) or read access token (v4): series and films. Shared by the admin. */
+  tmdbApiKey: string;
   metronApiToken: string;
   metronUsername: string;
   metronPassword: string;
@@ -589,6 +604,7 @@ export type SecretSetting =
   | 'tradocApiKey'
   | 'jellyfinApiKey'
   | 'googleBooksApiKey'
+  | 'tmdbApiKey'
   | 'metronApiToken'
   | 'metronPassword'
   | 'rakutenApplicationId'
@@ -599,9 +615,10 @@ export type PublicSettings = Omit<Settings, SecretSetting> & {
   /** Shared availability is visible to members; credential changes/probes require an admin. */
   catalogs: { canManage: boolean; configured: Record<CatalogProvider, boolean> };
 };
-export type CatalogProvider = 'googlebooks' | 'metron' | 'rakuten' | 'hardcover';
+export type CatalogProvider = 'googlebooks' | 'metron' | 'rakuten' | 'hardcover' | 'tmdb';
 export const catalogSettingKeys = [
   'googleBooksApiKey',
+  'tmdbApiKey',
   'metronApiToken',
   'metronUsername',
   'metronPassword',

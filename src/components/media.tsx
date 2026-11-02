@@ -179,23 +179,22 @@ export function TopRow({ items }: { items: UnifiedMedia[] | undefined }) {
         <MediaLink
           key={m.id}
           media={m}
-          className="group flex shrink-0 snap-start flex-col gap-2.5 md:-mr-2"
+          className="group grid shrink-0 snap-start grid-cols-[auto_auto] content-start gap-x-0 gap-y-2.5 md:-mr-2"
         >
-          <span className="flex items-end">
-            <span
-              aria-hidden
-              className="top-numeral font-display mr-[-14px] text-[110px] leading-[0.74] font-extrabold tracking-[-0.08em] md:mr-[-20px] md:text-[170px]"
-            >
-              {i + 1}
-            </span>
-            <Cover
-              src={m.coverUrl}
-              priority={i < 5}
-              alt={m.title}
-              className="relative w-[92px] transition-transform duration-300 group-hover:-translate-y-1 md:w-[128px]"
-            />
+          {/* The title sits under the cover whatever the numeral's width (1 vs 10). */}
+          <span
+            aria-hidden
+            className="top-numeral font-display mr-[-14px] self-end text-[110px] leading-[0.74] font-extrabold tracking-[-0.08em] md:mr-[-20px] md:text-[170px]"
+          >
+            {i + 1}
           </span>
-          <span className="ml-[54px] line-clamp-2 w-[92px] text-xs leading-snug font-medium md:ml-[82px] md:w-[128px] md:text-[13px]">
+          <Cover
+            src={m.coverUrl}
+            priority={i < 5}
+            alt={m.title}
+            className="relative w-[92px] transition-transform duration-300 group-hover:-translate-y-1 md:w-[128px]"
+          />
+          <span className="col-start-2 line-clamp-2 w-[92px] text-xs leading-snug font-medium md:w-[128px] md:text-[13px]">
             {m.title}
           </span>
         </MediaLink>

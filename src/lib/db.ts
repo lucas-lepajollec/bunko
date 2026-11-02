@@ -170,6 +170,7 @@ export function db(): Database.Database {
     migrateV16(connection);
     migrateV17(connection);
     migrateV18(connection);
+    migrateV19(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -1317,6 +1318,16 @@ export function migrateV16(database: Database.Database) {
   })();
 }
 
+/** Works the user joined by hand (a sequel series, films): member → root; additive. */
+export function migrateV19(database: Database.Database) {
+  database.transaction(() => {
+    database.exec(`CREATE TABLE IF NOT EXISTS work_links (
+      member TEXT PRIMARY KEY, root TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS work_links_root ON work_links(root);`);
+    if (Number(database.pragma('user_version', { simple: true })) < 19)
+      database.pragma('user_version=19');
+  })();
+}
 /** Jellyfin index (one row per series) and a per-work manual link; additive and idempotent. */
 export function migrateV18(database: Database.Database) {
   database.transaction(() => {

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMediaPreview } from '@/lib/client/media-navigation';
 import { mediaHref, useProgressiveSearch } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
-import { inUniverse, useUniverse } from '@/lib/client/universe';
+import { inUniverse, useUniverse, searchTypeOf } from '@/lib/client/universe';
 import { Cover, Skeleton, cx, useMediaMeta } from './ui';
 import { LoadNotice } from './load-notice';
 
@@ -45,14 +45,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
   const scope = SCOPES[pathname] ?? null;
   // A chosen universe searches only its own kind (and asks only those providers).
   const universe = useUniverse();
-  const type =
-    universe.active === 'all'
-      ? undefined
-      : universe.active === 'anime'
-        ? 'ANIME'
-        : ['lightnovel', 'webnovel', 'novel', 'book'].includes(universe.active)
-          ? 'NOVEL'
-          : 'MANGA';
+  const type = searchTypeOf(universe.active);
   const results = useProgressiveSearch(scope ? '' : q, type);
   const items = scope
     ? []

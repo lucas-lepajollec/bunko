@@ -3,6 +3,7 @@ import type { UnifiedMedia } from '@/types/shared';
 import {
   franchise,
   knownFranchise,
+  linkedRoot,
   loadedAnime,
   prefetchNodes,
   seasonOffset,
@@ -85,6 +86,8 @@ export async function groupAnimeSeasons<T extends UnifiedMedia>(
   const mapped = animeIdsReady();
   const rootOf = (m: UnifiedMedia) => {
     if (m.type !== 'ANIME' || !m.anilistId) return null;
+    const joined = linkedRoot(m.anilistId);
+    if (joined) return joined;
     const known = seasonRef(m.anilistId)?.root.anilistId;
     if (known) return known;
     if (!mapped) return null;
@@ -120,6 +123,7 @@ export async function groupAnimeSeasons<T extends UnifiedMedia>(
 /** Same work as `anilistId` (another season of it). */
 export function sameAnimeWork(a: number, b: number) {
   if (a === b) return true;
+  if (linkedRoot(a) === b || linkedRoot(b) === a) return true;
   const ra = seasonRef(a)?.root.anilistId ?? firstSeason(a);
   const rb = seasonRef(b)?.root.anilistId ?? firstSeason(b);
   return ra === rb;

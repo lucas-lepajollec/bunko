@@ -11,6 +11,8 @@ export const sourceId = z
     'Source ID must be a positive signed 64-bit decimal string',
   );
 export const mediaType = z.enum(['MANGA', 'NOVEL', 'ANIME']);
+/** Search adds TMDB's series (TV) and films (MOVIE). */
+export const searchType = z.enum(['MANGA', 'NOVEL', 'ANIME', 'TV', 'MOVIE']);
 const httpUrl = z
   .string()
   .max(2048)
@@ -129,7 +131,7 @@ export const mediaId = z
   .string()
   .max(80)
   .regex(
-    /^(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary|googlebooks|bnf|metron|hardcover|rakuten|jellyfin):[0-9a-zA-Z_-]+$/,
+    /^(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary|googlebooks|bnf|metron|hardcover|rakuten|jellyfin|tmdbtv|tmdbmovie):[0-9a-zA-Z_-]+$/,
     'Unknown media identifier',
   );
 export const adultOverrideBody = z.object({
@@ -142,6 +144,7 @@ export const adultOverrideBody = z.object({
       if (['metron', 'hardcover'].includes(provider)) return /^[1-9]\d{0,9}$/.test(key);
       if (provider === 'rakuten') return /^\d{13}$/.test(key);
       if (provider === 'jellyfin') return /^[0-9a-f]{32}$/i.test(key);
+      if (provider === 'tmdbtv' || provider === 'tmdbmovie') return /^[1-9]\d{0,9}$/.test(key);
       if (provider === 'googlebooks') return /^[\w-]{1,60}$/.test(key);
       if (provider === 'bnf') return /^cb\d+[a-z0-9]$/i.test(key);
       if (provider === 'openlibrary') return /^OL[1-9]\d*W$/.test(key);
@@ -168,6 +171,8 @@ export const discoverQuery = z
         'novel',
         'book',
         'anime',
+        'series',
+        'movies',
       ])
       .optional(),
     sort: z.enum(['trending', 'popular', 'score', 'new']).optional(),
@@ -201,7 +206,7 @@ export const discoverQuery = z
   });
 export const searchParams = z.object({
   q: z.string().trim().min(1).max(200),
-  type: mediaType.optional(),
+  type: searchType.optional(),
   fast: z.literal('1').optional(),
 });
 export const settingsPatch = z
@@ -227,6 +232,12 @@ export const settingsPatch = z
     tradocApiKey: z.string().max(2000).optional(),
     prowlarrUrl: z.union([httpUrl, z.literal('')]).optional(),
     prowlarrApiKey: z.string().max(2000).optional(),
+    tmdbApiKey: z
+      .string()
+      .trim()
+      .max(2000)
+      .regex(/^[^\s\x00-\x1f]*$/)
+      .optional(),
     googleBooksApiKey: z
       .string()
       .trim()
@@ -328,6 +339,8 @@ export const settingsPatch = z
         'novel',
         'book',
         'anime',
+        'series',
+        'movies',
       ])
       .optional(),
     universes: z
@@ -342,6 +355,8 @@ export const settingsPatch = z
           'novel',
           'book',
           'anime',
+          'series',
+          'movies',
         ]),
       )
       .max(9)

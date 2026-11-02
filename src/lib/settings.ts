@@ -21,6 +21,7 @@ export const secretKeys: SecretSetting[] = [
   'tradocApiKey',
   'jellyfinApiKey',
   'googleBooksApiKey',
+  'tmdbApiKey',
   'metronApiToken',
   'metronPassword',
   'rakutenApplicationId',
@@ -97,6 +98,7 @@ function serverSettings(): Settings {
     tradocUrl: '',
     tradocApiKey: '',
     googleBooksApiKey: '',
+    tmdbApiKey: '',
     metronApiToken: '',
     metronUsername: '',
     metronPassword: '',
@@ -170,6 +172,7 @@ export function publicSettings(): PublicSettings {
         ),
         rakuten: Boolean(settings.rakutenApplicationId && settings.rakutenAccessKey),
         hardcover: Boolean(settings.hardcoverToken),
+        tmdb: Boolean(settings.tmdbApiKey),
       },
     },
   } as PublicSettings;
@@ -276,6 +279,7 @@ function seedEnvironment() {
           jellyfinApiKey: 'JELLYFIN_API_KEY',
           tradocUrl: 'TRADOC_URL',
           tradocApiKey: 'TRADOC_API_KEY',
+          tmdbApiKey: 'TMDB_API_KEY',
         };
         for (const [key, name] of Object.entries(keys)) {
           const value = process.env[name] ?? env(name);
