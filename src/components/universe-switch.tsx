@@ -42,8 +42,9 @@ export function UniverseMenu() {
     timer.current = setTimeout(() => setOpen(false), 160);
   };
   if (!universe.ready) return null;
-  const reading = universe.enabled.filter((k) => k !== 'anime');
-  const video = universe.enabled.filter((k) => k === 'anime');
+  const isVideo = (k: DiscoverKind) => k === 'anime' || k === 'series' || k === 'movies';
+  const reading = universe.enabled.filter((k) => !isVideo(k));
+  const video = universe.enabled.filter(isVideo);
   if (reading.length + video.length + (universe.allowAll ? 1 : 0) < 2) return null;
   const item = (k: DiscoverKind) => (
     <button

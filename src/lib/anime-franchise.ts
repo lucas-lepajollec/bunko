@@ -3,6 +3,7 @@ import { AppError } from './errors';
 import { requestJson } from './http';
 import { aniFields, fromAniList, type AniMedia } from './media';
 import { cached, saveMetadata, storedMetadata } from './metadata-cache';
+import { statement } from './db';
 import { idsOfAnilist, tvdbSeasons } from './anime-ids';
 
 /** AniList formats that make the seasons of one show (films, OVAs and specials stay apart). */
@@ -152,6 +153,9 @@ export interface SeasonRef {
  * first. A film or OVA is its own work. Cached per season (24 h) and per work (12 h).
  */
 export async function franchise(anilistId: number, signal?: AbortSignal): Promise<Franchise> {
+  // Joined by hand to another work: that work is the franchise.
+  const joined = linkedRoot(anilistId);
+  if (joined && joined !== anilistId) return franchise(joined, signal);
   return cached(`anime-franchise:${anilistId}`, DAY / 2, async () => {
     // The offline id map already knows the show's other seasons: load them all at once.
     const known = idsOfAnilist(anilistId);
@@ -184,8 +188,21 @@ export async function franchise(anilistId: number, signal?: AbortSignal): Promis
         }
       }
     }
+    // Works the user joined to this one (another series, films), in airing order with the rest.
+    const members = linkedMembers(anilistId).filter((id) => !seen.has(id));
+    if (members.length) {
+      await prefetchNodes(members, signal);
+      for (const id of members) seen.set(id, await node(id, signal));
+    }
     const ordered = [...seen.values()].sort((a, b) => start(a) - start(b) || a.id - b.id);
-    const seasons = ordered.map((m, i) => seasonFacts(m, i + 1));
+    const joinedIds = new Set(members);
+    const seasons = ordered.map((m, i) => {
+      const facts = seasonFacts(m, i + 1);
+      // Films and joined works are named, not numbered.
+      return joinedIds.has(m.id) || !SEASON_FORMATS.has(m.format ?? '')
+        ? { ...facts, label: facts.title }
+        : facts;
+    });
     const work: Franchise = {
       root: fromAniList(ordered[0]),
       seasons,
@@ -243,4 +260,44 @@ export function seasonOffset(seasons: AnimeSeason[], number: number) {
 export function loadedAnime(anilistId: number): UnifiedMedia | null {
   const hit = storedMetadata<AniNode>(`anime-node:${anilistId}`);
   return hit ? fromAniList(hit.value) : null;
+}
+
+/** Works joined by hand (table `work_links`, ids as `anilist:N`). */
+export function linkedMembers(rootAnilistId: number): number[] {
+  return (
+    statement('SELECT member FROM work_links WHERE root=? ORDER BY created_at').all(
+      `anilist:${rootAnilistId}`,
+    ) as { member: string }[]
+  )
+    .map((r) => Number(r.member.slice('anilist:'.length)))
+    .filter((id) => Number.isInteger(id) && id > 0);
+}
+export function linkedRoot(anilistId: number): number | null {
+  const row = statement('SELECT root FROM work_links WHERE member=?').get(
+    `anilist:${anilistId}`,
+  ) as { root: string } | undefined;
+  return row ? Number(row.root.slice('anilist:'.length)) : null;
+}
+/** Join `member` into `root` (or undo it); works are recomputed from AniList afterwards. */
+export function setWorkLink(root: number, member: number, joined: boolean) {
+  if (root === member) throw new AppError('VALIDATION_ERROR', 'A work cannot contain itself', 400);
+  if (joined) {
+    // A member cannot itself be a root (no chains): its members move to the new root.
+    statement('UPDATE work_links SET root=? WHERE root=?').run(
+      `anilist:${root}`,
+      `anilist:${member}`,
+    );
+    statement('INSERT OR REPLACE INTO work_links(member,root,created_at) VALUES(?,?,?)').run(
+      `anilist:${member}`,
+      `anilist:${root}`,
+      new Date().toISOString(),
+    );
+  } else
+    statement('DELETE FROM work_links WHERE member=? AND root=?').run(
+      `anilist:${member}`,
+      `anilist:${root}`,
+    );
+  statement(
+    "DELETE FROM metadata_cache WHERE key LIKE 'anime-franchise:%' OR key LIKE 'anime-season-of:%'",
+  ).run();
 }

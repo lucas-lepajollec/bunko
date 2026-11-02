@@ -20,6 +20,8 @@ export function composeHome(
     manhua: [],
     comic: [],
     lightnovel: [],
+    series: [],
+    movies: [],
     webnovel: [],
     novel: [],
     book: [],
@@ -88,8 +90,9 @@ export async function episodeReleases(from: Date, to: Date): Promise<ChapterRele
  * and its hero. Without a kind it is the mixed home of every reading kind plus anime.
  */
 export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<HomeFeed> {
-  // Reading releases are not anime: the anime home never starts their ingestion.
-  if (kind !== 'anime') void refreshReleases().catch(() => {});
+  const video = kind === 'anime' || kind === 'series' || kind === 'movies';
+  // Reading releases are not video: those homes never start their ingestion.
+  if (!video) void refreshReleases().catch(() => {});
   const key = kind
     ? `home:top:${kind}:${includeProviderAdults()}`
     : `home:top:${includeProviderAdults()}`;
@@ -100,14 +103,22 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
     5 * 60_000,
     async () => {
       const items = (
-        await (kind && ['novel', 'book', 'webnovel', 'comic'].includes(kind)
-          ? discover({ sort: 'trending', kind, perPage: 20 }, undefined, true)
-          : discoverAniList(
-              { sort: 'trending', kind: kind ?? 'all', perPage: 20 },
-              undefined,
-              true,
-              true,
-            ))
+        await (kind === 'series' || kind === 'movies'
+          ? (await import('./tmdb')).tmdbConfigured()
+            ? (await import('./tmdb')).discoverTmdb(
+                kind === 'series' ? 'tv' : 'movie',
+                'trending',
+                1,
+              )
+            : { items: [] }
+          : kind && ['novel', 'book', 'webnovel', 'comic'].includes(kind)
+            ? discover({ sort: 'trending', kind, perPage: 20 }, undefined, true)
+            : discoverAniList(
+                { sort: 'trending', kind: kind ?? 'all', perPage: 20 },
+                undefined,
+                true,
+                true,
+              ))
       ).items;
       if (items.length) rankingFailures().delete(key);
       else rankingFailures().add(key);
@@ -122,14 +133,32 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
   ).catch(() => {});
   const releases = releaseLoadingState(),
     ranking = metadataStatus(key);
-  const reading = !kind || kind !== 'anime' ? releaseStore() : [];
+  const reading = !video ? releaseStore() : [];
   // Aired episodes: the anime universe, or the mixed home once anime are followed.
   const followsAnime =
     !kind && (await import('./db')).listTracked().some((t) => t.type === 'ANIME');
   const episodes = kind === 'anime' || followsAnime ? await recentEpisodes() : [];
   const pool = [...reading, ...episodes].filter((r) => !kind || mediaKind(r.media) === kind);
+  const home = normalizeHome(composeHome(heroArtwork(pool), top, kind));
+  // Series and films have no release feed yet: the hero shows the week's trending backdrops.
+  if ((kind === 'series' || kind === 'movies') && !home.hero.length)
+    home.hero = home.top
+      .filter((m) => m.bannerUrl)
+      .slice(0, 8)
+      .map((m) => ({
+        id: `tmdb:${m.id}`,
+        media: m,
+        chapter: null,
+        volume: null,
+        label: '',
+        group: null,
+        releasedAt: m.startDate ?? new Date().toISOString().slice(0, 10),
+        hasTime: false,
+        provider: 'tmdb' as const,
+        trackedId: m.trackedId ?? null,
+      }));
   return {
-    ...normalizeHome(composeHome(heroArtwork(pool), top, kind)),
+    ...home,
     pending: releases.pending || ranking.pending,
     partial: releases.partial || ranking.partial || rankingFailures().has(key),
   };

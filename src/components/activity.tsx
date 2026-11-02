@@ -124,8 +124,8 @@ export function ActivityCenter() {
         </svg>
         {busy && (
           // A small spinner just above the bell while anything loads.
-          <span aria-hidden className="absolute top-1 left-1/2 -translate-x-1/2">
-            <Spinner className="size-2.5 text-white" />
+          <span aria-hidden className="absolute inset-x-0 top-1 flex justify-center leading-none">
+            <Spinner className="block size-2.5 border-[1.5px] text-white" />
           </span>
         )}
         {partial && !busy && (

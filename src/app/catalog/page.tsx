@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import useSWRInfinite from 'swr/infinite';
 import Link from 'next/link';
 import type {
+  PublicSettings,
   DiscoverKind,
   DiscoverPage,
   DiscoverSort,
@@ -12,9 +13,9 @@ import type {
   Season,
 } from '@/types/shared';
 import { SEASONS, formatStartDate } from '@/lib/client/season';
-import { api, useProgressiveSearch } from '@/lib/client/api';
+import { api, useApi, useProgressiveSearch } from '@/lib/client/api';
 import { catalogLoading } from '@/lib/client/catalog-loading';
-import { inUniverse, useUniverse } from '@/lib/client/universe';
+import { inUniverse, useUniverse, searchTypeOf } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { PosterCard } from '@/components/media';
@@ -34,6 +35,8 @@ const KINDS: DiscoverKind[] = [
   'novel',
   'book',
   'anime',
+  'series',
+  'movies',
 ];
 const SORTS: DiscoverSort[] = ['trending', 'popular', 'score', 'new'];
 
@@ -82,17 +85,10 @@ function Catalog() {
   const adultOnly = params.get('adultOnly') === '1';
   const filterValues: FilterValues = { genre, tags, status, year, season, minScore, adultOnly };
   const { locale } = useI18n();
+  const tmdbKind = kind === 'series' || kind === 'movies';
+  const settings = useApi<PublicSettings>('/api/settings');
   // Search the media type of the universe on screen (AniList searches manga unless told).
-  const searched = useProgressiveSearch(
-    q,
-    kind === 'anime'
-      ? 'ANIME'
-      : ['lightnovel', 'webnovel', 'novel', 'book'].includes(kind)
-        ? 'NOVEL'
-        : kind === 'all'
-          ? undefined
-          : 'MANGA',
-  );
+  const searched = useProgressiveSearch(q, searchTypeOf(kind));
   const set = (key: string, value: string, extra?: Record<string, string>) => {
     const next = new URLSearchParams(params);
     for (const [k, v] of Object.entries({ [key]: value, ...extra })) {
@@ -271,24 +267,27 @@ function Catalog() {
                   ],
                   ['new', t('catalog.viewNew')],
                 ] as const
-              ).map(([v, label]) => (
-                <button
-                  key={v}
-                  type="button"
-                  aria-pressed={view === v}
-                  onClick={() =>
-                    v === 'chapters'
-                      ? set('view', 'chapters', { sort: '' })
-                      : set('sort', v === 'new' ? 'new' : '', { view: '' })
-                  }
-                  className={cx(
-                    'h-8 rounded-full px-3 whitespace-nowrap',
-                    view === v ? 'bg-fg text-bg font-semibold' : 'text-mid hover:text-white',
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
+              )
+                // Series and films have no release feed yet: catalog and newest only.
+                .filter(([v]) => v !== 'chapters' || !tmdbKind)
+                .map(([v, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={view === v}
+                    onClick={() =>
+                      v === 'chapters'
+                        ? set('view', 'chapters', { sort: '' })
+                        : set('sort', v === 'new' ? 'new' : '', { view: '' })
+                    }
+                    className={cx(
+                      'h-8 rounded-full px-3 whitespace-nowrap',
+                      view === v ? 'bg-fg text-bg font-semibold' : 'text-mid hover:text-white',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
             </div>
             <div className="ml-auto flex items-center gap-2">
               {view !== 'chapters' && (
@@ -301,15 +300,22 @@ function Catalog() {
               )}
             </div>
           </div>
-          <CatalogFilterBar
-            kind={kind}
-            values={filterValues}
-            releasesView={view === 'chapters'}
-            onChange={(patch) => {
-              const [first, ...rest] = Object.entries(patch);
-              set(first[0], first[1], Object.fromEntries(rest));
-            }}
-          />
+          {tmdbKind && settings.data && !settings.data.catalogs?.configured.tmdb && (
+            <p className="text-mid rounded-2xl bg-white/[0.04] p-4 text-sm leading-relaxed">
+              {t('tmdb.missing')}
+            </p>
+          )}
+          {!tmdbKind && (
+            <CatalogFilterBar
+              kind={kind}
+              values={filterValues}
+              releasesView={view === 'chapters'}
+              onChange={(patch) => {
+                const [first, ...rest] = Object.entries(patch);
+                set(first[0], first[1], Object.fromEntries(rest));
+              }}
+            />
+          )}
         </>
       )}
       {pages.error && <ErrorNote error={pages.error} />}

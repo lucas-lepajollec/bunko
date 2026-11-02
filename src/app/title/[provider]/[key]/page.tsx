@@ -22,7 +22,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { rankSourceCandidates } from '@/lib/client/source-ranking';
 import { Backdrop } from '@/components/backdrop';
 import { ChapterTable, missingForUnit, preferredVariant } from '@/components/chapters';
-import { PosterCard } from '@/components/media';
+import { PosterCard, ScrollRow } from '@/components/media';
 import { InfoBubble, Notice, toast } from '@/components/notify';
 import { MatchesSummary, type Lane } from '@/components/matches';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
@@ -735,7 +735,7 @@ function Title({ media }: { media: MediaDetail }) {
       {media.relations.length > 0 && (
         <section className="relative mx-auto flex max-w-[1760px] flex-col gap-5 px-4 pb-12 md:px-10">
           <SectionHeading num={2} title={t('title.universe')} />
-          <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+          <ScrollRow label={t('title.universe')}>
             {media.relations.map((r) => (
               <MediaLink
                 key={r.media.id}
@@ -754,7 +754,7 @@ function Title({ media }: { media: MediaDetail }) {
                 </span>
               </MediaLink>
             ))}
-          </div>
+          </ScrollRow>
         </section>
       )}
       {media.recommendations.length > 0 && (

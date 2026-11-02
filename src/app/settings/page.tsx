@@ -1408,6 +1408,11 @@ const CATALOGS: {
   fields: { key: string; secret: boolean }[];
 }[] = [
   {
+    id: 'tmdb',
+    url: 'https://www.themoviedb.org/settings/api',
+    fields: [{ key: 'tmdbApiKey', secret: true }],
+  },
+  {
     id: 'googlebooks',
     url: 'https://console.cloud.google.com/apis/credentials',
     fields: [{ key: 'googleBooksApiKey', secret: true }],

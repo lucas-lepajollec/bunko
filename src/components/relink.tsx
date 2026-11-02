@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { KavitaSeriesSummary, SearchResponse } from '@/types/shared';
 import { LoadNotice } from './load-notice';
 import { useApi, useProgressiveSearch } from '@/lib/client/api';
-import { kindOf, useUniverse, type Universe } from '@/lib/client/universe';
+import { kindOf, useUniverse, type Universe, searchTypeOf } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Cover, Skeleton, cx, field, smallButton, useMediaMeta } from './ui';
 
@@ -23,12 +23,7 @@ export function CatalogPicker({
   const [q, setQ] = useState(initial);
   const [query, setQuery] = useState(initial);
   // The work's own media type first (anime are only found by an anime search), then the rest.
-  const ownType =
-    kind === 'anime'
-      ? 'ANIME'
-      : kind && ['lightnovel', 'webnovel', 'novel', 'book'].includes(kind)
-        ? 'NOVEL'
-        : undefined;
+  const ownType = kind && kind !== 'manga' ? searchTypeOf(kind) : undefined;
   const own = useProgressiveSearch(query, ownType);
   const rest = useProgressiveSearch(ownType ? query : '');
   const results = {

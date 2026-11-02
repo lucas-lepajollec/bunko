@@ -1258,6 +1258,29 @@ const en: Dictionary = {
   'activity.task.translations': 'Translating',
   'activity.task.kavita': 'Reading the Kavita library',
   'activity.task.sourceScan': 'Searching the sources',
+  'works.title': 'Parts of this work',
+  'works.hint':
+    'Join another series or films to this work when the catalog keeps them apart (a sequel series, a film series): they become parts of this sheet, your library merges them and lists stop showing them separately.',
+  'works.separate': 'Separate',
+  'works.joined': 'Joined to this work',
+  'works.separated': 'Separated from this work',
+  'catalogs.tmdb.name': 'TMDB',
+  'catalogs.tmdb.what':
+    'TV series and films: catalog, seasons and episodes, ids for Jellyfin and video extensions. Free key; one key for every account.',
+  'catalogs.field.tmdbApiKey': 'TMDB API key or read access token',
+  'kind.series': 'TV series',
+  'kind.movies': 'Films',
+  'universe.desc.series': 'Live-action and animated series from TMDB, by season and episode.',
+  'universe.desc.movies': 'Films from TMDB, with their sagas.',
+  'format.SERIES': 'Series',
+  'format.MOVIE': 'Film',
+  'tmdb.missing':
+    'Series and films need a TMDB key: ask your administrator to add it in Settings → Catalogs.',
+  'episodes.film': 'Film',
+  'home.latestKind.series': 'Latest series episodes',
+  'home.latestKind.movies': 'Latest films',
+  'home.trendingKicker': 'Trending this week · {meta}',
+  'home.newEpisodeKicker': 'New episode · {when} · {meta}',
 };
 
 const fr: Dictionary = {
@@ -2502,6 +2525,29 @@ const fr: Dictionary = {
   'activity.task.translations': 'Traduction',
   'activity.task.kavita': 'Lecture de la bibliothèque Kavita',
   'activity.task.sourceScan': 'Recherche dans les sources',
+  'works.title': 'Parties de cette œuvre',
+  'works.hint':
+    'Rattache une autre série ou des films à cette œuvre quand le catalogue les garde à part (une série suite, une série de films) : ils deviennent des parties de cette fiche, ta bibliothèque les fusionne et les listes ne les montrent plus séparément.',
+  'works.separate': 'Séparer',
+  'works.joined': 'Rattaché à cette œuvre',
+  'works.separated': 'Séparé de cette œuvre',
+  'catalogs.tmdb.name': 'TMDB',
+  'catalogs.tmdb.what':
+    'Séries et films : catalogue, saisons et épisodes, identifiants pour Jellyfin et les extensions vidéo. Clé gratuite ; une clé pour tous les comptes.',
+  'catalogs.field.tmdbApiKey': 'Clé API ou jeton d’accès en lecture TMDB',
+  'kind.series': 'Séries',
+  'kind.movies': 'Films',
+  'universe.desc.series': 'Séries live et d’animation (TMDB), par saison et épisode.',
+  'universe.desc.movies': 'Films (TMDB), avec leurs sagas.',
+  'format.SERIES': 'Série',
+  'format.MOVIE': 'Film',
+  'tmdb.missing':
+    'Les séries et films ont besoin d’une clé TMDB : demande à l’administrateur de l’ajouter dans Réglages → Catalogues.',
+  'episodes.film': 'Film',
+  'home.latestKind.series': 'Derniers épisodes de séries',
+  'home.latestKind.movies': 'Derniers films',
+  'home.trendingKicker': 'Tendance de la semaine · {meta}',
+  'home.newEpisodeKicker': 'Nouvel épisode · {when} · {meta}',
 };
 
 const es: Dictionary = {
@@ -3738,6 +3784,29 @@ const es: Dictionary = {
   'activity.task.translations': 'Traduciendo',
   'activity.task.kavita': 'Leyendo la biblioteca de Kavita',
   'activity.task.sourceScan': 'Buscando en las fuentes',
+  'works.title': 'Partes de esta obra',
+  'works.hint':
+    'Une otra serie o películas a esta obra cuando el catálogo las separa (una serie secuela, una saga de películas): pasan a ser partes de esta ficha, tu biblioteca las fusiona y las listas dejan de mostrarlas aparte.',
+  'works.separate': 'Separar',
+  'works.joined': 'Unido a esta obra',
+  'works.separated': 'Separado de esta obra',
+  'catalogs.tmdb.name': 'TMDB',
+  'catalogs.tmdb.what':
+    'Series y películas: catálogo, temporadas y episodios, ids para Jellyfin y las extensiones de vídeo. Clave gratuita; una para todas las cuentas.',
+  'catalogs.field.tmdbApiKey': 'Clave API o token de lectura de TMDB',
+  'kind.series': 'Series',
+  'kind.movies': 'Películas',
+  'universe.desc.series': 'Series de imagen real y animación (TMDB), por temporada y episodio.',
+  'universe.desc.movies': 'Películas (TMDB), con sus sagas.',
+  'format.SERIES': 'Serie',
+  'format.MOVIE': 'Película',
+  'tmdb.missing':
+    'Las series y películas necesitan una clave de TMDB: pide al administrador que la añada en Ajustes → Catálogos.',
+  'episodes.film': 'Película',
+  'home.latestKind.series': 'Últimos episodios de series',
+  'home.latestKind.movies': 'Últimas películas',
+  'home.trendingKicker': 'Tendencia de la semana · {meta}',
+  'home.newEpisodeKicker': 'Nuevo episodio · {when} · {meta}',
 };
 
 const de: Dictionary = {
@@ -4983,6 +5052,29 @@ const de: Dictionary = {
   'activity.task.translations': 'Übersetzung',
   'activity.task.kavita': 'Kavita-Bibliothek wird gelesen',
   'activity.task.sourceScan': 'Quellen werden durchsucht',
+  'works.title': 'Teile dieses Werks',
+  'works.hint':
+    'Füge eine andere Serie oder Filme diesem Werk hinzu, wenn der Katalog sie trennt (Fortsetzungsserie, Filmreihe): Sie werden Teile dieser Seite, deine Bibliothek führt sie zusammen und Listen zeigen sie nicht mehr getrennt.',
+  'works.separate': 'Trennen',
+  'works.joined': 'Mit diesem Werk verbunden',
+  'works.separated': 'Von diesem Werk getrennt',
+  'catalogs.tmdb.name': 'TMDB',
+  'catalogs.tmdb.what':
+    'Serien und Filme: Katalog, Staffeln und Folgen, IDs für Jellyfin und Video-Erweiterungen. Kostenloser Schlüssel; einer für alle Konten.',
+  'catalogs.field.tmdbApiKey': 'TMDB-API-Schlüssel oder Lesetoken',
+  'kind.series': 'Serien',
+  'kind.movies': 'Filme',
+  'universe.desc.series': 'Real- und Animationsserien (TMDB), nach Staffel und Folge.',
+  'universe.desc.movies': 'Filme (TMDB), mit ihren Reihen.',
+  'format.SERIES': 'Serie',
+  'format.MOVIE': 'Film',
+  'tmdb.missing':
+    'Serien und Filme brauchen einen TMDB-Schlüssel: Bitte die Administration, ihn unter Einstellungen → Kataloge hinzuzufügen.',
+  'episodes.film': 'Film',
+  'home.latestKind.series': 'Neueste Serienfolgen',
+  'home.latestKind.movies': 'Neueste Filme',
+  'home.trendingKicker': 'Trend der Woche · {meta}',
+  'home.newEpisodeKicker': 'Neue Folge · {when} · {meta}',
 };
 
 const it: Dictionary = {
@@ -6219,6 +6311,29 @@ const it: Dictionary = {
   'activity.task.translations': 'Traduzione',
   'activity.task.kavita': 'Lettura della libreria Kavita',
   'activity.task.sourceScan': 'Ricerca nelle fonti',
+  'works.title': 'Parti di quest’opera',
+  'works.hint':
+    'Unisci un’altra serie o dei film a quest’opera quando il catalogo li tiene separati (una serie sequel, una saga di film): diventano parti di questa scheda, la libreria li unisce e le liste smettono di mostrarli a parte.',
+  'works.separate': 'Separa',
+  'works.joined': 'Unito a quest’opera',
+  'works.separated': 'Separato da quest’opera',
+  'catalogs.tmdb.name': 'TMDB',
+  'catalogs.tmdb.what':
+    'Serie e film: catalogo, stagioni ed episodi, id per Jellyfin e le estensioni video. Chiave gratuita; una per tutti gli account.',
+  'catalogs.field.tmdbApiKey': 'Chiave API o token di lettura TMDB',
+  'kind.series': 'Serie TV',
+  'kind.movies': 'Film',
+  'universe.desc.series': 'Serie live e d’animazione (TMDB), per stagione ed episodio.',
+  'universe.desc.movies': 'Film (TMDB), con le loro saghe.',
+  'format.SERIES': 'Serie',
+  'format.MOVIE': 'Film',
+  'tmdb.missing':
+    'Serie e film richiedono una chiave TMDB: chiedi all’amministratore di aggiungerla in Impostazioni → Cataloghi.',
+  'episodes.film': 'Film',
+  'home.latestKind.series': 'Ultimi episodi delle serie',
+  'home.latestKind.movies': 'Ultimi film',
+  'home.trendingKicker': 'Di tendenza questa settimana · {meta}',
+  'home.newEpisodeKicker': 'Nuovo episodio · {when} · {meta}',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

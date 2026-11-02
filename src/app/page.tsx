@@ -101,7 +101,7 @@ export default function HomePage() {
               num={++n}
               title={t(`home.latestKind.${k}`)}
               aside={t('home.latestKindAside')}
-              href={k === 'anime' ? '/planning' : `/catalog?view=chapters&kind=${k}`}
+              href={`/catalog?view=chapters&kind=${k}`}
               linkLabel={t('home.allReleases')}
             />
             {feed.data && !feed.data.pending && (feed.data.latest?.[k]?.length ?? 0) === 0 ? (
@@ -186,7 +186,11 @@ function Hero({
         {/* Without a wide banner the background stays plain: show the cover itself. */}
         <div className="text-soft flex flex-wrap items-center gap-3 text-[11px] tracking-[0.16em] uppercase md:text-xs">
           <span className="h-[3px] w-6 rounded-full" style={{ background: 'var(--accent)' }} />
-          {t('home.newChapterKicker', { when: relative(r.releasedAt), meta: meta(m) })}
+          {r.provider === 'tmdb'
+            ? t('home.trendingKicker', { meta: meta(m) })
+            : r.unit === 'episode'
+              ? t('home.newEpisodeKicker', { when: relative(r.releasedAt), meta: meta(m) })
+              : t('home.newChapterKicker', { when: relative(r.releasedAt), meta: meta(m) })}
         </div>
         <h1 className="font-display line-clamp-2 text-[38px] leading-[0.92] font-extrabold tracking-[-0.045em] [overflow-wrap:anywhere] md:text-[72px]">
           {m.title}
@@ -203,7 +207,10 @@ function Hero({
           <MediaLink media={m} className={cx(primaryButton, 'flex-1 md:flex-none')}>
             {t('home.openSheet')}
           </MediaLink>
-          <Link href="/catalog?view=chapters" className={cx(ghostButton, 'flex-1 md:flex-none')}>
+          <Link
+            href={`/catalog?view=chapters${m.type === 'ANIME' ? '&kind=anime' : ''}`}
+            className={cx(ghostButton, 'flex-1 md:flex-none')}
+          >
             {t('home.allReleases')}
           </Link>
         </div>

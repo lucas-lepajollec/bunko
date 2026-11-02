@@ -49,7 +49,9 @@ type Kind =
   | 'webnovel'
   | 'novel'
   | 'book'
-  | 'anime';
+  | 'anime'
+  | 'series'
+  | 'movies';
 type Sort =
   'news' | 'recent' | 'title' | 'added' | 'released' | 'score' | 'popular' | 'unread' | 'unlinked';
 
@@ -69,6 +71,8 @@ const KIND_FORMATS: Record<Exclude<Kind, 'all'>, MediaFormat[]> = {
   novel: ['NOVEL'],
   book: ['BOOK'],
   anime: [],
+  series: ['SERIES'],
+  movies: ['MOVIE'],
 };
 
 const ALL_KINDS: Kind[] = [
@@ -82,12 +86,14 @@ const ALL_KINDS: Kind[] = [
   'novel',
   'book',
   'anime',
+  'series',
+  'movies',
 ];
 function ofKind(e: TrackedMedia, kind: Kind) {
   return (
     kind === 'all' ||
     (kind === 'anime'
-      ? e.type === 'ANIME'
+      ? e.type === 'ANIME' && e.media.format !== 'SERIES' && e.media.format !== 'MOVIE'
       : e.media.format
         ? KIND_FORMATS[kind].includes(e.media.format)
         : kind === 'manga' && e.type === 'MANGA')
@@ -138,11 +144,12 @@ function Library() {
   const [chosenKind, setKind] = useState<Kind | null>(null);
   const kind: Kind = chosenKind ?? universe.active;
   // Anime speaks of episodes and watching; every label follows the kind on screen.
-  const video = kind === 'anime';
+  const video = kind === 'anime' || kind === 'series' || kind === 'movies';
   const vt = (key: string, vars?: Record<string, string | number>) =>
     video && t(`${key}.video`) !== `${key}.video` ? t(`${key}.video`, vars) : t(key, vars);
   const shownShelf: View = video ? 'ALL' : shelf;
-  const [sort, setSort] = useState<Sort>('news');
+  // Newest release / air date first by default, for every kind.
+  const [sort, setSort] = useState<Sort>('released');
   const updates = useApi<UpdatesFeed>('/api/updates');
   // Never hide titles silently: say how many the 18+ setting keeps out of view.
   const activity = useApi<LibraryActivity>('/api/library/activity');
@@ -305,6 +312,8 @@ function Library() {
                   'novel',
                   'book',
                   'anime',
+                  'series',
+                  'movies',
                 ] as Kind[]
               ).map((k) => (
                 <button

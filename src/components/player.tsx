@@ -12,6 +12,14 @@ import {
 import { useI18n } from '@/i18n/I18nProvider';
 import { Spinner, cx } from './ui';
 
+/** ISO 639 codes Jellyfin uses for each interface language. */
+const LANGUAGE_CODES: Record<string, string[]> = {
+  fr: ['fre', 'fra', 'fr'],
+  en: ['eng', 'en'],
+  es: ['spa', 'es'],
+  de: ['ger', 'deu', 'de'],
+  it: ['ita', 'it'],
+};
 export type PlaySource =
   { kind: 'jellyfin'; itemId: string } | { kind: 'stream'; stream: VideoStream };
 
@@ -22,6 +30,8 @@ export interface PlayerEpisode {
   label: string;
   /** AniList id of the season (extensions look the episode up with it), when known. */
   seasonAnilistId: number | null;
+  /** Series and films: IMDb id, and the TMDB season of the episode (null for a film). */
+  imdb?: { id: string; season: number | null } | null;
   /** Episode number inside its season. */
   episode: number;
   /** Jellyfin item of this episode, when the library has it. */
@@ -60,9 +70,15 @@ export function Player({
   );
   const [picking, setPicking] = useState(!episode.jellyfinItemId);
   const streams = useApi<{ streams: VideoStream[]; errors: string[] }>(
-    episode.seasonAnilistId && (picking || !episode.jellyfinItemId)
+    (picking || !episode.jellyfinItemId) && episode.seasonAnilistId
       ? `/api/video/streams?anilist=${episode.seasonAnilistId}&episode=${episode.episode}&lang=${language}`
-      : null,
+      : (picking || !episode.jellyfinItemId) && episode.imdb
+        ? `/api/video/streams?imdb=${episode.imdb.id}${
+            episode.imdb.season !== null
+              ? `&season=${episode.imdb.season}&episode=${episode.episode}`
+              : ''
+          }&lang=${language}`
+        : null,
   );
   // A new episode (next) starts from its own best source.
   const [current, setCurrent] = useState(episode);
@@ -158,7 +174,9 @@ export function Player({
               })}
               {!streams.isLoading && !episode.jellyfinItemId && !streams.data?.streams.length && (
                 <li className="text-mid px-3 py-4 text-sm leading-relaxed">
-                  {episode.seasonAnilistId ? t('player.noStreams') : t('player.noIds')}
+                  {episode.seasonAnilistId || episode.imdb
+                    ? t('player.noStreams')
+                    : t('player.noIds')}
                 </li>
               )}
             </ul>
@@ -229,7 +247,7 @@ function Screen({
   onNext?: () => void;
   onSources: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const video = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const hls = useRef<Hls | null>(null);
@@ -240,6 +258,7 @@ function Screen({
     burn?: number | null;
     bitrate: number;
     startMs?: number;
+    noDirect?: boolean;
   }>(() => ({ bitrate: savedBitrate() }));
   const [p, setP] = useState<PlaybackInfo | null>(null);
   const [subtitle, setSubtitle] = useState<number | null | undefined>(undefined);
@@ -272,6 +291,7 @@ function Screen({
       ...(request.startMs !== undefined ? { startMs: Math.round(request.startMs) } : {}),
       ...(request.audio != null ? { audioIndex: request.audio } : {}),
       ...(request.burn !== undefined ? { subtitleIndex: request.burn } : {}),
+      ...(request.noDirect ? { noDirect: true } : {}),
     })
       .then((info) => {
         if (live) setP(info);
@@ -284,10 +304,18 @@ function Screen({
     };
   }, [source, request, t]);
   const audioIndex = p?.audioIndex ?? p?.audio.find((a) => a.default)?.index ?? null;
+  // VOSTFR by default: subtitles in the interface language when the audio is in another one.
+  const codes = LANGUAGE_CODES[language] ?? [];
+  const audioLanguage = p?.audio.find((a) => a.index === audioIndex)?.language ?? null;
+  const preferredSub =
+    audioLanguage && codes.includes(audioLanguage.toLowerCase())
+      ? null
+      : (p?.subtitles.find((s) => s.text && codes.includes((s.language ?? '').toLowerCase()))
+          ?.index ?? null);
   const subtitleIndex =
     subtitle !== undefined
       ? subtitle
-      : (p?.subtitleIndex ?? p?.subtitles.find((s) => s.default && s.text)?.index ?? null);
+      : (p?.subtitleIndex ?? p?.subtitles.find((s) => s.default && s.text)?.index ?? preferredSub);
   const textSubtitles = p?.subtitles.filter((s) => s.text && s.url) ?? [];
   const url = source.kind === 'stream' ? source.stream.url : (p?.playUrl ?? null);
   const isHls =
@@ -312,7 +340,14 @@ function Screen({
     setError(null);
     setBuffering(true);
     let cancelled = false;
-    const onFail = () => setError(t('player.failed'));
+    const onFail = () => {
+      // The browser could not decode the original file: ask Jellyfin for a transcode instead.
+      if (source.kind === 'jellyfin' && p?.playMethod === 'direct') {
+        setRequest((r) => ({ ...r, noDirect: true, startMs: el.currentTime * 1000 }));
+        return;
+      }
+      setError(t('player.failed'));
+    };
     if (isHls && !el.canPlayType('application/vnd.apple.mpegurl')) {
       void import('hls.js').then(({ default: HlsJs }) => {
         if (cancelled) return;
@@ -364,7 +399,7 @@ function Screen({
       el.removeAttribute('src');
       el.load();
     };
-  }, [url, isHls, source.kind, p?.startMs, t]);
+  }, [url, isHls, source.kind, p?.startMs, p?.playMethod, t]);
 
   // Jellyfin keeps the place (resume) and learns what was watched.
   const report = useCallback(
@@ -459,7 +494,7 @@ function Screen({
       ref={frame}
       onMouseMove={wake}
       onTouchStart={wake}
-      className={cx('absolute inset-0 bg-black', !shown && 'cursor-none')}
+      className={cx('absolute inset-0 bg-black', shown ? 'player-controls-shown' : 'cursor-none')}
     >
       <video
         ref={video}

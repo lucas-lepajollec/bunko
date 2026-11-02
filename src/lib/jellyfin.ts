@@ -181,7 +181,7 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
   if (!jellyfinConfigured()) return;
   const uid = await userId(signal);
   const libraries = (await jellyfinLibraries(signal)).filter(
-    (l) => l.role === 'anime' || l.role === 'series',
+    (l) => l.role === 'anime' || l.role === 'series' || l.role === 'movies',
   );
   const seriesSchema = z.array(
     z
@@ -192,6 +192,7 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
         SortName: z.string().nullable().optional(),
         ProductionYear: z.number().nullable().optional(),
         ProviderIds: z.record(z.string(), z.string().nullable()).nullable().optional(),
+        UserData: z.object({ Played: z.boolean().optional() }).partial().nullable().optional(),
       })
       .passthrough(),
   );
@@ -209,6 +210,27 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
   const series: (z.infer<typeof seriesSchema>[number] & { role: JellyfinRole })[] = [];
   const episodes: z.infer<typeof episodeSchema> = [];
   for (const library of libraries) {
+    if (library.role === 'movies') {
+      // A film is a one-episode "series": the player and presence treat it the same way.
+      const films = seriesSchema.parse(
+        await allItems(
+          uid,
+          `ParentId=${library.id}&IncludeItemTypes=Movie&EnableUserData=true&Fields=ProviderIds,OriginalTitle,SortName,ProductionYear`,
+          signal,
+        ),
+      );
+      for (const f of films) {
+        series.push({ ...f, role: 'movies' });
+        episodes.push({
+          Id: f.Id,
+          SeriesId: f.Id,
+          ParentIndexNumber: 1,
+          IndexNumber: 1,
+          UserData: f.UserData ?? null,
+        });
+      }
+      continue;
+    }
     const found = seriesSchema.parse(
       await allItems(
         uid,
@@ -320,8 +342,17 @@ export function matchJellyfin(media: UnifiedMedia, link?: JellyfinLink | null) {
     const s = everything.find((x) => x.id === media.id.slice('jellyfin:'.length));
     return s ? { series: s, manual: false } : null;
   }
-  // Anime come from the libraries marked (or detected) as anime.
-  const all = everything.filter((s) => (s.role ?? 'anime') === 'anime');
+  // Each kind comes from its own libraries: anime, series (TMDB) or films (TMDB).
+  const role: JellyfinRole =
+    media.format === 'SERIES' ? 'series' : media.format === 'MOVIE' ? 'movies' : 'anime';
+  const all = everything.filter((s) => (s.role ?? 'anime') === role);
+  const tmdb = /^tmdb(?:tv|movie):(\d+)$/.exec(media.id)?.[1];
+  if (tmdb) {
+    const byTmdb = all.find((s) =>
+      Object.entries(s.providerIds).some(([k, v]) => k.toLowerCase() === 'tmdb' && v === tmdb),
+    );
+    if (byTmdb) return { series: byTmdb, manual: false };
+  }
   const ids = new Set<string>();
   if (media.anilistId) {
     ids.add(String(media.anilistId));

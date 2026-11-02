@@ -117,7 +117,25 @@ export async function episodeStreams(
   signal?: AbortSignal,
 ): Promise<{ streams: VideoStream[]; errors: string[] }> {
   await ensureAnimeIds();
-  const ids = episodeIds(anilistId, episode);
+  return streamsFor(episodeIds(anilistId, episode), language, signal);
+}
+/** Series and films (TMDB): addons know them by IMDb id, season and episode. */
+export async function imdbStreams(
+  imdb: string,
+  target: { season: number; episode: number } | null,
+  language: string,
+  signal?: AbortSignal,
+) {
+  const ids = target
+    ? [{ id: `${imdb}:${target.season}:${target.episode}`, prefix: 'tt', types: ['series'] }]
+    : [{ id: imdb, prefix: 'tt', types: ['movie'] }];
+  return streamsFor(ids, language, signal);
+}
+async function streamsFor(
+  ids: { id: string; prefix: string; types: string[] }[],
+  language: string,
+  signal?: AbortSignal,
+): Promise<{ streams: VideoStream[]; errors: string[] }> {
   const errors: string[] = [];
   const lists = await Promise.all(
     getSettings().videoAddons.map(async (url) => {

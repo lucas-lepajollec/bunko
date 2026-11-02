@@ -16,6 +16,8 @@ const nodes: Record<number, unknown> = {
     ['SEQUEL', 3, 'MOVIE'],
   ]),
   3: node(3, 'Fixture Show Movie', 'MOVIE', 2023, 1, [['PREQUEL', 2, 'TV']]),
+  // A follow-up series AniList keeps apart (no SEQUEL edge), like Steins;Gate 0.
+  9: node(9, 'Fixture Show Zero', 'TV', 2024, 8, []),
 };
 function node(
   id: number,
@@ -64,7 +66,7 @@ const works = await import('@/lib/anime-franchise');
 const { normalizeAnimeWorks, followedSeasons } = await import('@/lib/anime-works');
 
 beforeEach(() => {
-  db().exec('DELETE FROM tracked_media; DELETE FROM metadata_cache;');
+  db().exec('DELETE FROM tracked_media; DELETE FROM metadata_cache; DELETE FROM work_links;');
 });
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
@@ -125,4 +127,25 @@ it('loads the seasons the offline id map knows in one batched request', async ()
   const work = await works.franchise(1);
   expect(work.seasons).toHaveLength(2);
   expect(requests).toEqual([[1, 2]]);
+});
+
+it('joins a separate series into a work by hand, as a named part', async () => {
+  const zero = track({
+    media: { ...emptyMedia('anilist:9', 'Fixture Show Zero', 'ANIME'), anilistId: 9 },
+    status: 'READING',
+  });
+  db().prepare('UPDATE tracked_media SET last_read=2 WHERE id=?').run(zero.id);
+  works.setWorkLink(1, 9, true);
+  const work = await works.franchise(1);
+  expect(work.seasons.map((s) => [s.anilistId, s.label ?? null])).toEqual([
+    [1, null],
+    [2, null],
+    [9, 'Fixture Show Zero'],
+  ]);
+  // Opening the joined series opens the work; the library entry becomes the work.
+  expect((await works.franchise(9)).root.anilistId).toBe(1);
+  await normalizeAnimeWorks();
+  expect(getTracked(zero.id)).toMatchObject({ anilistId: 1, progress: { read: 24 } });
+  works.setWorkLink(1, 9, false);
+  expect((await works.franchise(1)).seasons).toHaveLength(2);
 });

@@ -10,13 +10,19 @@ import { googleBooksJson } from '@/lib/edition-feeds';
 import { metronJson } from '@/lib/metron';
 import { hardcoverQuery } from '@/lib/hardcover';
 const schema = z
-  .object({ provider: z.enum(['googlebooks', 'metron', 'rakuten', 'hardcover']) })
+  .object({ provider: z.enum(['googlebooks', 'metron', 'rakuten', 'hardcover', 'tmdb']) })
   .strict();
 export const POST = route(async (request) => {
   requireAdmin();
   const { provider } = await body(request, schema);
   const s = getSettings();
-  if (provider === 'googlebooks') {
+  if (provider === 'tmdb') {
+    const result = await (
+      await import('@/lib/tmdb')
+    ).tmdbJson<{ images?: unknown }>('/configuration', {}, 5 * 60_000);
+    if (!result.images)
+      throw new AppError('PROVIDER_INVALID_RESPONSE', 'Invalid provider response', 502);
+  } else if (provider === 'googlebooks') {
     if (!s.googleBooksApiKey)
       throw new AppError('PROVIDER_UNCONFIGURED', 'Provider is not configured', 409);
     const result = await googleBooksJson<{ kind?: string }>(

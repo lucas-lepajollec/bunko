@@ -195,6 +195,14 @@ export function anilistFromProviders(ids: Record<string, string>): number | null
 /** The first TVDB season of the show an AniList entry belongs to (itself when unknown). */
 export function firstSeason(anilistId: number): number {
   const e = idsOfAnilist(anilistId);
-  if (!e?.tvdb) return anilistId;
-  return tvdbSeasons(e.tvdb)[0]?.anilist ?? anilistId;
+  if (e?.tvdb) return tvdbSeasons(e.tvdb)[0]?.anilist ?? anilistId;
+  // No TVDB id: the TMDB show groups the seasons instead (TMDB season order).
+  if (e?.tmdb) {
+    const group = (index()?.byTmdb.get(e.tmdb) ?? [])
+      .filter((x) => x.type === 'TV' || x.type === 'ONA' || x.type === null)
+      .filter((x) => (x.tmdbSeason ?? 1) >= 1)
+      .sort((a, b) => (a.tmdbSeason ?? 1) - (b.tmdbSeason ?? 1) || a.anilist - b.anilist);
+    return group[0]?.anilist ?? anilistId;
+  }
+  return anilistId;
 }

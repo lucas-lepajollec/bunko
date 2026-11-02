@@ -12,7 +12,13 @@ import { getSettings } from '@/lib/settings';
 export const GET = route(async (r) => {
   const url = new URL(r.url);
   const path = url.pathname.replace(/^\/api\/jellyfin\/stream\//, '');
-  if (!/^Videos\/[0-9a-f]{32}\/[\w./-]+$/i.test(path) || path.includes('..'))
+  // Jellyfin writes item ids plain (32 hex) or as dashed GUIDs (transcoding URLs).
+  if (
+    !/^Videos\/(?:[0-9a-f]{32}|[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})\/[\w./-]+$/i.test(
+      path,
+    ) ||
+    path.includes('..')
+  )
     throw new AppError('VALIDATION_ERROR', 'Not a Jellyfin video path', 400);
   const s = getSettings();
   if (!s.jellyfinUrl || !s.jellyfinApiKey)

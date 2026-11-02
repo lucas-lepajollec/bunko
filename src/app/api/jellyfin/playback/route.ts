@@ -17,6 +17,7 @@ export const PUT = route(async (r) => {
         startMs: z.number().min(0).max(1e9).optional(),
         audioIndex: z.number().int().min(0).max(999).nullable().optional(),
         subtitleIndex: z.number().int().min(-1).max(999).nullable().optional(),
+        noDirect: z.boolean().optional(),
       })
       .strict(),
   );

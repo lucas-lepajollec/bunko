@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- Series and films (TMDB): two new universes with catalog (trending, popular, best rated,
+  newest), search (series and films also appear in the everything search, e.g. western
+  animation), sheets with seasons and episodes (or one part for a film), film sagas, and the home
+  of each universe. Japanese animation stays on AniList. TMDB key is a shared catalog credential
+  (Settings → Catalogs, or TMDB_API_KEY). Series and films play from Jellyfin (series and films
+  libraries, matched by TMDB id) or video extensions (IMDb id, season, episode).
+- Work links: join another anime into a work by hand (e.g. a sequel series AniList keeps apart, a
+  film series): it becomes a named part of the sheet, the library merges it and lists stop
+  showing it separately. Anime season grouping also uses TMDB ids from the offline map.
+- Jellyfin playback fixed for transcoded episodes (dashed item ids in Jellyfin's transcoding
+  URLs were rejected by the proxy), retries as a transcode when the browser cannot play the
+  original file, Jellyfin's subtitle preferences apply, VOSTFR by default (subtitles in the
+  interface language when the audio is another language), subtitles sit above the controls.
+  Verified against a real Jellyfin 10.10 (H.264 direct play; HEVC 10-bit + FLAC + ASS transcode).
+- Episodes are a grid of cards (still, number, state, watched tick, play on hover) scrolling
+  inside the panel. "Same universe" rows get scroll arrows. Top 10 titles align under their
+  covers and show anime works. Library sorts by release/air date by default. Planning lists
+  far more airing anime (up to 400 schedules a week). Home anime releases lead to the catalog's
+  latest episodes. The activity spinner is centred on the bell.
+
 - Activity center: the header bell is the one place for background work — downloads, source
   search, release checks, Jellyfin import, translations, Kavita reading, source scans on the page —
   each with its progress (percent and done/total), plus page loads and partial results. A small

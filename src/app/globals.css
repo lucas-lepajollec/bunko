@@ -142,3 +142,12 @@ input[type='search']::-webkit-search-cancel-button {
     scroll-behavior: auto !important;
   }
 }
+
+/* Player: subtitles move above the controls while they are shown. */
+.player-controls-shown video::-webkit-media-text-track-container {
+  transform: translateY(-96px);
+  transition: transform 0.3s;
+}
+.player-controls-shown video::cue {
+  line-height: 1.35;
+}
