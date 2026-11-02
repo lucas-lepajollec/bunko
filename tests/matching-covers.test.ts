@@ -950,6 +950,12 @@ it('exposes authenticated local activity, searching and refresh progress; stale 
     const response = await route.GET(request('GET', undefined, '/api/library/activity'));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
+      // One list of running tasks for the activity panel, with progress where known.
+      tasks: [
+        expect.objectContaining({ id: 'matching', detail: 'Owned Work', total: 2 }),
+        expect.objectContaining({ id: 'releases', done: 2, total: 5 }),
+        expect.objectContaining({ id: 'kavita', total: null }),
+      ],
       hiddenAdult: 0,
       jellyfinImport: null,
       revision: expect.any(Number),

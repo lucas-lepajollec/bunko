@@ -12,7 +12,7 @@ import { UI_LANGUAGES, type UiLanguage } from '@/i18n/messages';
 import { UNAUTHORIZED_EVENT, send, useApi, batchesInterval } from '@/lib/client/api';
 import { cx, errorText, field, primaryButton, Skeleton } from './ui';
 import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
-import { ActivityPill, NoticeBell } from './activity';
+import { ActivityCenter } from './activity';
 import { Toaster } from './notify';
 import { Select } from './select';
 import { UserRound } from 'lucide-react';
@@ -299,8 +299,7 @@ function Header() {
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-1">
-        <ActivityPill />
-        <NoticeBell />
+        <ActivityCenter />
         <QuickSearch variant="inline" />
         <button
           type="button"

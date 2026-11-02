@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- Activity center: the header bell is the one place for background work — downloads, source
+  search, release checks, Jellyfin import, translations, Kavita reading, source scans on the page —
+  each with its progress (percent and done/total), plus page loads and partial results. A small
+  spinner sits on the bell while anything runs; the panel fits phones and closes on outside
+  click. The header pill, the library activity line and inline loading notices are gone.
+- Jellyfin playback works like jellyfin-web: the browser's device profile and an explicit
+  bitrate go to PlaybackInfo; Jellyfin answers direct play (original file, seekable through the
+  proxy) or its own transcoding URL. Quality presets follow jellyfin-web (max by default);
+  audio, burned subtitles and quality reopen from the current position; text subtitles switch
+  in place.
+- AniList: one shared rate limiter (429 / Retry-After / X-RateLimit headers, spacing when few
+  requests remain; requests that would wait too long fail fast to cached data), batched season
+  loads shared between concurrent requests, stable airing cache windows, anime hero banners
+  looked up as anime, and anime views no longer start reading-release ingestion. Background
+  release checks and anime work run only for enabled kinds.
+- Anime seasons are grouped in the catalog, search and work settings; the work's own seasons no
+  longer appear in its relations or recommendations. Catalog search uses the media type of the
+  universe on screen. The anime catalog gets a "Latest episodes" view (week by week).
+- Work settings: catalog results show the work's kind (and the selected universe) first, then
+  other kinds; anime texts speak of Jellyfin, and an anime can leave the catalog for its
+  Jellyfin series.
+- Library sorts: release/air date, rating, popularity and most left to read/watch.
+
 - Jellyfin works on its own worker lane: an account with only Jellyfin is no longer skipped by the
   worker, the index and import no longer wait behind release checks, an unfinished import
   continues every minute, and saving Jellyfin settings starts it at once. Series identified by

@@ -572,7 +572,8 @@ async function workerTickBackground() {
   // Jellyfin and anime works have their own lane: they never wait behind release checks, and
   // an unfinished import keeps going every minute while the rest of the cycle runs.
   const video = background(async () => {
-    while (!signal.aborted && ownsLease()) {
+    // Anime work (Jellyfin, season regrouping) only when anime is an enabled kind.
+    while (!signal.aborted && ownsLease() && animeEnabled()) {
       await maybeSyncJellyfin(signal).catch(() => undefined);
       if (ownsLease()) await normalizeAnimeWorks(signal).catch(() => undefined);
       const progress = jellyfinImportProgress();
@@ -593,7 +594,9 @@ async function workerTickBackground() {
       maintenance ??= background(async () => {
         try {
           if (kavitaSyncRequested()) await syncKavitaIndex(signal);
-          if (ownsLease() && updateCheckDue()) await runUpdateCheck(createBatch, signal, ownsLease);
+          // Reading release checks only when a reading kind is enabled (empty = every kind).
+          if (ownsLease() && updateCheckDue() && readingEnabled())
+            await runUpdateCheck(createBatch, signal, ownsLease);
           if (ownsLease()) await processTranslations(signal);
         } catch (error) {
           maintenanceError = error;
@@ -726,4 +729,16 @@ export function requestUpdateCheck() {
     void workerTick().catch(() => {
       /* A future worker tick retries the durable request. */
     });
+}
+
+function enabledKinds() {
+  return getSettings().universes ?? [];
+}
+function readingEnabled() {
+  const kinds = enabledKinds();
+  return !kinds.length || kinds.some((k) => k !== 'anime');
+}
+function animeEnabled() {
+  const kinds = enabledKinds();
+  return !kinds.length || kinds.includes('anime');
 }

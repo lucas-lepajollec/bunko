@@ -154,12 +154,16 @@ export const libraryKeys = (key: unknown) =>
 
 export const releaseViewKey = (key: unknown) =>
   typeof key === 'string' &&
-  (key === '/api/home' || key.startsWith('/api/releases') || key.startsWith('/api/planning'));
+  (key === '/api/home' ||
+    key.startsWith('/api/home?') ||
+    key.startsWith('/api/releases') ||
+    key.startsWith('/api/planning'));
 export const progressViewKey = (key: unknown) =>
   typeof key === 'string' &&
   (key.startsWith('/api/tracked') ||
     key.startsWith('/api/media?') ||
     key === '/api/home' ||
+    key.startsWith('/api/home?') ||
     key.startsWith('/api/kavita/series'));
 
 export function mediaHref(id: string) {

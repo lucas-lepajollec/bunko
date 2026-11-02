@@ -448,6 +448,13 @@ async function anilistDetail(id: number, signal?: AbortSignal): Promise<MediaDet
       /* AniList busy: the single season is still a complete sheet. */
     }
   }
+  let sameWork: (other: number | null) => boolean = () => false;
+  if (m.type === 'ANIME') {
+    // Seasons of this work are not "related" or "recommended": they are in the work.
+    const works = await import('./anime-works');
+    (await import('./anime-ids')).animeIdsReady();
+    sameWork = (other) => other !== null && works.sameAnimeWork(id, other);
+  }
   return {
     ...fromAniList(m),
     ...(video ? { video } : {}),
@@ -455,10 +462,12 @@ async function anilistDetail(id: number, signal?: AbortSignal): Promise<MediaDet
     relations: m.relations.edges
       // Manga, novels and anime of the same universe link to each other.
       .filter((e) => e.node.type === 'MANGA' || e.node.type === 'ANIME')
+      .filter((e) => !(e.node.type === 'ANIME' && sameWork(e.node.id)))
       .map((e) => ({ relation: e.relationType, media: fromAniList(e.node) })),
     recommendations: m.recommendations.nodes
       .map((n) => n.mediaRecommendation)
       .filter((r): r is AniMedia => Boolean(r))
+      .filter((r) => !(r.type === 'ANIME' && sameWork(r.id)))
       .map(fromAniList),
   };
 }

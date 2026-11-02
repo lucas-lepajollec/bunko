@@ -4,17 +4,6 @@ import type { PlaybackInfo } from '@/types/shared';
 import { jellyfin, userId } from './jellyfin';
 
 const TICKS_PER_MS = 10_000;
-/** Subtitles the browser can show as text tracks (Jellyfin converts them to WebVTT). */
-const TEXT_SUBTITLES = new Set([
-  'subrip',
-  'srt',
-  'vtt',
-  'webvtt',
-  'ass',
-  'ssa',
-  'mov_text',
-  'text',
-]);
 export const DEVICE_ID = 'bunko-web';
 
 const itemSchema = z
@@ -59,29 +48,135 @@ const itemSchema = z
   })
   .passthrough();
 
-/** What the player needs to play a Jellyfin episode: its streams and where it stopped. */
-export async function playbackInfo(itemId: string, signal?: AbortSignal): Promise<PlaybackInfo> {
+const sourceSchema = z
+  .object({
+    Id: z.string(),
+    Container: z.string().nullable().optional(),
+    SupportsDirectPlay: z.boolean().optional(),
+    SupportsDirectStream: z.boolean().optional(),
+    TranscodingUrl: z.string().nullable().optional(),
+    DefaultAudioStreamIndex: z.number().nullable().optional(),
+    DefaultSubtitleStreamIndex: z.number().nullable().optional(),
+    MediaStreams: z
+      .array(
+        z
+          .object({
+            Type: z.string(),
+            Index: z.number(),
+            Codec: z.string().nullable().optional(),
+            Language: z.string().nullable().optional(),
+            DisplayTitle: z.string().nullable().optional(),
+            Title: z.string().nullable().optional(),
+            IsDefault: z.boolean().optional(),
+            Height: z.number().nullable().optional(),
+            DeliveryMethod: z.string().nullable().optional(),
+            DeliveryUrl: z.string().nullable().optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+  })
+  .passthrough();
+
+/** Jellyfin URLs carry the API key in their query: it never reaches the browser. */
+function proxied(url: string) {
+  const u = new URL(url, 'http://jellyfin.invalid');
+  for (const key of [...u.searchParams.keys()])
+    if (/^api_?key$/i.test(key)) u.searchParams.delete(key);
+  return `/api/jellyfin/stream${u.pathname}${u.search}`;
+}
+
+/**
+ * Ask Jellyfin how to play an episode, like its own web client: the browser's device profile
+ * and a bitrate ceiling go to `PlaybackInfo`, and Jellyfin answers with a direct stream (the
+ * original file) when the browser can play it, else its own transcoding URL (HLS). Audio,
+ * burned subtitles and quality changes call this again from the current position.
+ */
+export async function playbackInfo(
+  itemId: string,
+  options: {
+    profile: unknown;
+    maxBitrate: number;
+    startMs?: number;
+    audioIndex?: number | null;
+    subtitleIndex?: number | null;
+  },
+  signal?: AbortSignal,
+): Promise<PlaybackInfo> {
   const uid = await userId(signal);
   const item = itemSchema.parse(await jellyfin(`/Users/${uid}/Items/${itemId}`, signal));
-  const source = item.MediaSources?.[0];
-  const streams = source?.MediaStreams ?? [];
+  const resumeMs =
+    item.UserData?.PlaybackPositionTicks && !item.UserData.Played
+      ? Math.round(item.UserData.PlaybackPositionTicks / TICKS_PER_MS)
+      : 0;
+  // Opening resumes where Jellyfin left off; a stream change passes the current position.
+  const startMs = options.startMs ?? resumeMs;
+  const answer = z
+    .object({
+      PlaySessionId: z.string().nullable().optional(),
+      MediaSources: z.array(sourceSchema),
+    })
+    .passthrough()
+    .parse(
+      await jellyfin(`/Items/${itemId}/PlaybackInfo?UserId=${uid}`, signal, 30_000, {
+        method: 'POST',
+        body: {
+          UserId: uid,
+          DeviceProfile: options.profile,
+          MaxStreamingBitrate: options.maxBitrate,
+          StartTimeTicks: Math.round(startMs * TICKS_PER_MS),
+          ...(options.audioIndex != null ? { AudioStreamIndex: options.audioIndex } : {}),
+          ...(options.subtitleIndex != null
+            ? { SubtitleStreamIndex: options.subtitleIndex }
+            : { SubtitleStreamIndex: -1 }),
+          IsPlayback: true,
+          AutoOpenLiveStream: true,
+          EnableDirectPlay: true,
+          EnableDirectStream: true,
+          EnableTranscoding: true,
+          AllowVideoStreamCopy: true,
+          AllowAudioStreamCopy: true,
+        },
+      }),
+    );
+  const source = answer.MediaSources[0];
+  if (!source) throw new Error('Jellyfin returned no media source');
+  const session = (answer.PlaySessionId ?? randomUUID()).replaceAll('-', '');
+  const streams = source.MediaStreams ?? [];
   const label = (s: (typeof streams)[number]) =>
     s.DisplayTitle || s.Title || s.Language || `#${s.Index}`;
-  const video = streams.find((s) => s.Type === 'Video');
+  const direct = Boolean(source.SupportsDirectPlay || source.SupportsDirectStream);
+  const container = (source.Container ?? 'mp4').split(',')[0];
+  const playUrl = direct
+    ? `/api/jellyfin/stream/Videos/${itemId}/stream.${container}?${new URLSearchParams({
+        Static: 'true',
+        mediaSourceId: source.Id,
+        deviceId: DEVICE_ID,
+        PlaySessionId: session,
+      })}`
+    : source.TranscodingUrl
+      ? proxied(source.TranscodingUrl)
+      : null;
+  if (!playUrl) throw new Error('Jellyfin cannot play this item for this browser');
   return {
     itemId: item.Id,
-    mediaSourceId: source?.Id ?? item.Id,
-    playSessionId: randomUUID().replaceAll('-', ''),
+    mediaSourceId: source.Id,
+    playSessionId: session,
+    playUrl,
+    playMethod: direct ? 'direct' : 'transcode',
     title: item.Name,
     series: item.SeriesName ?? null,
     season: item.ParentIndexNumber ?? null,
     episode: item.IndexNumber ?? null,
     durationMs: item.RunTimeTicks ? Math.round(item.RunTimeTicks / TICKS_PER_MS) : null,
-    resumeMs:
-      item.UserData?.PlaybackPositionTicks && !item.UserData.Played
-        ? Math.round(item.UserData.PlaybackPositionTicks / TICKS_PER_MS)
-        : 0,
-    height: video?.Height ?? null,
+    resumeMs,
+    startMs,
+    height: streams.find((s) => s.Type === 'Video')?.Height ?? null,
+    audioIndex: options.audioIndex ?? source.DefaultAudioStreamIndex ?? null,
+    subtitleIndex:
+      options.subtitleIndex !== undefined
+        ? options.subtitleIndex
+        : (source.DefaultSubtitleStreamIndex ?? null),
     audio: streams
       .filter((s) => s.Type === 'Audio')
       .map((s) => ({
@@ -97,7 +192,9 @@ export async function playbackInfo(itemId: string, signal?: AbortSignal): Promis
         label: label(s),
         language: s.Language ?? null,
         default: Boolean(s.IsDefault),
-        text: TEXT_SUBTITLES.has((s.Codec ?? '').toLowerCase()),
+        // External text tracks load as WebVTT; the rest is burned in by a new PlaybackInfo.
+        text: s.DeliveryMethod === 'External' && Boolean(s.DeliveryUrl),
+        url: s.DeliveryMethod === 'External' && s.DeliveryUrl ? proxied(s.DeliveryUrl) : null,
       })),
   };
 }

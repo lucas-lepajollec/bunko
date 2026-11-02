@@ -65,12 +65,7 @@ function Catalog() {
   const genre = params.get('genre') ?? '';
   // Default view is the catalog as before; two visible switches show chapter releases or new series.
   const view: 'catalog' | 'chapters' | 'new' =
-    // Anime has no chapter feed: aired episodes live in the planning and on the home.
-    params.get('view') === 'chapters' && kind !== 'anime'
-      ? 'chapters'
-      : sort === 'new'
-        ? 'new'
-        : 'catalog';
+    params.get('view') === 'chapters' ? 'chapters' : sort === 'new' ? 'new' : 'catalog';
   const status = params.get('status') ?? '';
   const q = params.get('q')?.trim() ?? '';
   const season = (SEASONS.includes(params.get('season') as Season) ? params.get('season') : '') as
@@ -87,7 +82,17 @@ function Catalog() {
   const adultOnly = params.get('adultOnly') === '1';
   const filterValues: FilterValues = { genre, tags, status, year, season, minScore, adultOnly };
   const { locale } = useI18n();
-  const searched = useProgressiveSearch(q);
+  // Search the media type of the universe on screen (AniList searches manga unless told).
+  const searched = useProgressiveSearch(
+    q,
+    kind === 'anime'
+      ? 'ANIME'
+      : ['lightnovel', 'webnovel', 'novel', 'book'].includes(kind)
+        ? 'NOVEL'
+        : kind === 'all'
+          ? undefined
+          : 'MANGA',
+  );
   const set = (key: string, value: string, extra?: Record<string, string>) => {
     const next = new URLSearchParams(params);
     for (const [k, v] of Object.entries({ [key]: value, ...extra })) {
@@ -260,29 +265,30 @@ function Catalog() {
               {(
                 [
                   ['catalog', t('catalog.viewCatalog')],
-                  ['chapters', t('catalog.viewChapters')],
+                  [
+                    'chapters',
+                    t(kind === 'anime' ? 'catalog.viewEpisodes' : 'catalog.viewChapters'),
+                  ],
                   ['new', t('catalog.viewNew')],
                 ] as const
-              )
-                .filter(([v]) => v !== 'chapters' || kind !== 'anime')
-                .map(([v, label]) => (
-                  <button
-                    key={v}
-                    type="button"
-                    aria-pressed={view === v}
-                    onClick={() =>
-                      v === 'chapters'
-                        ? set('view', 'chapters', { sort: '' })
-                        : set('sort', v === 'new' ? 'new' : '', { view: '' })
-                    }
-                    className={cx(
-                      'h-8 rounded-full px-3 whitespace-nowrap',
-                      view === v ? 'bg-fg text-bg font-semibold' : 'text-mid hover:text-white',
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
+              ).map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={view === v}
+                  onClick={() =>
+                    v === 'chapters'
+                      ? set('view', 'chapters', { sort: '' })
+                      : set('sort', v === 'new' ? 'new' : '', { view: '' })
+                  }
+                  className={cx(
+                    'h-8 rounded-full px-3 whitespace-nowrap',
+                    view === v ? 'bg-fg text-bg font-semibold' : 'text-mid hover:text-white',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
             <div className="ml-auto flex items-center gap-2">
               {view !== 'chapters' && (

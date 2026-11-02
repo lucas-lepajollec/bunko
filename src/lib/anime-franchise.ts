@@ -34,11 +34,31 @@ const NODE_FIELDS = `${aniFields} duration
  * Load many seasons in a few requests (AniList pages hold 50): imports and works with many
  * seasons cost one request per 50 entries instead of one each. Already cached ids are skipped.
  */
+const inflight = ((
+  globalThis as typeof globalThis & {
+    __bunkoNodeLoads?: Map<number, Promise<void>>;
+  }
+).__bunkoNodeLoads ??= new Map());
 export async function prefetchNodes(ids: number[], signal?: AbortSignal) {
-  const missing = [...new Set(ids)].filter((id) => {
+  const wanted = [...new Set(ids)].filter((id) => {
     const hit = storedMetadata<AniNode>(`anime-node:${id}`);
     return !hit || Date.now() - hit.at >= DAY;
   });
+  // Ids another request is already loading are awaited, not requested twice.
+  const waiting = wanted.filter((id) => inflight.has(id)).map((id) => inflight.get(id)!);
+  const missing = wanted.filter((id) => !inflight.has(id));
+  let release!: () => void;
+  const mine = new Promise<void>((resolve) => (release = resolve));
+  for (const id of missing) inflight.set(id, mine);
+  try {
+    await loadNodes(missing, signal);
+  } finally {
+    for (const id of missing) inflight.delete(id);
+    release();
+  }
+  await Promise.all(waiting);
+}
+async function loadNodes(missing: number[], signal?: AbortSignal) {
   for (let i = 0; i < missing.length; i += 50) {
     const chunk = missing.slice(i, i + 50);
     const result = await requestJson<{

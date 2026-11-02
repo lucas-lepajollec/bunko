@@ -553,3 +553,19 @@ export async function controlTranslation(id: number, action: TranslationAction) 
   }
   return view(row(id));
 }
+
+/** Translation jobs still running (for the activity panel): finished share and the current file. */
+export function activeTranslations(): { done: number; total: number; current: string | null } {
+  const rows = db()
+    .prepare(
+      "SELECT state,progress,file_name FROM translation_jobs WHERE state IN ('queued','pending','running','importing') ORDER BY id",
+    )
+    .all() as { state: string; progress: number | null; file_name: string }[];
+  if (!rows.length) return { done: 0, total: 0, current: null };
+  const running = rows.find((r) => r.state === 'running') ?? rows[0];
+  return {
+    done: rows.reduce((sum, r) => sum + (r.progress ?? 0), 0),
+    total: rows.length,
+    current: running.file_name,
+  };
+}

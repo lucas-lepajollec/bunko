@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
+import { setNotice } from '@/lib/client/notices';
 import type {
   ChapterSelection,
   CoverChoice,
@@ -14,6 +15,7 @@ import { rankSourceCandidates } from '@/lib/client/source-ranking';
 import { useRelativeTime } from './time';
 import type { Lane } from '@/lib/client/use-source-scan';
 import { CatalogPicker, KavitaPicker } from './relink';
+import { kindOf } from '@/lib/client/universe';
 import { Cover, Dot, Skeleton, Spinner, cx, primaryButton, smallButton } from './ui';
 
 export type { Lane };
@@ -251,8 +253,16 @@ export function CatalogTab({
           .join(' · ')}
         empty={t('match.offCatalogShort')}
       />
-      <Hint>{off ? t('match.catalogOff') : t('match.catalogWrongHint')}</Hint>
-      {!off && (
+      <Hint>
+        {media.type === 'ANIME'
+          ? off
+            ? t('match.catalogOff.video')
+            : t('match.catalogWrongHint.video')
+          : off
+            ? t('match.catalogOff')
+            : t('match.catalogWrongHint')}
+      </Hint>
+      {!off && (media.type !== 'ANIME' || media.jellyfin) && (
         <button type="button" onClick={onDetach} className={cx(smallButton, 'self-start')}>
           {t('match.detach')}
         </button>
@@ -260,7 +270,7 @@ export function CatalogTab({
       <span className="text-muted mt-2 text-xs tracking-[0.14em] uppercase">
         {off ? t('match.attachCatalog') : t('match.changeWork')}
       </span>
-      <CatalogPicker initial={entry.title} onPick={onPick} />
+      <CatalogPicker initial={entry.title} onPick={onPick} kind={kindOf(media)} />
     </div>
   );
 }
@@ -315,6 +325,17 @@ function ScanProgress({ lanes, onScan }: { lanes: Lane[] | null; onScan: () => v
   const done = (lanes ?? []).filter((l) => l.state !== 'loading').length;
   const failed = (lanes ?? []).filter((l) => l.state === 'error').length;
   const running = lanes === null || done < total;
+  // Progress lives in the activity panel; the page keeps the summary and "search again".
+  const id = useId();
+  useEffect(() => {
+    setNotice(id, {
+      pending: running,
+      partial: false,
+      task: { label: t('activity.task.sourceScan'), done, total: total || null },
+    });
+    return () => setNotice(id, null);
+  }, [id, running, done, total, t]);
+  if (running) return null;
   return (
     <div className="flex flex-col gap-2 rounded-2xl bg-white/[0.04] p-3 text-sm">
       <div className="flex items-center gap-2">
@@ -335,14 +356,6 @@ function ScanProgress({ lanes, onScan }: { lanes: Lane[] | null; onScan: () => v
           </button>
         )}
       </div>
-      {running && total > 0 && (
-        <span className="h-1 overflow-hidden rounded-full bg-white/10">
-          <span
-            className="bg-fg block h-full rounded-full transition-[width] duration-500"
-            style={{ width: `${(done / total) * 100}%` }}
-          />
-        </span>
-      )}
     </div>
   );
 }

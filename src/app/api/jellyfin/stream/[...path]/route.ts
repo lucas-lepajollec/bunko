@@ -19,7 +19,11 @@ export const GET = route(async (r) => {
     throw new AppError('SERVICE_NOT_CONFIGURED', 'Jellyfin is not configured', 409);
   url.searchParams.delete('api_key');
   const upstream = await fetch(endpoint(s.jellyfinUrl, `/${path}${url.search}`), {
-    headers: { 'X-Emby-Token': s.jellyfinApiKey },
+    headers: {
+      'X-Emby-Token': s.jellyfinApiKey,
+      // Direct play seeks inside the original file.
+      ...(r.headers.get('range') ? { Range: r.headers.get('range')! } : {}),
+    },
     redirect: 'error',
     signal: r.signal,
   }).catch(() => {
@@ -29,10 +33,13 @@ export const GET = route(async (r) => {
     await upstream.body?.cancel();
     throw new AppError('JELLYFIN_ERROR', `Jellyfin returned HTTP ${upstream.status}`, 502);
   }
-  return new Response(upstream.body, {
-    headers: {
-      'Content-Type': upstream.headers.get('content-type') ?? 'application/octet-stream',
-      'Cache-Control': 'no-store',
-    },
+  const headers = new Headers({
+    'Content-Type': upstream.headers.get('content-type') ?? 'application/octet-stream',
+    'Cache-Control': 'no-store',
   });
+  for (const name of ['content-length', 'content-range', 'accept-ranges']) {
+    const value = upstream.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  return new Response(upstream.body, { status: upstream.status, headers });
 });

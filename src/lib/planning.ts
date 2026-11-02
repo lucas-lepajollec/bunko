@@ -158,7 +158,7 @@ const snapshots = new Map<
   { items: ChapterRelease[]; day: string; values: Map<string, PlanningWeek> }
 >();
 export function planning(q: z.infer<typeof planningQuery>): PlanningWeek {
-  void refreshReleases().catch(() => {});
+  if (q.kind !== 'anime') void refreshReleases().catch(() => {});
   const items = releaseStore(new Date(), true);
   const day = localDate(new Date());
   const userId = tenantId();

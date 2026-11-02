@@ -4,7 +4,8 @@ import { LoadNotice } from '@/components/load-notice';
 import { Select } from '@/components/select';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { setNotice } from '@/lib/client/notices';
 import useSWR, { useSWRConfig } from 'swr';
 import type {
   ChapterSelection,
@@ -860,14 +861,20 @@ function NoSource({
   const { t } = useI18n();
   const engine = useSuwayomi();
   const pending = (lanes ?? []).filter((l) => l.state === 'loading').length;
+  const searching = (started && (lanes === null || pending > 0)) || (!started && background);
+  // The search's progress is in the activity panel; the page only says it is under way.
+  const id = useId();
+  const total = lanes?.length ?? 0;
+  useEffect(() => {
+    setNotice(id, {
+      pending: searching,
+      partial: false,
+      task: { label: t('activity.task.sourceScan'), done: total - pending, total: total || null },
+    });
+    return () => setNotice(id, null);
+  }, [id, searching, total, pending, t]);
   if (engine.state && engine.state !== 'ok') return <SuwayomiNotice />;
-  if ((started && (lanes === null || pending > 0)) || (!started && background))
-    return (
-      <p className="text-mid flex items-center gap-2 text-sm">
-        <Spinner />
-        {t('sources.matchingLong')}
-      </p>
-    );
+  if (searching) return <p className="text-mid text-sm">{t('sources.matchingLong')}</p>;
   if (lanes?.length === 0)
     return (
       <Notice

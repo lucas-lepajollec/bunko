@@ -1,19 +1,16 @@
 'use client';
 import type Hls from 'hls.js';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PlaybackInfo, VideoStream } from '@/types/shared';
 import { send, useApi } from '@/lib/client/api';
+import {
+  QUALITY_PRESETS,
+  deviceProfile,
+  saveBitrate,
+  savedBitrate,
+} from '@/lib/client/device-profile';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Spinner, cx } from './ui';
-
-const DEVICE_ID = 'bunko-web';
-/** Jellyfin transcode ceilings offered in the quality menu (Original = no ceiling). */
-const QUALITIES = [
-  { key: 'original', height: Infinity, bitrate: 140_000_000 },
-  { key: '1080', height: 1080, bitrate: 10_000_000 },
-  { key: '720', height: 720, bitrate: 4_000_000 },
-  { key: '480', height: 480, bitrate: 1_500_000 },
-] as const;
 
 export type PlaySource =
   { kind: 'jellyfin'; itemId: string } | { kind: 'stream'; stream: VideoStream };
@@ -236,13 +233,16 @@ function Screen({
   const video = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const hls = useRef<Hls | null>(null);
-  const info = useApi<PlaybackInfo>(
-    source.kind === 'jellyfin' ? `/api/jellyfin/playback?item=${source.itemId}` : null,
-    { revalidateOnFocus: false, revalidateIfStale: false },
-  );
-  const [audio, setAudio] = useState<number | null>(null);
+  // Jellyfin: what to play comes from PlaybackInfo; a change of audio, burned subtitles or
+  // quality asks again from the current position.
+  const [request, setRequest] = useState<{
+    audio?: number | null;
+    burn?: number | null;
+    bitrate: number;
+    startMs?: number;
+  }>(() => ({ bitrate: savedBitrate() }));
+  const [p, setP] = useState<PlaybackInfo | null>(null);
   const [subtitle, setSubtitle] = useState<number | null | undefined>(undefined);
-  const [quality, setQuality] = useState<(typeof QUALITIES)[number]['key']>('original');
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -253,7 +253,6 @@ function Screen({
   const [idle, setIdle] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const finished = useRef(false);
-  const resumeAt = useRef<number | null>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Streams of an HLS extension source (audio / subtitle tracks the playlist carries).
   const [hlsTracks, setHlsTracks] = useState<{
@@ -263,44 +262,53 @@ function Screen({
     subtitleId: number;
   } | null>(null);
 
-  const p = info.data;
-  const audioIndex = audio ?? p?.audio.find((a) => a.default)?.index ?? p?.audio[0]?.index ?? null;
+  useEffect(() => {
+    if (source.kind !== 'jellyfin') return;
+    let live = true;
+    send<PlaybackInfo>('/api/jellyfin/playback', 'PUT', {
+      itemId: source.itemId,
+      profile: deviceProfile(),
+      maxBitrate: request.bitrate,
+      ...(request.startMs !== undefined ? { startMs: Math.round(request.startMs) } : {}),
+      ...(request.audio != null ? { audioIndex: request.audio } : {}),
+      ...(request.burn !== undefined ? { subtitleIndex: request.burn } : {}),
+    })
+      .then((info) => {
+        if (live) setP(info);
+      })
+      .catch(() => {
+        if (live) setError(t('player.failed'));
+      });
+    return () => {
+      live = false;
+    };
+  }, [source, request, t]);
+  const audioIndex = p?.audioIndex ?? p?.audio.find((a) => a.default)?.index ?? null;
   const subtitleIndex =
-    subtitle !== undefined ? subtitle : (p?.subtitles.find((s) => s.default)?.index ?? null);
-  const burned = p?.subtitles.find((s) => s.index === subtitleIndex && !s.text) ?? null;
-  const textTrack = p?.subtitles.find((s) => s.index === subtitleIndex && s.text) ?? null;
-  const ceiling = QUALITIES.find((q) => q.key === quality)!;
-
-  const url = useMemo(() => {
-    if (source.kind === 'stream') return source.stream.url;
-    if (!p) return null;
-    const q = new URLSearchParams({
-      MediaSourceId: p.mediaSourceId,
-      DeviceId: DEVICE_ID,
-      PlaySessionId: p.playSessionId,
-      VideoCodec: 'h264',
-      AudioCodec: 'aac,mp3',
-      TranscodingMaxAudioChannels: '2',
-      SegmentContainer: 'ts',
-      MinSegments: '1',
-      BreakOnNonKeyFrames: 'true',
-      MaxStreamingBitrate: String(ceiling.bitrate),
-      ...(Number.isFinite(ceiling.height) ? { MaxHeight: String(ceiling.height) } : {}),
-      ...(audioIndex !== null ? { AudioStreamIndex: String(audioIndex) } : {}),
-      // Image subtitles (PGS, DVD) cannot be a text track: Jellyfin draws them into the video.
-      ...(burned ? { SubtitleStreamIndex: String(burned.index), SubtitleMethod: 'Encode' } : {}),
-    });
-    return `/api/jellyfin/stream/Videos/${p.itemId}/master.m3u8?${q}`;
-  }, [source, p, audioIndex, burned, ceiling]);
-  const isHls = source.kind === 'jellyfin' || source.stream.kind === 'hls';
+    subtitle !== undefined
+      ? subtitle
+      : (p?.subtitleIndex ?? p?.subtitles.find((s) => s.default && s.text)?.index ?? null);
+  const textSubtitles = p?.subtitles.filter((s) => s.text && s.url) ?? [];
+  const url = source.kind === 'stream' ? source.stream.url : (p?.playUrl ?? null);
+  const isHls =
+    source.kind === 'jellyfin'
+      ? p?.playMethod === 'transcode' || /\.m3u8(\?|$)/i.test(p?.playUrl ?? '')
+      : source.stream.kind === 'hls';
+  // Text subtitles switch in place (no reload).
+  useEffect(() => {
+    const el = video.current;
+    if (!el) return;
+    for (let i = 0; i < el.textTracks.length; i++) {
+      const track = el.textTracks[i];
+      track.mode = track.id === `sub-${subtitleIndex}` ? 'showing' : 'disabled';
+    }
+  }, [subtitleIndex, p]);
 
   // Attach the stream; switching audio/quality/burned subtitles keeps the position.
   useEffect(() => {
     const el = video.current;
     if (!el || !url) return;
-    const start =
-      resumeAt.current ?? (source.kind === 'jellyfin' && p?.resumeMs ? p.resumeMs / 1000 : 0);
-    resumeAt.current = null;
+    const start = source.kind === 'jellyfin' ? (p?.startMs ?? 0) / 1000 : 0;
     setError(null);
     setBuffering(true);
     let cancelled = false;
@@ -309,7 +317,14 @@ function Screen({
       void import('hls.js').then(({ default: HlsJs }) => {
         if (cancelled) return;
         if (!HlsJs.isSupported()) return onFail();
-        const h = new HlsJs({ startPosition: start, maxBufferLength: 30 });
+        // jellyfin-web's settings: 30 s of buffer, generous manifest timeout (transcodes start slowly).
+        const h = new HlsJs({
+          startPosition: start,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 30,
+          backBufferLength: Infinity,
+          manifestLoadingTimeOut: 20_000,
+        });
         hls.current = h;
         h.on(HlsJs.Events.ERROR, (_e, data) => {
           if (data.fatal) onFail();
@@ -349,7 +364,7 @@ function Screen({
       el.removeAttribute('src');
       el.load();
     };
-  }, [url, isHls, source.kind, p?.resumeMs, t]);
+  }, [url, isHls, source.kind, p?.startMs, t]);
 
   // Jellyfin keeps the place (resume) and learns what was watched.
   const report = useCallback(
@@ -425,14 +440,20 @@ function Screen({
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  const switchWith = (apply: () => void) => {
-    resumeAt.current = video.current?.currentTime ?? null;
-    apply();
+  /** Ask Jellyfin again from the current position (audio, burned subtitles, quality). */
+  const reopen = (change: { audio?: number | null; burn?: number | null; bitrate?: number }) => {
+    const startMs = (video.current?.currentTime ?? 0) * 1000;
+    if (p)
+      void send('/api/jellyfin/playback', 'POST', {
+        itemId: p.itemId,
+        playSessionId: p.playSessionId,
+        positionMs: Math.round(startMs),
+        durationMs: p.durationMs,
+        event: 'stop',
+      }).catch(() => undefined);
+    setRequest((r) => ({ ...r, ...change, startMs }));
   };
   const shown = !idle || !playing || menu;
-  const qualities = QUALITIES.filter(
-    (q) => q.key === 'original' || !p?.height || q.height < p.height,
-  );
   return (
     <div
       ref={frame}
@@ -474,16 +495,16 @@ function Screen({
           if (onNext) onNext();
         }}
       >
-        {textTrack && p && (
+        {textSubtitles.map((sub) => (
           <track
-            key={textTrack.index}
+            key={`${p?.playSessionId}-${sub.index}`}
+            id={`sub-${sub.index}`}
             kind="subtitles"
-            default
-            label={textTrack.label}
-            srcLang={textTrack.language ?? undefined}
-            src={`/api/jellyfin/stream/Videos/${p.itemId}/${p.mediaSourceId}/Subtitles/${textTrack.index}/0/Stream.vtt`}
+            label={sub.label}
+            srcLang={sub.language ?? undefined}
+            src={sub.url!}
           />
-        )}
+        ))}
       </video>
 
       {(buffering || (source.kind === 'jellyfin' && !p)) && !error && (
@@ -615,7 +636,7 @@ function Screen({
                       label={t('player.audio')}
                       value={String(audioIndex ?? '')}
                       options={p.audio.map((a) => ({ value: String(a.index), label: a.label }))}
-                      onChange={(v) => switchWith(() => setAudio(Number(v)))}
+                      onChange={(v) => reopen({ audio: Number(v) })}
                     />
                     <Choice
                       label={t('player.subtitles')}
@@ -626,22 +647,31 @@ function Screen({
                       ]}
                       onChange={(v) => {
                         const next = v === 'off' ? null : Number(v);
-                        const wasBurned = Boolean(burned);
+                        const burned = p.subtitles.some(
+                          (s) => s.index === p.subtitleIndex && !s.text,
+                        );
                         const willBurn = p.subtitles.some((s) => s.index === next && !s.text);
-                        // Burned subtitles restart the stream; text tracks switch in place.
-                        if (wasBurned || willBurn) switchWith(() => setSubtitle(next));
-                        else setSubtitle(next);
+                        setSubtitle(next);
+                        // Image subtitles are drawn into the video by Jellyfin: a new stream.
+                        if (willBurn) reopen({ burn: next });
+                        else if (burned) reopen({ burn: null });
                       }}
                     />
                     <Choice
                       label={t('player.quality')}
-                      value={quality}
-                      options={qualities.map((q) => ({
-                        value: q.key,
-                        label: q.key === 'original' ? t('player.original') : `${q.key}p`,
+                      value={String(request.bitrate)}
+                      options={QUALITY_PRESETS.map((q) => ({
+                        value: String(q.bitrate),
+                        label: q.label === 'max' ? t('player.original') : q.label,
                       }))}
-                      onChange={(v) => switchWith(() => setQuality(v as typeof quality))}
+                      onChange={(v) => {
+                        saveBitrate(Number(v));
+                        reopen({ bitrate: Number(v) });
+                      }}
                     />
+                    <span className="text-muted px-1 text-xs">
+                      {p.playMethod === 'direct' ? t('player.direct') : t('player.transcoding')}
+                    </span>
                   </>
                 ) : hlsTracks && (hlsTracks.audio.length > 1 || hlsTracks.subtitles.length) ? (
                   <>

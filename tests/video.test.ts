@@ -63,6 +63,40 @@ const server: Server = createServer((req, res) => {
         },
       ],
     });
+  if (req.method === 'POST' && url.pathname === `/Items/${ITEM}/PlaybackInfo`)
+    return send({
+      PlaySessionId: 'c'.repeat(32),
+      MediaSources: [
+        {
+          Id: 'b'.repeat(32),
+          Container: 'mkv',
+          SupportsDirectPlay: false,
+          SupportsDirectStream: false,
+          TranscodingUrl: `/videos/${ITEM}/master.m3u8?MediaSourceId=x&ApiKey=secret-key&VideoBitrate=19800000`,
+          DefaultAudioStreamIndex: 1,
+          MediaStreams: [
+            { Type: 'Video', Index: 0, Height: 1080 },
+            { Type: 'Audio', Index: 1, Language: 'jpn', DisplayTitle: 'Japanese', IsDefault: true },
+            { Type: 'Audio', Index: 2, Language: 'fre', DisplayTitle: 'French' },
+            {
+              Type: 'Subtitle',
+              Index: 3,
+              Codec: 'ass',
+              DisplayTitle: 'French',
+              DeliveryMethod: 'External',
+              DeliveryUrl: `/Videos/${ITEM}/${'b'.repeat(32)}/Subtitles/3/0/Stream.vtt?ApiKey=secret-key`,
+            },
+            {
+              Type: 'Subtitle',
+              Index: 4,
+              Codec: 'PGSSUB',
+              DisplayTitle: 'PGS',
+              DeliveryMethod: 'Encode',
+            },
+          ],
+        },
+      ],
+    });
   if (req.method === 'POST' || req.method === 'DELETE') {
     res.writeHead(204);
     return res.end();
@@ -99,10 +133,16 @@ it('asks video extensions with the id they know and puts the interface language 
 
 it('reads a Jellyfin episode for the player and reports where it stopped', async () => {
   updateSettings({ jellyfinUrl: base, jellyfinApiKey: 'jf-key', jellyfinUser: '' });
-  const info = await play.playbackInfo(ITEM);
+  const info = await play.playbackInfo(ITEM, { profile: {}, maxBitrate: 120_000_000 });
+  // Jellyfin decides (here: transcode); its URL goes through Bunko without the API key.
+  expect(info.playMethod).toBe('transcode');
+  expect(info.playUrl).toMatch(/^\/api\/jellyfin\/stream\/videos\/a{32}\/master\.m3u8\?/);
+  expect(info.playUrl).not.toMatch(/secret-key/i);
+  expect(info.subtitles[0].url).not.toMatch(/secret-key/i);
   expect(info).toMatchObject({
     title: 'The Third',
     resumeMs: 600_000,
+    startMs: 600_000,
     durationMs: 1_440_000,
     height: 1080,
     audio: [
