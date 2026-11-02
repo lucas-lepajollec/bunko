@@ -173,6 +173,23 @@ export const discoverQuery = z
     status: z.enum(['RELEASING', 'FINISHED']).optional(),
     season: z.enum(['WINTER', 'SPRING', 'SUMMER', 'FALL']).optional(),
     year: z.coerce.number().int().min(1900).max(2100).optional(),
+    tags: z
+      .string()
+      .max(600)
+      .transform((v) =>
+        v
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .slice(0, 10),
+      )
+      .pipe(z.array(z.string().min(1).max(60)))
+      .optional(),
+    minScore: z.coerce.number().int().min(0).max(100).optional(),
+    adultOnly: z
+      .enum(['1', 'true'])
+      .transform(() => true)
+      .optional(),
     page: z.coerce.number().int().min(1).max(200).optional(),
     perPage: z.coerce.number().int().min(1).max(50).optional(),
   })

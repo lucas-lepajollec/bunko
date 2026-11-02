@@ -116,7 +116,8 @@ export function fromOpenLibrary(
     genres: subjects.slice(0, 100),
     adult: subjects.some((s) => /\b(erotica|pornography|erotic fiction)\b/i.test(s)),
     authors: doc.author_name ?? doc.authors?.flatMap((a) => (a.name ? [a.name] : [])) ?? [],
-    coverUrl: cover && cover > 0 ? `https://covers.openlibrary.org/b/id/${cover}-L.jpg` : null,
+    // Medium covers (~180 px wide) are plenty for cards and load far faster than -L.
+    coverUrl: cover && cover > 0 ? `https://covers.openlibrary.org/b/id/${cover}-M.jpg` : null,
     synopsis: cleanSynopsis(
       typeof doc.description === 'string' ? doc.description : doc.description?.value,
     ),
@@ -179,7 +180,10 @@ export async function discoverBooks(q: DiscoverQuery): Promise<BookDiscoverPage>
   const year = new Date().getUTCFullYear();
   const query = [
     subject,
-    q.genre ? `subject:${JSON.stringify(q.genre)}` : '',
+    // Catalog genres use AniList names; Open Library subjects are lower case ("Sci-Fi" → science fiction).
+    q.genre
+      ? `subject:${JSON.stringify(q.genre === 'Sci-Fi' ? 'science fiction' : q.genre.toLowerCase())}`
+      : '',
     q.year ? `first_publish_year:${q.year}` : '',
     q.sort === 'new' ? `first_publish_year:[1 TO ${year}]` : '',
   ]

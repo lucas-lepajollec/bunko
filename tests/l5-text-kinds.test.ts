@@ -236,7 +236,7 @@ it('searches and loads real-shaped work/edition/author details with persistent t
     authors: ['J. R. R. Tolkien'],
     synopsis: 'A fantasy story.',
     genres: ['Fantasy fiction'],
-    coverUrl: 'https://covers.openlibrary.org/b/id/258027-L.jpg',
+    coverUrl: 'https://covers.openlibrary.org/b/id/258027-M.jpg',
     editionCount: 120,
     volumes: null,
     year: 1954,
