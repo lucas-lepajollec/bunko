@@ -16,6 +16,7 @@ import {
   type Section,
 } from '@/components/matches';
 import { GeneralTab } from '@/components/work-settings';
+import { JellyfinTab } from '@/components/jellyfin-link';
 import { trackedFor } from '@/lib/client/tracked-entry';
 import {
   Cover,
@@ -28,7 +29,7 @@ import {
   smallButton,
 } from '@/components/ui';
 
-const SECTIONS: Section[] = ['general', 'catalog', 'sources', 'kavita', 'cover'];
+const SECTIONS: Section[] = ['general', 'catalog', 'sources', 'kavita', 'jellyfin', 'cover'];
 
 export default function WorkSettingsPage() {
   return (
@@ -73,7 +74,12 @@ function WorkSettings({ media }: { media: MediaDetail }) {
   const entry = trackedFor(library.data, media);
   const isComic = media.type === 'MANGA';
   // Kavita links books too; sources (and their scan) only exist for comics.
-  const sections = SECTIONS.filter((s) => isComic || s !== 'sources');
+  // Sources are for comics; Kavita for reading; Jellyfin for anime.
+  const anime = media.type === 'ANIME';
+  const sections = SECTIONS.filter(
+    (s) =>
+      (s !== 'sources' || isComic) && (s !== 'kavita' || !anime) && (s !== 'jellyfin' || anime),
+  );
   const requested = params.get('s') as Section | null;
   const section: Section = requested && sections.includes(requested) ? requested : 'general';
   const [save, setSave] = useState<Save>(null);
@@ -110,9 +116,11 @@ function WorkSettings({ media }: { media: MediaDetail }) {
       ? t('settings.work.general')
       : s === 'kavita'
         ? 'Kavita'
-        : s === 'cover'
-          ? t('match.tab.images')
-          : t(`match.${s}`);
+        : s === 'jellyfin'
+          ? 'Jellyfin'
+          : s === 'cover'
+            ? t('match.tab.images')
+            : t(`match.${s}`);
   const go = (s: Section) => {
     setSave(null);
     router.replace(`${mediaHref(media.id)}/settings${s === 'general' ? '' : `?s=${s}`}`, {
@@ -210,6 +218,12 @@ function WorkSettings({ media }: { media: MediaDetail }) {
               onScan={rescan}
               onSources={(next) => run(() => patch({ sources: next }))}
               busy={save?.state === 'saving'}
+            />
+          ) : section === 'jellyfin' ? (
+            <JellyfinTab
+              entry={entry}
+              media={media}
+              onLink={(jellyfinLink) => run(() => patch({ jellyfinLink }))}
             />
           ) : section === 'kavita' ? (
             <KavitaTab

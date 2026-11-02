@@ -42,19 +42,50 @@ export function UniverseMenu() {
     timer.current = setTimeout(() => setOpen(false), 160);
   };
   if (!universe.ready) return null;
-  const options: DiscoverKind[] = [
-    ...(universe.allowAll ? ['all' as const] : []),
-    ...universe.enabled,
-  ];
-  if (options.length < 2) return null;
+  const reading = universe.enabled.filter((k) => k !== 'anime');
+  const video = universe.enabled.filter((k) => k === 'anime');
+  if (reading.length + video.length + (universe.allowAll ? 1 : 0) < 2) return null;
+  const item = (k: DiscoverKind) => (
+    <button
+      key={k}
+      type="button"
+      role="menuitemradio"
+      aria-checked={universe.active === k}
+      onClick={() => {
+        setOpen(false);
+        void universe.set(k);
+      }}
+      className={cx(
+        'flex flex-col gap-0.5 rounded-xl px-3 py-2.5 text-left transition-colors',
+        universe.active === k ? 'bg-white/[0.09]' : 'hover:bg-white/[0.05]',
+      )}
+    >
+      <span
+        className={cx(
+          'flex items-center gap-2 text-[15px]',
+          universe.active === k ? 'font-semibold text-white' : 'text-fg',
+        )}
+      >
+        {label(t, k)}
+        {universe.active === k && (
+          <span aria-hidden className="size-1.5 rounded-full bg-[var(--accent,#9fb6ff)]" />
+        )}
+      </span>
+      <span className="text-muted text-[12px] leading-snug">{t(`universe.desc.${k}`)}</span>
+    </button>
+  );
   return (
     <div ref={root} className="relative hidden md:block" onMouseEnter={show} onMouseLeave={hide}>
+      {/* Looks like the other header links; the panel opens on hover (or click / keyboard). */}
       <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => (open ? setOpen(false) : show())}
-        className="flex h-9 items-center gap-1.5 rounded-full bg-white/[0.08] px-3.5 text-[13px] text-white hover:bg-white/[0.12] xl:text-sm"
+        className={cx(
+          'flex items-center gap-1.5 text-[13px] xl:text-[15px]',
+          open ? 'text-white' : 'text-mid hover:text-white',
+        )}
       >
         {label(t, universe.active)}
         <svg
@@ -65,39 +96,53 @@ export function UniverseMenu() {
           stroke="currentColor"
           strokeWidth="2.5"
           aria-hidden
+          className={cx('transition-transform duration-200', open && 'rotate-180')}
         >
           <path d="m6 9 6 6 6-6" />
         </svg>
       </button>
-      {open && (
-        <div
-          role="menu"
-          aria-label={t('universe.label')}
-          className="border-line absolute top-11 left-0 z-50 flex w-56 flex-col rounded-2xl border bg-[#141210] p-1.5 shadow-[0_24px_60px_rgba(0,0,0,0.55)]"
-        >
-          {options.map((k) => (
-            <button
-              key={k}
-              type="button"
-              role="menuitemradio"
-              aria-checked={universe.active === k}
-              onClick={() => {
-                setOpen(false);
-                void universe.set(k);
-              }}
-              className={cx(
-                'flex h-10 items-center justify-between rounded-xl px-3 text-left text-sm',
-                universe.active === k
-                  ? 'bg-white/[0.1] font-semibold text-white'
-                  : 'text-mid hover:bg-white/[0.06] hover:text-white',
-              )}
-            >
-              {label(t, k)}
-              {universe.active === k && <span aria-hidden>✓</span>}
-            </button>
-          ))}
+      <div
+        role="menu"
+        aria-label={t('universe.label')}
+        aria-hidden={!open}
+        className={cx(
+          'border-line absolute top-full left-[-16px] z-50 mt-4 w-[560px] rounded-3xl border bg-[#141210]/95 p-3 shadow-[0_30px_80px_rgba(0,0,0,0.6)] backdrop-blur-xl transition-[opacity,transform] duration-200',
+          open
+            ? 'translate-y-0 opacity-100'
+            : 'pointer-events-none invisible -translate-y-1 opacity-0',
+        )}
+      >
+        {/* The gap between the link and the panel stays hoverable. */}
+        <span aria-hidden className="absolute inset-x-0 -top-4 h-4" />
+        <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-muted px-3 pt-1 pb-1.5 text-[11px] tracking-[0.16em] uppercase">
+              {t('universe.groupReading')}
+            </span>
+            <div className="grid grid-cols-2 gap-0.5">{reading.map(item)}</div>
+          </div>
+          <div className="border-line flex flex-col gap-1 border-l pl-3">
+            {video.length > 0 && (
+              <>
+                <span className="text-muted px-3 pt-1 pb-1.5 text-[11px] tracking-[0.16em] uppercase">
+                  {t('universe.groupVideo')}
+                </span>
+                {video.map(item)}
+              </>
+            )}
+            {universe.allowAll && (
+              <div
+                className={cx(
+                  'flex flex-col gap-1',
+                  video.length > 0 && 'border-line mt-2 border-t pt-2',
+                )}
+              >
+                {item('all')}
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

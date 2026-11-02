@@ -23,6 +23,9 @@ const SERVICE_KEYS = [
   'prowlarrApiKey',
   'tradocUrl',
   'tradocApiKey',
+  'jellyfinUrl',
+  'jellyfinApiKey',
+  'jellyfinUser',
 ];
 export const PATCH = route(async (r) => {
   const patch = await body(r, settingsPatch);

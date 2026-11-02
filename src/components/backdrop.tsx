@@ -49,15 +49,43 @@ export function Backdrop({
             'linear-gradient(180deg, #000 0%, #000 58%, rgba(0,0,0,0.55) 78%, transparent 100%)',
         }}
       >
-        {src && (
+        {src && sharp && (
+          <>
+            {/* Wide banners (≈4.7:1) are never stretched over the whole hero: the banner keeps its
+                own proportions at the top, over a soft blurred copy that fills the rest. */}
+            <ManagedImage
+              src={src}
+              alt=""
+              referrerPolicy="no-referrer"
+              className={cx(
+                'absolute inset-0 size-full scale-110 object-cover opacity-45 blur-2xl',
+                mobileImage && 'hidden md:block',
+              )}
+            />
+            <ManagedImage
+              src={src}
+              alt=""
+              onLoadError={() => setFailed({ key, count: attempt + 1 })}
+              referrerPolicy="no-referrer"
+              className={cx(
+                'absolute inset-x-0 top-0 h-auto min-h-[55%] w-full object-cover object-[center_25%]',
+                mobileImage && 'hidden md:block',
+              )}
+              style={{
+                maskImage: 'linear-gradient(180deg, #000 70%, transparent 100%)',
+                WebkitMaskImage: 'linear-gradient(180deg, #000 70%, transparent 100%)',
+              }}
+            />
+          </>
+        )}
+        {src && !sharp && (
           <ManagedImage
             src={src}
             alt=""
             onLoadError={() => setFailed({ key, count: attempt + 1 })}
             referrerPolicy="no-referrer"
             className={cx(
-              'absolute inset-0 size-full object-cover object-[70%_center] md:object-[center_25%]',
-              !sharp && 'scale-125 opacity-40 blur-2xl',
+              'absolute inset-0 size-full scale-125 object-cover opacity-40 blur-2xl',
               mobileImage && 'hidden md:block',
             )}
           />

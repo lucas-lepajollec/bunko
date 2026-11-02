@@ -7,6 +7,7 @@ import { getSettings } from '@/lib/settings';
 import { kavitaAdmin } from '@/lib/kavita-client';
 import { endpoint } from '@/lib/http';
 import { tradocInfo } from '@/lib/translations';
+import { jellyfinInfo } from '@/lib/jellyfin';
 /** Reachability of the services the interface depends on; never returns upstream details. */
 export const GET = route(async (r) => {
   const settings = getSettings();
@@ -14,6 +15,7 @@ export const GET = route(async (r) => {
     suwayomi: { state: 'unconfigured', version: null },
     kavita: { state: 'unconfigured', admin: null },
     tradoc: { state: 'unconfigured', version: null },
+    jellyfin: { state: 'unconfigured', version: null },
   };
   await Promise.all([
     (async () => {
@@ -41,6 +43,15 @@ export const GET = route(async (r) => {
         status.kavita = { state: response.ok ? 'ok' : 'error', admin: await kavitaAdmin(r.signal) };
       } catch {
         status.kavita = { state: 'error', admin: null };
+      }
+    })(),
+    (async () => {
+      if (!settings.jellyfinUrl || !settings.jellyfinApiKey) return;
+      try {
+        const info = await jellyfinInfo(r.signal);
+        status.jellyfin = { state: 'ok', version: info.Version ?? null };
+      } catch {
+        status.jellyfin = { state: 'error', version: null };
       }
     })(),
     (async () => {
