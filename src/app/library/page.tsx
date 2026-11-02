@@ -71,6 +71,28 @@ const KIND_FORMATS: Record<Exclude<Kind, 'all'>, MediaFormat[]> = {
   anime: [],
 };
 
+const ALL_KINDS: Kind[] = [
+  'all',
+  'manga',
+  'manhwa',
+  'manhua',
+  'comic',
+  'lightnovel',
+  'webnovel',
+  'novel',
+  'book',
+  'anime',
+];
+function ofKind(e: TrackedMedia, kind: Kind) {
+  return (
+    kind === 'all' ||
+    (kind === 'anime'
+      ? e.type === 'ANIME'
+      : e.media.format
+        ? KIND_FORMATS[kind].includes(e.media.format)
+        : kind === 'manga' && e.type === 'MANGA')
+  );
+}
 export default function LibraryPage() {
   return (
     <Suspense>
@@ -144,21 +166,20 @@ function Library() {
   );
   const ownedVolumes = entries.reduce((sum, e) => sum + (e.ownedVolumes?.length ?? 0), 0);
   const unownedCount = entries.filter((entry) => !hasOwnedFiles(entry)).length;
+  // Works per kind: shown next to the total and on each kind chip.
+  const kindCounts = useMemo(() => {
+    const c = new Map<Kind, number>();
+    for (const e of entries)
+      for (const k of ALL_KINDS) if (k !== 'all' && ofKind(e, k)) c.set(k, (c.get(k) ?? 0) + 1);
+    return c;
+  }, [entries]);
   // The header search filters this page (`?q=`, written by the search field).
   const filterText = (params.get('q') ?? '').trim();
   const filtered = entries
     .filter((entry) => shownShelf !== 'UNOWNED' || !hasOwnedFiles(entry))
     .filter((e) => !status || shelfOf(e) === status)
     .filter((e) => matchesFilter(e, filterText))
-    .filter(
-      (e) =>
-        kind === 'all' ||
-        (kind === 'anime'
-          ? e.type === 'ANIME'
-          : e.media.format
-            ? KIND_FORMATS[kind].includes(e.media.format)
-            : kind === 'manga' && e.type === 'MANGA'),
-    );
+    .filter((e) => ofKind(e, kind));
   const withoutSources = filtered.filter(
     (entry) => entry.type === 'MANGA' && !entry.sources.length,
   );
@@ -175,11 +196,17 @@ function Library() {
         title={t('library.title')}
         aside={
           library.data
-            ? vt('library.inventory', {
-                series: n(entries.length),
-                chapters: n(ownedChapters),
-                volumes: n(ownedVolumes),
-              })
+            ? kind === 'all'
+              ? vt('library.inventory', {
+                  series: n(entries.length),
+                  chapters: n(ownedChapters),
+                  volumes: n(ownedVolumes),
+                })
+              : t('library.kindCount', {
+                  count: n(kindCounts.get(kind) ?? 0),
+                  kind: t(`kind.${kind}`),
+                  total: n(entries.length),
+                })
             : undefined
         }
       />
@@ -279,6 +306,11 @@ function Library() {
                   )}
                 >
                   {t(`kind.${k}`)}
+                  {k !== 'all' && (kindCounts.get(k) ?? 0) > 0 && (
+                    <span className="text-muted ml-1.5 font-serif italic">
+                      {n(kindCounts.get(k)!)}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

@@ -1233,6 +1233,7 @@ const en: Dictionary = {
   'player.fullscreen': 'Full screen',
   'player.playEpisode': 'Play episode {n}',
   'player.watch': 'Watch {label}',
+  'library.kindCount': '{kind}: {count} · {total} works in all',
 };
 
 const fr: Dictionary = {
@@ -2452,6 +2453,7 @@ const fr: Dictionary = {
   'player.fullscreen': 'Plein écran',
   'player.playEpisode': 'Lire l’épisode {n}',
   'player.watch': 'Regarder {label}',
+  'library.kindCount': '{kind} : {count} · {total} œuvres en tout',
 };
 
 const es: Dictionary = {
@@ -3663,6 +3665,7 @@ const es: Dictionary = {
   'player.fullscreen': 'Pantalla completa',
   'player.playEpisode': 'Reproducir el episodio {n}',
   'player.watch': 'Ver {label}',
+  'library.kindCount': '{kind}: {count} · {total} obras en total',
 };
 
 const de: Dictionary = {
@@ -4883,6 +4886,7 @@ const de: Dictionary = {
   'player.fullscreen': 'Vollbild',
   'player.playEpisode': 'Folge {n} abspielen',
   'player.watch': '{label} ansehen',
+  'library.kindCount': '{kind}: {count} · {total} Werke insgesamt',
 };
 
 const it: Dictionary = {
@@ -6094,6 +6098,7 @@ const it: Dictionary = {
   'player.fullscreen': 'Schermo intero',
   'player.playEpisode': 'Riproduci l’episodio {n}',
   'player.watch': 'Guarda {label}',
+  'library.kindCount': '{kind}: {count} · {total} opere in tutto',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

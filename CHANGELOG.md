@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Jellyfin works on its own worker lane: an account with only Jellyfin is no longer skipped by the
+  worker, the index and import no longer wait behind release checks, an unfinished import
+  continues every minute, and saving Jellyfin settings starts it at once. Series identified by
+  their ids are imported straight from the batched AniList load (no per-work request).
+- Library: the header shows the works of the selected kind next to the total, and each kind chip
+  shows its count.
+
 - Video player: every aired episode has a play button, and "Watch S2 · Ep. 5" resumes where the
   work stopped. Jellyfin episodes play inside Bunko through a server proxy (the API key stays on
   the server) with Jellyfin's audio tracks, subtitles (text as WebVTT, image ones burned in) and

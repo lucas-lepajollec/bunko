@@ -42,7 +42,7 @@ import {
 import { sharedConcurrencyGate } from './concurrency';
 import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
 import { processTranslations } from './translations';
-import { maybeSyncJellyfin } from './jellyfin';
+import { jellyfinImportProgress, maybeSyncJellyfin } from './jellyfin';
 import { normalizeAnimeWorks } from './anime-works';
 import { targetFor } from './library-paths';
 import { env } from '@/lib/env';
@@ -569,6 +569,17 @@ async function workerTickBackground() {
     );
   };
   let maintenance: ReturnType<typeof background> | undefined;
+  // Jellyfin and anime works have their own lane: they never wait behind release checks, and
+  // an unfinished import keeps going every minute while the rest of the cycle runs.
+  const video = background(async () => {
+    while (!signal.aborted && ownsLease()) {
+      await maybeSyncJellyfin(signal).catch(() => undefined);
+      if (ownsLease()) await normalizeAnimeWorks(signal).catch(() => undefined);
+      const progress = jellyfinImportProgress();
+      if (!progress || progress.done >= progress.total || !maintenance?.running) break;
+      await waitForWorker(60_000, signal);
+    }
+  });
   let finalCovers: ReturnType<typeof background> | undefined;
   let maintenanceError: unknown;
   try {
@@ -584,8 +595,6 @@ async function workerTickBackground() {
           if (kavitaSyncRequested()) await syncKavitaIndex(signal);
           if (ownsLease() && updateCheckDue()) await runUpdateCheck(createBatch, signal, ownsLease);
           if (ownsLease()) await processTranslations(signal);
-          if (ownsLease()) await normalizeAnimeWorks(signal).catch(() => undefined);
-          if (ownsLease()) await maybeSyncJellyfin(signal).catch(() => undefined);
         } catch (error) {
           maintenanceError = error;
         }
@@ -600,7 +609,9 @@ async function workerTickBackground() {
         continue;
       // A source request can arrive after an empty initial queue, during slow maintenance/transfers.
       startMatching();
-      let pending = [matching, covers, maintenance, finalCovers].filter((task) => task?.running);
+      let pending = [matching, covers, video, maintenance, finalCovers].filter(
+        (task) => task?.running,
+      );
       if (!pending.length) {
         if (finalCovers) break;
         finalCovers = background(() =>
@@ -617,11 +628,13 @@ async function workerTickBackground() {
     } while (!signal.aborted);
     await matching?.promise;
     await covers.promise;
+    await video.promise;
     if (maintenanceError) throw maintenanceError;
   } finally {
     controller.abort();
     await matching?.promise;
     await covers.promise;
+    await video.promise;
     await maintenance?.promise;
     await finalCovers?.promise;
     clearInterval(lease);
@@ -675,7 +688,13 @@ export async function runTenantWorkers() {
       // Blank instances have no upstream work. Local requests/batches still wake their own tick.
       try {
         const s = getSettings();
-        if (!s.suwayomiUrl && !s.kavitaUrl && !listTracked().length && !listBatches().length)
+        if (
+          !s.suwayomiUrl &&
+          !s.kavitaUrl &&
+          !s.jellyfinUrl &&
+          !listTracked().length &&
+          !listBatches().length
+        )
           return;
         await workerTick();
       } catch {
