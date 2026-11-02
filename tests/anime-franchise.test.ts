@@ -1,0 +1,102 @@
+import { afterAll, beforeEach, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+const directory = mkdtempSync(path.join(tmpdir(), 'bunko-anime-work-'));
+process.env.BUNKO_DATA_DIR = path.join(directory, 'state');
+process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
+process.env.BUNKO_WORKER = 'false';
+
+/** A small AniList graph: two TV seasons and a film of the same show. */
+const nodes: Record<number, unknown> = {
+  1: node(1, 'Fixture Show', 'TV', 2020, 12, [['SEQUEL', 2, 'TV']]),
+  2: node(2, 'Fixture Show Season 2', 'TV', 2022, 10, [
+    ['PREQUEL', 1, 'TV'],
+    ['SEQUEL', 3, 'MOVIE'],
+  ]),
+  3: node(3, 'Fixture Show Movie', 'MOVIE', 2023, 1, [['PREQUEL', 2, 'TV']]),
+};
+function node(
+  id: number,
+  title: string,
+  format: string,
+  year: number,
+  episodes: number,
+  relations: [string, number, string][],
+) {
+  return {
+    id,
+    type: 'ANIME',
+    format,
+    title: { romaji: title, english: title, native: null },
+    synonyms: [],
+    status: 'FINISHED',
+    episodes,
+    startDate: { year, month: 1, day: 1 },
+    coverImage: { extraLarge: null, color: null },
+    genres: [],
+    relations: {
+      edges: relations.map(([relationType, nid, f]) => ({
+        relationType,
+        node: { id: nid, type: 'ANIME', format: f },
+      })),
+    },
+  };
+}
+vi.mock('@/lib/http', async (original) => ({
+  ...(await original<typeof import('@/lib/http')>()),
+  requestJson: async (_url: string, init: RequestInit) => {
+    const { variables } = JSON.parse(String(init.body)) as { variables: { id: number } };
+    return { data: { Media: nodes[variables.id] ?? null } };
+  },
+}));
+const { enterFixtureTenant } = await import('./tenant-fixture');
+enterFixtureTenant();
+const { db, track, getTracked } = await import('@/lib/db');
+const { emptyMedia } = await import('@/lib/media');
+const works = await import('@/lib/anime-franchise');
+const { normalizeAnimeWorks, followedSeasons } = await import('@/lib/anime-works');
+
+beforeEach(() => {
+  db().exec('DELETE FROM tracked_media; DELETE FROM metadata_cache;');
+});
+afterAll(() => rmSync(directory, { recursive: true, force: true }));
+
+it('groups the TV seasons of a show into one work, films apart', async () => {
+  const work = await works.franchise(2);
+  expect(work.root.anilistId).toBe(1);
+  expect(work.seasons.map((s) => [s.number, s.anilistId, s.episodes])).toEqual([
+    [1, 1, 12],
+    [2, 2, 10],
+  ]);
+  expect(works.seasonRef(2)).toMatchObject({ season: 2, root: { anilistId: 1 } });
+  const video = works.workVideo(work.seasons, 2, []);
+  expect(video).toMatchObject({ episodes: 22, aired: 22, focus: 2 });
+  expect(video.list[12].number).toBe(13);
+});
+
+it('turns a season followed on its own into its work, with absolute progress', async () => {
+  const season2 = track({
+    media: { ...emptyMedia('anilist:2', 'Fixture Show Season 2', 'ANIME'), anilistId: 2 },
+    status: 'READING',
+  });
+  db().prepare('UPDATE tracked_media SET last_read=3 WHERE id=?').run(season2.id);
+  await normalizeAnimeWorks();
+  expect(getTracked(season2.id)).toMatchObject({ anilistId: 1, progress: { read: 15 } });
+  expect(followedSeasons().get(2)).toEqual({ trackedId: season2.id, season: 2 });
+});
+
+it('merges a duplicate season into the work already followed', async () => {
+  const root = track({
+    media: { ...emptyMedia('anilist:1', 'Fixture Show', 'ANIME'), anilistId: 1 },
+    status: 'READING',
+  });
+  const season2 = track({
+    media: { ...emptyMedia('anilist:2', 'Fixture Show Season 2', 'ANIME'), anilistId: 2 },
+    status: 'READING',
+  });
+  db().prepare('UPDATE tracked_media SET last_read=4 WHERE id=?').run(season2.id);
+  await normalizeAnimeWorks();
+  expect(getTracked(season2.id)).toBeUndefined();
+  expect(getTracked(root.id)).toMatchObject({ progress: { read: 16 } });
+});

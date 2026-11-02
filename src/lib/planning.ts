@@ -185,9 +185,8 @@ export async function withAnimeAiring(
 ): Promise<PlanningWeek> {
   if (q.kind && q.kind !== 'all' && q.kind !== 'anime') return week;
   const { animeAiring } = await import('./catalog');
-  const { listTracked } = await import('./db');
-  const tracked = listTracked().filter((t) => t.type === 'ANIME' && t.anilistId);
-  const byAniList = new Map(tracked.map((t) => [t.anilistId!, t.id]));
+  const { followedSeasons } = await import('./anime-works');
+  const byAniList = new Map([...followedSeasons()].map(([id, f]) => [id, f.trackedId]));
   const from = dateFromDay(week.start);
   from.setHours(0, 0, 0, 0);
   const to = new Date(from);
@@ -208,6 +207,7 @@ export async function withAnimeAiring(
       media: a.media,
       kind: at.getTime() <= now ? 'released' : 'expected',
       chapter: a.episode,
+      season: a.season,
       unit: 'episode',
       time: `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`,
       trackedId: a.media.anilistId ? (byAniList.get(a.media.anilistId) ?? null) : null,

@@ -246,7 +246,9 @@ function PlanningRow({ item }: { item: PlanningItem }) {
             {item.unit === 'episode' && item.chapter !== null
               ? item.chapterTo != null && item.chapterTo !== item.chapter
                 ? t('planning.episodeRange', { from: n(item.chapter), to: n(item.chapterTo) })
-                : t('episodes.short', { n: n(item.chapter) })
+                : item.season
+                  ? t('episodes.seasonShort', { s: n(item.season), n: n(item.chapter) })
+                  : t('episodes.short', { n: n(item.chapter) })
               : item.chapter !== null && item.chapterTo != null && item.chapterTo !== item.chapter
                 ? t('planning.chapterRange', {
                     from: n(Math.floor(item.chapter)),

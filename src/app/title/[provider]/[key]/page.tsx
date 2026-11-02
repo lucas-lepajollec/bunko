@@ -3,7 +3,7 @@ import { MediaLink } from '@/components/media-link';
 import { LoadNotice } from '@/components/load-notice';
 import { Select } from '@/components/select';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import type {
@@ -58,6 +58,15 @@ export default function TitlePage() {
     dedupingInterval: 1000,
     refreshInterval: (data) => (data?.pending ? 1500 : 0),
   });
+  const router = useRouter();
+  const root = detail.data?.video?.seasons?.[0]?.anilistId;
+  const otherSeason =
+    provider === 'anilist' && root && String(root) !== decodeURIComponent(key) ? root : null;
+  useEffect(() => {
+    // A later season opens its whole work, on that season.
+    if (otherSeason)
+      router.replace(`/title/anilist/${otherSeason}?season=${detail.data?.video?.focus ?? 1}`);
+  }, [otherSeason, router, detail.data?.video?.focus]);
   if (detail.error && !detail.data)
     return (
       <main className="mx-auto max-w-[1760px] px-4 pt-24 md:px-10 md:pt-32">
@@ -103,6 +112,7 @@ function Title({ media }: { media: MediaDetail }) {
   const [busy, setBusy] = useState(false);
   const isComic = media.type === 'MANGA';
   const video = media.type === 'ANIME' ? media.video : undefined;
+  const seasonParam = Number(useSearchParams().get('season')) || undefined;
   const [watchBusy, setWatchBusy] = useState(false);
   const fromDetail: ChapterSelection[] = media.sources.map((s) => ({
     suwayomiMangaId: s.suwayomiMangaId,
@@ -522,7 +532,7 @@ function Title({ media }: { media: MediaDetail }) {
                 </span>
                 {!video && <OwnedInventory entry={entry} />}
                 {video && media.jellyfin && (
-                  <span>{t('jellyfin.owned', { n: n(media.jellyfin.owned.length) })}</span>
+                  <span>{t('jellyfin.owned', { n: n(media.jellyfin.ownedCount) })}</span>
                 )}
                 {media.kavita && <KavitaRefresh trackedId={entry.id} />}
                 <span>
@@ -584,7 +594,7 @@ function Title({ media }: { media: MediaDetail }) {
               <>
                 <SectionHeading id="toc" num={1} title={t('episodes.title')} />
                 <EpisodeList
-                  video={video}
+                  video={seasonParam ? { ...video, focus: seasonParam } : video}
                   jellyfin={media.jellyfin}
                   entry={entry}
                   busy={watchBusy}

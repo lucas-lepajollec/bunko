@@ -1179,8 +1179,11 @@ const en: Dictionary = {
   'jellyfin.role.series': 'TV series',
   'jellyfin.role.movies': 'Films',
   'jellyfin.role.ignore': 'Ignore',
-  'library.watchedN': "watched {n}",
-  'profile.resumeWatching': "Continue watching",
+  'library.watchedN': 'watched {n}',
+  'profile.resumeWatching': 'Continue watching',
+  'episodes.seasonShort': 'S{s} · Ep. {n}',
+  'episodes.seasonN': 'Season {n}',
+  'episodes.seasonsLabel': 'Seasons',
 };
 
 const fr: Dictionary = {
@@ -2346,8 +2349,11 @@ const fr: Dictionary = {
   'jellyfin.role.series': 'Séries',
   'jellyfin.role.movies': 'Films',
   'jellyfin.role.ignore': 'Ignorer',
-  'library.watchedN': "vu {n}",
-  'profile.resumeWatching': "Reprendre le visionnage",
+  'library.watchedN': 'vu {n}',
+  'profile.resumeWatching': 'Reprendre le visionnage',
+  'episodes.seasonShort': 'S{s} · Ép. {n}',
+  'episodes.seasonN': 'Saison {n}',
+  'episodes.seasonsLabel': 'Saisons',
 };
 
 const es: Dictionary = {
@@ -3505,8 +3511,11 @@ const es: Dictionary = {
   'jellyfin.role.series': 'Series',
   'jellyfin.role.movies': 'Películas',
   'jellyfin.role.ignore': 'Ignorar',
-  'library.watchedN': "visto {n}",
-  'profile.resumeWatching': "Seguir viendo",
+  'library.watchedN': 'visto {n}',
+  'profile.resumeWatching': 'Seguir viendo',
+  'episodes.seasonShort': 'T{s} · Ep. {n}',
+  'episodes.seasonN': 'Temporada {n}',
+  'episodes.seasonsLabel': 'Temporadas',
 };
 
 const de: Dictionary = {
@@ -4673,8 +4682,11 @@ const de: Dictionary = {
   'jellyfin.role.series': 'Serien',
   'jellyfin.role.movies': 'Filme',
   'jellyfin.role.ignore': 'Ignorieren',
-  'library.watchedN': "gesehen {n}",
-  'profile.resumeWatching': "Weiterschauen",
+  'library.watchedN': 'gesehen {n}',
+  'profile.resumeWatching': 'Weiterschauen',
+  'episodes.seasonShort': 'St. {s} · Fl. {n}',
+  'episodes.seasonN': 'Staffel {n}',
+  'episodes.seasonsLabel': 'Staffeln',
 };
 
 const it: Dictionary = {
@@ -5832,8 +5844,11 @@ const it: Dictionary = {
   'jellyfin.role.series': 'Serie',
   'jellyfin.role.movies': 'Film',
   'jellyfin.role.ignore': 'Ignora',
-  'library.watchedN': "visto {n}",
-  'profile.resumeWatching': "Riprendi la visione",
+  'library.watchedN': 'visto {n}',
+  'profile.resumeWatching': 'Riprendi la visione',
+  'episodes.seasonShort': 'S{s} · Ep. {n}',
+  'episodes.seasonN': 'Stagione {n}',
+  'episodes.seasonsLabel': 'Stagioni',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

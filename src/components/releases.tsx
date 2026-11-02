@@ -9,9 +9,11 @@ import { Cover, PosterSkeletons, cx } from './ui';
 /** "Ch. 1130", "Vol. 3 Ch. 12", or the label as published. */
 export function useChapterLabel() {
   const { t, n } = useI18n();
-  return (r: Pick<ChapterRelease, 'chapter' | 'volume' | 'label' | 'unit'>) =>
+  return (r: Pick<ChapterRelease, 'chapter' | 'volume' | 'label' | 'unit' | 'season'>) =>
     r.unit === 'episode' && r.chapter !== null
-      ? t('episodes.short', { n: n(r.chapter) })
+      ? r.season
+        ? t('episodes.seasonShort', { s: n(r.season), n: n(r.chapter) })
+        : t('episodes.short', { n: n(r.chapter) })
       : r.chapter !== null
         ? r.volume !== null
           ? t('release.volChapter', { v: n(r.volume), n: n(r.chapter) })

@@ -750,7 +750,9 @@ function snapshotTracked(id?: number) {
       const coverChoice = JSON.parse(String(r.cover_choice_json)) as CoverChoice;
       const kavita = match(rawMedia, r.kavita_series_id as number | null);
       const identity =
-        r.off_catalog || /^(kavita|suwayomi|local):/.test(rawMedia.id) ? 'off-catalog' : 'catalog';
+        r.off_catalog || /^(kavita|suwayomi|local|jellyfin):/.test(rawMedia.id)
+          ? 'off-catalog'
+          : 'catalog';
       const automaticCovers = [
         ...new Set(
           [

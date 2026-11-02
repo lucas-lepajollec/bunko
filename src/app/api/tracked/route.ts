@@ -39,6 +39,17 @@ export const GET = route(async (r) => {
 export const POST = route(async (r) => {
   const input = await body(r, trackBody);
   if (input.autoDownload) requirePermission('downloads');
+  if (input.media.type === 'ANIME' && input.media.anilistId) {
+    // Anime are followed as whole works: a later season adds its first season's work.
+    try {
+      const { franchise } = await import('@/lib/anime-franchise');
+      const work = await franchise(input.media.anilistId, r.signal);
+      if (work.root.anilistId !== input.media.anilistId)
+        return json(track({ ...input, media: work.root }), 201);
+    } catch {
+      /* AniList busy: follow the season; the worker regroups it later. */
+    }
+  }
   return json(track(input), 201);
 });
 export const PATCH = route(async (r) => {

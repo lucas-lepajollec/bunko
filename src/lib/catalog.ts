@@ -1,3 +1,4 @@
+import { seasonRef } from './anime-franchise';
 import { rememberMediaPreview, mediaPreview } from './media-preview';
 import { deduplicate } from './search-engine';
 import { rakutenDetail } from './rakuten';
@@ -86,7 +87,8 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
     const own = trackedForMedia(m, tracked);
     const associated = trackedForMedia(m, shared);
     const t =
-      associated && (sameMedia(associated.media, m) || /^(kavita|suwayomi|local):/.test(m.id))
+      associated &&
+      (sameMedia(associated.media, m) || /^(kavita|suwayomi|local|jellyfin):/.test(m.id))
         ? associated
         : undefined;
     const enriched = withKavita(
@@ -433,9 +435,22 @@ async function anilistDetail(id: number, signal?: AbortSignal): Promise<MediaDet
     signal,
   );
   if (!m) throw new AppError('NOT_FOUND', 'Title not found', 404);
+  let video: VideoDetail | undefined;
+  if (m.type === 'ANIME') {
+    // An anime sheet is the whole work: its TV seasons together, episodes numbered across them.
+    video = videoDetail(m);
+    try {
+      const { franchise, workVideo } = await import('./anime-franchise');
+      const work = await franchise(id, signal);
+      if (work.seasons.length > 1 || work.seasons[0]?.anilistId !== id)
+        video = workVideo(work.seasons, work.index[id] ?? 1, video.studios);
+    } catch {
+      /* AniList busy: the single season is still a complete sheet. */
+    }
+  }
   return {
     ...fromAniList(m),
-    ...(m.type === 'ANIME' ? { video: videoDetail(m) } : {}),
+    ...(video ? { video } : {}),
     tags: m.tags.filter((t) => !t.isMediaSpoiler && t.rank >= 60).map((t) => t.name),
     relations: m.relations.edges
       // Manga, novels and anime of the same universe link to each other.
@@ -551,6 +566,8 @@ async function loadDetail(id: string, signal?: AbortSignal): Promise<MediaDetail
     detail = { ...kavitaMedia(Number(key)), tags: [], relations: [], recommendations: [] };
   else if (provider === 'anilist' && /^[1-9]\d{0,9}$/.test(key))
     detail = await anilistDetail(Number(key), signal);
+  else if (provider === 'jellyfin' && /^[0-9a-f]{32}$/i.test(key))
+    detail = (await import('./jellyfin')).jellyfinMedia(key);
   else if (provider === 'mangadex' && /^[0-9a-f-]{36}$/i.test(key))
     detail = await mangadexDetail(key, signal);
   else if (provider === 'mangaupdates' && /^\d{1,20}$/.test(key))
@@ -679,7 +696,10 @@ export async function suwayomiDetail(id: number, signal?: AbortSignal): Promise<
 }
 
 export interface AnimeAiring {
+  /** The whole work (first season) when the season's work is known. */
   media: UnifiedMedia;
+  /** Season of the work, when the airing entry is a later season. */
+  season: number | null;
   episode: number;
   airingAt: string;
 }
@@ -734,10 +754,14 @@ export async function animeAiring(
       seen.add(k);
       return true;
     })
-    .map((r) => ({
-      media: fromAniList(r.media),
-      episode: r.episode,
-      airingAt: new Date(r.airingAt * 1000).toISOString(),
-    }))
+    .map((r) => {
+      const ref = seasonRef(r.media.id);
+      return {
+        media: ref ? ref.root : fromAniList(r.media),
+        season: ref && ref.season > 1 ? ref.season : null,
+        episode: r.episode,
+        airingAt: new Date(r.airingAt * 1000).toISOString(),
+      };
+    })
     .filter((a) => visible(a.media));
 }
