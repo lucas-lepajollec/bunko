@@ -7,6 +7,8 @@ import { kindOf, useUniverse, type Universe, searchTypeOf } from '@/lib/client/u
 import { useI18n } from '@/i18n/I18nProvider';
 import { Cover, Skeleton, cx, field, smallButton, useMediaMeta } from './ui';
 
+const VIDEO: Universe[] = ['anime', 'series', 'movies', 'animation'];
+
 export function CatalogPicker({
   initial,
   onPick,
@@ -24,20 +26,29 @@ export function CatalogPicker({
   const [query, setQuery] = useState(initial);
   // The work's own media type first (anime are only found by an anime search), then the rest.
   const ownType = kind && kind !== 'manga' ? searchTypeOf(kind) : undefined;
-  const own = useProgressiveSearch(query, ownType);
-  const rest = useProgressiveSearch(ownType ? query : '');
+  // A video work looks everywhere video lives (anime, TMDB series and films), whatever its kind.
+  const video = Boolean(kind && VIDEO.includes(kind));
+  const own = useProgressiveSearch(query, video ? 'ANIME' : ownType);
+  const tv = useProgressiveSearch(video ? query : '', 'TV');
+  const movie = useProgressiveSearch(video ? query : '', 'MOVIE');
+  const rest = useProgressiveSearch(ownType || video ? query : '');
   const results = {
     isLoading: own.isLoading,
-    refining: own.refining || rest.refining,
+    refining: own.refining || rest.refining || tv.refining || movie.refining,
     partial: own.partial || rest.partial,
   };
-  const all = [...(own.data?.results ?? []), ...(rest.data?.results ?? [])].filter(
-    (m, i, list) => list.findIndex((x) => x.id === m.id) === i,
-  );
+  const all = [
+    ...(own.data?.results ?? []),
+    ...(tv.data?.results ?? []),
+    ...(movie.data?.results ?? []),
+    ...(rest.data?.results ?? []),
+  ].filter((m, i, list) => list.findIndex((x) => x.id === m.id) === i);
   const wanted = new Set<string>(
-    [kind, universe.active !== 'all' ? universe.active : undefined].filter((k): k is Universe =>
-      Boolean(k),
-    ),
+    video
+      ? VIDEO
+      : [kind, universe.active !== 'all' ? universe.active : undefined].filter((k): k is Universe =>
+          Boolean(k),
+        ),
   );
   const first = wanted.size ? all.filter((m) => wanted.has(kindOf(m))) : all;
   const others = wanted.size ? all.filter((m) => !wanted.has(kindOf(m))) : [];

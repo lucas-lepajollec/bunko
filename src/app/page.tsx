@@ -26,7 +26,18 @@ import {
 } from '@/components/ui';
 
 // Formats with dated releases (romans and livres have none); anime shows aired episodes.
-const KINDS = ['manga', 'manhwa', 'manhua', 'comic', 'lightnovel', 'webnovel', 'anime'] as const;
+const KINDS = [
+  'manga',
+  'manhwa',
+  'manhua',
+  'comic',
+  'lightnovel',
+  'webnovel',
+  'anime',
+  'series',
+  'movies',
+  'animation',
+] as const;
 
 export default function HomePage() {
   const { t } = useI18n();
@@ -43,7 +54,12 @@ export default function HomePage() {
       refreshInterval: (d) => (d?.pending ? 1500 : 300_000),
     },
   );
-  const shelves = KINDS.filter((k) => universe.active === 'all' || k === universe.active);
+  // The mixed home shows reading kinds and anime; series and films releases live on their homes.
+  const shelves = KINDS.filter((k) =>
+    universe.active === 'all'
+      ? !['series', 'movies', 'animation'].includes(k)
+      : k === universe.active,
+  );
   const library = useApi<TrackedMedia[]>('/api/tracked', {
     revalidateOnMount: true,
     dedupingInterval: 0,

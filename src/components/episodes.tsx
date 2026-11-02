@@ -175,64 +175,53 @@ export function EpisodeList({
     </div>
   );
   if (film && season.list.length <= 1) {
-    const watched = read >= 1;
     const released = (season.aired ?? 1) >= 1;
     const jf = jellyfin?.bySeason[0];
+    const image = season.list[0]?.thumbnail ?? artwork;
+    const meta = [
+      season.duration ? t('episodes.duration', { n: n(season.duration) }) : null,
+      !released ? t('episodes.upcoming') : jf?.owned.length ? t('episodes.inJellyfin') : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3">
         {player}
-        <button
-          type="button"
-          disabled={!released}
-          onClick={() => setPlaying({ season: 0, episode: 1 })}
-          aria-label={t('player.playFilm')}
-          className="group relative block aspect-video w-full max-w-4xl overflow-hidden rounded-2xl bg-white/[0.06] disabled:cursor-default"
-        >
-          {artwork && (
-            // eslint-disable-next-line @next/next/no-img-element -- the work's own banner
-            <img
-              src={season.list[0]?.thumbnail ?? artwork}
-              alt=""
-              className={cx('size-full object-cover', watched && 'opacity-60')}
-            />
-          )}
-          {released && (
-            <span className="absolute inset-0 flex items-center justify-center bg-black/25 transition-colors group-hover:bg-black/40">
-              <span className="flex size-16 items-center justify-center rounded-full bg-white text-black shadow-xl">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                  <path d="M7 4v16l13-8Z" />
-                </svg>
+        {image ? (
+          <button
+            type="button"
+            disabled={!released}
+            onClick={() => setPlaying({ season: 0, episode: 1 })}
+            aria-label={t('player.playFilm')}
+            className="group relative block aspect-video w-full max-w-[760px] overflow-hidden rounded-2xl bg-white/[0.06] disabled:cursor-default"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- the film's own still */}
+            <img src={image} alt="" className="size-full object-cover" />
+            {released && (
+              <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-colors group-hover:bg-black/40">
+                <span className="flex size-16 items-center justify-center rounded-full bg-white text-black shadow-xl">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M7 4v16l13-8Z" />
+                  </svg>
+                </span>
               </span>
-            </span>
-          )}
-        </button>
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <span className="text-mid">
-            {[
-              season.duration ? t('episodes.duration', { n: n(season.duration) }) : null,
-              !released
-                ? t('episodes.upcoming')
-                : jf?.owned.length
-                  ? t('episodes.inJellyfin')
-                  : null,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
-          {entry && released && (
-            <label className="ml-auto flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={watched}
-                disabled={busy}
-                onChange={() => onWatched(watched ? null : 1)}
-                className="size-4 accent-[var(--accent)]"
-              />
-              {t('episodes.watchedFilm')}
-            </label>
-          )}
-        </div>
-        {!entry && <p className="text-muted text-sm">{t('episodes.followFirst')}</p>}
+            )}
+          </button>
+        ) : (
+          // No still: a plain play button rather than an empty frame.
+          <button
+            type="button"
+            disabled={!released}
+            onClick={() => setPlaying({ season: 0, episode: 1 })}
+            className="bg-fg text-bg flex h-12 items-center gap-2.5 self-start rounded-full px-6 font-semibold disabled:opacity-50"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <path d="M7 4v16l13-8Z" />
+            </svg>
+            {t('player.playFilm')}
+          </button>
+        )}
+        {meta && <span className="text-mid text-sm">{meta}</span>}
       </div>
     );
   }
