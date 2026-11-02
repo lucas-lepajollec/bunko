@@ -129,7 +129,7 @@ export const mediaId = z
   .string()
   .max(80)
   .regex(
-    /^(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary|googlebooks|bnf|metron|hardcover|rakuten):[0-9a-zA-Z_-]+$/,
+    /^(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary|googlebooks|bnf|metron|hardcover|rakuten|jellyfin):[0-9a-zA-Z_-]+$/,
     'Unknown media identifier',
   );
 export const adultOverrideBody = z.object({
@@ -141,6 +141,7 @@ export const adultOverrideBody = z.object({
       if (!key || extra !== undefined) return false;
       if (['metron', 'hardcover'].includes(provider)) return /^[1-9]\d{0,9}$/.test(key);
       if (provider === 'rakuten') return /^\d{13}$/.test(key);
+      if (provider === 'jellyfin') return /^[0-9a-f]{32}$/i.test(key);
       if (provider === 'googlebooks') return /^[\w-]{1,60}$/.test(key);
       if (provider === 'bnf') return /^cb\d+[a-z0-9]$/i.test(key);
       if (provider === 'openlibrary') return /^OL[1-9]\d*W$/.test(key);

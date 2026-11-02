@@ -54,12 +54,8 @@ export function composeHome(
 /** Episodes aired in the last week, newest first, as release cards (followed shows first). */
 async function recentEpisodes(): Promise<ChapterRelease[]> {
   const { animeAiring } = await import('./catalog');
-  const { listTracked } = await import('./db');
-  const followed = new Map(
-    listTracked()
-      .filter((t) => t.type === 'ANIME' && t.anilistId)
-      .map((t) => [t.anilistId!, t.id]),
-  );
+  const { followedSeasons } = await import('./anime-works');
+  const followed = new Map([...followedSeasons()].map(([id, f]) => [id, f.trackedId]));
   const to = new Date();
   const from = new Date(to.getTime() - 7 * 86400_000);
   const airing = await Promise.race([
@@ -68,9 +64,10 @@ async function recentEpisodes(): Promise<ChapterRelease[]> {
   ]);
   return airing
     .map((a) => ({
-      id: `anilist:${a.media.id}:${a.episode}`,
+      id: `${a.media.id}:${a.season ?? 1}:${a.episode}`,
       media: a.media,
       chapter: a.episode,
+      season: a.season,
       volume: null,
       unit: 'episode' as const,
       label: `Ep. ${a.episode}`,

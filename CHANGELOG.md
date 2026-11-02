@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Anime are whole works: the TV seasons linked on AniList (sequel/prequel) form one sheet with a
+  season picker, progress counts episodes across seasons, and opening a later season opens its
+  work on that season. Following a season follows its work; entries followed per season before are
+  regrouped by the worker (progress converted, duplicates merged). Latest releases and the
+  planning show the work with "S2 · Ep. 5".
+- Jellyfin import works like Kavita: every series of the anime libraries is followed — the
+  catalog work when the AniList plugin id or one clear title match identifies it, otherwise the
+  Jellyfin series itself (off-catalog, with its poster). Batches continue every two minutes until
+  done; removed works are not re-added. Watched episodes count across seasons.
+
 - Jellyfin libraries get a role (anime, series, films, ignore), detected from the library type and
   name and editable in Settings → Connections; only anime libraries feed anime sheets and automatic
   following, and the Jellyfin AniList plugin id is used directly when present. Changing roles or

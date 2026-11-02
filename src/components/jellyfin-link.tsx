@@ -3,7 +3,6 @@ import { useState } from 'react';
 import type { JellyfinSeriesSummary, MediaDetail, TrackedMedia } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
-import { Select } from './select';
 import { cx, smallButton } from './ui';
 
 /** Link an anime to its Jellyfin series and season, or keep it unlinked. */
@@ -32,24 +31,12 @@ export function JellyfinTab({
             <span className="font-medium">{current.name}</span>
             <span className="text-muted text-xs">
               {t('jellyfin.summary', {
-                owned: n(current.owned.length),
-                played: n(current.played.length),
+                owned: n(current.ownedCount),
+                played: n(current.playedCount),
               })}
               {' · '}
               {current.manual ? t('jellyfin.manual') : t('jellyfin.automatic')}
             </span>
-            {current.seasons.length > 1 && (
-              <Select
-                label={t('jellyfin.season')}
-                value={String(current.season)}
-                onChange={(v) => onLink({ seriesId: current.seriesId, season: Number(v) })}
-                options={current.seasons.map((s) => ({
-                  value: String(s),
-                  label: s === 0 ? t('jellyfin.specials') : t('jellyfin.seasonN', { n: n(s) }),
-                }))}
-                className="self-start"
-              />
-            )}
           </>
         ) : (
           <span className="text-warn">

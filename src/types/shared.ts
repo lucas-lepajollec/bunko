@@ -85,8 +85,25 @@ export interface LoadState {
   /** One or more upstream refreshes failed; retained items may be incomplete. */
   partial?: boolean;
 }
+/** One season of an anime work (AniList lists each season as its own entry). */
+export interface AnimeSeason {
+  number: number;
+  anilistId: number | null;
+  title: string;
+  year: number | null;
+  status: string | null;
+  episodes: number | null;
+  aired: number | null;
+  duration: number | null;
+  nextEpisode: { number: number; airingAt: string } | null;
+  list: { number: number; title: string | null; thumbnail: string | null }[];
+}
 /** Anime facts from AniList (episodes are the unit; seasons are separate AniList entries). */
 export interface VideoDetail {
+  /** The whole work: every TV season in order (one entry when there is a single season). */
+  seasons?: AnimeSeason[];
+  /** The season the page was opened from (a sequel's link opens the whole work there). */
+  focus?: number;
   /** Planned episode count when known. */
   episodes: number | null;
   /** Minutes per episode. */
@@ -180,6 +197,8 @@ export interface ChapterRelease {
     | 'anilist';
   /** `volume` = a new tome/edition (books, LN volumes, BD albums); `episode` = anime airing. */
   unit?: 'chapter' | 'volume' | 'episode';
+  /** Anime season of the episode, when known. */
+  season?: number | null;
   /** Followed title in the library, if any. */
   trackedId: number | null;
 }
@@ -206,6 +225,8 @@ export interface PlanningItem {
   chapter: number | null;
   /** Several chapters of the work that day: `chapter` is the first, this the last. */
   chapterTo?: number | null;
+  /** Anime season of an aired episode, when known. */
+  season?: number | null;
   /** Releases merged into this card (1 when alone). */
   count?: number;
   /** `episode` for anime airings; chapters otherwise. */
@@ -539,12 +560,17 @@ export type JellyfinLink = { seriesId: string; season: number } | 'none';
 export interface JellyfinPresence {
   seriesId: string;
   name: string;
-  season: number;
-  seasons: number[];
-  owned: number[];
-  played: number[];
-  /** Episode number → Jellyfin item id, for "play in Jellyfin" links. */
-  episodeIds: Record<number, string>;
+  /** Owned and watched episodes per Jellyfin season (season numbers match the work's seasons). */
+  bySeason: {
+    season: number;
+    owned: number[];
+    played: number[];
+    /** Episode number → Jellyfin item id, for "play in Jellyfin" links. */
+    episodeIds: Record<number, string>;
+  }[];
+  /** Total owned episodes across seasons (specials excluded). */
+  ownedCount: number;
+  playedCount: number;
   url: string;
   manual: boolean;
 }

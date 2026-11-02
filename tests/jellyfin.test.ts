@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, expect, it } from 'vitest';
+import { afterAll, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -7,6 +7,23 @@ const directory = mkdtempSync(path.join(tmpdir(), 'bunko-jellyfin-'));
 process.env.BUNKO_DATA_DIR = path.join(directory, 'state');
 process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
 process.env.BUNKO_WORKER = 'false';
+// Catalog lookups: the plugin id 777 is a known work, title searches find nothing.
+vi.mock('@/lib/anime-franchise', async (original) => {
+  const real = await original<typeof import('@/lib/anime-franchise')>();
+  const { emptyMedia } = await import('@/lib/media');
+  return {
+    ...real,
+    franchise: async (id: number) => ({
+      root: { ...emptyMedia(`anilist:${id}`, 'Plugin Work', 'ANIME'), anilistId: id },
+      seasons: [],
+      index: { [id]: 1 },
+    }),
+  };
+});
+vi.mock('@/lib/search-engine', async (original) => ({
+  ...(await original<typeof import('@/lib/search-engine')>()),
+  search: async () => ({ results: [] }),
+}));
 const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { db, track, getTracked, listTracked } = await import('@/lib/db');
@@ -104,28 +121,73 @@ it('keeps the key secret, indexes series and episodes, and reads watched state',
   await jellyfin.syncJellyfinIndex();
   expect(auth).toBe('jf-key');
   const presence = jellyfin.jellyfinPresence(getTracked(followed.id)!.media);
-  expect(presence).toMatchObject({ seriesId: 'A', season: 1, owned: [1, 2, 3], played: [1, 2] });
+  expect(presence).toMatchObject({ seriesId: 'A', ownedCount: 5, playedCount: 2 });
+  expect(presence!.bySeason[0]).toMatchObject({ season: 1, owned: [1, 2, 3], played: [1, 2] });
+  expect(presence!.bySeason[1]).toMatchObject({ season: 2, owned: [1, 2], played: [] });
   // Watched in Jellyfin moves progress forward and starts the show.
   expect(getTracked(followed.id)).toMatchObject({ status: 'READING', progress: { read: 2 } });
 });
 
-it('picks the season from AniList titles, the plugin id, and manual links', async () => {
+it('finds the whole series from any season title, the plugin id, and manual links', async () => {
   await jellyfin.syncJellyfinIndex();
   expect(jellyfin.jellyfinPresence(anime(2, 'Fixture Quest Season 2'))).toMatchObject({
     seriesId: 'A',
-    season: 2,
-    owned: [1, 2],
   });
   expect(jellyfin.jellyfinPresence(anime(777, 'Another Name'))).toMatchObject({ seriesId: 'B' });
   expect(jellyfin.jellyfinPresence(anime(3, 'Unknown'))).toBeNull();
   expect(
-    jellyfin.jellyfinPresence(anime(3, 'Unknown'), { seriesId: 'A', season: 2 }),
-  ).toMatchObject({
-    season: 2,
-    manual: true,
-  });
+    jellyfin.jellyfinPresence(anime(3, 'Unknown'), { seriesId: 'A', season: 1 }),
+  ).toMatchObject({ seriesId: 'A', manual: true });
   expect(jellyfin.jellyfinPresence(anime(1, 'Fixture Quest'), 'none')).toBeNull();
   expect(jellyfin.seasonOf('Show 3rd Season')).toEqual({ base: 'Show', season: 3 });
+});
+it('counts watched episodes across the seasons of a work', () => {
+  const presence = {
+    seriesId: 'A',
+    name: 'A',
+    bySeason: [
+      { season: 1, owned: [1, 2, 3], played: [1, 2, 3], episodeIds: {} },
+      { season: 2, owned: [1, 2], played: [1], episodeIds: {} },
+    ],
+    ownedCount: 5,
+    playedCount: 4,
+    url: '',
+    manual: false,
+  };
+  // Without catalog seasons, earlier Jellyfin seasons count what they hold.
+  expect(jellyfin.watchedInWork(presence)).toBe(4);
+  const season = (number: number, episodes: number) => ({
+    number,
+    anilistId: number,
+    title: '',
+    year: null,
+    status: 'FINISHED',
+    episodes,
+    aired: episodes,
+    duration: null,
+    nextEpisode: null,
+    list: [],
+  });
+  expect(jellyfin.watchedInWork(presence, [season(1, 12), season(2, 12)])).toBe(13);
+});
+it('follows every anime of the anime libraries, off-catalog when no clear match', async () => {
+  updateSettings({ autoImportJellyfin: true });
+  await jellyfin.syncJellyfinIndex();
+  const tracked = listTracked();
+  // Plugin id: the catalog work. No match: the Jellyfin series itself. TV library: untouched.
+  expect(tracked.find((t) => t.anilistId === 777)).toMatchObject({
+    jellyfinLink: { seriesId: 'B' },
+  });
+  expect(tracked.find((t) => t.media.id === 'jellyfin:A')).toMatchObject({
+    status: 'READING',
+    progress: { read: 2 },
+  });
+  expect(tracked.some((t) => t.title === 'Office Drama')).toBe(false);
+  // A removed work is not added again.
+  const off = tracked.find((t) => t.media.id === 'jellyfin:A')!;
+  db().prepare('DELETE FROM tracked_media WHERE id=?').run(off.id);
+  await jellyfin.importJellyfinAnime();
+  expect(listTracked().some((t) => t.media.id === 'jellyfin:A')).toBe(false);
 });
 
 it('forgets everything from a previous server', async () => {

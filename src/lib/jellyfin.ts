@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import type {
+  AnimeSeason,
+  MediaDetail,
   JellyfinLibrary,
   JellyfinRole,
   JellyfinLink,
@@ -10,7 +12,8 @@ import type {
 import { db, listTracked, statement, track } from './db';
 import { AppError } from './errors';
 import { endpoint } from './http';
-import { normalizeTitle } from './media';
+import { emptyMedia, normalizeTitle } from './media';
+import { franchise, knownFranchise, seasonOffset, workVideo } from './anime-franchise';
 import { getSettings } from './settings';
 import { tenantSignal } from './tenant-lifecycle';
 
@@ -27,7 +30,9 @@ interface IndexedJellyfinSeries {
   seasons: Record<string, { n: number; id: string; played: boolean }[]>;
 }
 const SYNC_EVERY_MS = 15 * 60_000;
-const IMPORTS_PER_SYNC = 8;
+const IMPORTS_PER_SYNC = 12;
+/** While works remain to import, a new batch every 2 minutes (AniList allows ~30 requests/min). */
+const IMPORT_EVERY_MS = 2 * 60_000;
 
 export const jellyfinConfigured = () => {
   const s = getSettings();
@@ -245,7 +250,17 @@ export async function maybeSyncJellyfin(signal?: AbortSignal) {
   if (!jellyfinConfigured()) return;
   const row = statement("SELECT value FROM worker_state WHERE key='jellyfin_synced_at'").get() as
     { value: string } | undefined;
-  if (row && Date.now() - Date.parse(row.value) < SYNC_EVERY_MS) return;
+  if (row && Date.now() - Date.parse(row.value) < SYNC_EVERY_MS) {
+    const last = statement(
+      "SELECT value FROM worker_state WHERE key='jellyfin_import_at'",
+    ).get() as { value: string } | undefined;
+    if (
+      getSettings().autoImportJellyfin &&
+      (!last || Date.now() - Date.parse(last.value) >= IMPORT_EVERY_MS)
+    )
+      await importJellyfinAnime(signal);
+    return;
+  }
   await syncJellyfinIndex(signal);
 }
 export function requestJellyfinSync() {
@@ -264,35 +279,42 @@ export function seasonOf(title: string): { base: string; season: number | null }
     title.match(/^(.*?)[\s:-]*(\d+)(?:st|nd|rd|th)\s+season\b/i);
   return m ? { base: m[1].trim(), season: Number(m[2]) } : { base: title, season: null };
 }
+const seasonNumbers = (s: IndexedJellyfinSeries) =>
+  Object.keys(s.seasons)
+    .map(Number)
+    .filter((n) => n >= 1)
+    .sort((a, b) => a - b);
 /**
- * The Jellyfin series (and season) of an anime: the manual link, else an AniList provider id
- * (Jellyfin AniList plugin), else one unambiguous title. AniList lists each season separately;
- * Jellyfin groups them, so "Season 2" titles pick season 2.
+ * The Jellyfin series of an anime work (Jellyfin and Bunko both group the seasons): the manual
+ * link, the series itself for a work imported off-catalog, an AniList id of any of its seasons
+ * (Jellyfin AniList plugin), else one unambiguous title.
  */
 export function matchJellyfin(media: UnifiedMedia, link?: JellyfinLink | null) {
   if (media.type !== 'ANIME' || link === 'none') return null;
   const everything = indexed();
   if (link) {
     const s = everything.find((x) => x.id === link.seriesId);
-    return s ? { series: s, season: link.season, manual: true } : null;
+    return s ? { series: s, manual: true } : null;
+  }
+  if (media.id.startsWith('jellyfin:')) {
+    const s = everything.find((x) => x.id === media.id.slice('jellyfin:'.length));
+    return s ? { series: s, manual: false } : null;
   }
   // Anime come from the libraries marked (or detected) as anime.
   const all = everything.filter((s) => (s.role ?? 'anime') === 'anime');
-  const byProvider = media.anilistId
-    ? all.find((s) => s.providerIds.AniList === String(media.anilistId))
-    : undefined;
-  const titles = [media.title, ...media.altTitles].map(seasonOf);
-  const wanted = new Set(titles.map((t) => normalizeTitle(t.base)).filter(Boolean));
+  const ids = new Set<string>();
+  if (media.anilistId) {
+    ids.add(String(media.anilistId));
+    for (const season of knownFranchise(media.anilistId)?.seasons ?? [])
+      if (season.anilistId) ids.add(String(season.anilistId));
+  }
+  const byProvider = all.find((s) => s.providerIds.AniList && ids.has(s.providerIds.AniList));
+  const wanted = new Set(
+    [media.title, ...media.altTitles].map((t) => normalizeTitle(seasonOf(t).base)).filter(Boolean),
+  );
   const byTitle = all.filter((s) => s.names.some((n) => wanted.has(normalizeTitle(n))));
   const series = byProvider ?? (byTitle.length === 1 ? byTitle[0] : undefined);
-  if (!series) return null;
-  const seasons = Object.keys(series.seasons)
-    .map(Number)
-    .filter((n) => n >= 1)
-    .sort((a, b) => a - b);
-  const hinted = byProvider ? null : (titles.find((t) => t.season !== null)?.season ?? null);
-  const season = hinted && seasons.includes(hinted) ? hinted : (seasons[0] ?? 1);
-  return { series, season, manual: false };
+  return series ? { series, manual: false } : null;
 }
 export function jellyfinPresence(
   media: UnifiedMedia,
@@ -301,21 +323,41 @@ export function jellyfinPresence(
   if (!jellyfinConfigured()) return null;
   const match = matchJellyfin(media, link);
   if (!match) return null;
-  const episodes = match.series.seasons[String(match.season)] ?? [];
   const base = getSettings().jellyfinUrl.replace(/\/+$/, '');
+  const bySeason = seasonNumbers(match.series).map((season) => {
+    const episodes = match.series.seasons[String(season)] ?? [];
+    return {
+      season,
+      owned: [...new Set(episodes.map((e) => e.n))].sort((a, b) => a - b),
+      played: [...new Set(episodes.filter((e) => e.played).map((e) => e.n))].sort((a, b) => a - b),
+      episodeIds: Object.fromEntries(episodes.map((e) => [e.n, e.id])),
+    };
+  });
   return {
     seriesId: match.series.id,
     name: match.series.name,
-    season: match.season,
-    seasons: Object.keys(match.series.seasons)
-      .map(Number)
-      .sort((a, b) => a - b),
-    owned: [...new Set(episodes.map((e) => e.n))].sort((a, b) => a - b),
-    played: [...new Set(episodes.filter((e) => e.played).map((e) => e.n))].sort((a, b) => a - b),
-    episodeIds: Object.fromEntries(episodes.map((e) => [e.n, e.id])),
+    bySeason,
+    ownedCount: bySeason.reduce((n, s) => n + s.owned.length, 0),
+    playedCount: bySeason.reduce((n, s) => n + s.played.length, 0),
     url: `${base}/web/#/details?id=${match.series.id}`,
     manual: match.manual,
   };
+}
+/**
+ * Absolute episodes watched in a work: the last watched episode of the latest season with one,
+ * after every earlier season (the work's episode counts, else what Jellyfin holds).
+ */
+export function watchedInWork(presence: JellyfinPresence, seasons?: AnimeSeason[]) {
+  const watched = presence.bySeason.filter((s) => s.played.length);
+  const last = watched[watched.length - 1];
+  if (!last) return 0;
+  const offset =
+    seasons && seasons.length >= last.season
+      ? seasonOffset(seasons, last.season)
+      : presence.bySeason
+          .filter((s) => s.season < last.season)
+          .reduce((n, s) => n + Math.max(0, ...s.owned), 0);
+  return offset + Math.max(...last.played);
 }
 export function jellyfinSeriesList(query = ''): JellyfinSeriesSummary[] {
   const q = normalizeTitle(query);
@@ -332,6 +374,45 @@ export function jellyfinSeriesList(query = ''): JellyfinSeriesSummary[] {
       episodes: Object.values(s.seasons).reduce((n, list) => n + list.length, 0),
     }));
 }
+function jellyfinWork(s: IndexedJellyfinSeries): UnifiedMedia {
+  return {
+    ...emptyMedia(`jellyfin:${s.id}`, s.name, 'ANIME'),
+    altTitles: s.names.filter((n) => n !== s.name),
+    year: s.year,
+    coverUrl: `/api/jellyfin/image?id=${s.id}`,
+  };
+}
+/** An off-catalog anime work straight from a Jellyfin series (no catalog match). */
+export function jellyfinMedia(seriesId: string): MediaDetail {
+  const s = indexed().find((x) => x.id === seriesId);
+  if (!s) throw new AppError('NOT_FOUND', 'Jellyfin series is not indexed', 404);
+  const seasons: AnimeSeason[] = seasonNumbers(s).map((number) => {
+    const count = Math.max(0, ...(s.seasons[String(number)] ?? []).map((e) => e.n));
+    return {
+      number,
+      anilistId: null,
+      title: s.name,
+      year: s.year,
+      status: 'FINISHED',
+      episodes: count,
+      aired: count,
+      duration: null,
+      nextEpisode: null,
+      list: Array.from({ length: count }, (_, i) => ({
+        number: i + 1,
+        title: null,
+        thumbnail: null,
+      })),
+    };
+  });
+  return {
+    ...jellyfinWork(s),
+    ...(seasons.length ? { video: workVideo(seasons, 1, []) } : {}),
+    tags: [],
+    relations: [],
+    recommendations: [],
+  };
+}
 
 /** Watched in Jellyfin moves the episode count forward (never back). */
 function applyJellyfinProgress() {
@@ -340,16 +421,55 @@ function applyJellyfinProgress() {
   );
   for (const t of listTracked().filter((t) => t.type === 'ANIME')) {
     const presence = jellyfinPresence(t.media, t.jellyfinLink);
-    const watched = presence?.played.length ? Math.max(...presence.played) : 0;
+    if (!presence) continue;
+    const seasons = t.anilistId ? knownFranchise(t.anilistId)?.seasons : undefined;
+    const watched = watchedInWork(presence, seasons);
     if (watched > 0) update.run(watched, t.id, watched);
   }
 }
 
+/** The catalog work of a Jellyfin series: plugin id, else one clear AniList title match. */
+async function catalogWork(s: IndexedJellyfinSeries, signal?: AbortSignal) {
+  const plugin = Number(s.providerIds.AniList);
+  if (Number.isInteger(plugin) && plugin > 0) return (await franchise(plugin, signal)).root;
+  const { search, deduplicate } = await import('./search-engine');
+  const { titleScore } = await import('./matching');
+  const results = [];
+  for (const name of s.names.slice(0, 3))
+    results.push(...(await search(name, 'ANIME', signal)).results);
+  const candidates = deduplicate(results)
+    .filter((m) => m.type === 'ANIME' && m.id.startsWith('anilist:') && m.anilistId)
+    // Seasons come from the work; films and specials are their own works.
+    .filter((m) => !m.format || ['TV', 'TV_SHORT', 'ONA'].includes(m.format))
+    .map((m) => ({
+      m,
+      score: Math.max(...[m.title, ...m.altTitles].map((n) => titleScore(n, s.names))),
+    }))
+    .filter((c) => c.score >= 0.85)
+    .sort((a, b) => b.score - a.score);
+  const best = candidates[0];
+  if (!best) return null;
+  let pick = best.m;
+  if (candidates[1] && best.score - candidates[1].score < 0.1) {
+    // Same-name shows: the Jellyfin year decides, otherwise leave it off-catalog.
+    const tied = candidates.filter((c) => best.score - c.score < 0.1);
+    const sameYear = tied.filter((c) => s.year && c.m.year && Math.abs(c.m.year - s.year) <= 1);
+    if (sameYear.length !== 1) {
+      // Several seasons of one work tie on title: they share a root.
+      const roots = new Set<number>();
+      for (const c of tied) roots.add((await franchise(c.m.anilistId!, signal)).root.anilistId!);
+      if (roots.size !== 1) return null;
+    } else pick = sameYear[0].m;
+  }
+  return (await franchise(pick.anilistId!, signal)).root;
+}
+
 /**
- * Follow Jellyfin anime like Kavita series: a few per sync, matched to AniList only when one
- * result clearly wins; ambiguous or non-anime series are left alone.
+ * Follow every anime of the Jellyfin anime libraries, like Kavita series: the catalog work when
+ * it is clear, else the Jellyfin series itself (off-catalog, editable later). A removed work is
+ * not re-added. AniList limits requests, so each pass handles a batch and the next continues.
  */
-async function importJellyfinAnime(signal?: AbortSignal) {
+export async function importJellyfinAnime(signal?: AbortSignal) {
   const tracked = listTracked().filter((t) => t.type === 'ANIME');
   const linked = new Set(
     tracked.flatMap((t) => {
@@ -367,53 +487,33 @@ async function importJellyfinAnime(signal?: AbortSignal) {
   const candidates = indexed()
     .filter((s) => (s.role ?? 'anime') === 'anime' && !linked.has(s.id) && !tried.has(s.id))
     .slice(0, IMPORTS_PER_SYNC);
-  if (!candidates.length) return;
-  const { search } = await import('./search-engine');
-  const { titleScore } = await import('./matching');
+  statement(
+    "INSERT INTO worker_state(key,value) VALUES('jellyfin_import_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+  ).run(new Date().toISOString());
   for (const s of candidates) {
-    if (signal?.aborted) return;
+    if (signal?.aborted || !getSettings().autoImportJellyfin) return;
+    let work: UnifiedMedia | null;
+    try {
+      work = await catalogWork(s, signal);
+    } catch {
+      break; // AniList busy or unreachable: the next pass continues from here.
+    }
+    const status = Object.values(s.seasons).some((list) => list.some((e) => e.played))
+      ? 'READING'
+      : 'PLANNING';
+    const existing = work?.anilistId
+      ? listTracked().find((t) => t.anilistId === work!.anilistId)
+      : undefined;
+    const entry = existing ?? track({ media: work ?? jellyfinWork(s), status });
+    if (work && (!existing || !existing.jellyfinLink))
+      statement('UPDATE tracked_media SET jellyfin_link=? WHERE id=?').run(
+        JSON.stringify({ seriesId: s.id, season: 1 }),
+        entry.id,
+      );
     statement('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)').run(
       `jellyfin_import_tried:${s.id}`,
       new Date().toISOString(),
     );
-    try {
-      // The Jellyfin AniList plugin already knows the work: no title guessing needed.
-      const anilistId = Number(s.providerIds.AniList);
-      if (Number.isInteger(anilistId) && anilistId > 0) {
-        const { mediaDetail } = await import('./catalog');
-        const media = await mediaDetail(`anilist:${anilistId}`, signal);
-        if (media.type === 'ANIME' && !listTracked().some((t) => t.anilistId === anilistId)) {
-          const created = track({ media, status: 'PLANNING' });
-          statement('UPDATE tracked_media SET jellyfin_link=? WHERE id=?').run(
-            JSON.stringify({ seriesId: s.id, season: 1 }),
-            created.id,
-          );
-        }
-        continue;
-      }
-      const results = (await search(s.name, 'ANIME', signal)).results.filter(
-        (m) => m.type === 'ANIME' && m.id.startsWith('anilist:'),
-      );
-      const scored = results
-        .map((m) => ({
-          m,
-          score: Math.max(...[m.title, ...m.altTitles].map((n) => titleScore(n, s.names))),
-        }))
-        .filter(
-          (x) => x.score >= 0.95 && (!s.year || !x.m.year || Math.abs(x.m.year - s.year) <= 1),
-        )
-        .sort((a, b) => b.score - a.score);
-      if (!scored.length || (scored[1] && scored[1].score >= scored[0].score - 0.02)) continue;
-      const media = scored[0].m;
-      if (listTracked().some((t) => t.anilistId && t.anilistId === media.anilistId)) continue;
-      const created = track({ media, status: 'PLANNING' });
-      statement('UPDATE tracked_media SET jellyfin_link=? WHERE id=?').run(
-        JSON.stringify({ seriesId: s.id, season: 1 }),
-        created.id,
-      );
-    } catch {
-      /* Retried only when the index changes (tried markers are cleared with the server). */
-    }
   }
   applyJellyfinProgress();
 }
