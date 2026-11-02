@@ -15,6 +15,7 @@ const FIRST = 48;
 export function EpisodeList({
   title,
   artwork,
+  film: filmProp,
   anilistId,
   video,
   jellyfin,
@@ -26,6 +27,8 @@ export function EpisodeList({
   title: string;
   /** The work's banner or cover, for episodes without their own still. */
   artwork?: string | null;
+  /** A single film: one large "watch" card instead of an episode grid. */
+  film?: boolean;
   /** AniList id of the work, for a single-season work without season entries. */
   anilistId: number | null;
   video: VideoDetail;
@@ -60,7 +63,7 @@ export function EpisodeList({
       .reduce((sum, x) => sum + Math.max(x.episodes ?? 0, x.aired ?? 0, x.list.length), 0),
   );
   const read = entry?.progress?.read ?? 0;
-  const film = video.ids?.kind === 'movie';
+  const film = filmProp ?? video.ids?.kind === 'movie';
   const resume = Math.max(
     0,
     offsets.findLastIndex((o) => o <= read && read > 0),
@@ -171,6 +174,68 @@ export function EpisodeList({
       ))}
     </div>
   );
+  if (film && season.list.length <= 1) {
+    const watched = read >= 1;
+    const released = (season.aired ?? 1) >= 1;
+    const jf = jellyfin?.bySeason[0];
+    return (
+      <div className="flex flex-col gap-4">
+        {player}
+        <button
+          type="button"
+          disabled={!released}
+          onClick={() => setPlaying({ season: 0, episode: 1 })}
+          aria-label={t('player.playFilm')}
+          className="group relative block aspect-video w-full max-w-4xl overflow-hidden rounded-2xl bg-white/[0.06] disabled:cursor-default"
+        >
+          {artwork && (
+            // eslint-disable-next-line @next/next/no-img-element -- the work's own banner
+            <img
+              src={season.list[0]?.thumbnail ?? artwork}
+              alt=""
+              className={cx('size-full object-cover', watched && 'opacity-60')}
+            />
+          )}
+          {released && (
+            <span className="absolute inset-0 flex items-center justify-center bg-black/25 transition-colors group-hover:bg-black/40">
+              <span className="flex size-16 items-center justify-center rounded-full bg-white text-black shadow-xl">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M7 4v16l13-8Z" />
+                </svg>
+              </span>
+            </span>
+          )}
+        </button>
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span className="text-mid">
+            {[
+              season.duration ? t('episodes.duration', { n: n(season.duration) }) : null,
+              !released
+                ? t('episodes.upcoming')
+                : jf?.owned.length
+                  ? t('episodes.inJellyfin')
+                  : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+          {entry && released && (
+            <label className="ml-auto flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={watched}
+                disabled={busy}
+                onChange={() => onWatched(watched ? null : 1)}
+                className="size-4 accent-[var(--accent)]"
+              />
+              {t('episodes.watchedFilm')}
+            </label>
+          )}
+        </div>
+        {!entry && <p className="text-muted text-sm">{t('episodes.followFirst')}</p>}
+      </div>
+    );
+  }
   if (!season.list.length)
     return (
       <div className="flex flex-col">

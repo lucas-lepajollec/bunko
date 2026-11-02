@@ -93,6 +93,8 @@ const ALL_KINDS: Kind[] = [
   'animation',
 ];
 function ofKind(e: TrackedMedia, kind: Kind) {
+  // The user's own choice of kind wins (a western series kept as anime…).
+  if (e.media.kindOverride) return kind === 'all' || e.media.kindOverride === kind;
   return (
     kind === 'all' ||
     (kind === 'anime'

@@ -264,13 +264,19 @@ function Catalog() {
                   ['catalog', t('catalog.viewCatalog')],
                   [
                     'chapters',
-                    t(kind === 'anime' ? 'catalog.viewEpisodes' : 'catalog.viewChapters'),
+                    t(
+                      kind === 'anime' || kind === 'series'
+                        ? 'catalog.viewEpisodes'
+                        : kind === 'movies' || kind === 'animation'
+                          ? 'catalog.viewFilms'
+                          : 'catalog.viewChapters',
+                    ),
                   ],
                   ['new', t('catalog.viewNew')],
                 ] as const
               )
                 // Series and films have no release feed yet: catalog and newest only.
-                .filter(([v]) => v !== 'chapters' || (!tmdbKind && kind !== 'animation'))
+
                 .map(([v, label]) => (
                   <button
                     key={v}

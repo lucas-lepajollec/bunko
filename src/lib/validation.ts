@@ -72,7 +72,9 @@ export const media = z.object({
   chapters: z.number().nonnegative().nullable(),
   episodes: z.number().nonnegative().nullable(),
   webUrl: nullableUrl,
-  providers: z.array(z.enum(['anilist', 'mangadex', 'mangaupdates', 'local', 'kavita'])).max(5),
+  providers: z
+    .array(z.enum(['anilist', 'mangadex', 'mangaupdates', 'local', 'kavita', 'tmdb']))
+    .max(5),
   sources: z
     .array(
       z.object({
@@ -108,9 +110,29 @@ export const media = z.object({
       'WEB_NOVEL',
       'NOVEL',
       'BOOK',
+      'SERIES',
+      'MOVIE',
+      'ANIMATION_FILM',
     ])
     .nullable()
     .default(null),
+  /** The user's choice of kind for this work (e.g. a western series they count as anime). */
+  kindOverride: z
+    .enum([
+      'manga',
+      'manhwa',
+      'manhua',
+      'comic',
+      'lightnovel',
+      'webnovel',
+      'novel',
+      'book',
+      'anime',
+      'series',
+      'movies',
+      'animation',
+    ])
+    .optional(),
   origin: z.string().max(8).nullable().default(null),
   year: z.number().int().min(0).max(3000).nullable().default(null),
   volumes: z.number().nonnegative().nullable().default(null),
@@ -227,7 +249,10 @@ export const settingsPatch = z
     autoImportJellyfin: z.boolean().optional(),
     videoAddons: z.array(z.string().url().max(500)).max(20).optional(),
     jellyfinLibraries: z
-      .record(z.string().min(1).max(100), z.enum(['anime', 'series', 'movies', 'ignore']))
+      .record(
+        z.string().min(1).max(100),
+        z.enum(['anime', 'series', 'movies', 'animation', 'ignore']),
+      )
       .optional(),
     tradocUrl: z.union([httpUrl, z.literal('')]).optional(),
     tradocApiKey: z.string().max(2000).optional(),

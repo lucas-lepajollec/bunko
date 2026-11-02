@@ -217,6 +217,11 @@ it('forgets everything from a previous server', async () => {
   expect(jellyfin.jellyfinSeriesList()).toEqual([]);
   expect(listTracked()).toEqual([]);
 });
+it('detects animated films libraries apart from films', () => {
+  expect(jellyfin.detectRole('Films d’animation', 'movies')).toBe('animation');
+  expect(jellyfin.detectRole('Films', 'movies')).toBe('movies');
+  expect(jellyfin.detectRole('Anime', 'tvshows')).toBe('anime');
+});
 it('detects library roles and uses only anime libraries for anime', async () => {
   const libraries = await jellyfin.jellyfinLibraries();
   expect(libraries.map((l) => [l.name, l.role])).toEqual([

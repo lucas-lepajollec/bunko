@@ -116,6 +116,11 @@ function Title({ media }: { media: MediaDetail }) {
   const [busy, setBusy] = useState(false);
   const isComic = media.type === 'MANGA';
   const video = media.type === 'ANIME' ? media.video : undefined;
+  // A film (live action or animated) is watched, not browsed by episode.
+  const filmSheet =
+    media.format === 'MOVIE' ||
+    media.format === 'ANIMATION_FILM' ||
+    media.video?.ids?.kind === 'movie';
   const seasonParam = Number(useSearchParams().get('season')) || undefined;
   const [watchBusy, setWatchBusy] = useState(false);
   const fromDetail: ChapterSelection[] = media.sources.map((s) => ({
@@ -348,7 +353,7 @@ function Title({ media }: { media: MediaDetail }) {
           t('episodes.facts.airing'),
           [
             media.status ? t(`status.${statusKey(media.status)}`) : null,
-            video.episodes ? t('episodes.count', { n: n(video.episodes) }) : null,
+            video.episodes && !filmSheet ? t('episodes.count', { n: n(video.episodes) }) : null,
             video.duration ? t('episodes.duration', { n: n(video.duration) }) : null,
           ]
             .filter(Boolean)
@@ -596,8 +601,13 @@ function Title({ media }: { media: MediaDetail }) {
           >
             {video ? (
               <>
-                <SectionHeading id="toc" num={1} title={t('episodes.title')} />
+                <SectionHeading
+                  id="toc"
+                  num={1}
+                  title={filmSheet ? t('episodes.watchTitle') : t('episodes.title')}
+                />
                 <EpisodeList
+                  film={filmSheet}
                   title={media.title}
                   artwork={media.bannerUrl ?? media.coverUrl}
                   anilistId={media.anilistId}
@@ -721,7 +731,8 @@ function Title({ media }: { media: MediaDetail }) {
         !media.relations.length &&
         !media.recommendations.length &&
         (entry.identity === 'off-catalog' || media.providers.every((p) => p === 'kavita')) && (
-          <section className="relative mx-auto flex max-w-[1760px] px-4 pb-16 md:px-10">
+          // Same width and margins as the sheet's other sections.
+          <section className="relative mx-auto w-full max-w-[1760px] px-4 pb-16 md:px-10">
             <Notice
               title={t('title.offCatalogTitle')}
               action={

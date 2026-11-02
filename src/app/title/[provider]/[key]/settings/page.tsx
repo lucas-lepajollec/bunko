@@ -18,6 +18,7 @@ import {
 import { GeneralTab } from '@/components/work-settings';
 import { JellyfinTab } from '@/components/jellyfin-link';
 import { trackedFor } from '@/lib/client/tracked-entry';
+import { kindOf } from '@/lib/client/universe';
 import {
   Cover,
   Empty,
@@ -217,7 +218,16 @@ function WorkSettings({ media }: { media: MediaDetail }) {
               media={media}
               onPick={(m) =>
                 run(async () => {
-                  const u = await patch({ media: m });
+                  // Linking a video work to another kind's sheet keeps it where it was (an
+                  // anime linked to a TMDB series stays an anime for Bunko).
+                  const before = kindOf(media);
+                  const after = kindOf(m);
+                  const video = ['anime', 'series', 'movies', 'animation'];
+                  const keep =
+                    before !== after && video.includes(before) && video.includes(after)
+                      ? before
+                      : undefined;
+                  const u = await patch({ media: keep ? { ...m, kindOverride: keep } : m });
                   router.replace(`${mediaHref(u.media.id)}/settings?s=catalog`);
                 })
               }

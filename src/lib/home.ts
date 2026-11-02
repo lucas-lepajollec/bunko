@@ -139,7 +139,19 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
   const followsAnime =
     !kind && (await import('./db')).listTracked().some((t) => t.type === 'ANIME');
   const episodes = kind === 'anime' || followsAnime ? await recentEpisodes() : [];
-  const pool = [...reading, ...episodes].filter((r) => !kind || mediaKind(r.media) === kind);
+  // Series and films: the week's TMDB episodes and releases (cached sheets, bounded wait).
+  const tmdbWeek =
+    kind === 'series' || kind === 'movies' || kind === 'animation'
+      ? await Promise.race([
+          (await import('./tmdb-releases'))
+            .tmdbReleases(kind, new Date(Date.now() - 7 * 86400_000), new Date())
+            .catch(() => []),
+          new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
+        ])
+      : [];
+  const pool = [...reading, ...episodes, ...tmdbWeek].filter(
+    (r) => !kind || mediaKind(r.media) === kind,
+  );
   const home = normalizeHome(composeHome(heroArtwork(pool), top, kind));
   // Series and films have no release feed yet: the hero shows the week's trending backdrops.
   if ((kind === 'series' || kind === 'movies') && !home.hero.length)

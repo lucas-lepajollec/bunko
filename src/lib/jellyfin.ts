@@ -147,7 +147,8 @@ async function allItems(uid: string, query: string, signal?: AbortSignal) {
 export function detectRole(name: string, collectionType: string | null): JellyfinRole {
   const anime = /anim/i.test(name);
   if (collectionType === 'tvshows') return anime ? 'anime' : 'series';
-  if (collectionType === 'movies') return anime ? 'anime' : 'movies';
+  // A films library named "Animation"/"Anime": animated films, their own kind.
+  if (collectionType === 'movies') return anime ? 'animation' : 'movies';
   if (!collectionType || collectionType === 'mixed') return anime ? 'anime' : 'ignore';
   return 'ignore';
 }
@@ -180,9 +181,7 @@ export async function jellyfinLibraries(signal?: AbortSignal): Promise<JellyfinL
 export async function syncJellyfinIndex(signal?: AbortSignal) {
   if (!jellyfinConfigured()) return;
   const uid = await userId(signal);
-  const libraries = (await jellyfinLibraries(signal)).filter(
-    (l) => l.role === 'anime' || l.role === 'series' || l.role === 'movies',
-  );
+  const libraries = (await jellyfinLibraries(signal)).filter((l) => l.role !== 'ignore');
   const seriesSchema = z.array(
     z
       .object({
@@ -210,7 +209,7 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
   const series: (z.infer<typeof seriesSchema>[number] & { role: JellyfinRole })[] = [];
   const episodes: z.infer<typeof episodeSchema> = [];
   for (const library of libraries) {
-    if (library.role === 'movies') {
+    if (library.role === 'movies' || library.role === 'animation') {
       // A film is a one-episode "series": the player and presence treat it the same way.
       const films = seriesSchema.parse(
         await allItems(
@@ -220,7 +219,7 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
         ),
       );
       for (const f of films) {
-        series.push({ ...f, role: 'movies' });
+        series.push({ ...f, role: library.role });
         episodes.push({
           Id: f.Id,
           SeriesId: f.Id,
@@ -350,7 +349,7 @@ export function matchJellyfin(media: UnifiedMedia, link?: JellyfinLink | null) {
       : media.format === 'MOVIE'
         ? ['movies']
         : media.format === 'ANIMATION_FILM'
-          ? ['anime', 'movies']
+          ? ['animation', 'anime', 'movies']
           : ['anime'];
   const all = everything.filter((s) => roles.includes(s.role ?? 'anime'));
   const tmdb = /^tmdb(?:tv|movie):(\d+)$/.exec(media.id)?.[1];
@@ -436,7 +435,14 @@ function jellyfinWork(s: IndexedJellyfinSeries): UnifiedMedia {
   return {
     ...emptyMedia(`jellyfin:${s.id}`, s.name, 'ANIME'),
     // Series and films libraries give series and films (anime keep no format).
-    format: s.role === 'series' ? 'SERIES' : s.role === 'movies' ? 'MOVIE' : null,
+    format:
+      s.role === 'series'
+        ? 'SERIES'
+        : s.role === 'movies'
+          ? 'MOVIE'
+          : s.role === 'animation'
+            ? 'ANIMATION_FILM'
+            : null,
     altTitles: s.names.filter((n) => n !== s.name),
     year: s.year,
     coverUrl: `/api/jellyfin/image?id=${s.id}`,
@@ -499,7 +505,7 @@ async function tmdbWork(s: IndexedJellyfinSeries): Promise<UnifiedMedia | null> 
   const id = Number(Object.entries(s.providerIds).find(([k]) => k.toLowerCase() === 'tmdb')?.[1]);
   const { tmdbConfigured, tmdbJson, fromTmdb } = await import('./tmdb');
   if (!Number.isInteger(id) || id <= 0 || !tmdbConfigured()) return null;
-  const kind = s.role === 'movies' ? 'movie' : 'tv';
+  const kind = s.role === 'series' ? 'tv' : 'movie';
   return fromTmdb(await tmdbJson(`/${kind}/${id}`, {}, 12 * 3600_000), kind);
 }
 /** The catalog work of a Jellyfin series: plugin id, else one clear AniList title match. */
@@ -572,7 +578,9 @@ export async function importJellyfinAnime(signal?: AbortSignal) {
     if (!tried.has(id)) mark.run(`jellyfin_import_tried:${id}`, new Date().toISOString());
   const all = indexed().filter((s) => !linked.has(s.id) && !tried.has(s.id));
   // Series and films libraries: TMDB works by their TMDB id (or the Jellyfin item itself).
-  for (const s of all.filter((x) => x.role === 'series' || x.role === 'movies')) {
+  for (const s of all.filter(
+    (x) => x.role === 'series' || x.role === 'movies' || x.role === 'animation',
+  )) {
     if (signal?.aborted || !getSettings().autoImportJellyfin) return;
     let work: UnifiedMedia | null = null;
     try {
@@ -645,7 +653,7 @@ export async function importJellyfinAnime(signal?: AbortSignal) {
 /** Import progress of the anime libraries: series handled out of all of them. */
 export function jellyfinImportProgress(): { done: number; total: number } | null {
   if (!jellyfinConfigured() || !getSettings().autoImportJellyfin) return null;
-  const anime = indexed().filter((s) => ['anime', 'series', 'movies'].includes(s.role ?? 'anime'));
+  const anime = indexed().filter((s) => (s.role ?? 'anime') !== 'ignore');
   if (!anime.length) return null;
   const tried = new Set(
     (

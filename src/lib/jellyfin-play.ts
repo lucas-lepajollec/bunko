@@ -129,10 +129,10 @@ export async function playbackInfo(
           MaxStreamingBitrate: options.maxBitrate,
           StartTimeTicks: Math.round(startMs * TICKS_PER_MS),
           ...(options.audioIndex != null ? { AudioStreamIndex: options.audioIndex } : {}),
-          // Unset: Jellyfin applies the user's subtitle preferences; null: subtitles off.
-          ...(options.subtitleIndex !== undefined
-            ? { SubtitleStreamIndex: options.subtitleIndex ?? -1 }
-            : {}),
+          // Only image subtitles are burned in by Jellyfin; text ones are drawn by the browser.
+          // Leaving the index unset made Jellyfin burn its default track under Bunko's own
+          // text track (subtitles twice).
+          SubtitleStreamIndex: options.subtitleIndex ?? -1,
           IsPlayback: true,
           AutoOpenLiveStream: true,
           EnableDirectPlay: !options.noDirect,
@@ -181,7 +181,9 @@ export async function playbackInfo(
     subtitleIndex:
       options.subtitleIndex !== undefined
         ? options.subtitleIndex
-        : (source.DefaultSubtitleStreamIndex ?? null),
+        : source.DefaultSubtitleStreamIndex != null && source.DefaultSubtitleStreamIndex >= 0
+          ? source.DefaultSubtitleStreamIndex
+          : null,
     audio: streams
       .filter((s) => s.Type === 'Audio')
       .map((s) => ({

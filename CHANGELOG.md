@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Subtitles no longer show twice: Jellyfin is always asked not to burn subtitles (except image
+  subtitles chosen in the player) and the text track is drawn once by the browser.
+- Jellyfin libraries can be "Animated films" (detected for a films library named Animation /
+  Anime), indexed, imported and matched like films.
+- A video work linked to a sheet of another video kind keeps its kind (e.g. Arcane kept as anime
+  but linked to the TMDB series); work validation accepts series, films, animated films and
+  TMDB. TMDB sheets are catalog sheets (no "not in the catalog" banner, which is also aligned).
+- Films (live action or animated) show one large "Watch" card with the film's banner, runtime
+  and a watched tick, instead of an episode grid.
+- Series and films get latest releases and planning: followed series episode by episode, shows
+  on the air, and the week's film releases (live action and animated apart), in the catalog
+  ("Latest episodes" / "Latest releases"), on their homes and in the planning.
+
 - Player: playback was reopened (new Jellyfin session and transcode) every time the page
   refreshed in the background; it now opens once per episode and stream choice (verified against
   a real Jellyfin: 1 playback request instead of 5 in 25 s).
