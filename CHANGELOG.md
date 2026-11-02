@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Jellyfin import uses the ids Jellyfin already has (TVDB, TMDB, IMDb, AniDB, AniList plugin)
+  through an offline anime id map (Fribb/anime-lists, shared, refreshed weekly) and loads AniList
+  entries 50 per request: a whole library imports in a few requests. Title search remains only
+  for series nothing identifies. Works also load all their seasons in one batched request.
+- Phones: Activity moves from the tab bar to the menu (with its count). Anime sheets show an
+  episode skeleton while loading instead of the novels notice, and a later season known to belong
+  to a work opens the work immediately.
+
 - Jellyfin import shows its progress in the header activity ("Adding Jellyfin anime… 35/120")
   and runs a batch every minute. Settings → Jellyfin → "Disconnect Jellyfin" forgets the server
   and can remove the works it added (works followed by hand stay).

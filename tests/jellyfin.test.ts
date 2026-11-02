@@ -13,6 +13,7 @@ vi.mock('@/lib/anime-franchise', async (original) => {
   const { emptyMedia } = await import('@/lib/media');
   return {
     ...real,
+    prefetchNodes: async () => {},
     franchise: async (id: number) => ({
       root: { ...emptyMedia(`anilist:${id}`, 'Plugin Work', 'ANIME'), anilistId: id },
       seasons: [],
@@ -24,6 +25,9 @@ vi.mock('@/lib/search-engine', async (original) => ({
   ...(await original<typeof import('@/lib/search-engine')>()),
   search: async () => ({ results: [] }),
 }));
+const { seedAnimeIds, compact } = await import('@/lib/anime-ids');
+// Offline id map: the TVDB show 900 is AniList 900.
+seedAnimeIds(compact([{ anilist_id: 900, type: 'TV', tvdb_id: 900, season: { tvdb: 1 } }]));
 const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { db, track, getTracked, listTracked } = await import('@/lib/db');
@@ -77,6 +81,12 @@ const server: Server = createServer((req, res) => {
           parent === 'L1'
             ? [
                 { Id: 'A', Name: 'Fixture Quest', ProductionYear: 2023, ProviderIds: {} },
+                {
+                  Id: 'D',
+                  Name: 'Mapped Show',
+                  ProductionYear: 2021,
+                  ProviderIds: { Tvdb: '900' },
+                },
                 {
                   Id: 'B',
                   Name: 'Plugin Show',
@@ -183,6 +193,10 @@ it('follows every anime of the anime libraries, off-catalog when no clear match'
     progress: { read: 2 },
   });
   expect(tracked.some((t) => t.title === 'Office Drama')).toBe(false);
+  // TVDB id from Jellyfin: the work through the offline id map, no title search.
+  expect(tracked.find((t) => t.anilistId === 900)).toMatchObject({
+    jellyfinLink: { seriesId: 'D' },
+  });
   // A removed work is not added again.
   const off = tracked.find((t) => t.media.id === 'jellyfin:A')!;
   db().prepare('DELETE FROM tracked_media WHERE id=?').run(off.id);
@@ -197,7 +211,7 @@ it('forgets everything from a previous server', async () => {
       .jellyfinSeriesList()
       .map((s) => s.id)
       .sort(),
-  ).toEqual(['A', 'B', 'C']);
+  ).toEqual(['A', 'B', 'C', 'D']);
   updateSettings({ jellyfinUrl: 'http://other.invalid' });
   expect(jellyfin.jellyfinSeriesList()).toEqual([]);
   expect(listTracked()).toEqual([]);
@@ -220,10 +234,10 @@ it('shows import progress and disconnects, removing only what Jellyfin added', a
   const mine = track({ media: anime(42, 'Hand Picked'), status: 'PLANNING' });
   updateSettings({ autoImportJellyfin: true });
   await jellyfin.syncJellyfinIndex();
-  // Two anime-library series, both handled in one batch.
-  expect(jellyfin.jellyfinImportProgress()).toEqual({ done: 2, total: 2 });
-  expect(jellyfin.jellyfinImportedIds()).toHaveLength(2);
-  expect(jellyfin.disconnectJellyfin(true)).toEqual({ removed: 2 });
+  // Three anime-library series, all handled in one pass.
+  expect(jellyfin.jellyfinImportProgress()).toEqual({ done: 3, total: 3 });
+  expect(jellyfin.jellyfinImportedIds()).toHaveLength(3);
+  expect(jellyfin.disconnectJellyfin(true)).toEqual({ removed: 3 });
   expect(listTracked().map((t) => t.id)).toEqual([mine.id]);
   expect(publicSettings()).toMatchObject({ jellyfinUrl: '' });
   expect(jellyfin.jellyfinConfigured()).toBe(false);

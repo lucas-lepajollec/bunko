@@ -7,6 +7,7 @@ process.env.BUNKO_DATA_DIR = path.join(directory, 'state');
 process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
 process.env.BUNKO_WORKER = 'false';
 
+const requests: number[][] = [];
 /** A small AniList graph: two TV seasons and a film of the same show. */
 const nodes: Record<number, unknown> = {
   1: node(1, 'Fixture Show', 'TV', 2020, 12, [['SEQUEL', 2, 'TV']]),
@@ -46,8 +47,13 @@ function node(
 vi.mock('@/lib/http', async (original) => ({
   ...(await original<typeof import('@/lib/http')>()),
   requestJson: async (_url: string, init: RequestInit) => {
-    const { variables } = JSON.parse(String(init.body)) as { variables: { id: number } };
-    return { data: { Media: nodes[variables.id] ?? null } };
+    const { variables } = JSON.parse(String(init.body)) as {
+      variables: { id?: number; ids?: number[] };
+    };
+    requests.push(variables.ids ?? [variables.id!]);
+    if (variables.ids)
+      return { data: { Page: { media: variables.ids.map((id) => nodes[id]).filter(Boolean) } } };
+    return { data: { Media: nodes[variables.id!] ?? null } };
   },
 }));
 const { enterFixtureTenant } = await import('./tenant-fixture');
@@ -99,4 +105,24 @@ it('merges a duplicate season into the work already followed', async () => {
   await normalizeAnimeWorks();
   expect(getTracked(season2.id)).toBeUndefined();
   expect(getTracked(root.id)).toMatchObject({ progress: { read: 16 } });
+});
+
+it('loads the seasons the offline id map knows in one batched request', async () => {
+  const { seedAnimeIds, compact, anilistFromProviders } = await import('@/lib/anime-ids');
+  seedAnimeIds(
+    compact([
+      { anilist_id: 1, type: 'TV', tvdb_id: 500, season: { tvdb: 1 }, imdb_id: ['tt1'] },
+      { anilist_id: 2, type: 'TV', tvdb_id: 500, season: { tvdb: 2 }, imdb_id: ['tt1'] },
+      { anilist_id: 3, type: 'MOVIE', imdb_id: 'tt9' },
+    ]),
+  );
+  // Jellyfin's TVDB id (any case) or IMDb id finds the first season; films stay apart.
+  expect(anilistFromProviders({ tvdb: '500' })).toBe(1);
+  expect(anilistFromProviders({ Imdb: 'tt1' })).toBe(1);
+  expect(anilistFromProviders({ AniList: '2' })).toBe(1);
+  expect(anilistFromProviders({ Imdb: 'tt9' })).toBeNull();
+  requests.length = 0;
+  const work = await works.franchise(1);
+  expect(work.seasons).toHaveLength(2);
+  expect(requests).toEqual([[1, 2]]);
 });

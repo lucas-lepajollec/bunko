@@ -59,14 +59,16 @@ export default function TitlePage() {
     refreshInterval: (data) => (data?.pending ? 1500 : 0),
   });
   const router = useRouter();
-  const root = detail.data?.video?.seasons?.[0]?.anilistId;
+  const root = detail.data?.workOf
+    ? Number(detail.data.workOf.id.slice(8))
+    : detail.data?.video?.seasons?.[0]?.anilistId;
   const otherSeason =
     provider === 'anilist' && root && String(root) !== decodeURIComponent(key) ? root : null;
+  const focus = detail.data?.workOf?.season ?? detail.data?.video?.focus ?? 1;
   useEffect(() => {
     // A later season opens its whole work, on that season.
-    if (otherSeason)
-      router.replace(`/title/anilist/${otherSeason}?season=${detail.data?.video?.focus ?? 1}`);
-  }, [otherSeason, router, detail.data?.video?.focus]);
+    if (otherSeason) router.replace(`/title/anilist/${otherSeason}?season=${focus}`);
+  }, [otherSeason, router, focus]);
   if (detail.error && !detail.data)
     return (
       <main className="mx-auto max-w-[1760px] px-4 pt-24 md:px-10 md:pt-32">
@@ -692,6 +694,14 @@ function Title({ media }: { media: MediaDetail }) {
                   />
                 )}
               </>
+            ) : media.type === 'ANIME' ? (
+              // Episodes arrive with the full sheet (a later season also moves to its work).
+              <div className="flex flex-col gap-3" aria-busy>
+                <SectionHeading id="toc" num={1} title={t('episodes.title')} />
+                {Array.from({ length: 6 }, (_, i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
             ) : (
               <div className="flex flex-col gap-5">
                 {entry && <Translations entry={entry} owned={Boolean(media.kavita)} />}
