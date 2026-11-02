@@ -219,6 +219,7 @@ export const settingsPatch = z
     jellyfinApiKey: z.string().max(2000).optional(),
     jellyfinUser: z.string().trim().max(100).optional(),
     autoImportJellyfin: z.boolean().optional(),
+    videoAddons: z.array(z.string().url().max(500)).max(20).optional(),
     jellyfinLibraries: z
       .record(z.string().min(1).max(100), z.enum(['anime', 'series', 'movies', 'ignore']))
       .optional(),

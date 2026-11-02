@@ -46,7 +46,12 @@ export const jellyfinConfigured = () => {
   return Boolean(s.jellyfinUrl && s.jellyfinApiKey);
 };
 
-async function jellyfin<T>(path: string, signal?: AbortSignal, timeoutMs = 20_000): Promise<T> {
+export async function jellyfin<T>(
+  path: string,
+  signal?: AbortSignal,
+  timeoutMs = 20_000,
+  init: { method?: string; body?: unknown } = {},
+): Promise<T> {
   const s = getSettings();
   if (!s.jellyfinUrl || !s.jellyfinApiKey)
     throw new AppError('SERVICE_NOT_CONFIGURED', 'Jellyfin is not configured', 409);
@@ -61,7 +66,13 @@ async function jellyfin<T>(path: string, signal?: AbortSignal, timeoutMs = 20_00
       signal: bounded,
       cache: 'no-store',
       redirect: 'error',
-      headers: { Accept: 'application/json', 'X-Emby-Token': s.jellyfinApiKey },
+      method: init.method ?? 'GET',
+      headers: {
+        Accept: 'application/json',
+        'X-Emby-Token': s.jellyfinApiKey,
+        ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
     });
   } catch {
     throw new AppError(
@@ -78,7 +89,8 @@ async function jellyfin<T>(path: string, signal?: AbortSignal, timeoutMs = 20_00
     await response.body?.cancel();
     throw new AppError('JELLYFIN_ERROR', `Jellyfin returned HTTP ${response.status}`, 502);
   }
-  return (await response.json()) as T;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 export async function jellyfinInfo(signal?: AbortSignal) {
@@ -89,7 +101,7 @@ export async function jellyfinInfo(signal?: AbortSignal) {
 }
 
 /** The account whose watched state counts: the named user, else an administrator, else the first. */
-async function userId(signal?: AbortSignal) {
+export async function userId(signal?: AbortSignal) {
   const users = z
     .array(
       z

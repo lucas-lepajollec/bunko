@@ -27,6 +27,7 @@ const SERVICE_KEYS = [
   'jellyfinApiKey',
   'jellyfinUser',
   'jellyfinLibraries',
+  'videoAddons',
 ];
 export const PATCH = route(async (r) => {
   const patch = await body(r, settingsPatch);

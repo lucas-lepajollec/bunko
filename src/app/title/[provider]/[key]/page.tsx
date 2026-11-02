@@ -596,6 +596,8 @@ function Title({ media }: { media: MediaDetail }) {
               <>
                 <SectionHeading id="toc" num={1} title={t('episodes.title')} />
                 <EpisodeList
+                  title={media.title}
+                  anilistId={media.anilistId}
                   video={seasonParam ? { ...video, focus: seasonParam } : video}
                   jellyfin={media.jellyfin}
                   entry={entry}

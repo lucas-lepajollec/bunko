@@ -93,6 +93,7 @@ function serverSettings(): Settings {
     jellyfinUser: '',
     autoImportJellyfin: true,
     jellyfinLibraries: {},
+    videoAddons: [],
     tradocUrl: '',
     tradocApiKey: '',
     googleBooksApiKey: '',

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { AnimeSeason, JellyfinPresence, TrackedMedia, VideoDetail } from '@/types/shared';
 import { useI18n } from '@/i18n/I18nProvider';
 import { cx } from './ui';
+import { Player, type PlayerEpisode } from './player';
 
 const FIRST = 24;
 
@@ -12,12 +13,18 @@ const FIRST = 24;
  * happens elsewhere and Bunko keeps the place.
  */
 export function EpisodeList({
+  title,
+  anilistId,
   video,
   jellyfin,
   entry,
   busy,
   onWatched,
 }: {
+  /** Work title (shown in the player). */
+  title: string;
+  /** AniList id of the work, for a single-season work without season entries. */
+  anilistId: number | null;
   video: VideoDetail;
   /** What the Jellyfin library holds for this season (owned, watched, item ids). */
   jellyfin?: JellyfinPresence | null;
@@ -64,7 +71,55 @@ export function EpisodeList({
   const played = new Set(inJf?.played ?? []);
   const owned = new Set(inJf?.owned ?? []);
   const watchedHere = Math.min(Math.max(0, read - offset), season.list.length);
-  const jellyfinBase = jellyfin?.url.split('/web/')[0];
+  const [playing, setPlaying] = useState<{ season: number; episode: number } | null>(null);
+  // Resume: the episode after the last one watched (across the work).
+  const resumeAt = (() => {
+    const next = read + 1;
+    for (let i = seasons.length - 1; i >= 0; i--)
+      if (offsets[i] < next) {
+        const local = next - offsets[i];
+        const s = seasons[i];
+        return local <= (s.aired ?? s.list.length) ? { season: i, episode: local } : null;
+      }
+    return null;
+  })();
+  const episodeFor = (at: { season: number; episode: number }): PlayerEpisode => {
+    const s = seasons[at.season];
+    const jf = jellyfin?.bySeason.find((x) => x.season === s.number);
+    return {
+      title,
+      label:
+        seasons.length > 1
+          ? t('episodes.seasonShort', { s: n(s.number), n: n(at.episode) })
+          : t('episodes.short', { n: n(at.episode) }),
+      seasonAnilistId: s.anilistId ?? anilistId,
+      episode: at.episode,
+      jellyfinItemId: jf?.episodeIds[at.episode] ?? null,
+    };
+  };
+  const nextOf = (at: { season: number; episode: number }) => {
+    const s = seasons[at.season];
+    if (at.episode < (s.aired ?? s.list.length))
+      return { season: at.season, episode: at.episode + 1 };
+    const following = seasons[at.season + 1];
+    return following && (following.aired ?? following.list.length) > 0
+      ? { season: at.season + 1, episode: 1 }
+      : null;
+  };
+  const player = playing && (
+    <Player
+      episode={episodeFor(playing)}
+      onClose={() => setPlaying(null)}
+      onFinished={() => {
+        const absolute = offsets[playing.season] + playing.episode;
+        if (entry && absolute > read) onWatched(absolute);
+      }}
+      onNext={(() => {
+        const next = nextOf(playing);
+        return next ? () => setPlaying(next) : undefined;
+      })()}
+    />
+  );
   const [limit, setLimit] = useState(FIRST);
   const [newestFirst, setNewestFirst] = useState(false);
   const aired = season.aired ?? season.list.length;
@@ -121,6 +176,7 @@ export function EpisodeList({
     );
   return (
     <div className="flex flex-col">
+      {player}
       {tabs}
       <div className="border-line-strong flex flex-wrap items-center gap-2 border-b pb-3.5 text-sm">
         <span className="text-mid">
@@ -138,10 +194,25 @@ export function EpisodeList({
             })}
           </span>
         )}
+        {resumeAt && (
+          <button
+            type="button"
+            onClick={() => setPlaying(resumeAt)}
+            className="bg-fg text-bg ml-auto flex h-9 items-center gap-2 rounded-full px-4 font-semibold"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <path d="M7 4v16l13-8Z" />
+            </svg>
+            {t('player.watch', { label: episodeFor(resumeAt).label })}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setNewestFirst((v) => !v)}
-          className="text-mid ml-auto h-9 rounded-full bg-white/[0.06] px-3.5 hover:text-white"
+          className={cx(
+            'text-mid h-9 rounded-full bg-white/[0.06] px-3.5 hover:text-white',
+            !resumeAt && 'ml-auto',
+          )}
         >
           {newestFirst ? t('episodes.oldestFirst') : t('episodes.newestFirst')}
         </button>
@@ -200,19 +271,18 @@ export function EpisodeList({
                       ? t('episodes.watched')
                       : t('episodes.aired')}
               </span>
-              {inJellyfin && jellyfinBase && inJf?.episodeIds[e.number] && (
-                <a
-                  href={`${jellyfinBase}/web/#/details?id=${inJf!.episodeIds[e.number]}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={t('episodes.playInJellyfin', { n: n(e.number) })}
-                  title={t('episodes.playInJellyfin', { n: n(e.number) })}
+              {!upcoming && (
+                <button
+                  type="button"
+                  onClick={() => setPlaying({ season: index, episode: e.number })}
+                  aria-label={t('player.playEpisode', { n: n(e.number) })}
+                  title={t('player.playEpisode', { n: n(e.number) })}
                   className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                     <path d="M7 4v16l13-8Z" />
                   </svg>
-                </a>
+                </button>
               )}
             </li>
           );

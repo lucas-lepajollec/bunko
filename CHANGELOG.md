@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Video player: every aired episode has a play button, and "Watch S2 · Ep. 5" resumes where the
+  work stopped. Jellyfin episodes play inside Bunko through a server proxy (the API key stays on
+  the server) with Jellyfin's audio tracks, subtitles (text as WebVTT, image ones burned in) and
+  quality ceilings; the position is saved in Jellyfin for resume and past 90 % the episode is
+  marked played in Jellyfin and watched in Bunko. Next episode, keyboard shortcuts, full screen.
+- Video extensions (Settings → Video & streaming): Stremio-protocol addons added by manifest URL;
+  episodes are looked up by Kitsu, IMDb or MyAnimeList ids from the offline id map, streams in the
+  interface language come first, direct and HLS streams play in Bunko (torrents are listed as not
+  playable in a browser). Bunko ships no addon.
+
 - Jellyfin import uses the ids Jellyfin already has (TVDB, TMDB, IMDb, AniDB, AniList plugin)
   through an offline anime id map (Fribb/anime-lists, shared, refreshed weekly) and loads AniList
   entries 50 per request: a whole library imports in a few requests. Title search remains only
