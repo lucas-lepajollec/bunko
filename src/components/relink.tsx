@@ -37,7 +37,11 @@ export function CatalogPicker({
           {t('extsearch.run')}
         </button>
       </form>
-      <LoadNotice pending={results.isLoading || results.refining} partial={results.partial} />
+      <LoadNotice
+        inline
+        pending={results.isLoading || results.refining}
+        partial={results.partial}
+      />
       {results.isLoading && <Skeleton className="h-12 rounded-lg" />}
       {(results.data?.results ?? []).slice(0, 6).map((m) => (
         <button
@@ -90,6 +94,7 @@ export function KavitaPicker({
         </button>
       </form>
       <LoadNotice
+        inline
         pending={series.isLoading || series.isValidating}
         partial={Boolean(series.error)}
       />

@@ -1,5 +1,7 @@
 'use client';
+import { useEffect, useId } from 'react';
 import { useI18n } from '@/i18n/I18nProvider';
+import { setNotice } from '@/lib/client/notices';
 import { Spinner, cx } from './ui';
 import { InfoBubble } from './notify';
 
@@ -9,13 +11,25 @@ export function LoadNotice({
   partial,
   className,
   quiet = false,
+  inline = false,
 }: {
+  /** Show the notice here rather than in the header bell. */
+  inline?: boolean;
   pending?: boolean;
   partial?: boolean;
   className?: string;
   quiet?: boolean;
 }) {
   const { t } = useI18n();
+  const id = useId();
+  // General page status goes to the header's notice bell instead of interrupting the page;
+  // `inline` keeps it in place where it describes a small list (search panel, pickers).
+  useEffect(() => {
+    if (inline) return;
+    setNotice(id, { pending: Boolean(pending), partial: Boolean(partial) });
+    return () => setNotice(id, null);
+  }, [id, inline, pending, partial]);
+  if (!inline) return null;
   if (!pending && !partial) return null;
   if (quiet)
     return (

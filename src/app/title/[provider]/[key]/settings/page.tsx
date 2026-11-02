@@ -90,7 +90,11 @@ function WorkSettings({ media }: { media: MediaDetail }) {
     sourceId: s.sourceId,
     sourceName: s.sourceName,
   }));
-  const sources = stored ?? fromDetail;
+  // A work outside the library can still have sources chosen for it (kept until it is followed).
+  const choice = useApi<ChapterSelection[]>(
+    entry ? null : `/api/media/source-choice?id=${encodeURIComponent(media.id)}`,
+  );
+  const sources = stored ?? (choice.data?.length ? choice.data : fromDetail);
   const scan = useSourceScan(media.id, { ready: library.data !== undefined, auto: false });
   // Sources and covers need the live scan: start it as soon as one of those sections is shown.
   const wantsScan = isComic && (section === 'sources' || section === 'cover');
@@ -178,6 +182,20 @@ function WorkSettings({ media }: { media: MediaDetail }) {
           <SaveStatus save={save} />
           {library.data === undefined ? (
             <Skeleton className="h-64" />
+          ) : !entry && section === 'sources' ? (
+            <SourcesTab
+              entry={undefined}
+              sources={sources}
+              lanes={scan.lanes}
+              onScan={rescan}
+              busy={save?.state === 'saving'}
+              onSources={(next) =>
+                run(async () => {
+                  await send('/api/media/source-choice', 'PUT', { id: media.id, sources: next });
+                  await choice.mutate(next, { revalidate: false });
+                })
+              }
+            />
           ) : !entry ? (
             <div className="flex flex-col items-start gap-3 rounded-2xl bg-white/[0.04] p-4">
               <p className="text-mid">{t('match.trackFirst')}</p>

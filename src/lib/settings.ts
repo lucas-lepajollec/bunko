@@ -92,6 +92,7 @@ function serverSettings(): Settings {
     jellyfinApiKey: '',
     jellyfinUser: '',
     autoImportJellyfin: true,
+    jellyfinLibraries: {},
     tradocUrl: '',
     tradocApiKey: '',
     googleBooksApiKey: '',
@@ -207,6 +208,11 @@ export function updateSettings(patch: SettingsPatch) {
             )
             .run();
       }
+      if (patch.jellyfinLibraries !== undefined || patch.jellyfinUser !== undefined)
+        // New library roles or watching user: re-read Jellyfin at the next worker pass.
+        db().exec(
+          "DELETE FROM worker_state WHERE key='jellyfin_synced_at' OR key LIKE 'jellyfin_import_tried:%';",
+        );
       if (patch.jellyfinUrl !== undefined && patch.jellyfinUrl !== current.jellyfinUrl)
         // Item IDs belong to the previous server.
         db().exec(

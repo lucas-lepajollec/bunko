@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Jellyfin libraries get a role (anime, series, films, ignore), detected from the library type and
+  name and editable in Settings → Connections; only anime libraries feed anime sheets and automatic
+  following, and the Jellyfin AniList plugin id is used directly when present. Changing roles or
+  the watching user re-reads Jellyfin.
+- Sources can be searched and chosen for a work outside the library (Settings of the work →
+  Sources); following it later keeps them.
+- General page status (still loading, some providers unreachable) moves to a bell in the header
+  instead of interrupting pages.
+- The library follows the kind on screen: anime use watching statuses, "new episodes" and "last
+  watched" sorts, "watched N" on cards, and hide reading-only tabs. The home says "Continue
+  watching" for anime. Hero banners: a capped, gentle zoom with a long soft fade, no blurred copy.
+
 - Jellyfin: connect it in Settings → Connections (address, API key, the user whose watched state
   counts). Bunko indexes series and episodes every 15 minutes (or on demand), links anime by the
   AniList id (Jellyfin AniList plugin) or by title, picks the season from titles like "Season 2",

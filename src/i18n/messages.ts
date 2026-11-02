@@ -1163,6 +1163,24 @@ const en: Dictionary = {
     'Adds the anime of your Jellyfin library to Bunko when AniList clearly recognises them; others are left for you to link.',
   'jellyfin.syncNow': 'Re-read Jellyfin now',
   'jellyfin.synced': 'Jellyfin library read.',
+  'notices.label': 'Status',
+  'shelf.READING.video': 'Watching',
+  'shelf.PLANNING.video': 'Want to watch',
+  'shelf.COMPLETED.video': 'Watched',
+  'library.sort.news.video': 'New episodes',
+  'library.sort.recent.video': 'Last watched',
+  'library.inventory.video': '{series} works',
+  'jellyfin.libraries': 'Jellyfin libraries',
+  'jellyfin.librariesHint':
+    'Tell Bunko what each library holds. Anime libraries feed anime sheets and automatic following; series and films will be used by their own modules. Detected from the library type and name at first.',
+  'jellyfin.libraryRole': 'Role of {name}',
+  'jellyfin.detected': 'detected: {role}',
+  'jellyfin.role.anime': 'Anime',
+  'jellyfin.role.series': 'TV series',
+  'jellyfin.role.movies': 'Films',
+  'jellyfin.role.ignore': 'Ignore',
+  'library.watchedN': "watched {n}",
+  'profile.resumeWatching': "Continue watching",
 };
 
 const fr: Dictionary = {
@@ -2312,6 +2330,24 @@ const fr: Dictionary = {
     'Ajoute à Bunko les animes de ta bibliothèque Jellyfin quand AniList les reconnaît sans ambiguïté ; les autres restent à lier à la main.',
   'jellyfin.syncNow': 'Relire Jellyfin maintenant',
   'jellyfin.synced': 'Bibliothèque Jellyfin relue.',
+  'notices.label': 'État',
+  'shelf.READING.video': 'En cours de visionnage',
+  'shelf.PLANNING.video': 'À voir',
+  'shelf.COMPLETED.video': 'Vus',
+  'library.sort.news.video': 'Nouveaux épisodes',
+  'library.sort.recent.video': 'Dernier visionnage',
+  'library.inventory.video': '{series} œuvres',
+  'jellyfin.libraries': 'Bibliothèques Jellyfin',
+  'jellyfin.librariesHint':
+    'Indique à Bunko ce que contient chaque bibliothèque. Les bibliothèques d’animes alimentent les fiches et le suivi automatique ; séries et films serviront à leurs propres modules. Détecté au départ d’après le type et le nom de la bibliothèque.',
+  'jellyfin.libraryRole': 'Rôle de {name}',
+  'jellyfin.detected': 'détecté : {role}',
+  'jellyfin.role.anime': 'Animes',
+  'jellyfin.role.series': 'Séries',
+  'jellyfin.role.movies': 'Films',
+  'jellyfin.role.ignore': 'Ignorer',
+  'library.watchedN': "vu {n}",
+  'profile.resumeWatching': "Reprendre le visionnage",
 };
 
 const es: Dictionary = {
@@ -3453,6 +3489,24 @@ const es: Dictionary = {
     'Añade a Bunko los animes de tu biblioteca de Jellyfin cuando AniList los reconoce sin dudas; los demás quedan para vincular a mano.',
   'jellyfin.syncNow': 'Volver a leer Jellyfin ahora',
   'jellyfin.synced': 'Biblioteca de Jellyfin leída.',
+  'notices.label': 'Estado',
+  'shelf.READING.video': 'Viendo',
+  'shelf.PLANNING.video': 'Por ver',
+  'shelf.COMPLETED.video': 'Vistos',
+  'library.sort.news.video': 'Episodios nuevos',
+  'library.sort.recent.video': 'Último visionado',
+  'library.inventory.video': '{series} obras',
+  'jellyfin.libraries': 'Bibliotecas de Jellyfin',
+  'jellyfin.librariesHint':
+    'Indica a Bunko qué contiene cada biblioteca. Las bibliotecas de anime alimentan las fichas y el seguimiento automático; series y películas servirán a sus propios módulos. Se detecta al principio por el tipo y el nombre.',
+  'jellyfin.libraryRole': 'Función de {name}',
+  'jellyfin.detected': 'detectado: {role}',
+  'jellyfin.role.anime': 'Anime',
+  'jellyfin.role.series': 'Series',
+  'jellyfin.role.movies': 'Películas',
+  'jellyfin.role.ignore': 'Ignorar',
+  'library.watchedN': "visto {n}",
+  'profile.resumeWatching': "Seguir viendo",
 };
 
 const de: Dictionary = {
@@ -4603,6 +4657,24 @@ const de: Dictionary = {
     'Fügt Bunko die Anime deiner Jellyfin-Bibliothek hinzu, wenn AniList sie eindeutig erkennt; die übrigen verknüpfst du selbst.',
   'jellyfin.syncNow': 'Jellyfin jetzt neu einlesen',
   'jellyfin.synced': 'Jellyfin-Bibliothek eingelesen.',
+  'notices.label': 'Status',
+  'shelf.READING.video': 'Schaue ich',
+  'shelf.PLANNING.video': 'Möchte ich sehen',
+  'shelf.COMPLETED.video': 'Gesehen',
+  'library.sort.news.video': 'Neue Folgen',
+  'library.sort.recent.video': 'Zuletzt gesehen',
+  'library.inventory.video': '{series} Werke',
+  'jellyfin.libraries': 'Jellyfin-Bibliotheken',
+  'jellyfin.librariesHint':
+    'Sag Bunko, was jede Bibliothek enthält. Anime-Bibliotheken speisen die Anime-Seiten und das automatische Folgen; Serien und Filme nutzen später eigene Module. Zunächst anhand von Typ und Name erkannt.',
+  'jellyfin.libraryRole': 'Rolle von {name}',
+  'jellyfin.detected': 'erkannt: {role}',
+  'jellyfin.role.anime': 'Anime',
+  'jellyfin.role.series': 'Serien',
+  'jellyfin.role.movies': 'Filme',
+  'jellyfin.role.ignore': 'Ignorieren',
+  'library.watchedN': "gesehen {n}",
+  'profile.resumeWatching': "Weiterschauen",
 };
 
 const it: Dictionary = {
@@ -5744,6 +5816,24 @@ const it: Dictionary = {
     'Aggiunge a Bunko gli anime della tua libreria Jellyfin quando AniList li riconosce senza ambiguità; gli altri restano da collegare a mano.',
   'jellyfin.syncNow': 'Rileggi Jellyfin ora',
   'jellyfin.synced': 'Libreria Jellyfin letta.',
+  'notices.label': 'Stato',
+  'shelf.READING.video': 'In visione',
+  'shelf.PLANNING.video': 'Da vedere',
+  'shelf.COMPLETED.video': 'Visti',
+  'library.sort.news.video': 'Nuovi episodi',
+  'library.sort.recent.video': 'Ultimo visto',
+  'library.inventory.video': '{series} opere',
+  'jellyfin.libraries': 'Librerie Jellyfin',
+  'jellyfin.librariesHint':
+    'Indica a Bunko cosa contiene ogni libreria. Le librerie anime alimentano le schede e il monitoraggio automatico; serie e film serviranno ai loro moduli. Rilevato all’inizio da tipo e nome.',
+  'jellyfin.libraryRole': 'Ruolo di {name}',
+  'jellyfin.detected': 'rilevato: {role}',
+  'jellyfin.role.anime': 'Anime',
+  'jellyfin.role.series': 'Serie',
+  'jellyfin.role.movies': 'Film',
+  'jellyfin.role.ignore': 'Ignora',
+  'library.watchedN': "visto {n}",
+  'profile.resumeWatching': "Riprendi la visione",
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

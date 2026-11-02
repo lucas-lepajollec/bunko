@@ -134,7 +134,11 @@ function Title({ media }: { media: MediaDetail }) {
         })),
     [lanes, language],
   );
-  const sources = stored ?? (fromDetail.length ? fromDetail : autoPicked);
+  const sourceChoice = useApi<ChapterSelection[]>(
+    entry || !isComic ? null : `/api/media/source-choice?id=${encodeURIComponent(media.id)}`,
+  );
+  const chosen = !entry && sourceChoice.data?.length ? sourceChoice.data : null;
+  const sources = stored ?? chosen ?? (fromDetail.length ? fromDetail : autoPicked);
   // Something needs a look: no source, or none could be found automatically.
   const attention = isComic && Boolean(entry) && sources.length === 0;
   const priority = sources.map((s) => s.sourceId);

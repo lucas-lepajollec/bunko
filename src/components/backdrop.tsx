@@ -50,33 +50,25 @@ export function Backdrop({
         }}
       >
         {src && sharp && (
-          <>
-            {/* Wide banners (≈4.7:1) are never stretched over the whole hero: the banner keeps its
-                own proportions at the top, over a soft blurred copy that fills the rest. */}
-            <ManagedImage
-              src={src}
-              alt=""
-              referrerPolicy="no-referrer"
-              className={cx(
-                'absolute inset-0 size-full scale-110 object-cover opacity-45 blur-2xl',
-                mobileImage && 'hidden md:block',
-              )}
-            />
-            <ManagedImage
-              src={src}
-              alt=""
-              onLoadError={() => setFailed({ key, count: attempt + 1 })}
-              referrerPolicy="no-referrer"
-              className={cx(
-                'absolute inset-x-0 top-0 h-auto min-h-[55%] w-full object-cover object-[center_25%]',
-                mobileImage && 'hidden md:block',
-              )}
-              style={{
-                maskImage: 'linear-gradient(180deg, #000 70%, transparent 100%)',
-                WebkitMaskImage: 'linear-gradient(180deg, #000 70%, transparent 100%)',
-              }}
-            />
-          </>
+          // Wide banners (≈4.7:1): full width, a capped height (gentle zoom, never stretched over
+          // the whole hero), then a long soft fade into the page.
+          <ManagedImage
+            src={src}
+            alt=""
+            onLoadError={() => setFailed({ key, count: attempt + 1 })}
+            referrerPolicy="no-referrer"
+            className={cx(
+              'absolute inset-x-0 top-0 w-full object-cover object-[center_30%]',
+              mobileImage && 'hidden md:block',
+            )}
+            style={{
+              height: 'min(100%, max(29vw, 420px))',
+              maskImage:
+                'linear-gradient(180deg, #000 45%, rgba(0,0,0,0.55) 72%, transparent 100%)',
+              WebkitMaskImage:
+                'linear-gradient(180deg, #000 45%, rgba(0,0,0,0.55) 72%, transparent 100%)',
+            }}
+          />
         )}
         {src && !sharp && (
           <ManagedImage

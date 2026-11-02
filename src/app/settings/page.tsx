@@ -24,6 +24,7 @@ import type {
   SettingsPatch,
 } from '@/types/shared';
 import { PERMISSIONS } from '@/types/shared';
+import type { JellyfinLibrary, JellyfinRole } from '@/types/shared';
 import { UNIVERSES } from '@/lib/client/universe';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -369,8 +370,46 @@ function JellyfinOptions({
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
+  const libraries = useApi<JellyfinLibrary[]>('/api/jellyfin/libraries');
+  const roles: JellyfinRole[] = ['anime', 'series', 'movies', 'ignore'];
   return (
     <div className="flex flex-col gap-2 px-1 text-sm">
+      {libraries.data && libraries.data.length > 0 && (
+        <div className="flex flex-col gap-1.5 rounded-2xl bg-white/[0.03] p-3">
+          <span className="font-medium">{t('jellyfin.libraries')}</span>
+          <span className="text-muted text-xs leading-relaxed">{t('jellyfin.librariesHint')}</span>
+          {libraries.data.map((l) => (
+            <div key={l.id} className="flex flex-wrap items-center justify-between gap-2 py-1">
+              <span className="flex flex-col">
+                <span>{l.name}</span>
+                {l.role !== l.detected && (
+                  <span className="text-muted text-xs">
+                    {t('jellyfin.detected', { role: t(`jellyfin.role.${l.detected}`) })}
+                  </span>
+                )}
+              </span>
+              <Select
+                label={t('jellyfin.libraryRole', { name: l.name })}
+                value={l.role}
+                onChange={async (role) => {
+                  try {
+                    await send('/api/settings', 'PATCH', {
+                      jellyfinLibraries: {
+                        ...settings.jellyfinLibraries,
+                        [l.id]: role as JellyfinRole,
+                      },
+                    });
+                    await Promise.all([onSaved(), libraries.mutate()]);
+                  } catch (err) {
+                    toast({ tone: 'bad', text: errorText(t, err) });
+                  }
+                }}
+                options={roles.map((r) => ({ value: r, label: t(`jellyfin.role.${r}`) }))}
+              />
+            </div>
+          ))}
+        </div>
+      )}
       <Row label={t('jellyfin.autoImport')} tip={t('jellyfin.autoImportTip')}>
         <input
           type="checkbox"
