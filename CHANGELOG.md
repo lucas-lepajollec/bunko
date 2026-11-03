@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Release ingestion no longer rebuilds the release → work resolver (decoding the whole library
+  and catalog cache) for every resolved series. The resolver is reused while identities and the
+  catalog cache are unchanged: a full ingestion with 5,000 works went from 25.5 s to 1.9 s of
+  CPU, with no window above 50 %.
+- Background work telemetry: each worker lane, release ingestion and request is measured.
+  `GET /api/admin/jobs` (administrators) lists CPU and duration per job. Logs show
+  `[bunko] job …` for runs above 2 s of CPU and `[bunko] busy: N% CPU over 10 s; running: …`
+  when the process is busy, naming what runs. Aggregates only, no titles or settings.
+
 - Kind registry (`src/domain/kinds.ts`): one description of every kind of work (family,
   formats, search type, catalog and release sources, unit, reading sources, dated releases).
   Lists, menus, validation, classification, worker lanes and pages derive from it. A coverage

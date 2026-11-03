@@ -43,6 +43,8 @@ import { sharedConcurrencyGate } from './concurrency';
 import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
 import { processTranslations } from './translations';
 import { jellyfinImportProgress, maybeSyncJellyfin } from './jellyfin';
+import { measured } from './job-stats';
+import { tenantId } from './tenant-context';
 import { isReadingKind, isVideoKind } from '@/domain/kinds';
 import { normalizeAnimeWorks } from './anime-works';
 import { targetFor } from './library-paths';
@@ -544,8 +546,10 @@ async function workerTickBackground() {
     });
     return task;
   };
+  // Each lane is measured (CPU, duration): GET /api/admin/jobs and heavy-run log lines.
+  const job = <T>(name: string, run: () => Promise<T>) => measured(name, tenantId(), run);
   const covers = background(() =>
-    syncTrackedCovers(signal, true).catch(() => {
+    job('covers', () => syncTrackedCovers(signal, true)).catch(() => {
       /* Retry after a later wake. */
     }),
   );
@@ -565,7 +569,7 @@ async function workerTickBackground() {
     )
       return;
     matching = background(() =>
-      drainSourceMatches(signal, ownsLease).catch(() => {
+      job('source-matching', () => drainSourceMatches(signal, ownsLease)).catch(() => {
         // Unexpected worker/storage failures retry next cycle instead of spinning on the same row.
         matchingFailed = true;
       }),
@@ -577,8 +581,9 @@ async function workerTickBackground() {
   const video = background(async () => {
     // Anime work (Jellyfin, season regrouping) only when anime is an enabled kind.
     while (!signal.aborted && ownsLease() && animeEnabled()) {
-      await maybeSyncJellyfin(signal).catch(() => undefined);
-      if (ownsLease()) await normalizeAnimeWorks(signal).catch(() => undefined);
+      await job('jellyfin', () => maybeSyncJellyfin(signal)).catch(() => undefined);
+      if (ownsLease())
+        await job('anime-works', () => normalizeAnimeWorks(signal)).catch(() => undefined);
       const progress = jellyfinImportProgress();
       if (!progress || progress.done >= progress.total || !maintenance?.running) break;
       await waitForWorker(60_000, signal);
@@ -596,11 +601,11 @@ async function workerTickBackground() {
       if (!ownsLease()) return;
       maintenance ??= background(async () => {
         try {
-          if (kavitaSyncRequested()) await syncKavitaIndex(signal);
+          if (kavitaSyncRequested()) await job('kavita-index', () => syncKavitaIndex(signal));
           // Reading release checks only when a reading kind is enabled (empty = every kind).
           if (ownsLease() && updateCheckDue() && readingEnabled())
-            await runUpdateCheck(createBatch, signal, ownsLease);
-          if (ownsLease()) await processTranslations(signal);
+            await job('update-check', () => runUpdateCheck(createBatch, signal, ownsLease));
+          if (ownsLease()) await job('translations', () => processTranslations(signal));
         } catch (error) {
           maintenanceError = error;
         }
@@ -621,7 +626,7 @@ async function workerTickBackground() {
       if (!pending.length) {
         if (finalCovers) break;
         finalCovers = background(() =>
-          syncTrackedCovers(signal, true).catch((error) => {
+          job('covers', () => syncTrackedCovers(signal, true)).catch((error) => {
             maintenanceError ??= error;
           }),
         );

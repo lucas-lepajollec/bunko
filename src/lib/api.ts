@@ -1,3 +1,4 @@
+import { trackRequest } from './job-stats';
 import { ZodError, type ZodType } from 'zod';
 import { userContext } from './user-context';
 import { inTenant, tenantContext } from './tenant-context';
@@ -36,6 +37,7 @@ export function failure(e: unknown) {
 }
 export function route(handler: (r: Request) => Promise<Response> | Response, protect = true) {
   return async (r: Request) => {
+    const done = trackRequest(new URL(r.url).pathname);
     try {
       const user = protect ? authenticate(r) : undefined;
       if (!['GET', 'HEAD'].includes(r.method)) checkOrigin(r);
@@ -56,6 +58,8 @@ export function route(handler: (r: Request) => Promise<Response> | Response, pro
       });
     } catch (e) {
       return failure(e);
+    } finally {
+      done();
     }
   };
 }

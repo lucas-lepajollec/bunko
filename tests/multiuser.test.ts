@@ -521,7 +521,10 @@ it('authenticates the complete route inventory and concurrently exercises every 
       );
       for (const [i, r] of responses.entries()) {
         expect(r.status, `${method} ${pathname}, tenant ${i + 1}`).not.toBe(500);
-        if (['/api/users', '/api/settings/test-provider'].includes(pathname) && i === 1)
+        if (
+          ['/api/users', '/api/settings/test-provider', '/api/admin/jobs'].includes(pathname) &&
+          i === 1
+        )
           expect(r.status).toBe(403);
         else expect(r.status, `${method} ${pathname}`).not.toBe(403);
         // Infinite download SSE snapshots are checked separately; cancel rather than await forever.
