@@ -61,6 +61,18 @@ does a first cover check on every work. Let it settle a few minutes before readi
 To find where CPU goes, start the server with `node --inspect` and sample it with the Chrome
 DevTools protocol (`Profiler.start`/`stop`), mapping frames through the `.next` source maps.
 
+## Telemetry
+
+Each worker lane (covers, source matching, update check, Kavita index, translations, Jellyfin,
+anime works), release ingestion and every request is measured. `GET /api/admin/jobs`
+(administrators) returns the jobs running now, totals per job and the last runs. The logs show a
+line for any job above 2 s of CPU and for every 10-second window where the process uses at least
+50 % of a core, naming what was running:
+
+```sh
+docker logs bunko 2>&1 | grep '\[bunko\]'
+```
+
 ## Results (VM, 5,000 works)
 
 | Measure                            | Before                           | After                 |
@@ -69,6 +81,7 @@ DevTools protocol (`Profiler.start`/`stop`), mapping frames through the `.next` 
 | Version increments per idle minute | 1,309                            | 0                     |
 | Adding a work                      | 160 ms, growing with the library | about 20 ms, constant |
 | `/api/planning` max                | 2.5 s                            | under 1 s             |
+| Release ingestion (full run)       | 25.5 s CPU, > 100 % for minutes  | 1.9 s CPU             |
 
 Next steps (tracked in the scalability plan): paginated library endpoints and virtualised
 grids (`/api/tracked` still returns the whole library), a durable job table for background

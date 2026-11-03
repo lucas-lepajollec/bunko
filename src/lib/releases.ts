@@ -3,7 +3,6 @@ import { fetchMetronReleases } from './metron';
 import { fetchGoogleEditions, fetchBnfEditions, type EditionRelease } from './edition-feeds';
 import { refreshRoyalRoad } from './royalroad';
 import { tenantState } from './tenant-context';
-import { tenantId } from './tenant-context';
 import { mediaVisibility, rememberAdultIdentities, automaticMedia, adultResolver } from './adult';
 import { z } from 'zod';
 import type { ChapterRelease, DiscoverKind, UnifiedMedia, ReleasesPage } from '@/types/shared';
@@ -16,6 +15,8 @@ import { fromAniList, normalizeTitle, type AniMedia } from './media';
 import { decodeMetadata } from './metadata-cache';
 import { fetchUpdatesReleases, fetchDexReleases } from './release-providers';
 import { AppError, errorCode } from './errors';
+import { measured } from './job-stats';
+import { tenantId } from './tenant-context';
 import { KIND_IDS, kindOfMedia } from '@/domain/kinds';
 
 const DAY = 86400_000;
@@ -177,8 +178,29 @@ export function deduplicateReleases(input: ChapterRelease[]): ChapterRelease[] {
   }
   return [...groups.values()].sort(order);
 }
-export function saveReleases(input: ChapterRelease[], now = Date.now()) {
+/**
+ * The release → work resolver, built once and reused while the library identities and the
+ * catalog cache are unchanged (at most a minute). Ingestion calls `saveReleases` once per resolved
+ * series (up to a thousand times): rebuilding it each time decoded the whole library and catalog
+ * cache a thousand times per run.
+ */
+const resolverState = tenantState(() => ({
+  value: undefined as
+    { key: string; at: number; resolve: ReturnType<typeof mediaResolver> } | undefined,
+}));
+function releaseResolver() {
+  const meta = statement(
+    "SELECT COUNT(*) AS n, MAX(updated_at) AS at FROM metadata_cache WHERE key LIKE 'discover:%' OR key LIKE 'detail:%' OR key LIKE 'search:%'",
+  ).get() as { n: number; at: number | null };
+  const key = `${writeVersion('linkage')}:${writeVersion('identities')}:${meta.n}:${meta.at}`;
+  const cached = resolverState().value;
+  if (cached && cached.key === key && Date.now() - cached.at < 60_000) return cached.resolve;
   const resolve = mediaResolver(cachedCatalog());
+  resolverState().value = { key, at: Date.now(), resolve };
+  return resolve;
+}
+export function saveReleases(input: ChapterRelease[], now = Date.now()) {
+  const resolve = releaseResolver();
   const resolved = new Map<string, UnifiedMedia>();
   db().transaction(() => {
     const insert = statement(
@@ -242,7 +264,7 @@ export function refreshReleases(): Promise<void> {
   statement(
     "INSERT INTO worker_state(key,value) VALUES('release_catalog_revision',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
   ).run(catalogVersion);
-  const job = (async () => {
+  const job = measured('release-ingestion', tenantId(), async () => {
     const page = Number(
       (
         statement("SELECT value FROM worker_state WHERE key='release_backfill'").get() as
@@ -307,7 +329,7 @@ export function refreshReleases(): Promise<void> {
       "INSERT INTO worker_state(key,value) VALUES('release_refresh_result',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
     ).run(JSON.stringify({ at: Date.now(), failed: failures.length > 0 }));
     if (failures.length) console.warn(`[releases] refresh incomplete: ${failures.join('; ')}`);
-  })().finally(() => pending.delete(tenantKey));
+  }).finally(() => pending.delete(tenantKey));
   pending.set(tenantKey, job);
   return job;
 }
