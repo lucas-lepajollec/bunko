@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit --incremental false",
     "lint": "eslint .",
     "test": "vitest run",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "perf:load": "node scripts/perf/load.mjs"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",

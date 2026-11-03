@@ -167,9 +167,14 @@ export async function syncTrackedCover(
         }
       }
       if (!cover || !current()) {
+        // Written only when it changes: an unchanged "no cover" must not touch the library
+        // version (each write made every view rebuild and every open browser refetch).
         if (current())
           statement(
-            'INSERT OR REPLACE INTO resolved_covers(tracked_id,context,url,failures) VALUES(?,?,?,0)',
+            `INSERT INTO resolved_covers(tracked_id,context,url,failures) VALUES(?,?,?,0)
+             ON CONFLICT(tracked_id) DO UPDATE SET context=excluded.context,url=excluded.url,failures=0
+             WHERE resolved_covers.context IS NOT excluded.context OR resolved_covers.url IS NOT excluded.url
+               OR resolved_covers.failures<>0`,
           ).run(id, context, '');
         return;
       }
@@ -212,22 +217,41 @@ export async function syncTrackedCovers(parentSignal?: AbortSignal, backfillOnly
         "SELECT key,value FROM worker_state WHERE key LIKE 'tracked_cover_checked:%'",
       ).all() as { key: string; value: string }[]
     ).map((r) => {
-      const previous = JSON.parse(r.value) as number | { at: number; context: string };
+      const previous = JSON.parse(r.value) as
+        number | { at: number; context: string; tries?: number };
       return [
         Number(r.key.slice('tracked_cover_checked:'.length)),
-        typeof previous === 'number' ? { at: previous, context: '' } : previous,
+        typeof previous === 'number'
+          ? { at: previous, context: '', tries: 0 }
+          : { ...previous, tries: previous.tries ?? 0 },
       ] as const;
     }),
   );
+  // What a cover could come from: the catalog image, the linked Kavita series, the sources.
+  const candidates = (t: TrackedMedia) =>
+    JSON.stringify([t.media.coverUrl, t.kavitaSeriesId, t.sources.map((x) => x.suwayomiMangaId)]);
+  const key = (t: TrackedMedia) => `${context(t)}|${candidates(t)}`;
+  const hasCandidate = (t: TrackedMedia) =>
+    Boolean(t.media.coverUrl || t.kavitaSeriesId !== null || t.sources.length);
+  // A work with nothing to fetch a cover from waits longer each time (5 min, 10, 20… up to a
+  // day) instead of being looked at every 5 minutes forever; a new image source, a Kavita link
+  // or any change of the work makes it due again at once. Works with candidates keep 5 minutes.
+  const due = (t: TrackedMedia) => {
+    const last = checked.get(t.id);
+    if (!last || last.context !== key(t)) return true;
+    const wait = hasCandidate(t) ? 300_000 : Math.min(300_000 * 2 ** last.tries, 86_400_000);
+    return Date.now() - last.at >= wait;
+  };
   const queue = listTracked()
     .filter(
       (t) =>
-        !backfillOnly ||
+        // Full sweep: every work that has something to fetch a cover from; works with nothing
+        // follow the growing wait.
+        (!backfillOnly && (hasCandidate(t) || due(t))) ||
         ((t.kavitaCover.state === 'pending' ||
           t.kavitaCover.state === 'failed' ||
           !t.coverUrl?.startsWith('/api/covers/')) &&
-          (checked.get(t.id)?.context !== context(t) ||
-            Date.now() - (checked.get(t.id)?.at ?? 0) >= 300_000)),
+          due(t)),
     )
     .sort((a, b) => (checked.get(a.id)?.at ?? 0) - (checked.get(b.id)?.at ?? 0));
   for (const t of queue) {
@@ -237,9 +261,15 @@ export async function syncTrackedCovers(parentSignal?: AbortSignal, backfillOnly
     } catch {
       /* Persisted choices retry next cycle. */
     } finally {
+      const last = checked.get(t.id);
+      const resolved = getTracked(t.id)?.coverUrl?.startsWith('/api/covers/');
       statement('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)').run(
         `tracked_cover_checked:${t.id}`,
-        JSON.stringify({ at: Date.now(), context: context(t) }),
+        JSON.stringify({
+          at: Date.now(),
+          context: key(t),
+          tries: resolved ? 0 : last?.context === key(t) ? last.tries + 1 : 0,
+        }),
       );
     }
   }

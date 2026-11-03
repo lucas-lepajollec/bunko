@@ -2,24 +2,16 @@
 import { useSWRConfig } from 'swr';
 import type { DiscoverKind, Settings, UnifiedMedia } from '@/types/shared';
 import { send, useApi } from './api';
+import { KIND_IDS, KINDS, kindOfMedia, type Kind } from '@/domain/kinds';
 
-export type Universe = Exclude<DiscoverKind, 'all'>;
-export const UNIVERSES: Universe[] = [
-  'manga',
-  'manhwa',
-  'manhua',
-  'comic',
-  'lightnovel',
-  'webnovel',
-  'novel',
-  'book',
-  'anime',
-  'series',
-  'movies',
-  'animation',
-];
+export type Universe = Kind;
+/** Every kind, in menu order (from the kind registry). */
+export const UNIVERSES: Universe[] = [...KIND_IDS];
 /** Universes that have reading sources (Suwayomi extensions). */
-export const SOURCE_UNIVERSES: DiscoverKind[] = ['all', 'manga', 'manhwa', 'manhua', 'comic'];
+export const SOURCE_UNIVERSES: DiscoverKind[] = [
+  'all',
+  ...KIND_IDS.filter((k) => KINDS[k].sources),
+];
 
 /**
  * The interface's universe. One kind: catalog, planning, home and search show only it (and
@@ -44,23 +36,11 @@ export function useUniverse() {
   return { active, enabled, allowAll, ready: Boolean(data), set };
 }
 
-/** Client copy of the server's kind rule (formats first, then origin). */
+/** A work's kind (the registry's single rule, shared with the server). */
 export function kindOf(
   media: Pick<UnifiedMedia, 'type' | 'format' | 'origin'> & { kindOverride?: Universe },
 ): Universe {
-  if (media.kindOverride) return media.kindOverride;
-  if (media.format === 'SERIES') return 'series';
-  if (media.format === 'MOVIE') return 'movies';
-  if (media.format === 'ANIMATION_FILM') return 'animation';
-  if (media.type === 'ANIME') return 'anime';
-  if (media.format === 'COMIC') return 'comic';
-  if (media.format === 'LIGHT_NOVEL') return 'lightnovel';
-  if (media.format === 'WEB_NOVEL') return 'webnovel';
-  if (media.format === 'BOOK') return 'book';
-  if (media.type === 'NOVEL' || media.format === 'NOVEL') return 'novel';
-  if (media.format === 'MANHWA' || media.origin === 'KR') return 'manhwa';
-  if (media.format === 'MANHUA' || ['CN', 'HK', 'TW'].includes(media.origin ?? '')) return 'manhua';
-  return 'manga';
+  return kindOfMedia(media);
 }
 /** Whether a work belongs to the active universe (`all` keeps everything). */
 export const inUniverse = (
@@ -68,13 +48,4 @@ export const inUniverse = (
   media: Pick<UnifiedMedia, 'type' | 'format' | 'origin'>,
 ) => active === 'all' || kindOf(media) === active;
 
-export type SearchType = 'MANGA' | 'NOVEL' | 'ANIME' | 'TV' | 'MOVIE';
-/** The provider media type a universe searches (AniList searches manga unless told). */
-export function searchTypeOf(kind: DiscoverKind | undefined): SearchType | undefined {
-  if (!kind || kind === 'all') return undefined;
-  if (kind === 'anime' || kind === 'animation') return 'ANIME';
-  if (kind === 'series') return 'TV';
-  if (kind === 'movies') return 'MOVIE';
-  if (['lightnovel', 'webnovel', 'novel', 'book'].includes(kind)) return 'NOVEL';
-  return 'MANGA';
-}
+export { searchTypeOf, type SearchType } from '@/domain/kinds';

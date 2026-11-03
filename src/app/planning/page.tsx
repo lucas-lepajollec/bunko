@@ -1,4 +1,5 @@
 'use client';
+import { KIND_IDS, KINDS as KINDS_DEF } from '@/domain/kinds';
 import { MediaLink } from '@/components/media-link';
 import { Suspense, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -11,19 +12,8 @@ import { Page } from '@/components/shell';
 import { InfoBubble } from '@/components/notify';
 import { Cover, ErrorNote, PageTitle, Pill, Skeleton, cx } from '@/components/ui';
 
-const KINDS: DiscoverKind[] = [
-  'all',
-  'manga',
-  'manhwa',
-  'manhua',
-  'comic',
-  'lightnovel',
-  'webnovel',
-  'anime',
-  'series',
-  'movies',
-  'animation',
-];
+// Kinds with dated releases (from the kind registry).
+const KINDS: DiscoverKind[] = ['all', ...KIND_IDS.filter((k) => KINDS_DEF[k].datedReleases)];
 
 /** ISO date (YYYY-MM-DD) in local time. */
 const isoDay = (d: Date) =>

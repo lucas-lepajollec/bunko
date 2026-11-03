@@ -1,4 +1,5 @@
 'use client';
+import { isVideoKind } from '@/domain/kinds';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useUniverse } from '@/lib/client/universe';
@@ -73,7 +74,7 @@ export function ActivityCenter() {
   const tasks = useMemo(() => {
     const list = a?.tasks ?? [];
     // The side of the app on screen first (reading or video).
-    const scope = universe.active === 'anime' ? 'video' : 'reading';
+    const scope = isVideoKind(universe.active) ? 'video' : 'reading';
     return [...list].sort((x, y) => Number(y.scope === scope) - Number(x.scope === scope));
   }, [a?.tasks, universe.active]);
   const loading = notices.some((x) => x.pending);

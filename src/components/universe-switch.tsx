@@ -3,6 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { DiscoverKind } from '@/types/shared';
 import { useUniverse } from '@/lib/client/universe';
+import { isVideoKind } from '@/domain/kinds';
 import { useI18n } from '@/i18n/I18nProvider';
 import { announceMenu, onMenuOpened } from './select';
 import { cx } from './ui';
@@ -42,8 +43,7 @@ export function UniverseMenu() {
     timer.current = setTimeout(() => setOpen(false), 160);
   };
   if (!universe.ready) return null;
-  const isVideo = (k: DiscoverKind) =>
-    k === 'anime' || k === 'series' || k === 'movies' || k === 'animation';
+  const isVideo = (k: DiscoverKind) => isVideoKind(k);
   const reading = universe.enabled.filter((k) => !isVideo(k));
   const video = universe.enabled.filter(isVideo);
   if (reading.length + video.length + (universe.allowAll ? 1 : 0) < 2) return null;

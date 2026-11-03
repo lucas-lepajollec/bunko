@@ -138,8 +138,19 @@ export async function trackKavitaSeries(seriesId: number, signal?: AbortSignal, 
   })();
 }
 export async function autoImportKavita() {
+  // Series already linked to a work: looked up in one map built once (no per-series scan of
+  // the library); only their cover upload is retried.
+  const linked = new Map(
+    listTracked().flatMap((t) => (t.kavitaSeriesId !== null ? [[t.kavitaSeriesId, t]] : [])),
+  );
   for (const series of indexedSeries()) {
     if (!getSettings().autoImportKavita) return;
+    const owner = linked.get(series.seriesId);
+    if (owner) {
+      if (!owner.media.id.startsWith('kavita:'))
+        await ensureKavitaCover(series, owner.media).catch(() => undefined);
+      continue;
+    }
     if (db().prepare('SELECT 1 FROM kavita_dismissals WHERE series_id=?').get(series.seriesId))
       continue;
     try {

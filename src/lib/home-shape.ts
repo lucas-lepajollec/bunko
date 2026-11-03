@@ -1,20 +1,11 @@
 import type { DiscoverKind, HomeFeed } from '@/types/shared';
+import { KIND_IDS } from '@/domain/kinds';
 
-// `satisfies` checks spelling; Record makes adding a DiscoverKind fail typecheck until covered here.
-const kinds: Record<Exclude<DiscoverKind, 'all'>, true> = {
-  manga: true,
-  manhwa: true,
-  manhua: true,
-  comic: true,
-  lightnovel: true,
-  webnovel: true,
-  novel: true,
-  book: true,
-  series: true,
-  movies: true,
-  animation: true,
-  anime: true,
-};
+// Every kind of the registry has a shelf.
+const kinds = Object.fromEntries(KIND_IDS.map((k) => [k, true])) as Record<
+  Exclude<DiscoverKind, 'all'>,
+  true
+>;
 /** Accept older persisted feeds without allowing a missing shelf to reach a consumer. */
 export function normalizeHome(value: unknown): HomeFeed {
   const feed = (value && typeof value === 'object' ? value : {}) as Partial<HomeFeed>;

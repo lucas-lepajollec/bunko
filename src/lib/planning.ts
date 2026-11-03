@@ -1,3 +1,4 @@
+import { KINDS } from '@/domain/kinds';
 import { tenantId } from './tenant-context';
 import { z } from 'zod';
 import type { ChapterRelease, PlanningItem, PlanningWeek } from '@/types/shared';
@@ -158,7 +159,9 @@ const snapshots = new Map<
   { items: ChapterRelease[]; day: string; values: Map<string, PlanningWeek> }
 >();
 export function planning(q: z.infer<typeof planningQuery>): PlanningWeek {
-  if (q.kind !== 'anime') void refreshReleases().catch(() => {});
+  // Reading releases only for reading kinds (or everything).
+  if (!q.kind || q.kind === 'all' || KINDS[q.kind].releases === 'reading')
+    void refreshReleases().catch(() => {});
   const items = releaseStore(new Date(), true);
   const day = localDate(new Date());
   const userId = tenantId();
@@ -183,7 +186,7 @@ export async function withAnimeAiring(
   week: PlanningWeek,
   q: z.infer<typeof planningQuery>,
 ): Promise<PlanningWeek> {
-  if (q.kind && q.kind !== 'all' && q.kind !== 'anime') return week;
+  if (q.kind && q.kind !== 'all' && KINDS[q.kind].releases !== 'anilist') return week;
   const { animeAiring } = await import('./catalog');
   const { followedSeasons } = await import('./anime-works');
   const byAniList = new Map([...followedSeasons()].map(([id, f]) => [id, f.trackedId]));

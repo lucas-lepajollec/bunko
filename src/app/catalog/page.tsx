@@ -1,4 +1,5 @@
 'use client';
+import { KIND_IDS, KINDS as KIND_DEFS } from '@/domain/kinds';
 import { Select } from '@/components/select';
 import { Suspense, useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -24,21 +25,7 @@ import { LoadNotice } from '@/components/load-notice';
 import { CatalogFilterBar, type FilterValues } from '@/components/catalog-filters';
 import { Empty, ErrorNote, PageTitle, PosterSkeletons, cx, smallButton } from '@/components/ui';
 
-const KINDS: DiscoverKind[] = [
-  'all',
-  'manga',
-  'manhwa',
-  'manhua',
-  'comic',
-  'lightnovel',
-  'webnovel',
-  'novel',
-  'book',
-  'anime',
-  'series',
-  'movies',
-  'animation',
-];
+const KINDS: DiscoverKind[] = ['all', ...KIND_IDS];
 const SORTS: DiscoverSort[] = ['trending', 'popular', 'score', 'new'];
 
 export default function CatalogPage() {
@@ -86,7 +73,7 @@ function Catalog() {
   const adultOnly = params.get('adultOnly') === '1';
   const filterValues: FilterValues = { genre, tags, status, year, season, minScore, adultOnly };
   const { locale } = useI18n();
-  const tmdbKind = kind === 'series' || kind === 'movies';
+  const tmdbKind = kind !== 'all' && KIND_DEFS[kind].requires === 'tmdb';
   const settings = useApi<PublicSettings>('/api/settings');
   // Search the media type of the universe on screen (AniList searches manga unless told).
   const searched = useProgressiveSearch(q, searchTypeOf(kind));
@@ -265,11 +252,13 @@ function Catalog() {
                   [
                     'chapters',
                     t(
-                      kind === 'anime' || kind === 'series'
-                        ? 'catalog.viewEpisodes'
-                        : kind === 'movies' || kind === 'animation'
-                          ? 'catalog.viewFilms'
-                          : 'catalog.viewChapters',
+                      kind === 'all'
+                        ? 'catalog.viewChapters'
+                        : KIND_DEFS[kind].unit === 'episode'
+                          ? 'catalog.viewEpisodes'
+                          : KIND_DEFS[kind].unit === 'film'
+                            ? 'catalog.viewFilms'
+                            : 'catalog.viewChapters',
                     ),
                   ],
                   ['new', t('catalog.viewNew')],

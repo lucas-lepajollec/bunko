@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Kind registry (`src/domain/kinds.ts`): one description of every kind of work (family,
+  formats, search type, catalog and release sources, unit, reading sources, dated releases).
+  Lists, menus, validation, classification, worker lanes and pages derive from it. A coverage
+  test fails when a kind lacks texts, a format belongs to zero or two kinds, or a kind is not
+  accepted everywhere. Server and browser share one classification rule.
+- Scalability: idle CPU with 5,000 works went from 59–117 % of a core to 0.3 %. Causes and fixes:
+  - the 18+/identity graph has its own version domain and is skipped without manual 18+
+    decisions;
+  - reading or adding one work uses point queries;
+  - the Jellyfin index is decoded once per sync with lookup maps;
+  - identity queries use the index;
+  - covers with nothing to fetch back off up to a day;
+  - unchanged cover results are not rewritten;
+  - source matching only runs with Suwayomi configured.
+
+  Adding a work is constant time (about 20 ms instead of 160 ms and growing). New
+  `tests/scale.test.ts`, `npm run perf:load` with budgets, and `docs/performance.md`.
+
 - Film sheets: "Mark as watched" instead of "Episode 1 watched", no episode progress or counts,
   a compact watch card (no empty frame without a still, no stray checkbox).
 - TMDB sheets show directors (films) or creators (series), the main cast and the English

@@ -27,13 +27,22 @@ import type {
   SourceLinkStatus,
   CoverChoice,
 } from '@/types/shared';
+/**
+ * Every SQL statement resolves its tenant folder. The account and symlink checks (one accounts
+ * query, two filesystem calls) are kept for two seconds instead of repeated per statement; a
+ * deleted account is forgotten at once by `closeTenant`.
+ */
+const tenantChecks = new Map<number, { folder: string; at: number }>();
 export function dataDir(): string {
   const id = tenantId();
+  const known = tenantChecks.get(id);
+  if (known && Date.now() - known.at < 2000) return known.folder;
   if (!tenantExists(id)) throw new AppError('UNAUTHORIZED', 'Account has been deleted', 401);
   const folder = tenantPath(id);
   for (const part of [path.dirname(folder), folder])
     if (existsSync(part) && lstatSync(part).isSymbolicLink())
       throw new Error('Tenant directory must not be a symlink');
+  tenantChecks.set(id, { folder, at: Date.now() });
   return folder;
 }
 const connections = new Map<string, Database.Database>();
@@ -175,7 +184,7 @@ export function db(): Database.Database {
     const versionConnection = connection;
     connection.transaction(() => {
       versionConnection.exec(
-        "INSERT OR IGNORE INTO write_versions VALUES('content',0),('progress',0)",
+        "INSERT OR IGNORE INTO write_versions VALUES('content',0),('progress',0),('identities',0)",
       );
       const progressColumns = new Set([
         'last_read',
@@ -230,6 +239,15 @@ export function db(): Database.Database {
             : ''
         }
         ${
+          // Work identities (18+ resolution): aliases, decisions, and identity fields of works.
+          ['adult_identity_edges', 'adult_overrides'].includes(table) ||
+          (table === 'tracked_media' && operation !== 'UPDATE')
+            ? "UPDATE write_versions SET version=version+1 WHERE domain='identities';"
+            : table === 'tracked_media'
+              ? `UPDATE write_versions SET version=version+1 WHERE domain='identities' AND (OLD.anilist_id IS NOT NEW.anilist_id OR OLD.mangadex_id IS NOT NEW.mangadex_id OR OLD.kavita_series_id IS NOT NEW.kavita_series_id OR OLD.sources_json IS NOT NEW.sources_json OR json_extract(OLD.media_json,'$.id') IS NOT json_extract(NEW.media_json,'$.id') OR json_extract(OLD.media_json,'$.anilistId') IS NOT json_extract(NEW.media_json,'$.anilistId') OR json_extract(OLD.media_json,'$.mangadexId') IS NOT json_extract(NEW.media_json,'$.mangadexId') OR json_extract(OLD.media_json,'$.mangaUpdatesId') IS NOT json_extract(NEW.media_json,'$.mangaUpdatesId'));`
+              : ''
+        }
+        ${
           table === 'reader_progress' || (table === 'tracked_media' && operation === 'UPDATE')
             ? `UPDATE write_versions SET version=version+1 WHERE domain='progress' ${table === 'tracked_media' ? 'AND (OLD.last_read IS NOT NEW.last_read OR OLD.last_read_at IS NOT NEW.last_read_at OR OLD.volume_read IS NOT NEW.volume_read)' : ''};`
             : ''
@@ -246,6 +264,7 @@ export function db(): Database.Database {
   }
 }
 export function closeTenant(id: number) {
+  tenantChecks.delete(id);
   const folder = tenantPath(id);
   connections.get(folder)?.close();
   connections.delete(folder);
@@ -632,7 +651,8 @@ function snapshotTracked(id?: number) {
   const userId = tenantId();
   const version = writeVersion();
   const trackedSnapshot = trackedSnapshots.get(userId);
-  if (!db().inTransaction && trackedSnapshot?.version === version) return trackedSnapshot;
+  // The version read inside a transaction includes its own writes: a match is safe there too.
+  if (trackedSnapshot?.version === version) return trackedSnapshot;
   const outerTransaction = db().inTransaction;
   const resolveAdult = adultResolver();
   const settings = getSettings();
@@ -647,7 +667,7 @@ function snapshotTracked(id?: number) {
         ...(id === undefined ? [] : [id]),
       );
     const rows = select(
-      `SELECT *, (SELECT json_object('chapterId',chapter_id,'number',number,'page',page,'pageCount',page_count,'volume',(SELECT number FROM local_reader_chapters WHERE id=-reader_progress.chapter_id AND media_id LIKE '@volume:%'),'unit',COALESCE((SELECT CASE WHEN media_id LIKE '@volume:%' THEN 'volume' ELSE 'chapter' END FROM local_reader_chapters WHERE id=-reader_progress.chapter_id),'chapter'),'updatedAt',updated_at) FROM reader_progress WHERE media_id=tracked_media.media_json ->> '$.id' ORDER BY updated_at DESC,rowid DESC LIMIT 1) AS reader_position_json FROM tracked_media`,
+      `SELECT *, (SELECT json_object('chapterId',chapter_id,'number',number,'page',page,'pageCount',page_count,'volume',(SELECT number FROM local_reader_chapters WHERE id=-reader_progress.chapter_id AND media_id LIKE '@volume:%'),'unit',COALESCE((SELECT CASE WHEN media_id LIKE '@volume:%' THEN 'volume' ELSE 'chapter' END FROM local_reader_chapters WHERE id=-reader_progress.chapter_id),'chapter'),'updatedAt',updated_at) FROM reader_progress WHERE media_id=json_extract(tracked_media.media_json,'$.id') ORDER BY updated_at DESC,rowid DESC LIMIT 1) AS reader_position_json FROM tracked_media`,
       'id',
       ' ORDER BY id DESC',
     ) as Record<string, unknown>[];
@@ -728,9 +748,25 @@ function snapshotTracked(id?: number) {
         ...(m.anilistId ? [`anilist:${m.anilistId}`] : []),
         ...(m.mangadexId ? [`mangadex:${m.mangadexId}`] : []),
       ].map((id) => `${m.type}:${id}`);
-    for (const row of statement(
-      "SELECT payload FROM chapter_releases WHERE released_at<=? AND (json_extract(payload,'$.unit')='volume' OR json_extract(payload,'$.provider')='royalroad')",
-    ).all(new Date().toISOString()) as { payload: string }[]) {
+    // One work: only its own releases (filtered by SQLite, not decoded one by one).
+    const one =
+      id !== undefined && rows[0] ? (JSON.parse(String(rows[0].media_json)) as UnifiedMedia) : null;
+    for (const row of (one
+      ? statement(
+          `SELECT payload FROM chapter_releases WHERE released_at<=@now
+            AND (json_extract(payload,'$.unit')='volume' OR json_extract(payload,'$.provider')='royalroad')
+            AND (json_extract(payload,'$.media.id')=@id
+              OR (@anilist IS NOT NULL AND json_extract(payload,'$.media.anilistId')=@anilist)
+              OR (@mangadex IS NOT NULL AND json_extract(payload,'$.media.mangadexId')=@mangadex))`,
+        ).all({
+          now: new Date().toISOString(),
+          id: one.id,
+          anilist: one.anilistId ?? null,
+          mangadex: one.mangadexId ?? null,
+        })
+      : statement(
+          "SELECT payload FROM chapter_releases WHERE released_at<=? AND (json_extract(payload,'$.unit')='volume' OR json_extract(payload,'$.provider')='royalroad')",
+        ).all(new Date().toISOString())) as { payload: string }[]) {
       const r = JSON.parse(row.payload) as import('@/types/shared').ChapterRelease;
       if (r.unit !== 'volume' && r.provider !== 'royalroad') continue;
       for (const key of releaseKeys(r.media)) {
@@ -740,7 +776,7 @@ function snapshotTracked(id?: number) {
       }
     }
     const retry = new Map<number, number>();
-    const match = kavitaMatcher();
+    const match = kavitaMatcher(id);
     const entries = rows.map((r): TrackedMedia => {
       const id = Number(r.id);
       const rawMedia = JSON.parse(String(r.media_json)) as UnifiedMedia;
@@ -1003,12 +1039,18 @@ export function requireFollowed(id: number) {
     throw new AppError('NOT_FOUND', 'Work not found', 404);
 }
 function insertTracked(input: TrackRequest): TrackedMedia {
-  const existing = listTracked().find(
-    (t) =>
-      (input.media.anilistId !== null && t.anilistId === input.media.anilistId) ||
-      (input.media.mangadexId !== null && t.mangadexId === input.media.mangadexId) ||
-      t.media.id === input.media.id,
-  );
+  // Indexed lookups (anilist_id, mangadex_id, media id): adding a work costs the same in a
+  // library of 10 or 50,000.
+  const found = statement(
+    `SELECT id FROM tracked_media WHERE (@anilist IS NOT NULL AND anilist_id=@anilist)
+      OR (@mangadex IS NOT NULL AND mangadex_id=@mangadex) OR json_extract(media_json,'$.id')=@id
+      LIMIT 1`,
+  ).get({
+    anilist: input.media.anilistId,
+    mangadex: input.media.mangadexId,
+    id: input.media.id,
+  }) as { id: number } | undefined;
+  const existing = found ? getTracked(found.id) : undefined;
   if (existing) return existing;
   const m = { ...automaticMedia(input.media), trackedId: null };
   const id = Number(

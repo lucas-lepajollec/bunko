@@ -337,10 +337,10 @@ function persistProgress(value: ReaderProgressUpdate) {
         : undefined;
     const volume = local?.media_id === `@volume:${value.mediaId}` ? local.number : null;
     statement(
-      `UPDATE tracked_media SET volume_read=CASE WHEN ? AND ? IS NOT NULL THEN MAX(COALESCE(volume_read,0),?) ELSE volume_read END WHERE media_json ->> '$.id'=?`,
+      `UPDATE tracked_media SET volume_read=CASE WHEN ? AND ? IS NOT NULL THEN MAX(COALESCE(volume_read,0),?) ELSE volume_read END WHERE json_extract(media_json,'$.id')=?`,
     ).run(Number(value.page === value.pageCount - 1), volume, volume, value.mediaId);
     statement(
-      `UPDATE tracked_media SET status=CASE WHEN status='PLANNING' THEN 'READING' ELSE status END,last_read_at=?,last_read=CASE WHEN ? AND ? IS NOT NULL THEN MAX(COALESCE(last_read,0),?) ELSE last_read END WHERE media_json ->> '$.id'=?`,
+      `UPDATE tracked_media SET status=CASE WHEN status='PLANNING' THEN 'READING' ELSE status END,last_read_at=?,last_read=CASE WHEN ? AND ? IS NOT NULL THEN MAX(COALESCE(last_read,0),?) ELSE last_read END WHERE json_extract(media_json,'$.id')=?`,
     ).run(
       now,
       value.page === value.pageCount - 1 ? 1 : 0,

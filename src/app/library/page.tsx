@@ -1,4 +1,5 @@
 'use client';
+import { KIND_IDS, isVideoKind, kindOfMedia, type Kind as RegistryKind } from '@/domain/kinds';
 import { OwnedInventory } from '@/components/owned-inventory';
 import { MediaLink } from '@/components/media-link';
 import { Select } from '@/components/select';
@@ -9,7 +10,6 @@ import { useUniverse } from '@/lib/client/universe';
 import type {
   KavitaSeriesSummary,
   LibraryActivity,
-  MediaFormat,
   TrackedMedia,
   UpdatesFeed,
 } from '@/types/shared';
@@ -39,20 +39,7 @@ import {
 
 type Shelf = 'READING' | 'CAUGHT_UP' | 'PLANNING' | 'PAUSED' | 'COMPLETED' | 'DROPPED';
 type View = 'ALL' | 'KAVITA' | 'UPDATES' | 'UNOWNED';
-type Kind =
-  | 'all'
-  | 'manga'
-  | 'manhwa'
-  | 'manhua'
-  | 'comic'
-  | 'lightnovel'
-  | 'webnovel'
-  | 'novel'
-  | 'book'
-  | 'anime'
-  | 'series'
-  | 'movies'
-  | 'animation';
+type Kind = 'all' | RegistryKind;
 type Sort =
   'news' | 'recent' | 'title' | 'added' | 'released' | 'score' | 'popular' | 'unread' | 'unlinked';
 
@@ -62,47 +49,10 @@ const caughtUp = (e: TrackedMedia) =>
   (e.progress?.unread ?? 0) === 0 &&
   e.progress?.read !== null;
 const shelfOf = (e: TrackedMedia): Shelf => (caughtUp(e) ? 'CAUGHT_UP' : e.status);
-const KIND_FORMATS: Record<Exclude<Kind, 'all'>, MediaFormat[]> = {
-  manga: ['MANGA', 'ONE_SHOT'],
-  manhwa: ['MANHWA'],
-  manhua: ['MANHUA'],
-  comic: ['COMIC'],
-  lightnovel: ['LIGHT_NOVEL'],
-  webnovel: ['WEB_NOVEL'],
-  novel: ['NOVEL'],
-  book: ['BOOK'],
-  anime: [],
-  series: ['SERIES'],
-  movies: ['MOVIE'],
-  animation: ['ANIMATION_FILM'],
-};
-
-const ALL_KINDS: Kind[] = [
-  'all',
-  'manga',
-  'manhwa',
-  'manhua',
-  'comic',
-  'lightnovel',
-  'webnovel',
-  'novel',
-  'book',
-  'anime',
-  'series',
-  'movies',
-  'animation',
-];
+const ALL_KINDS: Kind[] = ['all', ...KIND_IDS];
+/** One classification for the whole app: the kind registry (user's override first). */
 function ofKind(e: TrackedMedia, kind: Kind) {
-  // The user's own choice of kind wins (a western series kept as anime…).
-  if (e.media.kindOverride) return kind === 'all' || e.media.kindOverride === kind;
-  return (
-    kind === 'all' ||
-    (kind === 'anime'
-      ? e.type === 'ANIME' && !e.media.format
-      : e.media.format
-        ? KIND_FORMATS[kind].includes(e.media.format)
-        : kind === 'manga' && e.type === 'MANGA')
-  );
+  return kind === 'all' || kindOfMedia(e.media) === kind;
 }
 export default function LibraryPage() {
   return (
@@ -149,7 +99,7 @@ function Library() {
   const [chosenKind, setKind] = useState<Kind | null>(null);
   const kind: Kind = chosenKind ?? universe.active;
   // Anime speaks of episodes and watching; every label follows the kind on screen.
-  const video = ['anime', 'series', 'movies', 'animation'].includes(kind);
+  const video = isVideoKind(kind);
   const vt = (key: string, vars?: Record<string, string | number>) =>
     video && t(`${key}.video`) !== `${key}.video` ? t(`${key}.video`, vars) : t(key, vars);
   const shownShelf: View = video ? 'ALL' : shelf;
@@ -305,23 +255,7 @@ function Library() {
               role="group"
               aria-label={t('catalog.kind')}
             >
-              {(
-                [
-                  'all',
-                  'manga',
-                  'manhwa',
-                  'manhua',
-                  'comic',
-                  'lightnovel',
-                  'webnovel',
-                  'novel',
-                  'book',
-                  'anime',
-                  'series',
-                  'movies',
-                  'animation',
-                ] as Kind[]
-              ).map((k) => (
+              {ALL_KINDS.map((k) => (
                 <button
                   key={k}
                   type="button"

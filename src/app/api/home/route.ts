@@ -1,26 +1,12 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 import { z } from 'zod';
+import { KIND_IDS } from '@/domain/kinds';
 import { json, route } from '@/lib/api';
 import { homeFeed } from '@/lib/home';
 import { withTracking } from '@/lib/catalog';
 import { groupAnimeSeasons } from '@/lib/anime-works';
-const kind = z
-  .enum([
-    'manga',
-    'manhwa',
-    'manhua',
-    'comic',
-    'lightnovel',
-    'webnovel',
-    'novel',
-    'book',
-    'anime',
-    'series',
-    'movies',
-    'animation',
-  ])
-  .optional();
+const kind = z.enum(KIND_IDS).optional();
 /** `?kind=` limits the home to one universe (and loads only it). */
 export const GET = route(async (r) => {
   const feed = await homeFeed(kind.parse(new URL(r.url).searchParams.get('kind') ?? undefined));

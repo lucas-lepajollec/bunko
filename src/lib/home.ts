@@ -1,3 +1,4 @@
+import { KIND_IDS, KINDS, isVideoKind } from '@/domain/kinds';
 import { normalizeHome } from './home-shape';
 import { heroArtwork } from './hero-artwork';
 import type { ChapterRelease, DiscoverKind, HomeFeed } from '@/types/shared';
@@ -14,20 +15,8 @@ export function composeHome(
   kind?: Exclude<DiscoverKind, 'all'>,
 ): HomeFeed {
   const visibleMedia = mediaVisibility();
-  const latest: HomeFeed['latest'] = {
-    manga: [],
-    manhwa: [],
-    manhua: [],
-    comic: [],
-    lightnovel: [],
-    series: [],
-    movies: [],
-    animation: [],
-    webnovel: [],
-    novel: [],
-    book: [],
-    anime: [],
-  };
+  const latest = Object.fromEntries(KIND_IDS.map((k) => [k, []])) as unknown as HomeFeed['latest'];
+
   const banners: ChapterRelease[] = [];
   const covers: ChapterRelease[] = [];
   const seen = new Set<string>();
@@ -91,7 +80,7 @@ export async function episodeReleases(from: Date, to: Date): Promise<ChapterRele
  * and its hero. Without a kind it is the mixed home of every reading kind plus anime.
  */
 export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<HomeFeed> {
-  const video = kind === 'anime' || kind === 'series' || kind === 'movies' || kind === 'animation';
+  const video = isVideoKind(kind);
   // Reading releases are not video: those homes never start their ingestion.
   if (!video) void refreshReleases().catch(() => {});
   const key = kind
@@ -104,10 +93,10 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
     5 * 60_000,
     async () => {
       const items = (
-        await (kind === 'series' || kind === 'movies'
+        await (kind && KINDS[kind].catalog === 'tmdb'
           ? (await import('./tmdb')).tmdbConfigured()
             ? (await import('./tmdb')).discoverTmdb(
-                kind === 'series' ? 'tv' : 'movie',
+                KINDS[kind].search === 'TV' ? 'tv' : 'movie',
                 'trending',
                 1,
               )
@@ -138,10 +127,11 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
   // Aired episodes: the anime universe, or the mixed home once anime are followed.
   const followsAnime =
     !kind && (await import('./db')).listTracked().some((t) => t.type === 'ANIME');
-  const episodes = kind === 'anime' || followsAnime ? await recentEpisodes() : [];
+  const episodes =
+    (kind && KINDS[kind].releases === 'anilist') || followsAnime ? await recentEpisodes() : [];
   // Series and films: the week's TMDB episodes and releases (cached sheets, bounded wait).
   const tmdbWeek =
-    kind === 'series' || kind === 'movies' || kind === 'animation'
+    kind && KINDS[kind].releases === 'tmdb'
       ? await Promise.race([
           (await import('./tmdb-releases'))
             .tmdbReleases(kind, new Date(Date.now() - 7 * 86400_000), new Date())
@@ -154,7 +144,7 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
   );
   const home = normalizeHome(composeHome(heroArtwork(pool), top, kind));
   // Series and films have no release feed yet: the hero shows the week's trending backdrops.
-  if ((kind === 'series' || kind === 'movies') && !home.hero.length)
+  if (kind && KINDS[kind].catalog === 'tmdb' && !home.hero.length)
     home.hero = home.top
       .filter((m) => m.bannerUrl)
       .slice(0, 8)

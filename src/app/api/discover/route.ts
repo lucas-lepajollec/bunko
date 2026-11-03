@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 import { json, route } from '@/lib/api';
+import { KINDS } from '@/domain/kinds';
 import { discoverQuery } from '@/lib/validation';
 import { discoverAniList, progressiveDiscover, withTracking } from '@/lib/catalog';
 import type { UnifiedMedia } from '@/types/shared';
@@ -9,17 +10,17 @@ import { discoverTmdb, tmdbConfigured } from '@/lib/tmdb';
 export const GET = route(async (r) => {
   const q = discoverQuery.parse(Object.fromEntries(new URL(r.url).searchParams));
   // Series and films come from TMDB (nothing without its key).
-  if (q.kind === 'series' || q.kind === 'movies') {
+  if (q.kind && q.kind !== 'all' && KINDS[q.kind].catalog === 'tmdb') {
     if (!tmdbConfigured()) return json({ items: [], page: 1, hasNextPage: false });
     const page = await discoverTmdb(
-      q.kind === 'series' ? 'tv' : 'movie',
+      KINDS[q.kind].search === 'TV' ? 'tv' : 'movie',
       q.sort ?? 'trending',
       q.page ?? 1,
     );
     return json({ ...page, items: withTracking(page.items) });
   }
   // Animated films: anime films (AniList) and western animation films (TMDB), interleaved.
-  if (q.kind === 'animation') {
+  if (q.kind && q.kind !== 'all' && KINDS[q.kind].catalog === 'anilist+tmdb') {
     const [anime, western] = await Promise.all([
       discoverAniList({ ...q, kind: 'animation' }, r.signal).catch(() => null),
       tmdbConfigured()
@@ -40,6 +41,7 @@ export const GET = route(async (r) => {
   }
   const page = await progressiveDiscover(q, r.signal);
   // Anime are listed as works: a trending later season shows its whole work once.
-  if (q.kind && q.kind !== 'anime' && q.kind !== 'all') return json(page);
+  // Anime are listed as works (seasons grouped); other kinds are returned as is.
+  if (q.kind && q.kind !== 'all' && KINDS[q.kind].releases !== 'anilist') return json(page);
   return json({ ...page, items: withTracking(await groupAnimeSeasons(page.items, r.signal)) });
 });
