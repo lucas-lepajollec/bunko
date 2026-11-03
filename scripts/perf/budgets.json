@@ -1,0 +1,13 @@
+{
+  "_note": "Budgets for scripts/perf/load.mjs (5,000 works, production build). Tighten as phases land; see docs/performance.md.",
+  "addMsPerWork": 25,
+  "idleCpuPercent": 0.5,
+  "endpoints": {
+    "/api/library/activity": { "p50": 50, "kb": 8 },
+    "/api/home": { "p50": 250 },
+    "/api/planning": { "p50": 300 },
+    "/api/releases": { "p50": 200 },
+    "/api/settings": { "p50": 50 },
+    "/api/tracked": { "p50": 400 }
+  }
+}

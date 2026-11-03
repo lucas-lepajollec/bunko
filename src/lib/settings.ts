@@ -12,6 +12,7 @@ import { catalogSettingsRows, writeCatalogSettings } from './catalog-settings-st
 import { currentUser } from './user-context';
 import { requireAdmin } from './auth';
 import { catalogSettingKeys, type CatalogSetting } from '@/types/shared';
+import { KIND_IDS } from '@/domain/kinds';
 import type {
   DiscoverKind,
   PublicSettings,
@@ -34,19 +35,9 @@ export const secretKeys: SecretSetting[] = [
   'rakutenAccessKey',
   'hardcoverToken',
 ];
+// Kinds added after users had chosen their kind list: they start enabled for those users.
 const LATER_KINDS: Exclude<DiscoverKind, 'all'>[] = ['series', 'movies', 'animation'];
-const ALL_KINDS: Exclude<DiscoverKind, 'all'>[] = [
-  'manga',
-  'manhwa',
-  'manhua',
-  'comic',
-  'lightnovel',
-  'webnovel',
-  'novel',
-  'book',
-  'anime',
-  ...LATER_KINDS,
-];
+const ALL_KINDS: Exclude<DiscoverKind, 'all'>[] = [...KIND_IDS];
 export function persistentSecret(name: string, bytes: number): Buffer {
   if (!['access.token', 'settings.key'].includes(name))
     throw new Error('Unknown persistent secret');

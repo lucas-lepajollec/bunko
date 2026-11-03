@@ -1,10 +1,10 @@
 import type { ChapterRelease, UnifiedMedia } from '@/types/shared';
+import { KINDS, type Kind } from '@/domain/kinds';
 import { listTracked } from './db';
 import { fromTmdb, isAnime, tmdbConfigured, tmdbDetail, tmdbJson } from './tmdb';
 import { mediaVisibility } from './adult';
 
 const HOUR = 3600_000;
-type Kind = 'series' | 'movies' | 'animation';
 interface ShowFacts {
   id: number;
   name?: string;
@@ -133,6 +133,8 @@ async function filmReleases(from: string, to: string, animation: boolean) {
 
 /** Releases of the TMDB kinds between two dates, newest first. */
 export async function tmdbReleases(kind: Kind | 'all', fromDate: Date, toDate: Date) {
+  // Only the kinds whose releases come from TMDB (the kind registry says which).
+  if (kind !== 'all' && KINDS[kind].releases !== 'tmdb') return [];
   if (!tmdbConfigured()) return [];
   const from = day(fromDate);
   const to = day(toDate);

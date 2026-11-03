@@ -16,45 +16,19 @@ import { fromAniList, normalizeTitle, type AniMedia } from './media';
 import { decodeMetadata } from './metadata-cache';
 import { fetchUpdatesReleases, fetchDexReleases } from './release-providers';
 import { AppError, errorCode } from './errors';
+import { KIND_IDS, kindOfMedia } from '@/domain/kinds';
 
 const DAY = 86400_000;
 export const feedQuery = z.object({
-  kind: z
-    .enum([
-      'all',
-      'manga',
-      'manhwa',
-      'manhua',
-      'comic',
-      'lightnovel',
-      'webnovel',
-      'novel',
-      'book',
-      'anime',
-      'series',
-      'movies',
-      'animation',
-    ])
-    .optional(),
+  kind: z.enum(['all', ...KIND_IDS]).optional(),
   genre: z.string().max(60).optional(),
   library: z.literal('1').optional(),
   cursor: z.string().max(1500).optional(),
 });
 export type FeedQuery = z.infer<typeof feedQuery>;
+/** A work's kind: the kind registry's single rule (shared with the browser). */
 export function mediaKind(media: UnifiedMedia): Exclude<DiscoverKind, 'all'> {
-  if (media.kindOverride) return media.kindOverride;
-  if (media.format === 'SERIES') return 'series';
-  if (media.format === 'MOVIE') return 'movies';
-  if (media.format === 'ANIMATION_FILM') return 'animation';
-  if (media.type === 'ANIME') return 'anime';
-  if (media.format === 'COMIC') return 'comic';
-  if (media.format === 'LIGHT_NOVEL') return 'lightnovel';
-  if (media.format === 'WEB_NOVEL') return 'webnovel';
-  if (media.format === 'BOOK') return 'book';
-  if (media.type === 'NOVEL' || media.format === 'NOVEL') return 'novel';
-  if (media.format === 'MANHWA' || media.origin === 'KR') return 'manhwa';
-  if (media.format === 'MANHUA' || ['CN', 'HK', 'TW'].includes(media.origin ?? '')) return 'manhua';
-  return 'manga';
+  return kindOfMedia(media);
 }
 /** Build an exact, ambiguity-aware index once; never scan the catalog for each release. */
 export function mediaResolver(catalog: UnifiedMedia[]) {

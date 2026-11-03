@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { KIND_IDS } from '@/domain/kinds';
 import { localImageUrl } from './images';
 import type { FilterChange } from '@/types/shared';
 const text = z.string().max(20_000);
@@ -117,22 +118,7 @@ export const media = z.object({
     .nullable()
     .default(null),
   /** The user's choice of kind for this work (e.g. a western series they count as anime). */
-  kindOverride: z
-    .enum([
-      'manga',
-      'manhwa',
-      'manhua',
-      'comic',
-      'lightnovel',
-      'webnovel',
-      'novel',
-      'book',
-      'anime',
-      'series',
-      'movies',
-      'animation',
-    ])
-    .optional(),
+  kindOverride: z.enum(KIND_IDS).optional(),
   origin: z.string().max(8).nullable().default(null),
   year: z.number().int().min(0).max(3000).nullable().default(null),
   volumes: z.number().nonnegative().nullable().default(null),
@@ -181,23 +167,7 @@ export const adultOverrideBody = z.object({
 });
 export const discoverQuery = z
   .object({
-    kind: z
-      .enum([
-        'all',
-        'manga',
-        'manhwa',
-        'manhua',
-        'comic',
-        'lightnovel',
-        'webnovel',
-        'novel',
-        'book',
-        'anime',
-        'series',
-        'movies',
-        'animation',
-      ])
-      .optional(),
+    kind: z.enum(['all', ...KIND_IDS]).optional(),
     sort: z.enum(['trending', 'popular', 'score', 'new']).optional(),
     genre: z.string().max(60).optional(),
     status: z.enum(['RELEASING', 'FINISHED']).optional(),
@@ -353,42 +323,8 @@ export const settingsPatch = z
       .optional(),
     hideNsfwSources: z.boolean().optional(),
     progressSource: z.enum(['suwayomi', 'kavita']).optional(),
-    universe: z
-      .enum([
-        'all',
-        'manga',
-        'manhwa',
-        'manhua',
-        'comic',
-        'lightnovel',
-        'webnovel',
-        'novel',
-        'book',
-        'anime',
-        'series',
-        'movies',
-        'animation',
-      ])
-      .optional(),
-    universes: z
-      .array(
-        z.enum([
-          'manga',
-          'manhwa',
-          'manhua',
-          'comic',
-          'lightnovel',
-          'webnovel',
-          'novel',
-          'book',
-          'anime',
-          'series',
-          'movies',
-          'animation',
-        ]),
-      )
-      .max(9)
-      .optional(),
+    universe: z.enum(['all', ...KIND_IDS]).optional(),
+    universes: z.array(z.enum(KIND_IDS)).max(9).optional(),
     showAllUniverse: z.boolean().optional(),
     favoriteSourceIds: z.array(sourceId).max(100).optional(),
     extensionRepos: z.array(httpUrl).max(20).optional(),

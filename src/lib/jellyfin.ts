@@ -24,6 +24,7 @@ import {
 import { anilistFromProviders, ensureAnimeIds, idsOfAnilist, tvdbSeasons } from './anime-ids';
 import { getSettings, updateSettings } from './settings';
 import { tenantSignal } from './tenant-lifecycle';
+import { tenantState } from './tenant-context';
 
 /** One Jellyfin series as indexed: names, provider ids and its episodes by season. */
 interface IndexedJellyfinSeries {
@@ -308,10 +309,57 @@ export function requestJellyfinSync() {
   statement("DELETE FROM worker_state WHERE key='jellyfin_synced_at'").run();
 }
 
+interface JellyfinIndex {
+  stamp: string;
+  rows: IndexedJellyfinSeries[];
+  byId: Map<string, IndexedJellyfinSeries>;
+  /** AniList id (Jellyfin AniList plugin) → series. */
+  byAniList: Map<string, IndexedJellyfinSeries>;
+  /** TMDB id → series. */
+  byTmdb: Map<string, IndexedJellyfinSeries>;
+  /** Normalized name → series carrying it. */
+  byName: Map<string, IndexedJellyfinSeries[]>;
+}
+const indexState = tenantState(() => ({ value: undefined as JellyfinIndex | undefined }));
+/**
+ * The Jellyfin index, decoded once per sync and kept with lookup tables: matching a work is a
+ * map lookup instead of re-reading and scanning every series (it was V × J per pass).
+ */
+function jellyfinIndex(): JellyfinIndex {
+  const row = statement(
+    "SELECT COUNT(*) AS n, MAX(rowid) AS last, (SELECT value FROM worker_state WHERE key='jellyfin_synced_at') AS at FROM jellyfin_series",
+  ).get() as { n: number; last: number | null; at: string | null };
+  const stamp = `${row.n}:${row.last}:${row.at}`;
+  const cached = indexState().value;
+  if (cached?.stamp === stamp) return cached;
+  const rows = (
+    statement('SELECT payload FROM jellyfin_series').all() as { payload: string }[]
+  ).map((r) => JSON.parse(r.payload) as IndexedJellyfinSeries);
+  const index: JellyfinIndex = {
+    stamp,
+    rows,
+    byId: new Map(),
+    byAniList: new Map(),
+    byTmdb: new Map(),
+    byName: new Map(),
+  };
+  for (const s of rows) {
+    index.byId.set(s.id, s);
+    for (const [key, value] of Object.entries(s.providerIds)) {
+      if (key.toLowerCase() === 'anilist') index.byAniList.set(value, s);
+      if (key.toLowerCase() === 'tmdb') index.byTmdb.set(value, s);
+    }
+    for (const name of new Set(s.names.map(normalizeTitle).filter(Boolean))) {
+      const list = index.byName.get(name);
+      if (list) list.push(s);
+      else index.byName.set(name, [s]);
+    }
+  }
+  if (!db().inTransaction) indexState().value = index;
+  return index;
+}
 function indexed(): IndexedJellyfinSeries[] {
-  return (statement('SELECT payload FROM jellyfin_series').all() as { payload: string }[]).map(
-    (r) => JSON.parse(r.payload) as IndexedJellyfinSeries,
-  );
+  return jellyfinIndex().rows;
 }
 /** "Title Season 2", "Title 2nd Season", "Title Part 2"… → base title and season number. */
 export function seasonOf(title: string): { base: string; season: number | null } {
@@ -332,13 +380,13 @@ const seasonNumbers = (s: IndexedJellyfinSeries) =>
  */
 export function matchJellyfin(media: UnifiedMedia, link?: JellyfinLink | null) {
   if (media.type !== 'ANIME' || link === 'none') return null;
-  const everything = indexed();
+  const index = jellyfinIndex();
   if (link) {
-    const s = everything.find((x) => x.id === link.seriesId);
+    const s = index.byId.get(link.seriesId);
     return s ? { series: s, manual: true } : null;
   }
   if (media.id.startsWith('jellyfin:')) {
-    const s = everything.find((x) => x.id === media.id.slice('jellyfin:'.length));
+    const s = index.byId.get(media.id.slice('jellyfin:'.length));
     return s ? { series: s, manual: false } : null;
   }
   // Each kind comes from its own libraries: anime, series (TMDB) or films (TMDB).
@@ -351,12 +399,11 @@ export function matchJellyfin(media: UnifiedMedia, link?: JellyfinLink | null) {
         : media.format === 'ANIMATION_FILM'
           ? ['animation', 'anime', 'movies']
           : ['anime'];
-  const all = everything.filter((s) => roles.includes(s.role ?? 'anime'));
+  const inRoles = (s: IndexedJellyfinSeries | undefined) =>
+    s && roles.includes(s.role ?? 'anime') ? s : undefined;
   const tmdb = /^tmdb(?:tv|movie):(\d+)$/.exec(media.id)?.[1];
   if (tmdb) {
-    const byTmdb = all.find((s) =>
-      Object.entries(s.providerIds).some(([k, v]) => k.toLowerCase() === 'tmdb' && v === tmdb),
-    );
+    const byTmdb = inRoles(index.byTmdb.get(tmdb));
     if (byTmdb) return { series: byTmdb, manual: false };
   }
   const ids = new Set<string>();
@@ -365,11 +412,15 @@ export function matchJellyfin(media: UnifiedMedia, link?: JellyfinLink | null) {
     for (const season of knownFranchise(media.anilistId)?.seasons ?? [])
       if (season.anilistId) ids.add(String(season.anilistId));
   }
-  const byProvider = all.find((s) => s.providerIds.AniList && ids.has(s.providerIds.AniList));
+  const byProvider = [...ids].map((id) => inRoles(index.byAniList.get(id))).find(Boolean);
   const wanted = new Set(
     [media.title, ...media.altTitles].map((t) => normalizeTitle(seasonOf(t).base)).filter(Boolean),
   );
-  const byTitle = all.filter((s) => s.names.some((n) => wanted.has(normalizeTitle(n))));
+  const byTitle = [
+    ...new Set(
+      [...wanted].flatMap((name) => (index.byName.get(name) ?? []).filter((s) => inRoles(s))),
+    ),
+  ];
   const series = byProvider ?? (byTitle.length === 1 ? byTitle[0] : undefined);
   return series ? { series, manual: false } : null;
 }

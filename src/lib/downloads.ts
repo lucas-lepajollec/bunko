@@ -43,6 +43,7 @@ import { sharedConcurrencyGate } from './concurrency';
 import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
 import { processTranslations } from './translations';
 import { jellyfinImportProgress, maybeSyncJellyfin } from './jellyfin';
+import { isReadingKind, isVideoKind } from '@/domain/kinds';
 import { normalizeAnimeWorks } from './anime-works';
 import { targetFor } from './library-paths';
 import { env } from '@/lib/env';
@@ -558,6 +559,8 @@ async function workerTickBackground() {
       matchingFailed ||
       matching?.running ||
       (matching && !covers.running && !maintenance?.running) ||
+      // Nothing to search without Suwayomi: no endless "matching" of every manga.
+      !getSettings().suwayomiUrl ||
       !sourceMatchQueue().length
     )
       return;
@@ -734,13 +737,13 @@ export function requestUpdateCheck() {
 function enabledKinds() {
   return getSettings().universes ?? [];
 }
-const VIDEO_KINDS = ['anime', 'series', 'movies', 'animation'];
+/** Reading maintenance: any reading kind enabled (the kind registry's families). */
 function readingEnabled() {
   const kinds = enabledKinds();
-  return !kinds.length || kinds.some((k) => !VIDEO_KINDS.includes(k));
+  return !kinds.length || kinds.some((k) => isReadingKind(k));
 }
 /** Jellyfin and anime works: any video kind enabled. */
 function animeEnabled() {
   const kinds = enabledKinds();
-  return !kinds.length || kinds.some((k) => VIDEO_KINDS.includes(k));
+  return !kinds.length || kinds.some((k) => isVideoKind(k));
 }

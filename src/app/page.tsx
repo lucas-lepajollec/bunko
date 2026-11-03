@@ -1,4 +1,5 @@
 'use client';
+import { KIND_IDS, KINDS as KIND_DEFS } from '@/domain/kinds';
 import { MediaLink } from '@/components/media-link';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
@@ -25,19 +26,8 @@ import {
   useMediaMeta,
 } from '@/components/ui';
 
-// Formats with dated releases (romans and livres have none); anime shows aired episodes.
-const KINDS = [
-  'manga',
-  'manhwa',
-  'manhua',
-  'comic',
-  'lightnovel',
-  'webnovel',
-  'anime',
-  'series',
-  'movies',
-  'animation',
-] as const;
+// Kinds with dated releases, from the kind registry (novels and books have none).
+const KINDS = KIND_IDS.filter((k) => KIND_DEFS[k].datedReleases);
 
 export default function HomePage() {
   const { t } = useI18n();
@@ -57,7 +47,8 @@ export default function HomePage() {
   // The mixed home shows reading kinds and anime; series and films releases live on their homes.
   const shelves = KINDS.filter((k) =>
     universe.active === 'all'
-      ? !['series', 'movies', 'animation'].includes(k)
+      ? // Series and films releases need TMDB: their own homes show them.
+        !KIND_DEFS[k].requires && KIND_DEFS[k].releases !== 'tmdb'
       : k === universe.active,
   );
   const library = useApi<TrackedMedia[]>('/api/tracked', {

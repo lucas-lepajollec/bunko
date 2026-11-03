@@ -112,16 +112,32 @@ const linkageCache = tenantState(() => ({
 }));
 type Link = { kavita_series_id: number | null; kavita_manual: number };
 /** Capture an indexed resolver once per catalog/library operation. */
-export function kavitaMatcher() {
+export function kavitaMatcher(onlyTrackedId?: number) {
   const linkage = linkageCache().value;
   const version = writeVersion('linkage');
   let links = linkage;
-  if (links?.version !== version) {
+  if (links?.version !== version && onlyTrackedId !== undefined) {
+    // One work being read: its own row is enough (no scan of the whole library).
+    const ids = new Map<string, Link>();
+    const anilist = new Map<number, Link>();
+    const mangadex = new Map<string, Link>();
+    const r = statement(
+      "SELECT json_extract(media_json,'$.id') AS identity,anilist_id,mangadex_id,kavita_series_id,kavita_manual FROM tracked_media WHERE id=?",
+    ).get(onlyTrackedId) as
+      | (Link & { identity: string; anilist_id: number | null; mangadex_id: string | null })
+      | undefined;
+    if (r) {
+      ids.set(r.identity, r);
+      if (r.anilist_id !== null) anilist.set(r.anilist_id, r);
+      if (r.mangadex_id !== null) mangadex.set(r.mangadex_id, r);
+    }
+    links = { version, ids, anilist, mangadex };
+  } else if (links?.version !== version) {
     const ids = new Map<string, Link>();
     const anilist = new Map<number, Link>();
     const mangadex = new Map<string, Link>();
     const rows = statement(
-      "SELECT media_json ->> '$.id' AS identity,anilist_id,mangadex_id,kavita_series_id,kavita_manual FROM tracked_media",
+      "SELECT json_extract(media_json,'$.id') AS identity,anilist_id,mangadex_id,kavita_series_id,kavita_manual FROM tracked_media",
     ).all() as (Link & {
       identity: string;
       anilist_id: number | null;

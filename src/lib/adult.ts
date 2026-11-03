@@ -45,10 +45,28 @@ const identitiesCache = tenantState(() => ({
       }
     | undefined,
 }));
+/** Rebuild counter: scale tests assert that unrelated writes never trigger a full rebuild. */
+export const adultStats = { rebuilds: 0 };
 function adultState() {
   const identities = identitiesCache().value;
-  const version = writeVersion();
-  if (identities?.version === version && !db().inTransaction) return identities;
+  // Only identity changes invalidate it (its own version domain), not every write. A version
+  // read inside a transaction already includes that transaction's changes, so a hit is safe there.
+  const version = writeVersion('identities');
+  if (identities?.version === version) return identities;
+  // No manual 18+ decision anywhere (the usual case): nothing to resolve, no graph to build.
+  const anyOverride = statement('SELECT 1 FROM adult_overrides LIMIT 1').get();
+  if (!anyOverride) {
+    const empty = {
+      version,
+      find: (id: string) => id,
+      groups: new Map<string, string[]>(),
+      overrides: new Map<string, { adult: boolean; revision: number; automatic: boolean }>(),
+    };
+    // Never cache inside a transaction: a rollback would leave a state for an undone version.
+    if (!db().inTransaction) identitiesCache().value = empty;
+    return empty;
+  }
+  adultStats.rebuilds++;
   const parents = new Map<string, string>();
   const find = (id: string): string => {
     const parent = parents.get(id);
@@ -64,30 +82,41 @@ function adultState() {
   const join = (ids: string[]) => {
     for (const id of ids.slice(1)) parents.set(find(id), find(ids[0]));
   };
-  const rows = statement(`SELECT identity,alias,NULL AS id,NULL AS media_json,
-    NULL AS sources_json,NULL AS kavita_series_id FROM adult_identity_edges
-    UNION ALL SELECT NULL,NULL,id,media_json,sources_json,kavita_series_id FROM tracked_media`).all() as (
-    | { identity: string; alias: string }
-    | {
-        identity: null;
-        id: number;
-        media_json: string;
-        sources_json: string;
-        kavita_series_id: number | null;
-      }
-  )[];
-  for (const row of rows) {
-    if (row.identity !== null) join([row.identity, row.alias]);
-    else
-      join(
-        adultIdentities({
-          ...JSON.parse(row.media_json),
-          trackedId: row.id,
-          kavitaSeriesId: row.kavita_series_id,
-          sources: JSON.parse(row.sources_json),
-        }),
-      );
-  }
+  for (const row of statement('SELECT identity,alias FROM adult_identity_edges').all() as {
+    identity: string;
+    alias: string;
+  }[])
+    join([row.identity, row.alias]);
+  // Only the identity fields, extracted by SQLite (no decoding of whole works).
+  for (const row of statement(`SELECT id, kavita_series_id,
+      json_extract(media_json,'$.id') AS media_id,
+      json_extract(media_json,'$.anilistId') AS anilist_id,
+      json_extract(media_json,'$.mangadexId') AS mangadex_id,
+      json_extract(media_json,'$.mangaUpdatesId') AS mangaupdates_id,
+      (SELECT json_group_array(json_extract(value,'$.suwayomiMangaId'))
+         FROM json_each(tracked_media.sources_json)) AS source_ids
+      FROM tracked_media`).all() as {
+    id: number;
+    kavita_series_id: number | null;
+    media_id: string;
+    anilist_id: number | null;
+    mangadex_id: string | null;
+    mangaupdates_id: string | null;
+    source_ids: string;
+  }[])
+    join(
+      adultIdentities({
+        id: row.media_id,
+        anilistId: row.anilist_id,
+        mangadexId: row.mangadex_id,
+        mangaUpdatesId: row.mangaupdates_id,
+        trackedId: row.id,
+        kavitaSeriesId: row.kavita_series_id,
+        sources: (JSON.parse(row.source_ids) as (number | null)[])
+          .filter((n): n is number => n !== null)
+          .map((suwayomiMangaId) => ({ suwayomiMangaId })) as unknown as UnifiedMedia['sources'],
+      }),
+    );
   const overrides = new Map<string, { adult: boolean; revision: number; automatic: boolean }>();
   for (const row of statement('SELECT * FROM adult_overrides ORDER BY revision,identity').all() as {
     identity: string;

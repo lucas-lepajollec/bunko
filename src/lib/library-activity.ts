@@ -15,7 +15,10 @@ export function libraryActivity(): LibraryActivity {
   const active = activeSourceMatch();
   const current = active && ids.has(active.id) ? active : null;
   const lastAt = workerValue('last_check_at');
-  const queued = sourceMatchQueue().filter((t) => ids.has(t.id) && t.id !== current?.id).length;
+  // Without Suwayomi nothing is searched: no queue to show.
+  const queued = getSettings().suwayomiUrl
+    ? sourceMatchQueue().filter((t) => ids.has(t.id) && t.id !== current?.id).length
+    : 0;
   const batches = listBatches().filter((b) => b.state !== 'completed' && b.state !== 'error');
   const chapters = batches.flatMap((b) => b.chapters);
   const jellyfin = jellyfinImportProgress();
