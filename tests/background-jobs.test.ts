@@ -20,13 +20,13 @@ afterAll(() => rmSync(directory, { recursive: true, force: true }));
 it('lists only the jobs that apply, with their last run', async () => {
   const ids = () => backgroundJobs().map((j) => j.id);
   // Nothing connected: catalog releases and covers only.
-  expect(ids()).toEqual(['release-ingestion', 'anime-works', 'covers']);
+  expect(ids()).toEqual(['release-ingestion', 'catalog-linking', 'covers']);
   updateSettings({ suwayomiUrl: 'http://suwayomi.test' });
   expect(ids()).toContain('update-check');
   expect(ids()).toContain('source-matching');
   // Video kinds off: no anime work.
   updateSettings({ universes: ['manga'] });
-  expect(ids()).not.toContain('anime-works');
+  expect(ids()).not.toContain('catalog-linking');
 
   await recorded('covers', async () => undefined);
   await expect(
@@ -55,7 +55,11 @@ it('runs a job on request, only when it applies', () => {
 it('names every job in every language', () => {
   for (const [lang, dict] of Object.entries(messages))
     for (const id of BACKGROUND_JOB_IDS)
-      expect((dict as Record<string, string>)[`jobs.name.${id}`], `${lang} ${id}`).toBeTruthy();
+      for (const key of [`jobs.name.${id}`, `jobs.desc.${id}`])
+        expect((dict as Record<string, string>)[key], `${lang} ${key}`).toBeTruthy();
+  for (const [lang, dict] of Object.entries(messages))
+    for (const job of backgroundJobs())
+      expect((dict as Record<string, string>)[`jobs.group.${job.group}`], lang).toBeTruthy();
 });
 
 it('keeps the kind priority order the user saves', async () => {

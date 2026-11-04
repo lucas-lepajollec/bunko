@@ -318,7 +318,6 @@ it('keeps LN/WN and book/novel releases separate in all home keys', () => {
   );
   expect(home.latest.lightnovel).toHaveLength(1);
   expect(home.latest.webnovel).toHaveLength(1);
-  expect(home.top.some((m) => ['novel', 'book'].includes(mediaKind(m)))).toBe(false);
   expect(home.latest.novel).toHaveLength(1);
   expect(home.latest.book).toHaveLength(1);
   expect(home.hero.some((r) => ['novel', 'book'].includes(mediaKind(r.media)))).toBe(false);

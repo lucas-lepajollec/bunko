@@ -777,12 +777,16 @@ export type BackgroundJobId =
   | 'source-matching'
   | 'kavita-index'
   | 'jellyfin'
-  | 'anime-works'
+  | 'catalog-linking'
   | 'covers'
   | 'translations';
+/** What a background job works with: the activity panel groups jobs by it. */
+export type BackgroundJobGroup =
+  'suwayomi' | 'kavita' | 'jellyfin' | 'catalogs' | 'bunko' | 'tradoc';
 /** One background job of the account, as the activity panel shows it. */
 export interface BackgroundJob {
   id: BackgroundJobId;
+  group: BackgroundJobGroup;
   running: boolean;
   lastAt: string | null;
   lastMs: number | null;

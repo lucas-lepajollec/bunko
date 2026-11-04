@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Background tasks named after what they do and grouped by the service they work with
+  (Suwayomi, Kavita, Jellyfin, Catalogs, TraDoc, Bunko), with a description of each. "Anime
+  works" only grouped anime seasons while linking imported works to the catalog was hidden in
+  the Jellyfin sync: both are now one "Catalog linking" job for series, films and anime.
+- Desktop kind menu opens on click like any menu, with "Everything" as its own column beside
+  the reading and video kinds.
+- The mixed home's Top 10 is the "Everything" mix: every enabled kind, in priority order
+  (it was AniList manga only).
+
 - Release check and cover pass (NAS profile: 95 % of their CPU): reading one work after a write
   scanned every stored release (up to 30,000 rows) and rebuilt the work each time it was read.
   Releases are now found by indexed identity and a work read since the last write is reused:

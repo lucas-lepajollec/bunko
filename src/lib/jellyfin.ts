@@ -308,7 +308,7 @@ export async function maybeSyncJellyfin(signal?: AbortSignal) {
       progress.done < progress.total &&
       (!last || Date.now() - Date.parse(last.value) >= IMPORT_EVERY_MS)
     )
-      await importJellyfinAnime(signal, false);
+      await importJellyfinAnime(signal);
     return;
   }
   await syncJellyfinIndex(signal);
@@ -626,7 +626,7 @@ async function catalogWork(s: IndexedJellyfinSeries, signal?: AbortSignal) {
  * it is clear, else the Jellyfin series itself (off-catalog, editable later). A removed work is
  * not re-added. AniList limits requests, so each pass handles a batch and the next continues.
  */
-export async function importJellyfinAnime(signal?: AbortSignal, afterSync = true) {
+export async function importJellyfinAnime(signal?: AbortSignal) {
   const tracked = listTracked().filter((t) => t.type === 'ANIME');
   const linked = new Set(
     tracked.flatMap((t) => {
@@ -716,8 +716,7 @@ export async function importJellyfinAnime(signal?: AbortSignal, afterSync = true
       new Date().toISOString(),
     );
   }
-  // Catalog upgrades of off-catalog works: once per sync, not every import pass.
-  if (afterSync) await upgradeOffCatalogWorks(signal).catch(() => undefined);
+  // Identifying works imported off-catalog is the catalog-linking job (catalog-linking.ts).
   applyJellyfinProgress();
 }
 

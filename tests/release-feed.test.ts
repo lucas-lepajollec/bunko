@@ -7,7 +7,7 @@ import type { ChapterRelease, UnifiedMedia } from '@/types/shared';
 const directory = mkdtempSync(path.join(tmpdir(), 'bunko-release-tests-'));
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_WORKER = 'false';
-const { enterFixtureTenant } = await import('./tenant-fixture');
+const { enterFixtureTenant, settleCatalogTasks } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { db, track, observeChapters } = await import('@/lib/db');
 const { emptyMedia, fromMangaUpdates } = await import('@/lib/media');
@@ -352,11 +352,14 @@ describe('home composition and caching', () => {
     await new Promise<void>((r) => setImmediate(r));
     await homeFeed();
     await new Promise<void>((r) => setImmediate(r));
-    expect(calls).toBe(2);
+    // The providers were asked (one lane per enabled kind); nothing empty is cached.
+    await settleCatalogTasks();
+    expect(calls).toBeGreaterThanOrEqual(2);
     expect(
       db()
         .prepare(
-          "SELECT key FROM metadata_cache WHERE key LIKE 'home:top:%' OR key LIKE 'discover:%'",
+          // The top and AniList pages; the mixed catalog keeps a short-lived degraded state.
+          "SELECT key FROM metadata_cache WHERE key LIKE 'home:top:%' OR key LIKE 'discover:{%'",
         )
         .all(),
     ).toEqual([]);

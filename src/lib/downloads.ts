@@ -47,7 +47,7 @@ import { measured } from './job-stats';
 import { recorded } from './job-runs';
 import { tenantId } from './tenant-context';
 import { isReadingKind, isVideoKind } from '@/domain/kinds';
-import { normalizeAnimeWorks } from './anime-works';
+import { linkCatalog } from './catalog-linking';
 import { targetFor } from './library-paths';
 import { env } from '@/lib/env';
 import { sourceServerKey } from './source-server';
@@ -586,7 +586,7 @@ async function workerTickBackground() {
     while (!signal.aborted && ownsLease() && animeEnabled()) {
       await job('jellyfin', () => maybeSyncJellyfin(signal)).catch(() => undefined);
       if (ownsLease())
-        await job('anime-works', () => normalizeAnimeWorks(signal)).catch(() => undefined);
+        await job('catalog-linking', () => linkCatalog(signal)).catch(() => undefined);
       const progress = jellyfinImportProgress();
       if (!progress || progress.done >= progress.total || !maintenance?.running) break;
       await waitForWorker(60_000, signal);

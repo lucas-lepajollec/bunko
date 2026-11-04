@@ -7,6 +7,7 @@ import { discover, discoverAniList, withTracking } from './catalog';
 import { cached, storedMetadata, metadataStatus } from './metadata-cache';
 import { mediaVisibility, includeProviderAdults } from './adult';
 import { tenantState } from './tenant-context';
+import { discoverQuery } from './validation';
 import { getSettings } from './settings';
 const rankingFailures = tenantState(() => new Set<string>());
 
@@ -39,7 +40,8 @@ export function composeHome(
     top: withTracking(top)
       .filter(visibleMedia)
       // The mixed home ranks comics/LN/anime; a books universe shows its own books.
-      .filter((m) => (kind ? mediaKind(m) === kind : !['novel', 'book'].includes(mediaKind(m))))
+      // One kind's home keeps that kind; the mixed home keeps the catalog mix's order.
+      .filter((m) => !kind || mediaKind(m) === kind)
       .slice(0, 10),
     latest,
   };
@@ -80,13 +82,19 @@ export async function episodeReleases(from: Date, to: Date): Promise<ChapterRele
  * Home for one universe (`kind`) loads only that kind: its trending titles, its latest releases
  * and its hero. Without a kind it is the mixed home of every reading kind plus anime.
  */
+/** The mixed home's top follows the enabled kinds and their order (default: no suffix). */
+function mixScope() {
+  const { universes, kindOrder } = getSettings();
+  const custom = universes.length || kindOrder.join() !== KIND_IDS.join();
+  return custom ? `:${universes.join(',')}:${kindOrder.join(',')}` : '';
+}
 export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<HomeFeed> {
   const video = isVideoKind(kind);
   // Reading releases are not video: those homes never start their ingestion.
   if (!video) void refreshReleases().catch(() => {});
   const key = kind
     ? `home:top:${kind}:${includeProviderAdults()}`
-    : `home:top:${includeProviderAdults()}`;
+    : `home:top:${includeProviderAdults()}${mixScope()}`;
   const stored = storedMetadata<HomeFeed['top'] | HomeFeed>(key)?.value;
   const top = Array.isArray(stored) ? stored : normalizeHome(stored).top;
   void cached<HomeFeed['top']>(
@@ -104,12 +112,20 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
             : { items: [] }
           : kind && ['novel', 'book', 'webnovel', 'comic'].includes(kind)
             ? discover({ sort: 'trending', kind, perPage: 20 }, undefined, true)
-            : discoverAniList(
-                { sort: 'trending', kind: kind ?? 'all', perPage: 20 },
-                undefined,
-                true,
-                true,
-              ))
+            : !kind
+              ? // Everything: the catalog's mix (one lane per enabled kind, priority order),
+                // parsed like the catalog page's own request so both share its cache.
+                discover(
+                  discoverQuery.parse({ sort: 'trending', kind: 'all', perPage: '8' }),
+                  undefined,
+                  true,
+                )
+              : discoverAniList(
+                  { sort: 'trending', kind: kind ?? 'all', perPage: 20 },
+                  undefined,
+                  true,
+                  true,
+                ))
       ).items;
       if (items.length) rankingFailures().delete(key);
       else rankingFailures().add(key);

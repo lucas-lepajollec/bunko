@@ -11,14 +11,13 @@ import { cx } from './ui';
 const label = (t: (k: string) => string, k: DiscoverKind) =>
   k === 'all' ? t('universe.all') : t(`kind.${k}`);
 
-/** Desktop header: the current universe, opening on hover (or click) to switch. */
+/** Desktop header: the current universe, opening on click (like any menu) to switch. */
 export function UniverseMenu() {
   const { t } = useI18n();
   const universe = useUniverse();
   const [open, setOpen] = useState(false);
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => onMenuOpened((other) => other !== id && setOpen(false)), [id]);
   useEffect(() => {
     if (!open) return;
@@ -34,20 +33,15 @@ export function UniverseMenu() {
     };
   }, [open]);
   const show = () => {
-    clearTimeout(timer.current);
     if (!open) announceMenu(id);
     setOpen(true);
-  };
-  const hide = () => {
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setOpen(false), 160);
   };
   if (!universe.ready) return null;
   const isVideo = (k: DiscoverKind) => isVideoKind(k);
   const reading = universe.enabled.filter((k) => !isVideo(k));
   const video = universe.enabled.filter(isVideo);
   if (reading.length + video.length + (universe.allowAll ? 1 : 0) < 2) return null;
-  const item = (k: DiscoverKind) => (
+  const item = (k: DiscoverKind, tall = false) => (
     <button
       key={k}
       type="button"
@@ -59,7 +53,8 @@ export function UniverseMenu() {
       }}
       className={cx(
         'flex flex-col gap-0.5 rounded-xl px-3 py-2.5 text-left transition-colors',
-        universe.active === k ? 'bg-white/[0.09]' : 'hover:bg-white/[0.05]',
+        tall && 'h-full justify-start bg-white/[0.04] p-4',
+        universe.active === k ? 'bg-white/[0.09]' : 'hover:bg-white/[0.06]',
       )}
     >
       <span
@@ -77,8 +72,8 @@ export function UniverseMenu() {
     </button>
   );
   return (
-    <div ref={root} className="relative hidden md:block" onMouseEnter={show} onMouseLeave={hide}>
-      {/* Looks like the other header links; the panel opens on hover (or click / keyboard). */}
+    <div ref={root} className="relative hidden md:block">
+      {/* Looks like the other header links; the panel opens on click or keyboard. */}
       <button
         type="button"
         aria-haspopup="menu"
@@ -108,41 +103,43 @@ export function UniverseMenu() {
         aria-label={t('universe.label')}
         aria-hidden={!open}
         className={cx(
-          'border-line absolute top-full left-[-16px] z-50 mt-4 w-[560px] rounded-3xl border bg-[#141210]/95 p-3 shadow-[0_30px_80px_rgba(0,0,0,0.6)] backdrop-blur-xl transition-[opacity,transform] duration-200',
+          'border-line absolute top-full left-[-16px] z-50 mt-4 w-[740px] max-w-[calc(100vw-48px)] rounded-3xl border bg-[#141210]/95 p-3 shadow-[0_30px_80px_rgba(0,0,0,0.6)] backdrop-blur-xl transition-[opacity,transform] duration-200',
           open
             ? 'translate-y-0 opacity-100'
             : 'pointer-events-none invisible -translate-y-1 opacity-0',
         )}
       >
-        {/* The gap between the link and the panel stays hoverable. */}
-        <span aria-hidden className="absolute inset-x-0 -top-4 h-4" />
-        <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-3">
+        {/* Everything on the side (all kinds together), then reading and video kinds. */}
+        <div
+          className={cx(
+            'grid gap-3',
+            universe.allowAll
+              ? 'grid-cols-[170px_minmax(0,1.6fr)_minmax(0,1fr)]'
+              : 'grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]',
+          )}
+        >
+          {universe.allowAll && (
+            <div className="border-line flex flex-col gap-1 border-r pr-3">
+              <span className="text-muted px-3 pt-1 pb-1.5 text-[11px] tracking-[0.16em] uppercase">
+                {t('universe.groupAll')}
+              </span>
+              <div className="flex-1">{item('all', true)}</div>
+            </div>
+          )}
           <div className="flex flex-col gap-1">
             <span className="text-muted px-3 pt-1 pb-1.5 text-[11px] tracking-[0.16em] uppercase">
               {t('universe.groupReading')}
             </span>
-            <div className="grid grid-cols-2 gap-0.5">{reading.map(item)}</div>
+            <div className="grid grid-cols-2 gap-0.5">{reading.map((k) => item(k))}</div>
           </div>
-          <div className="border-line flex flex-col gap-1 border-l pl-3">
-            {video.length > 0 && (
-              <>
-                <span className="text-muted px-3 pt-1 pb-1.5 text-[11px] tracking-[0.16em] uppercase">
-                  {t('universe.groupVideo')}
-                </span>
-                {video.map(item)}
-              </>
-            )}
-            {universe.allowAll && (
-              <div
-                className={cx(
-                  'flex flex-col gap-1',
-                  video.length > 0 && 'border-line mt-2 border-t pt-2',
-                )}
-              >
-                {item('all')}
-              </div>
-            )}
-          </div>
+          {video.length > 0 && (
+            <div className="border-line flex flex-col gap-1 border-l pl-3">
+              <span className="text-muted px-3 pt-1 pb-1.5 text-[11px] tracking-[0.16em] uppercase">
+                {t('universe.groupVideo')}
+              </span>
+              {video.map((k) => item(k))}
+            </div>
+          )}
         </div>
       </div>
     </div>
