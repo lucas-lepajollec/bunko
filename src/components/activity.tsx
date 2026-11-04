@@ -5,11 +5,13 @@ import { usePathname } from 'next/navigation';
 import { useUniverse } from '@/lib/client/universe';
 import { useNotices } from '@/lib/client/notices';
 import { useSWRConfig } from 'swr';
-import type { ActivityTask, LibraryActivity } from '@/types/shared';
-import { useApi, libraryKeys, releaseViewKey, progressViewKey } from '@/lib/client/api';
+import type { ActivityTask, BackgroundJob, LibraryActivity } from '@/types/shared';
+import { send, useApi, libraryKeys, releaseViewKey, progressViewKey } from '@/lib/client/api';
+import { Play } from 'lucide-react';
+import { toast } from './notify';
 import { useI18n } from '@/i18n/I18nProvider';
 import { useRelativeTime } from './time';
-import { Spinner, cx } from './ui';
+import { Spinner, cx, errorText } from './ui';
 
 const busy = (a: LibraryActivity | undefined) =>
   Boolean(a?.tasks?.length) ||
@@ -64,7 +66,6 @@ export function useLibraryActivity({ sync = false }: { sync?: boolean } = {}) {
  */
 export function ActivityCenter() {
   const { t, n } = useI18n();
-  const relative = useRelativeTime();
   const universe = useUniverse();
   const a = useLibraryActivity({ sync: true });
   const notices = useNotices();
@@ -203,14 +204,96 @@ export function ActivityCenter() {
           )}
           {partial && <span className="text-warn">{t('loading.partial')}</span>}
           {!busy && !partial && <span className="text-mid">{t('notices.idle')}</span>}
-          {a?.refresh.lastAt && (
-            <span className="border-line text-muted border-t pt-3 text-xs">
-              {t('activity.idle', { when: relative(a.refresh.lastAt) })}
-              {a.refresh.nextAt && ` · ${t('activity.next', { when: relative(a.refresh.nextAt) })}`}
-            </span>
-          )}
+          <BackgroundJobs />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Every background job of the account (release checks, source and catalog matching, Kavita,
+ * Jellyfin, covers, translations): when it last ran, when it runs next, and a button to run it
+ * now. Loaded only while the panel is open.
+ */
+function BackgroundJobs() {
+  const { t, n } = useI18n();
+  const relative = useRelativeTime();
+  const jobs = useApi<BackgroundJob[]>('/api/jobs', { refreshInterval: 4000 });
+  const [asked, setAsked] = useState<Set<string>>(new Set());
+  if (!jobs.data?.length) return null;
+  const run = async (job: BackgroundJob) => {
+    const name = t(`jobs.name.${job.id}`);
+    setAsked((x) => new Set(x).add(job.id));
+    try {
+      const done = await send<{ jobs: BackgroundJob[] }>('/api/jobs', 'POST', { id: job.id });
+      await jobs.mutate(done.jobs, { revalidate: false });
+      toast({ tone: 'ok', text: t('jobs.started', { name }) });
+    } catch (err) {
+      toast({ tone: 'bad', text: errorText(t, err) });
+    } finally {
+      // The worker picks the request up within seconds; the row then shows it running.
+      setTimeout(() => {
+        setAsked((x) => {
+          const next = new Set(x);
+          next.delete(job.id);
+          return next;
+        });
+      }, 5000);
+    }
+  };
+  return (
+    <div className="border-line flex flex-col gap-1 border-t pt-3">
+      <span className="text-muted mb-1 text-xs font-medium tracking-[0.06em] uppercase">
+        {t('jobs.title')}
+      </span>
+      {jobs.data.map((job) => {
+        const name = t(`jobs.name.${job.id}`);
+        const busy = job.running || asked.has(job.id);
+        const status = job.running
+          ? [t('jobs.running'), job.pending && `${n(job.pending.done)}/${n(job.pending.total)}`]
+          : [
+              job.lastAt
+                ? t(job.failed ? 'jobs.failed' : 'jobs.last', { when: relative(job.lastAt) })
+                : t('jobs.never'),
+              job.pending && !job.pending.done
+                ? t('jobs.pending', { count: n(job.pending.total) })
+                : job.pending
+                  ? `${n(job.pending.done)}/${n(job.pending.total)}`
+                  : null,
+              job.nextAt && t('jobs.next', { when: relative(job.nextAt) }),
+            ];
+        return (
+          <div key={job.id} className="flex min-h-11 items-center gap-3">
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate">{name}</span>
+              <span
+                className={cx(
+                  'flex items-center gap-1.5 truncate text-xs',
+                  job.failed && !job.running ? 'text-warn' : 'text-muted',
+                )}
+              >
+                {job.running && <Spinner className="size-2.5 border-[1.5px]" />}
+                {status.filter(Boolean).join(' · ')}
+              </span>
+            </span>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void run(job)}
+              aria-label={t('jobs.run', { name })}
+              title={t('jobs.run', { name })}
+              className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full bg-white/[0.06] hover:text-white disabled:opacity-40"
+            >
+              {asked.has(job.id) && !job.running ? (
+                <Spinner className="size-3 border-[1.5px]" />
+              ) : (
+                <Play className="size-3.5 fill-current" aria-hidden />
+              )}
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

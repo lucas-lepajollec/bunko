@@ -16,6 +16,7 @@ import { decodeMetadata } from './metadata-cache';
 import { fetchUpdatesReleases, fetchDexReleases } from './release-providers';
 import { AppError, errorCode } from './errors';
 import { measured } from './job-stats';
+import { recorded } from './job-runs';
 import { tenantId } from './tenant-context';
 import { KIND_IDS, kindOfMedia } from '@/domain/kinds';
 
@@ -264,72 +265,74 @@ export function refreshReleases(): Promise<void> {
   statement(
     "INSERT INTO worker_state(key,value) VALUES('release_catalog_revision',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
   ).run(catalogVersion);
-  const job = measured('release-ingestion', tenantId(), async () => {
-    const page = Number(
-      (
-        statement("SELECT value FROM worker_state WHERE key='release_backfill'").get() as
-          { value: string } | undefined
-      )?.value ?? '2',
-    );
-    const outcomes = await Promise.allSettled([
-      (async () => {
-        const failures: unknown[] = [];
-        // The provider commits cached rows first, then each resolved series. A later
-        // timeout must not hold completed releases hostage to the rest of the budget.
-        // Drain the bounded current listing progressively: a first-40 cutoff can
-        // indefinitely miss less frequent formats (notably novels) farther down it.
-        for (const currentPage of [1, page]) {
-          try {
-            await fetchUpdatesReleases(currentPage, saveReleases, currentPage === 1 ? 1000 : 40);
-            if (currentPage !== 1)
-              statement(
-                "INSERT INTO worker_state(key,value) VALUES('release_backfill',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-              ).run(String(page >= 21 ? 2 : page + 1));
-          } catch (error) {
-            failures.push(...(error instanceof AggregateError ? error.errors : [error]));
+  const job = measured('release-ingestion', tenantId(), () =>
+    recorded('release-ingestion', async () => {
+      const page = Number(
+        (
+          statement("SELECT value FROM worker_state WHERE key='release_backfill'").get() as
+            { value: string } | undefined
+        )?.value ?? '2',
+      );
+      const outcomes = await Promise.allSettled([
+        (async () => {
+          const failures: unknown[] = [];
+          // The provider commits cached rows first, then each resolved series. A later
+          // timeout must not hold completed releases hostage to the rest of the budget.
+          // Drain the bounded current listing progressively: a first-40 cutoff can
+          // indefinitely miss less frequent formats (notably novels) farther down it.
+          for (const currentPage of [1, page]) {
+            try {
+              await fetchUpdatesReleases(currentPage, saveReleases, currentPage === 1 ? 1000 : 40);
+              if (currentPage !== 1)
+                statement(
+                  "INSERT INTO worker_state(key,value) VALUES('release_backfill',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                ).run(String(page >= 21 ? 2 : page + 1));
+            } catch (error) {
+              failures.push(...(error instanceof AggregateError ? error.errors : [error]));
+            }
           }
-        }
-        if (failures.length) throw new AggregateError(failures, 'MangaUpdates refresh failed');
-      })(),
-      fetchDexReleases().then((items) => saveReleases(items)),
-      fetchGoogleEditions(saveReleases),
-      fetchBnfEditions().then((items) => saveReleases(items)),
-      refreshRoyalRoad(saveReleases),
-      fetchMetronReleases(new Date(), saveReleases),
-      fetchRakutenReleases().then((items) => saveReleases(items)),
-    ]);
-    const failures = outcomes.flatMap((outcome, i) => {
-      if (outcome.status !== 'rejected') return [];
-      const reasons =
-        outcome.reason instanceof AggregateError ? outcome.reason.errors : [outcome.reason];
-      // Fixed allowlist only: never log error messages, stacks, URLs or response bodies.
-      const codes = [
-        ...new Set(
-          reasons.map((reason) => {
-            const code = errorCode(reason);
-            const detail = reason instanceof AppError ? reason.detail : null;
-            if (code === 'METADATA_UNAVAILABLE' && detail && /^HTTP_[1-5]\d{2}$/.test(detail))
-              return `${code}/${detail}`;
-            return [
-              'RATE_LIMITED',
-              'METADATA_UNAVAILABLE',
-              'UPSTREAM_TIMEOUT',
-              'UPSTREAM_HTTP_ERROR',
-            ].includes(code)
-              ? code
-              : 'UPSTREAM_ERROR';
-          }),
-        ),
-      ];
-      return [
-        `${['mangaupdates', 'mangadex', 'googlebooks', 'bnf', 'royalroad', 'metron', 'rakuten'][i]}=${codes.join(',')} (${reasons.length})`,
-      ];
-    });
-    statement(
-      "INSERT INTO worker_state(key,value) VALUES('release_refresh_result',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-    ).run(JSON.stringify({ at: Date.now(), failed: failures.length > 0 }));
-    if (failures.length) console.warn(`[releases] refresh incomplete: ${failures.join('; ')}`);
-  }).finally(() => pending.delete(tenantKey));
+          if (failures.length) throw new AggregateError(failures, 'MangaUpdates refresh failed');
+        })(),
+        fetchDexReleases().then((items) => saveReleases(items)),
+        fetchGoogleEditions(saveReleases),
+        fetchBnfEditions().then((items) => saveReleases(items)),
+        refreshRoyalRoad(saveReleases),
+        fetchMetronReleases(new Date(), saveReleases),
+        fetchRakutenReleases().then((items) => saveReleases(items)),
+      ]);
+      const failures = outcomes.flatMap((outcome, i) => {
+        if (outcome.status !== 'rejected') return [];
+        const reasons =
+          outcome.reason instanceof AggregateError ? outcome.reason.errors : [outcome.reason];
+        // Fixed allowlist only: never log error messages, stacks, URLs or response bodies.
+        const codes = [
+          ...new Set(
+            reasons.map((reason) => {
+              const code = errorCode(reason);
+              const detail = reason instanceof AppError ? reason.detail : null;
+              if (code === 'METADATA_UNAVAILABLE' && detail && /^HTTP_[1-5]\d{2}$/.test(detail))
+                return `${code}/${detail}`;
+              return [
+                'RATE_LIMITED',
+                'METADATA_UNAVAILABLE',
+                'UPSTREAM_TIMEOUT',
+                'UPSTREAM_HTTP_ERROR',
+              ].includes(code)
+                ? code
+                : 'UPSTREAM_ERROR';
+            }),
+          ),
+        ];
+        return [
+          `${['mangaupdates', 'mangadex', 'googlebooks', 'bnf', 'royalroad', 'metron', 'rakuten'][i]}=${codes.join(',')} (${reasons.length})`,
+        ];
+      });
+      statement(
+        "INSERT INTO worker_state(key,value) VALUES('release_refresh_result',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      ).run(JSON.stringify({ at: Date.now(), failed: failures.length > 0 }));
+      if (failures.length) console.warn(`[releases] refresh incomplete: ${failures.join('; ')}`);
+    }),
+  ).finally(() => pending.delete(tenantKey));
   pending.set(tenantKey, job);
   return job;
 }

@@ -44,6 +44,7 @@ import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
 import { processTranslations } from './translations';
 import { jellyfinImportProgress, maybeSyncJellyfin } from './jellyfin';
 import { measured } from './job-stats';
+import { recorded } from './job-runs';
 import { tenantId } from './tenant-context';
 import { isReadingKind, isVideoKind } from '@/domain/kinds';
 import { normalizeAnimeWorks } from './anime-works';
@@ -547,7 +548,9 @@ async function workerTickBackground() {
     return task;
   };
   // Each lane is measured (CPU, duration): GET /api/admin/jobs and heavy-run log lines.
-  const job = <T>(name: string, run: () => Promise<T>) => measured(name, tenantId(), run);
+  // Each run is also recorded for the activity panel (last run, failure).
+  const job = <T>(name: string, run: () => Promise<T>) =>
+    measured(name, tenantId(), () => recorded(name, run));
   const covers = background(() =>
     job('covers', () => syncTrackedCovers(signal, true)).catch(() => {
       /* Retry after a later wake. */

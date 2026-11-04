@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Background tasks in the activity panel: every job of the account (release check, catalog
+  releases, source matching, Kavita scan, Jellyfin sync, anime catalog matching, covers,
+  translations) with its last run, failures, waiting work and next run, and a button to run it
+  now. Jobs appear only when they apply (service connected, kind enabled). One registry
+  (`src/lib/background-jobs.ts`) defines them; `GET/POST /api/jobs` serves it.
+
 - Settings: turning a media kind off no longer fails with "invalid values" (the list of kinds was
   capped at 9 since kinds were added; the cap now follows the kind registry, and a test enables
   every kind at once).

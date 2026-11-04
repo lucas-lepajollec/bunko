@@ -766,6 +766,28 @@ export interface ActivityTask {
   /** Title being worked on, when there is one. */
   detail: string | null;
 }
+export type BackgroundJobId =
+  | 'update-check'
+  | 'release-ingestion'
+  | 'source-matching'
+  | 'kavita-index'
+  | 'jellyfin'
+  | 'anime-works'
+  | 'covers'
+  | 'translations';
+/** One background job of the account, as the activity panel shows it. */
+export interface BackgroundJob {
+  id: BackgroundJobId;
+  running: boolean;
+  lastAt: string | null;
+  lastMs: number | null;
+  /** The last run failed. */
+  failed: boolean;
+  /** Next automatic run; null for work that runs whenever there is some. */
+  nextAt: string | null;
+  /** Work waiting or in progress (works to check, series to import…). */
+  pending: { done: number; total: number } | null;
+}
 export interface LibraryActivity {
   /** Everything running now, for the header indicator and notification panel. */
   tasks?: ActivityTask[];
