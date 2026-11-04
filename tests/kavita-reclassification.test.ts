@@ -166,7 +166,8 @@ it('reclassifies warm off-catalog and catalog library snapshots after settings P
   expect(libraryKind(getTracked(catalog.id)!.media)).toBe('BOOK');
   expect(withTracking([raw(catalog.id)])[0].format).toBe('BOOK');
   expect(mediaKind(withTracking([raw(catalog.id)])[0])).toBe('book');
-  expect(composeHome([], [raw(catalog.id)]).top).toEqual([]); // BOOK leaves LN home lanes.
+  // BOOK leaves the light-novel home (the mixed home keeps every enabled kind).
+  expect(composeHome([], [raw(catalog.id)], 'lightnovel').top).toEqual([]);
   expect(raw(off.id).format).toBe('LIGHT_NOVEL');
   expect(raw(catalog.id).format).toBe('LIGHT_NOVEL');
   saveMetadata('detail:anilist:900', {

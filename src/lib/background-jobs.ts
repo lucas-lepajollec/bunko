@@ -4,7 +4,7 @@
  * to run it now. The activity panel shows this list; nothing else decides what a job is.
  */
 import { isReadingKind, isVideoKind } from '@/domain/kinds';
-import type { BackgroundJob, BackgroundJobId } from '@/types/shared';
+import type { BackgroundJob, BackgroundJobGroup, BackgroundJobId } from '@/types/shared';
 import { getSettings } from './settings';
 import { statement } from './db';
 import { tenantId } from './tenant-context';
@@ -18,6 +18,7 @@ import { jellyfinConfigured, jellyfinImportProgress, requestJellyfinSync } from 
 import { refreshReleases } from './releases';
 import { sourceMatchQueue } from './source-match-state';
 import { activeTranslations } from './translations';
+import { catalogLinkingNext, requestCatalogLinking } from './catalog-linking';
 
 const MINUTE = 60_000;
 const after = (iso: string | null, ms: number) =>
@@ -33,6 +34,7 @@ const stamp = (key: string) => {
 
 interface Definition {
   id: BackgroundJobId;
+  group: BackgroundJobGroup;
   applies: () => boolean;
   /** When the next automatic run is due; null for work that runs whenever there is some. */
   next: () => string | null;
@@ -43,6 +45,7 @@ interface Definition {
 const JOBS: Definition[] = [
   {
     id: 'update-check',
+    group: 'suwayomi',
     applies: () => Boolean(getSettings().suwayomiUrl) && reading(),
     next: () => after(workerValue('last_check_at'), getSettings().updateIntervalMinutes * MINUTE),
     pending: () => {
@@ -54,6 +57,7 @@ const JOBS: Definition[] = [
   },
   {
     id: 'release-ingestion',
+    group: 'catalogs',
     applies: reading,
     next: () => after(stamp('release_refresh'), 20 * MINUTE),
     run: () => {
@@ -63,6 +67,7 @@ const JOBS: Definition[] = [
   },
   {
     id: 'source-matching',
+    group: 'suwayomi',
     applies: () => Boolean(getSettings().suwayomiUrl) && reading(),
     next: () => null,
     pending: () => {
@@ -73,12 +78,14 @@ const JOBS: Definition[] = [
   },
   {
     id: 'kavita-index',
+    group: 'kavita',
     applies: () => Boolean(getSettings().kavitaUrl),
     next: () => after(stamp('kavita_synced_at'), 15 * MINUTE),
     run: () => requestKavitaSync(),
   },
   {
     id: 'jellyfin',
+    group: 'jellyfin',
     applies: () => jellyfinConfigured() && video(),
     next: () => after(stamp('jellyfin_synced_at'), 15 * MINUTE),
     pending: () => {
@@ -91,13 +98,16 @@ const JOBS: Definition[] = [
     },
   },
   {
-    id: 'anime-works',
+    id: 'catalog-linking',
+    group: 'catalogs',
+    // Imported series, films and anime, and anime seasons: video kinds for now.
     applies: video,
-    next: () => null,
-    run: () => wakeWorker(),
+    next: catalogLinkingNext,
+    run: requestCatalogLinking,
   },
   {
     id: 'covers',
+    group: 'bunko',
     applies: () => true,
     next: () => null,
     run: () => {
@@ -108,6 +118,7 @@ const JOBS: Definition[] = [
   },
   {
     id: 'translations',
+    group: 'tradoc',
     applies: () => Boolean(getSettings().tradocUrl),
     next: () => null,
     pending: () => {
@@ -119,22 +130,34 @@ const JOBS: Definition[] = [
 ];
 
 export const BACKGROUND_JOB_IDS = JOBS.map((j) => j.id);
+const GROUP_ORDER: BackgroundJobGroup[] = [
+  'suwayomi',
+  'kavita',
+  'jellyfin',
+  'catalogs',
+  'tradoc',
+  'bunko',
+];
 
 /** The account's jobs that apply to it, with their state. */
 export function backgroundJobs(): BackgroundJob[] {
   const running = runningJobs(tenantId());
-  return JOBS.filter((j) => j.applies()).map((j) => {
-    const last = lastJobRun(j.id);
-    return {
-      id: j.id,
-      running: running.has(j.id),
-      lastAt: last?.at ?? null,
-      lastMs: last?.ms ?? null,
-      failed: last?.failed ?? false,
-      nextAt: j.next(),
-      pending: j.pending?.() ?? null,
-    };
-  });
+  return [...JOBS]
+    .sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group))
+    .filter((j) => j.applies())
+    .map((j) => {
+      const last = lastJobRun(j.id);
+      return {
+        id: j.id,
+        group: j.group,
+        running: running.has(j.id),
+        lastAt: last?.at ?? null,
+        lastMs: last?.ms ?? null,
+        failed: last?.failed ?? false,
+        nextAt: j.next(),
+        pending: j.pending?.() ?? null,
+      };
+    });
 }
 
 /** Ask for a job now (it runs in the account's worker, never in the request). */

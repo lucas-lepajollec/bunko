@@ -1,6 +1,6 @@
 'use client';
 import { isVideoKind } from '@/domain/kinds';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useUniverse } from '@/lib/client/universe';
 import { useNotices } from '@/lib/client/notices';
@@ -247,8 +247,10 @@ function BackgroundJobs() {
       <span className="text-muted mb-1 text-xs font-medium tracking-[0.06em] uppercase">
         {t('jobs.title')}
       </span>
-      {jobs.data.map((job) => {
+      {jobs.data.map((job, i) => {
         const name = t(`jobs.name.${job.id}`);
+        // Jobs come grouped by what they work with (Suwayomi, Kavita, Jellyfin, catalogs…).
+        const header = i === 0 || jobs.data![i - 1].group !== job.group;
         const busy = job.running || asked.has(job.id);
         const status = job.running
           ? [t('jobs.running'), job.pending && `${n(job.pending.done)}/${n(job.pending.total)}`]
@@ -264,34 +266,43 @@ function BackgroundJobs() {
               job.nextAt && t('jobs.next', { when: relative(job.nextAt) }),
             ];
         return (
-          <div key={job.id} className="flex min-h-11 items-center gap-3">
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate">{name}</span>
-              <span
-                className={cx(
-                  'flex items-center gap-1.5 truncate text-xs',
-                  job.failed && !job.running ? 'text-warn' : 'text-muted',
-                )}
-              >
-                {job.running && <Spinner className="size-2.5 border-[1.5px]" />}
-                {status.filter(Boolean).join(' · ')}
+          <Fragment key={job.id}>
+            {header && (
+              <span className="text-mid mt-2 text-xs font-semibold first:mt-0">
+                {t(`jobs.group.${job.group}`)}
               </span>
-            </span>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void run(job)}
-              aria-label={t('jobs.run', { name })}
-              title={t('jobs.run', { name })}
-              className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full bg-white/[0.06] hover:text-white disabled:opacity-40"
-            >
-              {asked.has(job.id) && !job.running ? (
-                <Spinner className="size-3 border-[1.5px]" />
-              ) : (
-                <Play className="size-3.5 fill-current" aria-hidden />
-              )}
-            </button>
-          </div>
+            )}
+            <div className="flex min-h-11 items-center gap-3" title={t(`jobs.desc.${job.id}`)}>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate" aria-description={t(`jobs.desc.${job.id}`)}>
+                  {name}
+                </span>
+                <span
+                  className={cx(
+                    'flex items-center gap-1.5 truncate text-xs',
+                    job.failed && !job.running ? 'text-warn' : 'text-muted',
+                  )}
+                >
+                  {job.running && <Spinner className="size-2.5 border-[1.5px]" />}
+                  {status.filter(Boolean).join(' · ')}
+                </span>
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void run(job)}
+                aria-label={t('jobs.run', { name })}
+                title={t('jobs.run', { name })}
+                className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full bg-white/[0.06] hover:text-white disabled:opacity-40"
+              >
+                {asked.has(job.id) && !job.running ? (
+                  <Spinner className="size-3 border-[1.5px]" />
+                ) : (
+                  <Play className="size-3.5 fill-current" aria-hidden />
+                )}
+              </button>
+            </div>
+          </Fragment>
         );
       })}
     </div>
