@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Streaming extensions that know titles by TMDB id are asked with `tmdb:` ids: series and films
+  (also when Bunko has no IMDb id for them) and anime, with the TMDB season from the anime map
+  (asked before IMDb, whose season is TVDB's; no guess when the map has none).
+- Streams on a service allowed on the local network (`BUNKO_VIDEO_ALLOWED_HOSTS`) start through
+  the relay directly instead of a failed browser attempt first.
+- Version labels are read line by line: "VO" followed by a count of French subtitle files is no
+  longer taken for VOSTFR, nor a VF stream with the same mention.
 - Streaming security: every address a streaming extension chooses (manifests, stream and subtitle
   lists, relayed streams, HLS playlists, segments, keys, subtitle files) goes through one guarded
   client. Private, loopback, link-local/metadata, CGNAT, multicast and reserved destinations are

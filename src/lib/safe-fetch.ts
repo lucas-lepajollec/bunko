@@ -122,6 +122,17 @@ const addressAllowed = (address: string) => {
 
 /** Whether this address may be fetched as far as can be told without DNS (literal IPs, names). */
 export function plausiblyPublic(raw: string) {
+  return plausibly(raw, true);
+}
+/**
+ * Whether the address looks public by itself, without the administrator's allowance: a service
+ * allowed on the LAN or the Docker network (`addon:7000`) is reachable by Bunko, not by the
+ * viewer's browser, so its streams only play through the relay.
+ */
+export function onPublicInternet(raw: string) {
+  return plausibly(raw, false);
+}
+function plausibly(raw: string, allowance: boolean) {
   let url: URL;
   try {
     url = new URL(raw);
@@ -130,9 +141,9 @@ export function plausiblyPublic(raw: string) {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
   if (url.username || url.password) return false;
-  if (hostAllowed(url)) return true;
+  if (allowance && hostAllowed(url)) return true;
   const host = url.hostname.replace(/^\[|\]$/g, '');
-  if (isIP(host)) return isPublicAddress(host) || addressAllowed(host);
+  if (isIP(host)) return isPublicAddress(host) || (allowance && addressAllowed(host));
   // Single-label and local names resolve inside the LAN or the Docker network.
   return host.includes('.') && !/\.(?:local|localhost|internal|lan|home|arpa)$/i.test(host);
 }

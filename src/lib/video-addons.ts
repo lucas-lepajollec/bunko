@@ -6,7 +6,7 @@ import { AppError } from './errors';
 import { cached } from './metadata-cache';
 import { addonId, getSettings, updateSettings } from './settings';
 import { relayPath, safeHeaders, subtitlePath } from './video-relay';
-import { plausiblyPublic, safeJson } from './safe-fetch';
+import { onPublicInternet, plausiblyPublic, safeJson } from './safe-fetch';
 import { tenantId } from './tenant-context';
 
 /**
@@ -130,6 +130,19 @@ export function episodeIds(anilistId: number, episode: number) {
   const out: { id: string; prefix: string; types: string[] }[] = [];
   if (ids?.kitsu)
     out.push({ id: `kitsu:${ids.kitsu}:${episode}`, prefix: 'kitsu', types: ['anime', 'series'] });
+  // Before IMDb: an addon that knows TMDB ids numbers seasons the TMDB way, which the map gives
+  // exactly, while an IMDb id carries the TVDB season. Without a known TMDB season, nothing is
+  // guessed.
+  if (ids?.tmdb && (ids.type === 'MOVIE' || ids.tmdbSeason !== null))
+    out.push(
+      ids.type === 'MOVIE'
+        ? { id: `tmdb:${ids.tmdb}`, prefix: 'tmdb', types: ['movie'] }
+        : {
+            id: `tmdb:${ids.tmdb}:${ids.tmdbSeason}:${episode}`,
+            prefix: 'tmdb',
+            types: ['series'],
+          },
+    );
   if (ids?.imdb)
     out.push({
       id: ids.type === 'MOVIE' ? ids.imdb : `${ids.imdb}:${ids.tvdbSeason ?? 1}:${episode}`,
@@ -220,6 +233,15 @@ const ORIGINAL = /\b(?:vo|raw|jap(?:anese)?|jpn)\b|🇯🇵/i;
  * audio without known subtitles, null = nothing said.
  */
 export function versionOf(text: string, language: string): VideoStream['version'] {
+  // Line by line, the first one that names a version wins: "🇯🇵 VO" then "🇫🇷 3 ST FR" is the
+  // original audio with French subtitle files available, not a subtitled release.
+  for (const line of text.split('\n')) {
+    const version = lineVersion(line, language);
+    if (version) return version;
+  }
+  return null;
+}
+function lineVersion(text: string, language: string): VideoStream['version'] {
   const v = VERSIONS[language] ?? VERSIONS.en;
   if (v.sub.test(text)) return 'sub';
   if (v.multi.test(text)) return 'multi';
@@ -345,16 +367,22 @@ export async function episodeStreams(
   void signal;
   return remembered(episodeIds(anilistId, episode), language);
 }
-/** Series and films (TMDB): addons know them by IMDb id, season and episode. */
-export async function imdbStreams(
-  imdb: string,
+/**
+ * Series and films (TMDB): addons know them by IMDb id or by TMDB id (`tmdb:1399:1:2`), with the
+ * TMDB season and episode. IMDb first, the id most addons know.
+ */
+export async function titleStreams(
+  title: { imdb: string | null; tmdb: number | null },
   target: { season: number; episode: number } | null,
   language: string,
   signal?: AbortSignal,
 ) {
-  const ids = target
-    ? [{ id: `${imdb}:${target.season}:${target.episode}`, prefix: 'tt', types: ['series'] }]
-    : [{ id: imdb, prefix: 'tt', types: ['movie'] }];
+  const at = target ? `:${target.season}:${target.episode}` : '';
+  const types = [target ? 'series' : 'movie'];
+  const ids = [
+    ...(title.imdb ? [{ id: `${title.imdb}${at}`, prefix: 'tt', types }] : []),
+    ...(title.tmdb ? [{ id: `tmdb:${title.tmdb}${at}`, prefix: 'tmdb', types }] : []),
+  ];
   void signal;
   return remembered(ids, language);
 }
@@ -458,7 +486,7 @@ async function streamsFor(
         const s = item.data;
         const text = [s.name, s.title, s.description, s.behaviorHints?.filename]
           .filter(Boolean)
-          .join(' ');
+          .join('\n');
         // Links into a private network are never offered (the relay would refuse them anyway).
         const web = s.url && plausiblyPublic(s.url) ? s.url : null;
         if (s.url && !web) return [];
@@ -481,8 +509,9 @@ async function streamsFor(
             name: s.name ?? m.name,
             title: s.title ?? s.description ?? '',
             kind,
-            // A stream that needs headers only plays through Bunko.
-            url: web && !headers ? web : null,
+            // A stream that needs headers, or that lives on a service the administrator allowed
+            // on the local network, only plays through Bunko.
+            url: web && !headers && onPublicInternet(web) ? web : null,
             relayUrl: web ? relayPath({ url: web, headers }) : null,
             externalUrl: s.externalUrl && plausiblyPublic(s.externalUrl) ? s.externalUrl : null,
             preferred: version === 'sub' || version === 'dub' || version === 'multi',

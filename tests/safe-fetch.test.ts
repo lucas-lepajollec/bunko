@@ -222,9 +222,9 @@ it('refuses LAN extensions unless allowed, and rests a failing one', async () =>
   process.env.BUNKO_VIDEO_ALLOWED_HOSTS = '127.0.0.1';
   updateSettings({ videoAddons: [`http://127.0.0.1:${a}/manifest.json`] });
   addons.resetStreamCache();
-  await addons.imdbStreams('tt0000001', null, 'fr');
+  await addons.titleStreams({ imdb: 'tt0000001', tmdb: null }, null, 'fr');
   addons.resetStreamCache();
-  await addons.imdbStreams('tt0000002', null, 'fr');
+  await addons.titleStreams({ imdb: 'tt0000002', tmdb: null }, null, 'fr');
   expect(calls.filter((c) => c === 'A /manifest.json')).toHaveLength(1);
   addons.resetAddonRest();
   updateSettings({ videoAddons: [] });
@@ -232,8 +232,8 @@ it('refuses LAN extensions unless allowed, and rests a failing one', async () =>
 
 it('keeps another account out of cached episode lookups', async () => {
   process.env.BUNKO_VIDEO_ALLOWED_HOSTS = '127.0.0.1';
-  const mine = await addons.imdbStreams('tt0000003', null, 'fr');
-  const theirs = await inTenant(2, () => addons.imdbStreams('tt0000003', null, 'fr'));
+  const mine = await addons.titleStreams({ imdb: 'tt0000003', tmdb: null }, null, 'fr');
+  const theirs = await inTenant(2, () => addons.titleStreams({ imdb: 'tt0000003', tmdb: null }, null, 'fr'));
   expect(theirs).not.toBe(mine);
   expect(theirs.streams).toEqual([]);
 });

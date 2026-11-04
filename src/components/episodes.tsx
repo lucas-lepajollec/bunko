@@ -101,9 +101,11 @@ export function EpisodeList({
           ? t('episodes.seasonShort', { s: n(s.number), n: n(at.episode) })
           : t('episodes.short', { n: n(at.episode) }),
       seasonAnilistId: s.anilistId ?? anilistId,
-      imdb: video.ids?.imdb
+      imdb:
+        video.ids?.imdb || video.ids?.tmdb
         ? {
-            id: video.ids.imdb,
+            id: video.ids.imdb ?? null,
+            tmdb: video.ids.tmdb ?? null,
             season: video.ids.kind === 'movie' ? null : (s.tmdbSeason ?? s.number),
           }
         : null,
