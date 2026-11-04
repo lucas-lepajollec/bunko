@@ -43,6 +43,14 @@ function filename(cover: StoredCover) {
     throw new Error('Invalid stored cover');
   return path.join(/* turbopackIgnore: true */ directory(), cover.filename);
 }
+/** Whether a stored cover's file is still on disk (no read of its bytes). */
+export function storedCoverFileExists(cover: StoredCover) {
+  try {
+    return existsSync(filename(cover));
+  } catch {
+    return false;
+  }
+}
 function remove(file: string) {
   try {
     unlinkSync(file);

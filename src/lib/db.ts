@@ -563,7 +563,10 @@ export function observeChapters(
 ) {
   const insert =
     statement(`INSERT INTO observed_chapters(tracked_id,chapter_id,number,source_id,source_name,volume,namespace)
-    VALUES(?,?,?,?,?,?,?) ON CONFLICT(namespace,tracked_id,chapter_id) DO UPDATE SET number=excluded.number,volume=excluded.volume`);
+    VALUES(?,?,?,?,?,?,?) ON CONFLICT(namespace,tracked_id,chapter_id) DO UPDATE SET number=excluded.number,volume=excluded.volume
+    WHERE number IS NOT excluded.number OR volume IS NOT excluded.volume`);
+  // Unchanged chapters are not rewritten: every write fired the version triggers, so a check of
+  // a long series invalidated every view thousands of times.
   db().transaction(() => {
     for (const c of chapters) {
       insert.run(
@@ -583,9 +586,10 @@ export function observeChapters(
     }
     const numbers = chapters.flatMap((c) => (c.number === null ? [] : [c.number]));
     if (numbers.length)
-      statement('UPDATE tracked_media SET released=MAX(COALESCE(released,0),?) WHERE id=?').run(
+      statement('UPDATE tracked_media SET released=? WHERE id=? AND COALESCE(released,0)<?').run(
         Math.max(...numbers),
         trackedId,
+        Math.max(...numbers),
       );
   })();
 }
