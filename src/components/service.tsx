@@ -22,7 +22,7 @@ export function SuwayomiNotice() {
         state === 'unconfigured' ? t('service.suwayomiUnconfigured') : t('service.suwayomiDown')
       }
       action={
-        <Link href="/settings#connections" className={smallButton}>
+        <Link href="/settings#suwayomi" className={smallButton}>
           {t('service.openSettings')} →
         </Link>
       }

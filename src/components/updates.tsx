@@ -80,7 +80,7 @@ export function LibraryUpdates() {
             total: feed.data?.trackedCount ?? 0,
             n: settings.data?.updateIntervalMinutes ?? 15,
           })}{' '}
-          <Link href="/settings#downloads" className="underline">
+          <Link href="/settings#suwayomi" className="underline">
             {t('updates.edit')}
           </Link>
         </InfoBubble>

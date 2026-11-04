@@ -11,9 +11,7 @@
           "column": 44
         }
       ],
-      "path": [
-        "fetchSourceManga"
-      ]
+      "path": ["fetchSourceManga"]
     }
   ]
 }
