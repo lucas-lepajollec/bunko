@@ -8,15 +8,18 @@ services:
     container_name: bunko
     restart: unless-stopped
     ports:
-      - "${BUNKO_PORT:-2512}:2512"
+      - '${BUNKO_PORT:-2512}:2512'
     volumes:
       # Database, access token and settings key. Back it up.
       - bunko-data:/data
       # The folder that contains your Kavita libraries (writable by UID 1000).
       - ${KAVITA_LIBRARIES:-./library}:/library
     # Optional: pre-fill the Suwayomi address (Settings can change it).
+    # Streaming extensions cannot reach private addresses; allow a self-hosted one on the LAN or
+    # this Docker network explicitly (host, host:port or CIDR). See docs/video-streaming.md.
     # environment:
     #   SUWAYOMI_URL: http://192.168.1.10:4567
+    #   BUNKO_VIDEO_ALLOWED_HOSTS: aiostreams:3000
     read_only: true
     tmpfs:
       - /tmp

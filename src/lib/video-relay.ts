@@ -3,6 +3,7 @@ import { gunzipSync } from 'node:zlib';
 import { AppError } from './errors';
 import { persistentSecret } from './settings';
 import { tenantId } from './tenant-context';
+import { readCapped, safeFetch, type SafeResponse } from './safe-fetch';
 
 /**
  * Streams found by video extensions, played through Bunko when the browser cannot load them
@@ -87,7 +88,9 @@ const isPlaylist = (url: string, type: string | null) =>
 export function rewritePlaylist(text: string, base: string, link: (url: string) => string) {
   const resolve = (ref: string) => {
     try {
-      return link(new URL(ref, base).toString());
+      const url = new URL(ref, base);
+      // Only web links are relayed (data:, skd: key systems… are left as they are).
+      return url.protocol === 'http:' || url.protocol === 'https:' ? link(url.toString()) : ref;
     } catch {
       return ref;
     }
@@ -106,83 +109,128 @@ export function rewritePlaylist(text: string, base: string, link: (url: string) 
 
 const PLAYLIST_LIMIT = 8 * 1024 * 1024;
 const SUBTITLE_LIMIT = 5 * 1024 * 1024;
+/**
+ * Relayed bytes come from a third party but are served from Bunko's origin: only media types go
+ * out as such (anything else is opaque bytes), never sniffed, never run as a page.
+ */
+const MEDIA_TYPE =
+  /^(?:video\/[\w.+-]+|audio\/[\w.+-]+|application\/(?:vnd\.apple\.mpegurl|x-mpegurl|mp4|octet-stream|dash\+xml)|image\/(?:jpeg|png|webp))$/i;
+const SAFE_HEADERS = {
+  'Cache-Control': 'no-store',
+  'X-Content-Type-Options': 'nosniff',
+  'Content-Security-Policy': "default-src 'none'; sandbox",
+  'Cross-Origin-Resource-Policy': 'same-origin',
+};
+const mediaType = (type: string | null) => {
+  const bare = (type ?? '').split(';')[0].trim();
+  return MEDIA_TYPE.test(bare) ? bare : 'application/octet-stream';
+};
+
+/**
+ * Streams relayed at once: per account and for the whole server (each one holds an upstream
+ * connection and the NAS's bandwidth).
+ */
+const PER_ACCOUNT = 8;
+const PER_SERVER = 32;
+const active = new Map<number, number>();
+let activeTotal = 0;
+function reserve() {
+  const tenant = tenantId();
+  const mine = active.get(tenant) ?? 0;
+  if (mine >= PER_ACCOUNT || activeTotal >= PER_SERVER)
+    throw new AppError('TOO_MANY_STREAMS', 'Too many streams at once', 429);
+  active.set(tenant, mine + 1);
+  activeTotal++;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    active.set(tenant, (active.get(tenant) ?? 1) - 1);
+    activeTotal--;
+  };
+}
+export const relayLoad = () => ({ total: activeTotal });
 
 async function fetchTarget(
   target: RelayTarget,
   init: { range?: string | null; signal?: AbortSignal },
 ) {
-  const url = new URL(target.url);
-  if (url.protocol !== 'http:' && url.protocol !== 'https:')
-    throw new AppError('VALIDATION_ERROR', 'Not a web stream', 400);
-  const response = await fetch(url, {
+  const response = await safeFetch(target.url, {
     headers: {
       ...(target.headers ?? {}),
       ...(init.range ? { Range: init.range } : {}),
     },
-    redirect: 'follow',
     signal: init.signal,
-  }).catch(() => {
-    throw new AppError('STREAM_UNREACHABLE', 'The stream could not be reached', 502);
   });
-  if (!response.ok) {
-    await response.body?.cancel();
+  if (response.status < 200 || response.status >= 300) {
+    response.cancel();
     throw new AppError('VIDEO_STREAM_ERROR', `The stream returned HTTP ${response.status}`, 502);
   }
   return response;
 }
 
-async function readLimited(response: Response, limit: number) {
-  const reader = response.body?.getReader();
-  if (!reader) return Buffer.alloc(0);
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const part = await reader.read();
-    if (part.done) break;
-    size += part.value.byteLength;
-    if (size > limit) {
-      await reader.cancel();
-      throw new AppError('PAYLOAD_TOO_LARGE', 'The stream file is too large', 502);
-    }
-    chunks.push(part.value);
-  }
-  return Buffer.concat(chunks);
+/** A body that frees its relay slot when it ends, fails or the player hangs up. */
+function tracked(body: ReadableStream<Uint8Array>, release: () => void) {
+  const reader = body.getReader();
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const part = await reader.read();
+        if (part.done) {
+          release();
+          controller.close();
+        } else controller.enqueue(part.value);
+      } catch (error) {
+        release();
+        controller.error(error);
+      }
+    },
+    cancel(reason) {
+      release();
+      return reader.cancel(reason);
+    },
+  });
 }
 
 /** The relayed stream: byte ranges pass through (seeking), playlists are rewritten. */
 export async function relay(token: string, request: Request): Promise<Response> {
   const target = unseal(token);
-  const range = request.headers.get('range');
-  const upstream = await fetchTarget(target, { range, signal: request.signal });
-  const type = upstream.headers.get('content-type');
-  if (!range && isPlaylist(upstream.url || target.url, type)) {
-    const text = (await readLimited(upstream, PLAYLIST_LIMIT)).toString('utf8');
-    if (text.trimStart().startsWith('#EXTM3U'))
-      return new Response(
-        rewritePlaylist(text, upstream.url || target.url, (url) =>
-          relayPath({ url, headers: target.headers }),
-        ),
-        {
-          headers: {
-            'Content-Type': 'application/vnd.apple.mpegurl',
-            'Cache-Control': 'no-store',
-          },
-        },
-      );
-    return new Response(text, { headers: { 'Content-Type': type ?? 'text/plain' } });
+  // Playlists are always read whole (players may ask for a byte range of them too).
+  const range = isPlaylist(target.url, null) ? null : request.headers.get('range');
+  const release = reserve();
+  let upstream: SafeResponse;
+  try {
+    upstream = await fetchTarget(target, { range, signal: request.signal });
+    if (range && isPlaylist(upstream.url, upstream.headers.get('content-type'))) {
+      upstream.cancel();
+      upstream = await fetchTarget(target, { signal: request.signal });
+    }
+  } catch (error) {
+    release();
+    throw error;
   }
-  const headers = new Headers({
-    'Content-Type': type ?? 'application/octet-stream',
-    'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff',
-  });
+  const type = upstream.headers.get('content-type');
+  if (isPlaylist(upstream.url, type)) {
+    let text: string;
+    try {
+      text = (await readCapped(upstream, PLAYLIST_LIMIT)).toString('utf8');
+    } finally {
+      release();
+    }
+    if (!text.trimStart().startsWith('#EXTM3U'))
+      throw new AppError('VIDEO_STREAM_ERROR', 'Not an HLS playlist', 502);
+    return new Response(
+      rewritePlaylist(text, upstream.url, (url) => relayPath({ url, headers: target.headers })),
+      { headers: { ...SAFE_HEADERS, 'Content-Type': 'application/vnd.apple.mpegurl' } },
+    );
+  }
+  const headers = new Headers({ ...SAFE_HEADERS, 'Content-Type': mediaType(type) });
   for (const name of ['content-length', 'content-range', 'accept-ranges']) {
     const value = upstream.headers.get(name);
     if (value) headers.set(name, value);
   }
-  return new Response(upstream.body, { status: upstream.status, headers });
+  return new Response(tracked(upstream.body, release), { status: upstream.status, headers });
 }
-
 // ---------------------------------------------------------------------------------------------
 // Subtitles: addons return SRT, ASS/SSA or WebVTT (sometimes gzipped, sometimes Latin-1); the
 // browser's <track> only reads WebVTT.
@@ -257,9 +305,10 @@ export function toVtt(text: string) {
 export async function subtitle(token: string, request: Request): Promise<Response> {
   const target = unseal(token);
   const upstream = await fetchTarget(target, { signal: request.signal });
-  const text = decodeText(await readLimited(upstream, SUBTITLE_LIMIT));
+  const text = decodeText(await readCapped(upstream, SUBTITLE_LIMIT));
   return new Response(toVtt(text), {
     headers: {
+      ...SAFE_HEADERS,
       'Content-Type': 'text/vtt; charset=utf-8',
       'Cache-Control': 'private, max-age=3600',
     },

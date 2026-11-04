@@ -1,8 +1,9 @@
 'use client';
 import type Hls from 'hls.js';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { preload } from 'swr';
 import type { PlaybackInfo, VideoStream, VideoStreams, VideoSubtitle } from '@/types/shared';
-import { send, useApi } from '@/lib/client/api';
+import { api, send, useApi } from '@/lib/client/api';
 import {
   QUALITY_PRESETS,
   deviceProfile,
@@ -26,11 +27,62 @@ export type PlaySource =
 const browserPlayable = (s: VideoStream) => s.kind === 'direct' || s.kind === 'hls';
 /** Next stream to start by itself: ones the browser should decode before the doubtful ones. */
 const bestStream = (streams: VideoStream[], skip: string[] = []) => {
-  const open = streams.filter((s) => browserPlayable(s) && !skip.includes(s.id));
+  const open = streams.filter((s) => browserPlayable(s) && s.autoplay && !skip.includes(s.id));
   return open.find((s) => s.webReady) ?? open[0];
 };
 /** Automatic tries before the source list is shown (each stream may fail in the browser). */
 const AUTO_TRIES = 4;
+/** A stream that shows no picture within this time is treated as failed (next one tried). */
+const STARTUP_MS = 20_000;
+/** Why a stream could not be played, for the message and the playback log. */
+export type StreamError = 'network' | 'decode' | 'unsupported' | 'timeout' | 'hls';
+/** One playback's timings, sent once to the server log (no address, no title). */
+interface PlaybackMetrics {
+  opened: number;
+  discovered: number | null;
+  selected: number | null;
+  fallbacks: number;
+  error: StreamError | null;
+  sent: boolean;
+}
+const newMetrics = (): PlaybackMetrics => ({
+  opened: performance.now(),
+  discovered: null,
+  selected: null,
+  fallbacks: 0,
+  error: null,
+  sent: false,
+});
+function sendMetrics(
+  m: PlaybackMetrics,
+  outcome: 'playing' | 'failed',
+  via: 'direct' | 'relay' | 'jellyfin' | null,
+) {
+  if (m.sent) return;
+  m.sent = true;
+  const ms = (from: number | null, to: number | null) =>
+    from === null || to === null ? null : Math.max(0, Math.round(to - from));
+  const now = performance.now();
+  void send('/api/video/telemetry', 'POST', {
+    outcome,
+    via,
+    discoveryMs: ms(m.opened, m.discovered),
+    selectionMs: ms(m.discovered, m.selected),
+    firstFrameMs: outcome === 'playing' ? ms(m.selected ?? m.opened, now) : null,
+    fallbacks: m.fallbacks,
+    errorType: m.error,
+  }).catch(() => undefined);
+}
+export const streamsPath = (episode: PlayerEpisode, language: string) =>
+  episode.seasonAnilistId
+    ? `/api/video/streams?anilist=${episode.seasonAnilistId}&episode=${episode.episode}&lang=${language}`
+    : episode.imdb
+      ? `/api/video/streams?imdb=${episode.imdb.id}${
+          episode.imdb.season !== null
+            ? `&season=${episode.imdb.season}&episode=${episode.episode}`
+            : ''
+        }&lang=${language}`
+      : null;
 
 export interface PlayerEpisode {
   /** Work title, e.g. "Jujutsu Kaisen". */
@@ -64,11 +116,14 @@ const clock = (seconds: number) => {
  */
 export function Player({
   episode,
+  next,
   onClose,
   onFinished,
   onNext,
 }: {
   episode: PlayerEpisode;
+  /** The following episode: its sources are looked up near the end of this one. */
+  next?: PlayerEpisode | null;
   onClose: () => void;
   onFinished: () => void;
   onNext?: () => void;
@@ -84,16 +139,10 @@ export function Player({
   const [tried, setTried] = useState<string[]>([]);
   const [showTorrents, setShowTorrents] = useState(false);
   const streams = useApi<VideoStreams>(
-    (picking || !episode.jellyfinItemId) && episode.seasonAnilistId
-      ? `/api/video/streams?anilist=${episode.seasonAnilistId}&episode=${episode.episode}&lang=${language}`
-      : (picking || !episode.jellyfinItemId) && episode.imdb
-        ? `/api/video/streams?imdb=${episode.imdb.id}${
-            episode.imdb.season !== null
-              ? `&season=${episode.imdb.season}&episode=${episode.episode}`
-              : ''
-          }&lang=${language}`
-        : null,
+    picking || !episode.jellyfinItemId ? streamsPath(episode, language) : null,
   );
+  const metrics = useRef<PlaybackMetrics>(newMetrics());
+  const [failedAll, setFailedAll] = useState<StreamError | null>(null);
   // A new episode (next) starts from its own best source.
   // Parents rebuild the episode object on every refresh: only a different episode resets.
   const episodeKey = `${episode.title}|${episode.label}|${episode.jellyfinItemId ?? ''}`;
@@ -105,26 +154,51 @@ export function Player({
     setAutoPick(!episode.jellyfinItemId);
     setAuto(false);
     setTried([]);
+    setFailedAll(null);
   }
   const play = (stream: VideoStream, automatic: boolean) => {
     setSource({ kind: 'stream', stream, subtitles: streams.data?.subtitles ?? [] });
     setPicking(false);
     setAuto(automatic);
+    setFailedAll(null);
   };
+  // Each episode is measured on its own (declared first: it runs before the two below).
+  useEffect(() => {
+    metrics.current = newMetrics();
+  }, [episodeKey]);
+  useEffect(() => {
+    if (streams.data && metrics.current.discovered === null)
+      metrics.current.discovered = performance.now();
+  }, [streams.data]);
+  useEffect(() => {
+    if (source && metrics.current.selected === null) metrics.current.selected = performance.now();
+  }, [source]);
   if (autoPick && streams.data) {
     setAutoPick(false);
     const first = bestStream(streams.data.streams);
     if (first) play(first, true);
   }
-  /** The automatic choice failed in the browser: the next stream, or the list. */
-  const nextStream = () => {
-    if (!auto || source?.kind !== 'stream') return false;
+  /** The stream failed in the browser: the next automatic one, or a clear message. */
+  const nextStream = (type: StreamError) => {
+    if (source?.kind !== 'stream') return false;
+    metrics.current.error = type;
     const done = [...tried, source.stream.id];
     setTried(done);
-    const next = bestStream(streams.data?.streams ?? [], done);
-    if (!next || done.length >= AUTO_TRIES) return false;
-    play(next, true);
-    return true;
+    const following = auto ? bestStream(streams.data?.streams ?? [], done) : undefined;
+    if (following && done.length < AUTO_TRIES) {
+      metrics.current.fallbacks++;
+      play(following, true);
+      return true;
+    }
+    sendMetrics(metrics.current, 'failed', null);
+    setFailedAll(type);
+    return false;
+  };
+  // Near the end, the next episode's sources are looked up (the list only, no video).
+  const nextPath = next ? streamsPath(next, language) : null;
+  const finishing = () => {
+    if (nextPath && !next?.jellyfinItemId) void preload(nextPath, (p: string) => api(p));
+    onFinished();
   };
   const list = streams.data?.streams ?? [];
   const torrents = list.filter((s) => s.kind === 'torrent');
@@ -148,9 +222,15 @@ export function Player({
           key={source.kind === 'jellyfin' ? source.itemId : source.stream.id}
           source={source}
           onUnplayable={nextStream}
+          failure={
+            failedAll
+              ? `${t('player.failedAll', { count: tried.length })} ${t(`player.reason.${failedAll}`)}`
+              : null
+          }
+          metrics={metrics}
           episode={episode}
           onClose={onClose}
-          onFinished={onFinished}
+          onFinished={finishing}
           onNext={onNext}
           onSources={() => setPicking(true)}
         />
@@ -172,6 +252,9 @@ export function Player({
                 ✕
               </button>
             </div>
+            {list.length > 0 && (
+              <p className="text-muted -mt-1 px-1 text-xs">{t('player.versionsEstimated')}</p>
+            )}
             <ul className="flex flex-col gap-1.5 overflow-y-auto">
               {episode.jellyfinItemId && (
                 <SourceRow
@@ -197,8 +280,7 @@ export function Player({
                     title={s.name}
                     detail={s.title}
                     badges={[
-                      s.preferred && s.version ? t(`player.version.${s.version}`) : null,
-                      s.preferred && !s.version ? t('player.preferred') : null,
+                      t(`player.version.${s.version ?? 'unknown'}`),
                       s.quality ? (s.quality >= 2160 ? '4K' : `${s.quality}p`) : null,
                       tried.includes(s.id) ? t('player.failedShort') : null,
                     ]}
@@ -305,6 +387,8 @@ function Screen({
   onNext,
   onSources,
   onUnplayable,
+  failure,
+  metrics,
 }: {
   source: PlaySource;
   episode: PlayerEpisode;
@@ -313,7 +397,10 @@ function Screen({
   onNext?: () => void;
   onSources: () => void;
   /** Every way to load this stream failed: true when the player moved on to another one. */
-  onUnplayable?: () => boolean;
+  onUnplayable?: (type: StreamError) => boolean;
+  /** Every automatic try failed: the message to show. */
+  failure?: string | null;
+  metrics?: RefObject<PlaybackMetrics>;
 }) {
   const { t, language } = useI18n();
   const video = useRef<HTMLVideoElement>(null);
@@ -408,17 +495,20 @@ function Screen({
         ].filter((u): u is string => Boolean(u))
       : [];
   const [attempt, setAttempt] = useState(0);
-  const fallback = useRef<() => boolean>(() => false);
+  const fallback = useRef<(type: StreamError) => boolean>(() => false);
   useEffect(() => {
-    fallback.current = () => {
+    fallback.current = (type) => {
       if (source.kind !== 'stream') return false;
       if (attempt < candidates.length - 1) {
+        if (metrics) metrics.current.fallbacks++;
         setAttempt(attempt + 1);
         return true;
       }
-      return onUnplayable?.() ?? false;
+      onUnplayable?.(type);
+      return true;
     };
   });
+  const firstFrame = useRef(false);
   // Subtitles of an extension stream: VOSTFR by default when the stream is not in the
   // interface language (a VO stream plus subtitles from a subtitle extension).
   const streamSubs =
@@ -476,19 +566,43 @@ function Screen({
     setError(null);
     setBuffering(true);
     let cancelled = false;
-    const onFail = () => {
+    let failed = false;
+    const onFail = (type: StreamError = 'unsupported') => {
+      if (failed || cancelled) return;
+      failed = true;
+      clearTimeout(startup);
       // The browser could not decode the original file: ask Jellyfin for a transcode instead.
       if (source.kind === 'jellyfin' && p?.playMethod === 'direct') {
         setRequest((r) => ({ ...r, noDirect: true, startMs: el.currentTime * 1000 }));
         return;
       }
-      if (fallback.current()) return;
+      if (fallback.current(type)) return;
       setError(t('player.failed'));
     };
+    // No picture after a while (dead link that never answers): next attempt.
+    const startup = setTimeout(() => {
+      if (el.readyState < 2) onFail('timeout');
+    }, STARTUP_MS);
+    const mediaError = () => {
+      const code = el.error?.code;
+      // Browsers report a missing file as "unsupported": through Bunko, ask which it was.
+      if (code === 4 && url.startsWith('/api/')) {
+        void fetch(url, { headers: { Range: 'bytes=0-0' } }).then(
+          (r) => {
+            void r.body?.cancel();
+            onFail(r.ok ? 'unsupported' : 'network');
+          },
+          () => onFail('network'),
+        );
+        return;
+      }
+      onFail(code === 2 ? 'network' : code === 3 ? 'decode' : 'unsupported');
+    };
+    el.addEventListener('loadeddata', () => clearTimeout(startup), { once: true });
     if (isHls && !el.canPlayType('application/vnd.apple.mpegurl')) {
       void import('hls.js').then(({ default: HlsJs }) => {
         if (cancelled) return;
-        if (!HlsJs.isSupported()) return onFail();
+        if (!HlsJs.isSupported()) return onFail('unsupported');
         // jellyfin-web's settings: 30 s of buffer, generous manifest timeout (transcodes start slowly).
         const h = new HlsJs({
           startPosition: start,
@@ -499,7 +613,14 @@ function Screen({
         });
         hls.current = h;
         h.on(HlsJs.Events.ERROR, (_e, data) => {
-          if (data.fatal) onFail();
+          if (!data.fatal) return;
+          onFail(
+            data.type === HlsJs.ErrorTypes.NETWORK_ERROR
+              ? 'network'
+              : data.type === HlsJs.ErrorTypes.MEDIA_ERROR
+                ? 'decode'
+                : 'hls',
+          );
         });
         const syncTracks = () =>
           setHlsTracks({
@@ -527,10 +648,12 @@ function Screen({
         void el.play().catch(() => undefined);
       };
       el.addEventListener('loadedmetadata', seek, { once: true });
-      el.addEventListener('error', onFail, { once: true });
+      el.addEventListener('error', mediaError, { once: true });
     }
     return () => {
       cancelled = true;
+      clearTimeout(startup);
+      el.removeEventListener('error', mediaError);
       hls.current?.destroy();
       hls.current = null;
       el.removeAttribute('src');
@@ -645,7 +768,21 @@ function Screen({
           report('progress');
         }}
         onWaiting={() => setBuffering(true)}
-        onPlaying={() => setBuffering(false)}
+        onPlaying={() => {
+          setBuffering(false);
+          if (!firstFrame.current && metrics) {
+            firstFrame.current = true;
+            sendMetrics(
+              metrics.current,
+              'playing',
+              source.kind === 'jellyfin'
+                ? 'jellyfin'
+                : url && url.startsWith('/api/')
+                  ? 'relay'
+                  : 'direct',
+            );
+          }
+        }}
         onCanPlay={() => setBuffering(false)}
         onDurationChange={(e) => setDuration(e.currentTarget.duration)}
         onVolumeChange={(e) => {
@@ -688,14 +825,14 @@ function Screen({
         ))}
       </video>
 
-      {(buffering || (source.kind === 'jellyfin' && !p)) && !error && (
+      {(buffering || (source.kind === 'jellyfin' && !p)) && !error && !failure && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <Spinner className="size-8 text-white" />
         </div>
       )}
-      {error && (
+      {(error ?? failure) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
-          <p className="max-w-md text-lg">{error}</p>
+          <p className="max-w-md text-lg">{error ?? failure}</p>
           <button
             type="button"
             onClick={onSources}

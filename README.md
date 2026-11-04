@@ -23,12 +23,12 @@ A self-hosted reading hub that sits on top of the Suwayomi and Kavita you alread
 
 [Suwayomi](https://github.com/Suwayomi/Suwayomi-Server) runs Mihon/Tachiyomi-compatible extensions and downloads chapters. [Kavita](https://www.kavitareader.com/) is a great reader. Between the two, finding a title, checking which source has it and getting clean files into your library is still tedious. Bunko is that missing layer:
 
-| | What it does |
-| --- | --- |
-| **Catalog first** | Instant search and browsing over AniList, MangaDex and MangaUpdates — covers, synopses, seasons and release dates, not raw source listings. |
-| **Sources second** | Each title is matched automatically to your installed extensions, ranked by title similarity. A live search across every extension finds what no catalog lists. |
-| **One click to Kavita** | Pick missing chapters, a range or a specific version per chapter. They arrive as CBZ files with embedded `ComicInfo.xml`, and Kavita rescans the series. |
-| **Follow, don't babysit** | Reading statuses, read / owned / released progress (from Kavita), automatic fetching of new chapters and a daily release feed. |
+|                           | What it does                                                                                                                                                    |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Catalog first**         | Instant search and browsing over AniList, MangaDex and MangaUpdates — covers, synopses, seasons and release dates, not raw source listings.                     |
+| **Sources second**        | Each title is matched automatically to your installed extensions, ranked by title similarity. A live search across every extension finds what no catalog lists. |
+| **One click to Kavita**   | Pick missing chapters, a range or a specific version per chapter. They arrive as CBZ files with embedded `ComicInfo.xml`, and Kavita rescans the series.        |
+| **Follow, don't babysit** | Reading statuses, read / owned / released progress (from Kavita), automatic fetching of new chapters and a daily release feed.                                  |
 
 Bunko does not host, provide or recommend any content source, and ships with no extension repository.
 
@@ -60,7 +60,7 @@ services:
     container_name: bunko
     restart: unless-stopped
     ports:
-      - "2512:2512"
+      - '2512:2512'
     volumes:
       - bunko-data:/data
       # Replace the left side with the folder that contains your Kavita libraries.
@@ -84,15 +84,15 @@ docker compose up -d
 
 Open `http://<your-host>:2512`. On first start you choose a username and a password (the first visitor creates the administrator account, so do this right away). Then, in **Settings → Connections**:
 
-| Setting | Example | Notes |
-| --- | --- | --- |
-| Suwayomi address | `http://192.168.1.10:4567` | As reachable **from the Bunko container**. Username and password if Suwayomi uses basic authentication. |
-| Kavita address and API key | `http://192.168.1.10:5000` | Use the API key of a Kavita **administrator**: only admins may scan folders and set covers. |
-| Kavita path of the mounted folder | *(empty)* | Optional. Bunko finds which of Kavita's folders sit under `/library` by itself; fill it only if detection fails. |
+| Setting                           | Example                    | Notes                                                                                                            |
+| --------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Suwayomi address                  | `http://192.168.1.10:4567` | As reachable **from the Bunko container**. Username and password if Suwayomi uses basic authentication.          |
+| Kavita address and API key        | `http://192.168.1.10:5000` | Use the API key of a Kavita **administrator**: only admins may scan folders and set covers.                      |
+| Kavita path of the mounted folder | _(empty)_                  | Optional. Bunko finds which of Kavita's folders sit under `/library` by itself; fill it only if detection fails. |
 
 Then, in **Settings → Kavita libraries**, pick the library folder that receives each format (manga, manhwa & webtoons, manhua, novels). Your Suwayomi extensions are listed under **Sources**: choose which ones join global search, open a title and pick chapters.
 
-Bunko also indexes what Kavita already holds: titles you own show an *In Kavita* badge, owned chapters are never downloaded again, and existing series can be followed from **Library → In Kavita**.
+Bunko also indexes what Kavita already holds: titles you own show an _In Kavita_ badge, owned chapters are never downloaded again, and existing series can be followed from **Library → In Kavita**.
 
 > **Good to know.** Bunko asks Suwayomi only for the chapter pages, then builds each CBZ itself, named the way Kavita expects (`Series [bunko-…]/Series Ch. 0012.cbz` for new works) with embedded metadata. Suwayomi's own download folder and settings are left untouched, and the two containers do not need to share a volume.
 
@@ -104,10 +104,10 @@ The administrator creates accounts in **Settings → Users**. Each account is a 
 Mount each person's Kavita folder as a subfolder of `/library` (any names), then each account picks its folder in **Settings → Kavita libraries**. Two accounts cannot use the same folder.
 
 ```yaml
-    volumes:
-      - bunko-data:/data
-      - /path/to/first/kavita/libraries:/library/disk1
-      - /path/to/second/kavita/libraries:/library/disk2
+volumes:
+  - bunko-data:/data
+  - /path/to/first/kavita/libraries:/library/disk1
+  - /path/to/second/kavita/libraries:/library/disk2
 ```
 
 With a single account you can keep mounting your folder directly at `/library`, as above.
@@ -149,11 +149,11 @@ On upgrade, Bunko copies the oldest administrator's existing catalog configurati
 
 ## Configuration and persistence
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `SUWAYOMI_URL` | `http://suwayomi:4567` | Optional initial Suwayomi address; the address saved in Settings takes precedence. |
-| `BUNKO_DATA_DIR` | `/data` in the image | Database, `access.token`, `settings.key`. |
-| `BUNKO_LIBRARY_DIR` | `/library` in the image | Folder receiving imported CBZ files. |
+| Variable            | Default                 | Purpose                                                                            |
+| ------------------- | ----------------------- | ---------------------------------------------------------------------------------- |
+| `SUWAYOMI_URL`      | `http://suwayomi:4567`  | Optional initial Suwayomi address; the address saved in Settings takes precedence. |
+| `BUNKO_DATA_DIR`    | `/data` in the image    | Database, `access.token`, `settings.key`.                                          |
+| `BUNKO_LIBRARY_DIR` | `/library` in the image | Folder receiving imported CBZ files.                                               |
 
 Everything else lives in **Settings**: connections, new-chapter check interval (5 minutes to 24 hours), interface language. Source order, languages and repositories live in **Sources**.
 
@@ -176,7 +176,8 @@ To roll back, stop Bunko and restore the matching pre-upgrade `/data` backup tog
 - Service credentials are encrypted at rest and never returned by the API. The container runs read-only, as a non-root user, without capabilities.
 - Catalog metadata comes from the public AniList, MangaDex and MangaUpdates APIs; titles and synopses stay in their source language.
 - Sources depend on third-party extensions and websites. Matching is title-based and labels doubtful candidates instead of guessing.
-- Novel downloads and the video module (Sonarr/Prowlarr) are not in the interface yet.
+- Novel downloads and Sonarr/Prowlarr video downloads are not in the interface yet.
+- Video streaming plays what the Jellyfin library and the streaming extensions you add can serve: Bunko ships no source, plays no torrents and refuses private network addresses unless allowed. See [Video streaming](docs/video-streaming.md).
 
 Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
 
@@ -184,7 +185,7 @@ Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
 
 Next.js 16 (App Router) on Node 22, in one container. The API talks to Suwayomi over GraphQL, to Kavita over REST and to the metadata providers; SQLite (WAL, full-text search) stores the library, settings, source health and the release feed. A durable worker runs imports, Kavita scans, progress refresh and scheduled checks, and resumes after restarts. The interface is built on the shared contract in [`src/types/shared.ts`](src/types/shared.ts).
 
-[API reference](docs/api.md) · [Architecture notes](docs/architecture.md) · [Verification record](docs/verification.md)
+[API reference](docs/api.md) · [Architecture notes](docs/architecture.md) · [Video streaming](docs/video-streaming.md) · [Verification record](docs/verification.md)
 
 ## Development and quality
 

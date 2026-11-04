@@ -107,6 +107,7 @@ function serverSettings(): Settings {
     jellyfinLibraries: {},
     videoAddons: [],
     videoAudio: 'original',
+    videoAnyLanguage: false,
     tradocUrl: '',
     tradocApiKey: '',
     googleBooksApiKey: '',

@@ -220,6 +220,7 @@ export const settingsPatch = z
     // Configured addon addresses carry their options (often base64) in the path: long.
     videoAddons: z.array(z.string().url().max(4000)).max(20).optional(),
     videoAudio: z.enum(['original', 'dubbed']).optional(),
+    videoAnyLanguage: z.boolean().optional(),
     jellyfinLibraries: z
       .record(
         z.string().min(1).max(100),

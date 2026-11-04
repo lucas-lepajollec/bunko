@@ -135,7 +135,8 @@ export interface VideoAddon {
   description: string | null;
   /** What the extension offers for an episode. */
   resources: ('stream' | 'subtitles')[];
-  error: 'unreachable' | null;
+  /** `private`: on the LAN, not allowed by BUNKO_VIDEO_ALLOWED_HOSTS. */
+  error: 'unreachable' | 'private' | null;
 }
 /** A subtitle file offered by an extension, converted to WebVTT by Bunko. */
 export interface VideoSubtitle {
@@ -161,7 +162,14 @@ export interface VideoStream {
   externalUrl: string | null;
   /** In the interface language (subtitled, dubbed or several audio tracks). */
   preferred: boolean;
-  version: 'sub' | 'dub' | 'multi' | null;
+  /**
+   * Read from the stream's labels (an estimate, not a verified track): subtitled, dubbed or
+   * several audio tracks in the interface language, original audio (`vo`), another language,
+   * or nothing said (null).
+   */
+  version: 'sub' | 'dub' | 'multi' | 'vo' | 'other' | null;
+  /** May start without asking (the user's version, or VO with their subtitles). */
+  autoplay: boolean;
   /** Vertical resolution read from the labels (1080, 720, 2160…). */
   quality: number | null;
   /** False when the addon or the codec says browsers may not decode it. */
@@ -593,6 +601,8 @@ export interface Settings {
   videoAddons: string[];
   /** Version tried first: original audio with subtitles, or dubbed. */
   videoAudio: 'original' | 'dubbed';
+  /** Also start other languages by themselves when nothing matches (default false). */
+  videoAnyLanguage: boolean;
   /** Role per Jellyfin library id; libraries not listed use the detected role. */
   jellyfinLibraries: Record<string, JellyfinRole>;
   /** Follow Jellyfin anime automatically (matched to AniList when unambiguous). Default true. */

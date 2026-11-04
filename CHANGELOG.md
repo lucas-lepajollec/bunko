@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Streaming security: every address a streaming extension chooses (manifests, stream and subtitle
+  lists, relayed streams, HLS playlists, segments, keys, subtitle files) goes through one guarded
+  client. Private, loopback, link-local/metadata, CGNAT, multicast and reserved destinations are
+  refused (IPv4, IPv6, IPv4-in-IPv6, odd spellings), checked at connection time against the DNS
+  answer actually used (no rebinding) and again on every redirect, which also drops credentials
+  when leaving the origin. Timeouts, size caps and per-account/server relay limits. Self-hosted
+  extensions on the LAN are allowed by the administrator only (`BUNKO_VIDEO_ALLOWED_HOSTS`).
+- Relayed bytes are served as opaque media with `nosniff` and a sandbox CSP (a hostile source
+  could previously get an HTML page served from Bunko's origin). Native HLS players asking for a
+  byte range of a playlist now get it rewritten (relayed HLS failed in Chromium).
+- Streaming: a stream without a picture after 20 s counts as failed and the next one is tried; the
+  final message says why (unreachable, unsupported, timeout). Versions VOSTFR / VF / MULTI / VO /
+  other language / unknown, presented as read from the names; VO streams with subtitles in the
+  interface language rank right after the preferred versions and start with them on; other
+  languages start by themselves only if allowed (new setting). A failing extension rests (30 s up
+  to 10 min); episode lookups are reused for 10 minutes; the next episode's sources are looked up
+  at 90 %. Playback timings in the server log (`source_discovery_ms`, `time_to_first_frame_ms`,
+  `stream_fallback_count`, `stream_error_type`). See docs/video-streaming.md.
+
 - Streaming extensions (Stremio addons) play like a library: the best stream starts by itself
   and the next one is tried when the browser cannot play it. Streams are ranked by version in
   the interface language — subtitled original first, or dubbed first (Settings → Extensions →

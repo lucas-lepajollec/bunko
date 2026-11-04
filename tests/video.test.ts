@@ -7,6 +7,8 @@ const directory = mkdtempSync(path.join(tmpdir(), 'bunko-video-'));
 process.env.BUNKO_DATA_DIR = path.join(directory, 'state');
 process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
 process.env.BUNKO_WORKER = 'false';
+// The fixture servers run on loopback: allowed explicitly, as an administrator would.
+process.env.BUNKO_VIDEO_ALLOWED_HOSTS = '127.0.0.1';
 const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant();
 const { updateSettings } = await import('@/lib/settings');
@@ -191,8 +193,11 @@ it('asks video extensions with the id they know, VOSTFR first, then VF', async (
     ['T', 'torrent', 'sub', null, true],
     ['M', 'direct', 'multi', 2160, false],
     ['H', 'hls', 'dub', 720, true],
-    ['EN', 'direct', null, 1080, true],
+    // English sub, but French subtitles exist for the episode: VO + VOSTFR, may start alone.
+    ['EN', 'direct', 'other', 1080, true],
   ]);
+  // Everything here may start by itself except the torrent (not playable in a browser).
+  expect(result.streams.filter((s) => !s.autoplay).map((s) => s.name)).toEqual(['T']);
   // A stream that needs headers only plays through Bunko; the others may load directly.
   const h = result.streams.find((s) => s.name === 'H')!;
   expect(h.url).toBeNull();
@@ -252,6 +257,17 @@ it('relays a stream with the headers its addon asked for, playlists included', a
   expect(lines[1]).toMatch(/URI="\/api\/video\/relay\/[\w-]+"/);
   expect(lines[3]).toMatch(/^\/api\/video\/relay\/[\w-]+$/);
   expect(text).not.toContain(base);
+  // Native HLS players ask for a byte range of the playlist: it is still read whole and rewritten.
+  const ranged = await get(
+    relay.relayPath({
+      url: `${base}/hls/master.m3u8`,
+      headers: { Referer: 'https://player.example/' },
+    }),
+    { headers: { Range: 'bytes=0-' } },
+  );
+  expect(ranged.status).toBe(200);
+  expect(ranged.headers.get('content-type')).toBe('application/vnd.apple.mpegurl');
+  expect((await ranged.text()).match(/\/api\/video\/relay\//g)).toHaveLength(2);
   // The variant playlist, reached through its relay link, keeps the header.
   const variant = await (await get(lines[3])).text();
   const links = variant
