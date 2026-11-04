@@ -6,9 +6,23 @@
  */
 const state = ((
   globalThis as typeof globalThis & {
-    __bunkoAniList?: { blockedUntil: number; remaining: number | null; last: number };
+    __bunkoAniList?: {
+      blockedUntil: number;
+      remaining: number | null;
+      last: number;
+      lastBackground: number;
+      observedAt: number;
+    };
   }
-).__bunkoAniList ??= { blockedUntil: 0, remaining: null, last: 0 });
+).__bunkoAniList ??= {
+  blockedUntil: 0,
+  remaining: null,
+  last: 0,
+  lastBackground: 0,
+  observedAt: 0,
+});
+state.lastBackground ??= 0;
+state.observedAt ??= 0;
 
 /** Fixtures fake AniList 429s on purpose: the shared block stays off in tests unless asked. */
 const active = () => !process.env.VITEST || process.env.BUNKO_TEST_ANILIST_LIMIT === '1';
@@ -20,9 +34,18 @@ export function aniListBlockedFor() {
 }
 
 /** Wait for the limiter; throws when the wait exceeds `maxWaitMs`. */
-export async function aniListGate(maxWaitMs: number, signal?: AbortSignal) {
+export async function aniListGate(maxWaitMs: number, signal?: AbortSignal, backgroundJob = false) {
   if (!active()) return;
   let wait = aniListBlockedFor();
+  // Background jobs (imports, grouping, release checks) keep to one request every 2.5 s and stop
+  // when 30 requests remain: the rest of the window stays for the pages someone has open, so a
+  // large import can no longer make the catalog unavailable.
+  if (backgroundJob) {
+    wait = Math.max(wait, state.lastBackground + 2500 - Date.now());
+    // A low count observed over a minute ago belongs to a finished window.
+    if (state.remaining !== null && state.remaining < 30 && Date.now() - state.observedAt < 60_000)
+      wait = Math.max(wait, state.observedAt + 60_000 - Date.now());
+  }
   // Under 10 requests left in the window: space them out (~2/s) instead of bursting into a 429.
   if (state.remaining !== null && state.remaining < 10)
     wait = Math.max(wait, state.last + 2000 - Date.now());
@@ -31,6 +54,8 @@ export async function aniListGate(maxWaitMs: number, signal?: AbortSignal) {
     error.code = 'RATE_LIMITED';
     throw error;
   }
+  // Concurrent background requests each take their own slot.
+  if (backgroundJob) state.lastBackground = Date.now() + Math.max(wait, 0);
   if (wait > 0)
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(resolve, wait);
@@ -50,8 +75,10 @@ export async function aniListGate(maxWaitMs: number, signal?: AbortSignal) {
 export function aniListObserve(response: Response) {
   if (!active()) return;
   const remaining = Number(response.headers.get('x-ratelimit-remaining'));
-  if (Number.isFinite(remaining) && response.headers.has('x-ratelimit-remaining'))
+  if (Number.isFinite(remaining) && response.headers.has('x-ratelimit-remaining')) {
     state.remaining = remaining;
+    state.observedAt = Date.now();
+  }
   if (response.status !== 429 && remaining !== 0) return;
   const retry = response.headers.get('retry-after');
   const reset = Number(response.headers.get('x-ratelimit-reset'));
@@ -68,4 +95,6 @@ export function resetAniListLimit() {
   state.blockedUntil = 0;
   state.remaining = null;
   state.last = 0;
+  state.lastBackground = 0;
+  state.observedAt = 0;
 }
