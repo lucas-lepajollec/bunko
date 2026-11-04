@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Release check and cover pass (NAS profile: 95 % of their CPU): reading one work after a write
+  scanned every stored release (up to 30,000 rows) and rebuilt the work each time it was read.
+  Releases are now found by indexed identity and a work read since the last write is reused:
+  48 ms → 0.4 ms per work on a 3,000-work library with 20,000 releases (scale test guard).
+- Translations: an install interrupted after the file was written resumes safely — the backup
+  of the original is made once and never from the translated file, and a separate copy is
+  rewritten instead of duplicated. A book TraDoc reports finished as soon as it is sent is
+  installed (it was marked completed without its file).
+- TraDoc address: the service address (http://nas:2507) works as well as …/api/v1; an address
+  that answers with a web page and a refused request (no model) get clear messages. Books are
+  sent from disk instead of being read whole into memory.
+- Jellyfin: a user name that does not exist is an error instead of silently reading another
+  account (an empty name still uses an administrator).
+- TMDB series releases: shows are looked up four at a time within an 8 s budget, followed shows
+  first, instead of one after another.
+- Catalog tracking flags: the library is listed and indexed once per response (it was twice).
+
 - Kind priority: Settings → Media types lists every kind in order, with arrows to move one up or
   down and a box to show it. The order sets the universe switcher, the kind menus of the
   catalog, planning and library, the home shelves and the mix in "Everything".

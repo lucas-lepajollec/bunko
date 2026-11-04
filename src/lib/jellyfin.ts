@@ -102,7 +102,7 @@ export async function jellyfinInfo(signal?: AbortSignal) {
     .parse(await jellyfin('/System/Info', signal, 5000));
 }
 
-/** The account whose watched state counts: the named user, else an administrator, else the first. */
+/** The account whose watched state counts: the named user (which must exist), else an administrator. */
 export async function userId(signal?: AbortSignal) {
   const users = z
     .array(
@@ -116,6 +116,10 @@ export async function userId(signal?: AbortSignal) {
     )
     .parse(await jellyfin('/Users', signal));
   const wanted = getSettings().jellyfinUser.trim().toLowerCase();
+  // A named user that does not exist is an error, never another account: a typo must not read
+  // or write someone else's watched episodes. An empty name uses an administrator.
+  if (wanted && !users.some((u) => u.Name.toLowerCase() === wanted))
+    throw new AppError('JELLYFIN_USER_NOT_FOUND', 'The Jellyfin user does not exist', 502);
   const user =
     (wanted && users.find((u) => u.Name.toLowerCase() === wanted)) ||
     users.find((u) => u.Policy?.IsAdministrator) ||

@@ -1,5 +1,13 @@
 import { afterAll, beforeEach, expect, it } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
@@ -35,6 +43,10 @@ const server: Server = createServer(async (req, res) => {
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(body));
   };
+  if (url.pathname.startsWith('/web/')) {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    return void res.end('<!DOCTYPE html><html></html>');
+  }
   if (url.pathname.startsWith('/tradoc/')) {
     if (tradocDown) return void req.socket.destroy();
     if (req.headers.authorization !== 'Bearer tdk_fixture') return send(401, {});
@@ -226,6 +238,71 @@ it('keeps both as a separate series and retries while TraDoc is unreachable', as
   const copy = path.join(tenantRoot, 'Novels', 'Fixture Novel [FR]', 'Fixture Novel v01.epub');
   expect(readFileSync(copy, 'utf8')).toBe(translated);
   expect(scans).toEqual(['/books/Novels/Fixture Novel [FR]']);
+});
+
+it('resumes an interrupted install without losing the original or duplicating the copy', async () => {
+  const [file] = await translations.translatableFiles(trackedId);
+  for (const mode of ['replace', 'separate'] as const) {
+    db().exec('DELETE FROM translation_jobs');
+    writeFileSync(book, original);
+    rmSync(path.join(tenantRoot, 'Novels', 'Fixture Novel [FR]'), { recursive: true, force: true });
+    await translations.requestTranslations({
+      trackedId,
+      paths: [file.path],
+      sourceLang: 'en',
+      targetLang: 'fr',
+      mode,
+    });
+    remoteStatus = 'running';
+    await run();
+    remoteStatus = 'completed';
+    due();
+    await run();
+    expect(translations.listTranslations(trackedId)[0].state).toBe('completed');
+    // A stop after the file was written but before "completed" was recorded: install again.
+    db().exec("UPDATE translation_jobs SET state='importing', next_check_at=0");
+    await run();
+    expect(translations.listTranslations(trackedId)[0].state).toBe('completed');
+    const job = db().prepare('SELECT id,backup_path FROM translation_jobs').get() as {
+      id: number;
+      backup_path: string | null;
+    };
+    if (mode === 'replace') {
+      // The backup still holds the original, never the translation written the first time.
+      expect(readFileSync(job.backup_path!, 'utf8')).toBe(original);
+      expect(readFileSync(book, 'utf8')).toBe(translated);
+    } else {
+      const folder = path.join(tenantRoot, 'Novels', 'Fixture Novel [FR]');
+      expect(readdirSync(folder)).toEqual(['Fixture Novel v01.epub']);
+    }
+  }
+});
+
+it('installs a book TraDoc reports finished as soon as it is sent', async () => {
+  const [file] = await translations.translatableFiles(trackedId);
+  await translations.requestTranslations({
+    trackedId,
+    paths: [file.path],
+    sourceLang: 'en',
+    targetLang: 'fr',
+    mode: 'replace',
+  });
+  remoteStatus = 'completed';
+  await run();
+  expect(translations.listTranslations(trackedId)[0].state).toBe('completed');
+  expect(readFileSync(book, 'utf8')).toBe(translated);
+});
+
+it('accepts the TraDoc service address and explains an address that is not its API', async () => {
+  expect(translations.tradocApiBase('http://nas:2507')).toBe('http://nas:2507/api/v1');
+  expect(translations.tradocApiBase('http://nas:2507/api/')).toBe('http://nas:2507/api/v1');
+  expect(translations.tradocApiBase('http://nas:2507/api/v1/')).toBe('http://nas:2507/api/v1');
+  expect(translations.tradocApiBase('https://x.test/tradoc/api/v1')).toBe(
+    'https://x.test/tradoc/api/v1',
+  );
+  // The fixture's /web/api/v1 answers with a web page, like a wrong address would.
+  updateSettings({ tradocUrl: `${base}/web` });
+  await expect(translations.tradocInfo()).rejects.toMatchObject({ code: 'TRADOC_BAD_ADDRESS' });
 });
 
 it('refuses files that do not belong to the work and manga works', async () => {

@@ -205,6 +205,15 @@ it('follows every anime of the anime libraries, off-catalog when no clear match'
   expect(listTracked().some((t) => t.media.id === 'jellyfin:A')).toBe(false);
 });
 
+it('reads the named user only, never another account when the name is wrong', async () => {
+  updateSettings({ jellyfinUser: 'other' });
+  expect(await jellyfin.userId()).toBe('u1');
+  updateSettings({ jellyfinUser: 'Typo' });
+  await expect(jellyfin.userId()).rejects.toMatchObject({ code: 'JELLYFIN_USER_NOT_FOUND' });
+  updateSettings({ jellyfinUser: '' });
+  expect(await jellyfin.userId()).toBe('u2');
+});
+
 it('forgets everything from a previous server', async () => {
   await jellyfin.syncJellyfinIndex();
   expect(

@@ -78,15 +78,15 @@ async function anilist<T>(query: string, variables: Record<string, unknown>, sig
   return result.data;
 }
 export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
+  // One library list and one lookup per call (the same list was read and indexed twice).
   const tracked = listTracked();
-  const shared = listTracked();
   const resolve = kavitaMatcher();
   const baseUrl = getSettings().kavitaUrl.replace(/\/+$/, '');
   const resolveAdult = adultResolver();
   return items.map((m) => {
     rememberMediaPreview(m);
     const own = trackedForMedia(m, tracked);
-    const associated = trackedForMedia(m, shared);
+    const associated = own;
     const t =
       associated &&
       (sameMedia(associated.media, m) || /^(kavita|suwayomi|local|jellyfin):/.test(m.id))

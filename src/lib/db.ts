@@ -96,6 +96,10 @@ export function db(): Database.Database {
     CREATE TABLE IF NOT EXISTS chapter_releases (
       id TEXT PRIMARY KEY, released_at TEXT NOT NULL, payload TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS chapter_releases_date ON chapter_releases(released_at DESC,id DESC);
+    -- One work's releases by identity (its sheet, every per-work refresh) without a table scan.
+    CREATE INDEX IF NOT EXISTS chapter_releases_media_id ON chapter_releases(json_extract(payload,'$.media.id'));
+    CREATE INDEX IF NOT EXISTS chapter_releases_media_anilist ON chapter_releases(json_extract(payload,'$.media.anilistId'));
+    CREATE INDEX IF NOT EXISTS chapter_releases_media_mangadex ON chapter_releases(json_extract(payload,'$.media.mangadexId'));
     CREATE TABLE IF NOT EXISTS metadata_cache (
       key TEXT PRIMARY KEY, payload TEXT NOT NULL, bytes INTEGER NOT NULL,
       updated_at INTEGER NOT NULL, attempted_at INTEGER NOT NULL);
@@ -265,6 +269,9 @@ export function db(): Database.Database {
 }
 export function closeTenant(id: number) {
   tenantChecks.delete(id);
+  // A recreated account restarts its versions: never serve the previous one's library.
+  trackedSnapshots.delete(id);
+  singleSnapshots.delete(id);
   const folder = tenantPath(id);
   connections.get(folder)?.close();
   connections.delete(folder);
@@ -651,12 +658,22 @@ type TrackedSnapshot = {
   retry: Map<number, number>;
 };
 const trackedSnapshots = new Map<number, TrackedSnapshot>();
+/**
+ * Single works read since the last write: a background pass reads the same work several times
+ * (getTracked before and after each step), and every write would otherwise rebuild it each time.
+ */
+const singleSnapshots = new Map<number, { version: number; byId: Map<number, TrackedSnapshot> }>();
 function snapshotTracked(id?: number) {
   const userId = tenantId();
   const version = writeVersion();
   const trackedSnapshot = trackedSnapshots.get(userId);
   // The version read inside a transaction includes its own writes: a match is safe there too.
   if (trackedSnapshot?.version === version) return trackedSnapshot;
+  const singles = singleSnapshots.get(userId);
+  if (id !== undefined && singles?.version === version) {
+    const hit = singles.byId.get(id);
+    if (hit) return hit;
+  }
   const outerTransaction = db().inTransaction;
   const resolveAdult = adultResolver();
   const settings = getSettings();
@@ -755,18 +772,24 @@ function snapshotTracked(id?: number) {
     // One work: only its own releases (filtered by SQLite, not decoded one by one).
     const one =
       id !== undefined && rows[0] ? (JSON.parse(String(rows[0].media_json)) as UnifiedMedia) : null;
+    // Only the identities the work has, so each term uses its expression index.
+    const identity = one
+      ? [
+          "json_extract(payload,'$.media.id')=@id",
+          ...(one.anilistId ? ["json_extract(payload,'$.media.anilistId')=@anilist"] : []),
+          ...(one.mangadexId ? ["json_extract(payload,'$.media.mangadexId')=@mangadex"] : []),
+        ]
+      : [];
     for (const row of (one
       ? statement(
-          `SELECT payload FROM chapter_releases WHERE released_at<=@now
-            AND (json_extract(payload,'$.unit')='volume' OR json_extract(payload,'$.provider')='royalroad')
-            AND (json_extract(payload,'$.media.id')=@id
-              OR (@anilist IS NOT NULL AND json_extract(payload,'$.media.anilistId')=@anilist)
-              OR (@mangadex IS NOT NULL AND json_extract(payload,'$.media.mangadexId')=@mangadex))`,
+          `SELECT payload FROM chapter_releases WHERE (${identity.join(' OR ')})
+            AND released_at<=@now
+            AND (json_extract(payload,'$.unit')='volume' OR json_extract(payload,'$.provider')='royalroad')`,
         ).all({
           now: new Date().toISOString(),
           id: one.id,
-          anilist: one.anilistId ?? null,
-          mangadex: one.mangadexId ?? null,
+          ...(one.anilistId ? { anilist: one.anilistId } : {}),
+          ...(one.mangadexId ? { mangadex: one.mangadexId } : {}),
         })
       : statement(
           "SELECT payload FROM chapter_releases WHERE released_at<=? AND (json_extract(payload,'$.unit')='volume' OR json_extract(payload,'$.provider')='royalroad')",
@@ -970,6 +993,14 @@ function snapshotTracked(id?: number) {
     });
     const snapshot = { version, entries, byId: new Map(entries.map((t) => [t.id, t])), retry };
     if (id === undefined && !outerTransaction) trackedSnapshots.set(userId, snapshot);
+    if (id !== undefined && !outerTransaction) {
+      let memo = singleSnapshots.get(userId);
+      if (memo?.version !== version)
+        singleSnapshots.set(userId, (memo = { version, byId: new Map() }));
+      // Bounded: a pass over the whole library between two writes keeps the latest works only.
+      if (memo.byId.size >= 500) memo.byId.clear();
+      memo.byId.set(id, snapshot);
+    }
     return snapshot;
   })();
   // Prime committed index/settings caches after our read transaction. Never publish a

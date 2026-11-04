@@ -498,6 +498,12 @@ const en: Dictionary = {
   'error.UNSAFE_ARCHIVE': 'the chapter archive was rejected',
   'error.UNSAFE_PATH': 'unsafe library path',
   'error.MANGA_NOT_INDEXED': 'Search this source first.',
+  'error.TRADOC_BAD_ADDRESS':
+    'This address does not answer as TraDoc’s API. Use the address of TraDoc (for example http://nas:2507).',
+  'error.TRADOC_REJECTED':
+    'TraDoc refused the translation. In TraDoc → Settings → Integrations, give this connection a default model.',
+  'error.JELLYFIN_USER_NOT_FOUND':
+    'This Jellyfin user does not exist. Check the user name in Settings → Jellyfin (leave it empty to use an administrator).',
   'error.METADATA_UNAVAILABLE': 'The catalog is unavailable right now.',
   'error.IMAGE_UNAVAILABLE': 'Image unavailable.',
   'error.PAYLOAD_TOO_LARGE': 'Request too large.',
@@ -1801,6 +1807,12 @@ const fr: Dictionary = {
   'error.UNSAFE_ARCHIVE': 'l’archive du chapitre a été refusée',
   'error.UNSAFE_PATH': 'chemin de bibliothèque refusé',
   'error.MANGA_NOT_INDEXED': 'Cherche d’abord dans cette source.',
+  'error.TRADOC_BAD_ADDRESS':
+    'Cette adresse ne répond pas comme l’API de TraDoc. Indique l’adresse de TraDoc (par exemple http://nas:2507).',
+  'error.TRADOC_REJECTED':
+    'TraDoc a refusé la traduction. Dans TraDoc → Réglages → Intégrations, donne un modèle par défaut à cette connexion.',
+  'error.JELLYFIN_USER_NOT_FOUND':
+    'Cet utilisateur Jellyfin n’existe pas. Vérifie le nom dans Paramètres → Jellyfin (laisse vide pour utiliser un administrateur).',
   'error.METADATA_UNAVAILABLE': 'Le catalogue est indisponible pour le moment.',
   'error.IMAGE_UNAVAILABLE': 'Image indisponible.',
   'error.PAYLOAD_TOO_LARGE': 'Requête trop volumineuse.',
@@ -3109,6 +3121,12 @@ const es: Dictionary = {
   'error.UNSAFE_ARCHIVE': 'el archivo del capítulo fue rechazado',
   'error.UNSAFE_PATH': 'ruta de biblioteca no segura',
   'error.MANGA_NOT_INDEXED': 'Busca primero en esta fuente.',
+  'error.TRADOC_BAD_ADDRESS':
+    'Esta dirección no responde como la API de TraDoc. Indica la dirección de TraDoc (por ejemplo http://nas:2507).',
+  'error.TRADOC_REJECTED':
+    'TraDoc rechazó la traducción. En TraDoc → Ajustes → Integraciones, asigna un modelo por defecto a esta conexión.',
+  'error.JELLYFIN_USER_NOT_FOUND':
+    'Este usuario de Jellyfin no existe. Revisa el nombre en Ajustes → Jellyfin (déjalo vacío para usar un administrador).',
   'error.METADATA_UNAVAILABLE': 'El catálogo no está disponible ahora.',
   'error.IMAGE_UNAVAILABLE': 'Imagen no disponible.',
   'error.PAYLOAD_TOO_LARGE': 'Solicitud demasiado grande.',
@@ -4417,6 +4435,12 @@ const de: Dictionary = {
   'error.UNSAFE_ARCHIVE': 'das Kapitelarchiv wurde abgelehnt',
   'error.UNSAFE_PATH': 'unsicherer Bibliothekspfad',
   'error.MANGA_NOT_INDEXED': 'Durchsuche zuerst diese Quelle.',
+  'error.TRADOC_BAD_ADDRESS':
+    'Diese Adresse antwortet nicht wie die TraDoc-API. Gib die Adresse von TraDoc an (zum Beispiel http://nas:2507).',
+  'error.TRADOC_REJECTED':
+    'TraDoc hat die Übersetzung abgelehnt. Lege in TraDoc → Einstellungen → Integrationen ein Standardmodell für diese Verbindung fest.',
+  'error.JELLYFIN_USER_NOT_FOUND':
+    'Dieser Jellyfin-Benutzer existiert nicht. Prüfe den Namen unter Einstellungen → Jellyfin (leer lassen für einen Administrator).',
   'error.METADATA_UNAVAILABLE': 'Der Katalog ist gerade nicht verfügbar.',
   'error.IMAGE_UNAVAILABLE': 'Bild nicht verfügbar.',
   'error.PAYLOAD_TOO_LARGE': 'Anfrage zu groß.',
@@ -5729,6 +5753,12 @@ const it: Dictionary = {
   'error.UNSAFE_ARCHIVE': 'l’archivio del capitolo è stato rifiutato',
   'error.UNSAFE_PATH': 'percorso della libreria non sicuro',
   'error.MANGA_NOT_INDEXED': 'Cerca prima in questa fonte.',
+  'error.TRADOC_BAD_ADDRESS':
+    'Questo indirizzo non risponde come l’API di TraDoc. Indica l’indirizzo di TraDoc (per esempio http://nas:2507).',
+  'error.TRADOC_REJECTED':
+    'TraDoc ha rifiutato la traduzione. In TraDoc → Impostazioni → Integrazioni, assegna un modello predefinito a questa connessione.',
+  'error.JELLYFIN_USER_NOT_FOUND':
+    'Questo utente Jellyfin non esiste. Controlla il nome in Impostazioni → Jellyfin (lascialo vuoto per usare un amministratore).',
   'error.METADATA_UNAVAILABLE': 'Il catalogo non è disponibile ora.',
   'error.IMAGE_UNAVAILABLE': 'Immagine non disponibile.',
   'error.PAYLOAD_TOO_LARGE': 'Richiesta troppo grande.',

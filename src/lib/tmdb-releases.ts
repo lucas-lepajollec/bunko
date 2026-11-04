@@ -3,6 +3,7 @@ import { KINDS, type Kind } from '@/domain/kinds';
 import { listTracked } from './db';
 import { fromTmdb, isAnime, tmdbConfigured, tmdbDetail, tmdbJson } from './tmdb';
 import { mediaVisibility } from './adult';
+import { eachConcurrent } from './concurrency';
 
 const HOUR = 3600_000;
 interface ShowFacts {
@@ -44,14 +45,34 @@ function episodeCard(
  * seasons), plus the last/next episode of the shows on the air this week. TMDB has no release
  * feed; this is built from cached sheets (12 h) so a page view costs few requests.
  */
+/**
+ * Look several shows up at once (four at a time), results in input order. Nothing new is
+ * started after the budget: a slow TMDB yields partial results instead of piling up work.
+ */
+async function lookUp<T, R>(items: T[], run: (item: T) => Promise<R | null>, budgetMs = 8000) {
+  const results: (R | null)[] = new Array(items.length).fill(null);
+  const deadline = AbortSignal.timeout(budgetMs);
+  await eachConcurrent(
+    items.map((item, i) => [item, i] as const),
+    4,
+    async ([item, i]) => {
+      results[i] = await run(item).catch(() => null);
+    },
+    deadline,
+  );
+  return results;
+}
+
 async function seriesEpisodes(from: string, to: string): Promise<ChapterRelease[]> {
   const followed = listTracked().filter((t) => t.media.id.startsWith('tmdbtv:'));
   const cards: ChapterRelease[] = [];
   const seen = new Set<string>();
-  for (const t of followed.slice(0, 60)) {
-    const detail = await tmdbDetail('tv', Number(t.media.id.slice('tmdbtv:'.length))).catch(
-      () => null,
-    );
+  // Followed shows first: their episodes matter more than the general "on the air" list.
+  const details = await lookUp(followed.slice(0, 60), (t) =>
+    tmdbDetail('tv', Number(t.media.id.slice('tmdbtv:'.length))),
+  );
+  for (const [i, t] of followed.slice(0, 60).entries()) {
+    const detail = details[i];
     if (!detail) continue;
     for (const s of detail.video?.seasons ?? [])
       for (const e of s.list)
@@ -69,13 +90,11 @@ async function seriesEpisodes(from: string, to: string): Promise<ChapterRelease[
     { page: '1' },
     HOUR,
   ).catch(() => ({ results: [] }));
-  for (const show of onAir.results.slice(0, 20)) {
-    if (isAnime(show as never)) continue;
-    const facts = await tmdbJson<ShowFacts & Record<string, unknown>>(
-      `/tv/${show.id}`,
-      {},
-      12 * HOUR,
-    ).catch(() => null);
+  const shows = onAir.results.slice(0, 20).filter((show) => !isAnime(show as never));
+  const allFacts = await lookUp(shows, (show) =>
+    tmdbJson<ShowFacts & Record<string, unknown>>(`/tv/${show.id}`, {}, 12 * HOUR),
+  );
+  for (const facts of allFacts) {
     if (!facts) continue;
     const media = fromTmdb(facts as never, 'tv');
     const tracked = followed.find((t) => t.media.id === media.id);
