@@ -1,11 +1,13 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { VideoAddon, VideoStream, VideoSubtitle } from '@/types/shared';
+import type { VideoAddon, VideoStream, VideoStreams, VideoSubtitle } from '@/types/shared';
 import { ensureAnimeIds, idsOfAnilist } from './anime-ids';
 import { AppError } from './errors';
 import { cached } from './metadata-cache';
 import { addonId, getSettings, updateSettings } from './settings';
 import { relayPath, safeHeaders, subtitlePath } from './video-relay';
+import { plausiblyPublic, safeJson } from './safe-fetch';
+import { tenantId } from './tenant-context';
 
 /**
  * Video extensions speak the Stremio addon protocol: a manifest says which ids an addon knows
@@ -57,12 +59,11 @@ export function normalizeAddonUrl(raw: string) {
 
 async function manifest(url: string, signal?: AbortSignal): Promise<Manifest> {
   return cached(`addon-manifest:${addonId(url)}`, 6 * 3600_000, async () => {
-    const response = await fetch(`${base(url)}/manifest.json`, {
-      signal: AbortSignal.any([AbortSignal.timeout(8000), ...(signal ? [signal] : [])]),
-      headers: { Accept: 'application/json' },
+    const data = await safeJson(`${base(url)}/manifest.json`, {
+      timeoutMs: 8000,
+      signal: AbortSignal.any([AbortSignal.timeout(10_000), ...(signal ? [signal] : [])]),
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return manifestSchema.parse(await response.json());
+    return manifestSchema.parse(data);
   });
 }
 const resourcesOf = (m: Manifest) =>
@@ -85,8 +86,9 @@ export async function videoAddons(signal?: AbortSignal): Promise<VideoAddon[]> {
           resources: resourcesOf(m),
           error: null,
         };
-      } catch {
-        return { id, host, name: null, description: null, resources: [], error: 'unreachable' };
+      } catch (e) {
+        const error = (e as AppError).code === 'DESTINATION_REFUSED' ? 'private' : 'unreachable';
+        return { id, host, name: null, description: null, resources: [], error } as VideoAddon;
       }
     }),
   );
@@ -100,8 +102,15 @@ export async function addVideoAddon(raw: string, signal?: AbortSignal) {
   if (list.length >= 20) throw new AppError('TOO_MANY_ADDONS', 'At most 20 video extensions', 400);
   let m: Manifest;
   try {
+    if (!plausiblyPublic(url)) throw new AppError('DESTINATION_REFUSED', 'Private address', 403);
     m = await manifest(url, signal);
-  } catch {
+  } catch (e) {
+    if ((e as AppError).code === 'DESTINATION_REFUSED')
+      throw new AppError(
+        'ADDON_PRIVATE',
+        'This address is on the local network: allow it with BUNKO_VIDEO_ALLOWED_HOSTS',
+        422,
+      );
     throw new AppError('ADDON_UNREACHABLE', 'This manifest cannot be read', 422);
   }
   if (!resourcesOf(m).length)
@@ -203,11 +212,21 @@ const VERSIONS: Record<string, { sub: RegExp; multi: RegExp; dub: RegExp }> = {
     dub: /italian|italiano|\bita\b|🇮🇹/i,
   },
 };
+/** Original audio without a known subtitle language (raw, Japanese…). */
+const ORIGINAL = /\b(?:vo|raw|jap(?:anese)?|jpn)\b|🇯🇵/i;
+/**
+ * Version of a stream for one interface language, read from its labels: an estimate (release
+ * names are not verified tracks). `other` = another language's sub or dub, `vo` = original
+ * audio without known subtitles, null = nothing said.
+ */
 export function versionOf(text: string, language: string): VideoStream['version'] {
   const v = VERSIONS[language] ?? VERSIONS.en;
   if (v.sub.test(text)) return 'sub';
   if (v.multi.test(text)) return 'multi';
   if (v.dub.test(text)) return 'dub';
+  for (const [code, other] of Object.entries(VERSIONS))
+    if (code !== language && (other.sub.test(text) || other.dub.test(text))) return 'other';
+  if (ORIGINAL.test(text)) return 'vo';
   return null;
 }
 export function qualityOf(text: string) {
@@ -267,7 +286,7 @@ export function languageOf(lang: string | undefined) {
   return LANGUAGE_CODES[value] ?? (/^[a-z]{2}$/.test(value) ? value : null);
 }
 function subtitleOf(s: z.infer<typeof subtitleSchema>, source: string): VideoSubtitle | null {
-  if (!/^https?:\/\//i.test(s.url)) return null;
+  if (!plausiblyPublic(s.url)) return null;
   return {
     id: createHash('sha1').update(s.url).digest('hex').slice(0, 12),
     lang: languageOf(s.lang),
@@ -276,14 +295,39 @@ function subtitleOf(s: z.infer<typeof subtitleSchema>, source: string): VideoSub
   };
 }
 
-async function addonJson(url: string, path: string, signal?: AbortSignal) {
-  const response = await fetch(`${base(url)}${path}`, {
-    signal: AbortSignal.any([AbortSignal.timeout(15_000), ...(signal ? [signal] : [])]),
-    headers: { Accept: 'application/json' },
+/** One extension endpoint; a slow extension does not hold the episode back more than 10 s. */
+function addonJson(url: string, path: string, signal?: AbortSignal) {
+  return safeJson(`${base(url)}${path}`, {
+    timeoutMs: 8000,
+    signal: AbortSignal.any([AbortSignal.timeout(10_000), ...(signal ? [signal] : [])]),
   });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json();
 }
+
+/**
+ * An extension that failed is left out for a while (30 s, doubling up to 10 min) instead of
+ * making every episode wait for its timeout again. Per account: each has its own addresses.
+ */
+const resting = new Map<string, { failures: number; until: number }>();
+const restKey = (url: string) => `${tenantId()}:${addonId(url)}`;
+function isResting(url: string, now = Date.now()) {
+  const state = resting.get(restKey(url));
+  return Boolean(state && state.until > now);
+}
+function noteResult(url: string, ok: boolean, now = Date.now()) {
+  const key = restKey(url);
+  if (ok) {
+    resting.delete(key);
+    return;
+  }
+  const failures = (resting.get(key)?.failures ?? 0) + 1;
+  resting.set(key, { failures, until: now + Math.min(600_000, 30_000 * 2 ** (failures - 1)) });
+}
+export const resetAddonRest = () => resting.clear();
+
+/** Recent episode lookups (10 min): reopening or coming back to an episode is instant. */
+const recent = new Map<string, { at: number; value: Promise<VideoStreams> }>();
+const RECENT_MS = 10 * 60_000;
+export const resetStreamCache = () => recent.clear();
 const idPath = (id: string) => encodeURIComponent(id).replaceAll('%3A', ':');
 
 /**
@@ -298,7 +342,8 @@ export async function episodeStreams(
   signal?: AbortSignal,
 ) {
   await ensureAnimeIds();
-  return streamsFor(episodeIds(anilistId, episode), language, signal);
+  void signal;
+  return remembered(episodeIds(anilistId, episode), language);
 }
 /** Series and films (TMDB): addons know them by IMDb id, season and episode. */
 export async function imdbStreams(
@@ -310,25 +355,63 @@ export async function imdbStreams(
   const ids = target
     ? [{ id: `${imdb}:${target.season}:${target.episode}`, prefix: 'tt', types: ['series'] }]
     : [{ id: imdb, prefix: 'tt', types: ['movie'] }];
-  return streamsFor(ids, language, signal);
+  void signal;
+  return remembered(ids, language);
 }
+
+function remembered(
+  ids: { id: string; prefix: string; types: string[] }[],
+  language: string,
+): Promise<VideoStreams> {
+  const settings = getSettings();
+  const key = [
+    tenantId(),
+    ids.map((i) => i.id).join(','),
+    language,
+    settings.videoAudio,
+    settings.videoAnyLanguage,
+    settings.videoAddons.map(addonId).join(','),
+  ].join('|');
+  const now = Date.now();
+  for (const [k, v] of recent) if (now - v.at > RECENT_MS) recent.delete(k);
+  const hit = recent.get(key);
+  if (hit) return hit.value;
+  // Not tied to the first caller's request: a second caller may still want the answer.
+  const value = streamsFor(ids, language).catch((error) => {
+    recent.delete(key);
+    throw error;
+  });
+  recent.set(key, { at: now, value });
+  if (recent.size > 200) recent.delete(recent.keys().next().value!);
+  return value;
+}
+
+const subtitleRank = (lang: string | null, language: string) =>
+  lang === language ? 0 : lang === 'en' ? 1 : lang ? 2 : 3;
 
 const QUALITY_RANK: Record<number, number> = { 1080: 0, 720: 1, 2160: 2, 576: 3, 480: 3, 360: 4 };
 
 async function streamsFor(
   ids: { id: string; prefix: string; types: string[] }[],
   language: string,
-  signal?: AbortSignal,
-): Promise<{ streams: VideoStream[]; subtitles: VideoSubtitle[]; errors: string[] }> {
+): Promise<VideoStreams> {
+  const started = performance.now();
   const errors: string[] = [];
+  let skipped = 0;
   const settings = getSettings();
   const subtitles: VideoSubtitle[] = [];
   const lists = await Promise.all(
     settings.videoAddons.map(async (url) => {
+      if (isResting(url)) {
+        skipped++;
+        errors.push(new URL(base(url)).host);
+        return [];
+      }
       let m: Manifest;
       try {
-        m = await manifest(url, signal);
+        m = await manifest(url);
       } catch {
+        noteResult(url, false);
         errors.push(new URL(base(url)).host);
         return [];
       }
@@ -336,13 +419,20 @@ async function streamsFor(
         const id = ids.find((i) => supports(m, i, wanted));
         if (!id) return null;
         const type = id.types.find((t) => m.types.includes(t)) ?? id.types[0];
-        return addonJson(url, `/${wanted}/${type}/${idPath(id.id)}.json`, signal);
+        return addonJson(url, `/${wanted}/${type}/${idPath(id.id)}.json`);
       };
       const [streamData, subtitleData] = await Promise.all([
-        ask('stream').catch(() => {
-          errors.push(m.name);
-          return null;
-        }),
+        ask('stream').then(
+          (data) => {
+            noteResult(url, true);
+            return data;
+          },
+          () => {
+            noteResult(url, false);
+            errors.push(m.name);
+            return null;
+          },
+        ),
         ask('subtitles').catch(() => null),
       ]);
       const found = z
@@ -369,7 +459,9 @@ async function streamsFor(
         const text = [s.name, s.title, s.description, s.behaviorHints?.filename]
           .filter(Boolean)
           .join(' ');
-        const web = s.url && /^https?:\/\//i.test(s.url) ? s.url : null;
+        // Links into a private network are never offered (the relay would refuse them anyway).
+        const web = s.url && plausiblyPublic(s.url) ? s.url : null;
+        if (s.url && !web) return [];
         const kind: VideoStream['kind'] = web
           ? /\.m3u8(\?|$)/i.test(web)
             ? 'hls'
@@ -392,9 +484,9 @@ async function streamsFor(
             // A stream that needs headers only plays through Bunko.
             url: web && !headers ? web : null,
             relayUrl: web ? relayPath({ url: web, headers }) : null,
-            externalUrl:
-              s.externalUrl && /^https?:\/\//i.test(s.externalUrl) ? s.externalUrl : null,
-            preferred: version !== null,
+            externalUrl: s.externalUrl && plausiblyPublic(s.externalUrl) ? s.externalUrl : null,
+            preferred: version === 'sub' || version === 'dub' || version === 'multi',
+            autoplay: false,
             version,
             quality: qualityOf(text),
             webReady: !s.behaviorHints?.notWebReady && !HEAVY_CODEC.test(text),
@@ -408,8 +500,21 @@ async function streamsFor(
   );
   const order =
     settings.videoAudio === 'dubbed' ? { dub: 0, multi: 1, sub: 2 } : { sub: 0, multi: 1, dub: 2 };
+  // VO streams become VOSTFR with subtitles in the interface language from a subtitle extension.
+  const withSubtitles = (s: VideoStream) =>
+    subtitles.some((x) => x.lang === language) || s.subtitles.some((x) => x.lang === language);
+  const group = (s: VideoStream) =>
+    s.version === 'sub' || s.version === 'dub' || s.version === 'multi'
+      ? order[s.version]
+      : withSubtitles(s)
+        ? 3
+        : s.version === 'vo'
+          ? 4
+          : s.version === null
+            ? 5
+            : 6;
   const rank = (s: VideoStream) => [
-    s.version ? order[s.version] : 3,
+    group(s),
     s.kind === 'direct' || s.kind === 'hls' ? 0 : 1,
     s.webReady ? 0 : 1,
     s.quality ? (QUALITY_RANK[s.quality] ?? 5) : 5,
@@ -428,11 +533,21 @@ async function streamsFor(
       const i = a.r.findIndex((v, k) => v !== b.r[k]);
       return i === -1 ? 0 : a.r[i] - b.r[i];
     })
-    .map(({ s }) => s);
+    // Started without asking: the chosen version, or a VO with subtitles in the interface
+    // language; other languages only when the user allows them.
+    .map(({ s, r }) => ({
+      ...s,
+      autoplay: r[1] === 0 && (r[0] <= 3 || settings.videoAnyLanguage),
+    }));
   const subSeen = new Set<string>();
   const sortedSubtitles = subtitles
     .filter((s) => (subSeen.has(s.id) ? false : (subSeen.add(s.id), true)))
-    .sort((a, b) => Number(b.lang === language) - Number(a.lang === language))
-    .slice(0, 40);
+    // The interface language, then English, then the rest: a short menu, not 40 languages.
+    .sort((a, b) => subtitleRank(a.lang, language) - subtitleRank(b.lang, language))
+    .slice(0, 20);
+  const playable = streams.filter((s) => s.kind === 'direct' || s.kind === 'hls').length;
+  console.log(
+    `[bunko] video sources: ${Math.round(performance.now() - started)} ms, ${settings.videoAddons.length} extensions (${errors.length} failed${skipped ? `, ${skipped} resting` : ''}), ${streams.length} streams (${playable} playable), ${sortedSubtitles.length} subtitles`,
+  );
   return { streams, subtitles: sortedSubtitles, errors };
 }

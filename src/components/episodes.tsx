@@ -123,6 +123,10 @@ export function EpisodeList({
   const player = playing && (
     <Player
       episode={episodeFor(playing)}
+      next={(() => {
+        const following = nextOf(playing);
+        return following ? episodeFor(following) : null;
+      })()}
       onClose={() => setPlaying(null)}
       onFinished={() => {
         const absolute = offsets[playing.season] + playing.episode;

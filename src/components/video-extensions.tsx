@@ -5,6 +5,7 @@ import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { toast } from './notify';
 import { Segmented, cx, errorText, smallButton } from './ui';
+import { Switch } from './work-settings';
 
 type Settings = PublicSettings;
 
@@ -61,6 +62,23 @@ export function VideoExtensions({
         </div>
         <span className="text-muted text-xs leading-relaxed">{t('video.audioHint')}</span>
       </div>
+      <div className="flex items-start justify-between gap-4">
+        <span className="flex flex-col gap-0.5">
+          <span className="text-sm font-medium">{t('video.anyLanguage')}</span>
+          <span className="text-muted text-xs leading-relaxed">{t('video.anyLanguageHint')}</span>
+        </span>
+        <Switch
+          label={t('video.anyLanguage')}
+          checked={settings.videoAnyLanguage ?? false}
+          onChange={async (videoAnyLanguage) => {
+            try {
+              onSaved(await send<Settings>('/api/settings', 'PATCH', { videoAnyLanguage }));
+            } catch (err) {
+              toast({ tone: 'bad', text: errorText(t, err) });
+            }
+          }}
+        />
+      </div>
       <ul className="flex flex-col gap-2">
         {list.map((a) => (
           <li
@@ -80,7 +98,11 @@ export function VideoExtensions({
                 ))}
               </span>
               <span className={cx('truncate text-xs', a.error ? 'text-warn' : 'text-muted')}>
-                {a.error ? t('video.addonUnreachable') : a.host}
+                {a.error === 'private'
+                  ? t('error.ADDON_PRIVATE')
+                  : a.error
+                    ? t('video.addonUnreachable')
+                    : a.host}
               </span>
             </span>
             <button
