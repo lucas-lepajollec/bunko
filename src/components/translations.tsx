@@ -42,7 +42,7 @@ export function Translations({ entry, owned }: { entry: TrackedMedia; owned: boo
       {!configured ? (
         <p className="text-mid text-sm">
           {t('translate.notConfigured')}{' '}
-          <Link href="/settings#connections" className="underline hover:text-white">
+          <Link href="/settings#translation" className="underline hover:text-white">
             {t('translate.settings')}
           </Link>
         </p>

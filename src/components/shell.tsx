@@ -15,7 +15,16 @@ import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
 import { ActivityCenter } from './activity';
 import { Toaster } from './notify';
 import { Select } from './select';
-import { UserRound } from 'lucide-react';
+import {
+  ChevronRight,
+  Download,
+  LogOut,
+  Menu,
+  Puzzle,
+  Settings2,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { clearPersistentCache, persistentCache } from '@/lib/client/cache';
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -368,29 +377,19 @@ function MobileMenu() {
   const activity = useActivity();
   const badge = activity.active + activity.failed;
   const links = [
-    { href: '/profile', label: t('profile.title') },
-    { href: '/downloads', label: t('nav.activity'), badge },
-    { href: '/sources', label: t('nav.sources') },
-    { href: '/settings', label: t('nav.settings') },
+    { href: '/profile', label: t('profile.title'), Icon: UserRound },
+    { href: '/downloads', label: t('nav.activity'), badge, Icon: Download },
+    { href: '/sources', label: t('nav.sources'), Icon: Puzzle },
+    { href: '/settings', label: t('nav.settings'), Icon: Settings2 },
   ];
+  const name = auth.data?.username ?? '';
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger
         aria-label={t('nav.menu')}
         className="relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08] md:hidden"
       >
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          aria-hidden
-        >
-          <path d="M4 7h16M4 12h16M4 17h16" />
-        </svg>
+        <Menu className="size-5" aria-hidden />
         {badge > 0 && (
           <span
             aria-hidden
@@ -399,44 +398,54 @@ function MobileMenu() {
         )}
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="bg-bg border-line fixed inset-y-0 right-0 z-50 flex w-[min(320px,85vw)] flex-col border-l p-5 pt-[max(env(safe-area-inset-top),20px)] outline-none">
-          <div className="flex items-center justify-between">
-            <Dialog.Title className="font-display text-2xl font-extrabold tracking-[-0.03em]">
-              {PRODUCT_NAME}
-            </Dialog.Title>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px]" />
+        {/* A sheet from the bottom, as on phones' own menus: reachable with the thumb. */}
+        <Dialog.Content className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] flex-col gap-4 overflow-y-auto rounded-t-[28px] bg-[#161412] px-4 pt-2.5 pb-[max(env(safe-area-inset-bottom),16px)] outline-none">
+          <span aria-hidden className="mx-auto h-1 w-9 rounded-full bg-white/20" />
+          <div className="flex items-center gap-3 px-1">
+            <span
+              aria-hidden
+              className="bg-fg text-bg flex size-11 shrink-0 items-center justify-center rounded-full text-lg font-bold uppercase"
+            >
+              {name.slice(0, 1) || '·'}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <Dialog.Title className="truncate text-[17px] font-semibold">
+                {name || PRODUCT_NAME}
+              </Dialog.Title>
+              <Dialog.Description className="text-muted text-[13px]">
+                {auth.data?.role ? t(`users.role.${auth.data.role}`) : PRODUCT_NAME}
+              </Dialog.Description>
+            </span>
             <Dialog.Close
               aria-label={t('common.close')}
-              className="text-mid flex size-11 items-center justify-center rounded-full hover:bg-white/[0.08]"
+              className="text-mid flex size-9 items-center justify-center rounded-full bg-white/[0.07] hover:text-white"
             >
-              ✕
+              <X className="size-4" aria-hidden />
             </Dialog.Close>
           </div>
-          <Dialog.Description className="text-muted mt-1 text-sm">
-            {auth.data?.username ?? ''}
-          </Dialog.Description>
-          <nav className="mt-6 flex flex-col" aria-label={t('nav.menu')}>
-            {links.map((l) => (
+          <nav
+            className="flex flex-col overflow-hidden rounded-2xl bg-white/[0.05]"
+            aria-label={t('nav.menu')}
+          >
+            {links.map(({ href, label, Icon, ...l }) => (
               <Link
-                key={l.href}
-                href={l.href}
-                aria-current={isActive(pathname, l.href) ? 'page' : undefined}
+                key={href}
+                href={href}
+                aria-current={isActive(pathname, href) ? 'page' : undefined}
                 className={cx(
-                  'border-line flex min-h-14 items-center justify-between border-b text-[17px]',
-                  isActive(pathname, l.href) ? 'font-semibold text-white' : 'text-mid',
+                  'border-line flex min-h-[52px] items-center gap-3.5 border-b px-4 text-[16px] last:border-b-0 active:bg-white/[0.06]',
+                  isActive(pathname, href) ? 'font-semibold text-white' : 'text-white/85',
                 )}
               >
-                <span className="flex items-center gap-2.5">
-                  {l.label}
-                  {'badge' in l && Boolean(l.badge) && (
-                    <span className="bg-fg text-bg flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold">
-                      {l.badge}
-                    </span>
-                  )}
-                </span>
-                <span aria-hidden className="text-muted">
-                  ›
-                </span>
+                <Icon className="text-mid size-[19px] shrink-0" aria-hidden />
+                <span className="flex-1">{label}</span>
+                {'badge' in l && Boolean(l.badge) && (
+                  <span className="bg-fg text-bg flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold">
+                    {l.badge}
+                  </span>
+                )}
+                <ChevronRight className="text-muted size-4 shrink-0" aria-hidden />
               </Link>
             ))}
           </nav>
@@ -448,8 +457,9 @@ function MobileMenu() {
               setOpen(false);
               await mutate('/api/auth');
             }}
-            className="text-bad mt-auto flex min-h-14 items-center text-[17px]"
+            className="text-bad flex min-h-[52px] items-center gap-3.5 rounded-2xl bg-white/[0.05] px-4 text-[16px] active:bg-white/[0.08]"
           >
+            <LogOut className="size-[19px] shrink-0" aria-hidden />
             {t('settings.signOut')}
           </button>
         </Dialog.Content>

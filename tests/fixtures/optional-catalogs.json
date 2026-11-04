@@ -23,9 +23,7 @@
         "name": "Science Fiction"
       }
     ],
-    "alt_names": [
-      "Asgardians"
-    ]
+    "alt_names": ["Asgardians"]
   },
   "metronIssue": {
     "id": 50,
@@ -71,12 +69,8 @@
     },
     "release_date": "2026-10-15",
     "release_year": 2026,
-    "author_names": [
-      "Example Author"
-    ],
-    "genres": [
-      "Fantasy"
-    ],
+    "author_names": ["Example Author"],
+    "genres": ["Fantasy"],
     "rating": 4.2,
     "users_count": 1000,
     "book_series": [
@@ -106,9 +100,7 @@
           "title": "Novel Vol. 2",
           "publishedDate": "2026-10-15",
           "language": "en",
-          "categories": [
-            "Fiction"
-          ]
+          "categories": ["Fiction"]
         }
       }
     ]

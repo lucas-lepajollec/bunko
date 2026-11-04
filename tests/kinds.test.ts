@@ -58,5 +58,7 @@ it('accepts every kind wherever a kind is chosen, and gives each a home shelf', 
     expect(discoverQuery.safeParse({ kind }).success, kind).toBe(true);
     expect(settingsPatch.safeParse({ universe: kind }).success, kind).toBe(true);
   }
+  // Every kind enabled at once (a fixed maximum once rejected the full list).
+  expect(settingsPatch.safeParse({ universes: [...KIND_IDS] }).success).toBe(true);
   expect(Object.keys(normalizeHome({}).latest).sort()).toEqual([...KIND_IDS].sort());
 });

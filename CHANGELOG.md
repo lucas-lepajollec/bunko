@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Settings: turning a media kind off no longer fails with "invalid values" (the list of kinds was
+  capped at 9 since kinds were added; the cap now follows the kind registry, and a test enables
+  every kind at once).
+- Settings grouped by what they are about: You (account, media types), Administration, Services
+  (Suwayomi, Kavita, Jellyfin, Translation — each with its connection and its options together)
+  and Content (catalogs, streaming). Earlier links keep working. The static "Modules" cards are
+  gone; each service shows its state in the list.
+- Phone menu: a bottom sheet with the account, grouped rows with icons and sign-out apart.
+
 - Live streams (activity, imports) no longer crash the process when the browser leaves between
   two writes (`Invalid state: Controller is already closed`).
 - AniList priority: background jobs keep to one request every 2.5 s and stop when 30 requests

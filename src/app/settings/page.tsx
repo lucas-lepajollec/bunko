@@ -30,33 +30,32 @@ import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LanguageSelect, Page } from '@/components/shell';
 import { useRelativeTime } from '@/components/time';
-import {
-  Dot,
-  ErrorNote,
-  Skeleton,
-  cx,
-  errorText,
-  field,
-  roman,
-  smallButton,
-} from '@/components/ui';
+import { Dot, ErrorNote, Skeleton, cx, errorText, field, smallButton } from '@/components/ui';
 
-const SECTIONS = [
-  'account',
-  'users',
-  'connections',
-  'kavita',
-  'downloads',
-  'sources',
-  'video',
-  'catalogs',
-  'modules',
+/**
+ * Settings by what they are about: the user's own account and media, accounts (admins), each
+ * external service with its connection and its options together, then catalogs and streaming.
+ */
+const GROUPS = [
+  { id: 'personal', sections: ['account', 'media'] },
+  { id: 'admin', sections: ['users'] },
+  { id: 'services', sections: ['suwayomi', 'kavita', 'jellyfin', 'translation'] },
+  { id: 'content', sections: ['catalogs', 'video'] },
 ] as const;
+type SectionId = (typeof GROUPS)[number]['sections'][number];
+const SECTIONS: readonly SectionId[] = GROUPS.flatMap((g) => g.sections);
+/** Earlier links (#connections, #downloads…) open the section that now holds them. */
+const ALIASES: Record<string, SectionId> = {
+  connections: 'suwayomi',
+  downloads: 'suwayomi',
+  sources: 'suwayomi',
+  display: 'account',
+  modules: 'media',
+};
 /** Every user configures their own instance; only admins also manage accounts. */
 const MEMBER_SECTIONS: readonly SectionId[] = SECTIONS.filter((s) => s !== 'users');
 type Settings = PublicSettings & { updateIntervalMinutes?: number };
 
-type SectionId = (typeof SECTIONS)[number];
 const subscribeHash = (l: () => void) => {
   window.addEventListener('hashchange', l);
   return () => window.removeEventListener('hashchange', l);
@@ -65,7 +64,7 @@ const subscribeHash = (l: () => void) => {
 export default function SettingsPage() {
   const { t } = useI18n();
   // Phones show the list of sections first, then one section with a back button; a link such as
-  // /settings#display opens that section directly. Desktop keeps everything on one page.
+  // /settings#kavita opens that section directly. Desktop shows the chosen section beside the list.
   const hash = useSyncExternalStore(
     subscribeHash,
     () => window.location.hash.slice(1),
@@ -74,16 +73,20 @@ export default function SettingsPage() {
   const [picked, setPicked] = useState<SectionId | null | undefined>(undefined);
   const auth = useApi<AuthState>('/api/auth');
   const visible: readonly SectionId[] = auth.data?.role === 'member' ? MEMBER_SECTIONS : SECTIONS;
+  const fromHash = ALIASES[hash] ?? hash;
   const open: SectionId | null =
     picked !== undefined
       ? picked
-      : (visible as readonly string[]).includes(hash)
-        ? (hash as SectionId)
+      : (visible as readonly string[]).includes(fromHash)
+        ? (fromHash as SectionId)
         : null;
   const settings = useApi<Settings>('/api/settings', { revalidateOnFocus: true });
   const status = useApi<ServicesStatus>('/api/status');
+  const reload = () => Promise.all([settings.mutate(), status.mutate()]);
+  const keep = (s: Settings) => settings.mutate(s, { revalidate: false });
+  const current = open ?? visible[0];
   return (
-    <Page className="pb-20 md:grid md:grid-cols-[260px_minmax(0,1fr)] md:gap-20">
+    <Page className="pb-20 md:grid md:grid-cols-[240px_minmax(0,1fr)] md:gap-16">
       <nav
         aria-label={t('settings.sections')}
         className={cx(
@@ -91,36 +94,51 @@ export default function SettingsPage() {
           open ? 'hidden' : 'flex',
         )}
       >
-        <h1 className="font-display mb-4 text-[40px] leading-none font-extrabold tracking-[-0.04em] md:mb-6 md:text-[52px]">
+        <h1 className="font-display mb-6 text-[40px] leading-none font-extrabold tracking-[-0.04em] md:text-[44px]">
           {t('nav.settings')}
         </h1>
-        <div className="flex flex-col">
-          {visible.map((s, i) => (
-            <a
-              key={s}
-              href={`#${s}`}
-              aria-current={(open ?? visible[0]) === s ? 'page' : undefined}
-              onClick={(e) => {
-                // One section at a time on every screen; the hash keeps it linkable.
-                e.preventDefault();
-                setPicked(s);
-                history.replaceState(null, '', `#${s}`);
-                window.scrollTo(0, 0);
-              }}
-              className={cx(
-                'border-line flex min-h-14 items-center gap-3.5 border-b hover:text-white md:min-h-0 md:items-baseline md:py-2.5',
-                (open ?? visible[0]) === s ? 'md:font-semibold md:text-white' : 'text-mid',
-              )}
-            >
-              <span className="text-muted w-[30px] font-serif text-lg">{roman(i + 1)}</span>
-              <span className="flex-1 text-[17px] md:text-[15px]">
-                {t(`settings.section.${s}`)}
-              </span>
-              <span aria-hidden className="text-muted md:hidden">
-                ›
-              </span>
-            </a>
-          ))}
+        <div className="flex flex-col gap-6">
+          {GROUPS.map((g) => {
+            const items = g.sections.filter((s) => visible.includes(s));
+            if (!items.length) return null;
+            return (
+              <div key={g.id} className="flex flex-col">
+                <span className="text-muted mb-1.5 px-3 text-xs font-medium tracking-[0.06em] uppercase">
+                  {t(`settings.group.${g.id}`)}
+                </span>
+                <div className="flex flex-col overflow-hidden rounded-2xl bg-white/[0.04] md:bg-transparent">
+                  {items.map((s) => (
+                    <a
+                      key={s}
+                      href={`#${s}`}
+                      aria-current={current === s ? 'page' : undefined}
+                      onClick={(e) => {
+                        // One section at a time on every screen; the hash keeps it linkable.
+                        e.preventDefault();
+                        setPicked(s);
+                        history.replaceState(null, '', `#${s}`);
+                        window.scrollTo(0, 0);
+                      }}
+                      className={cx(
+                        'border-line flex min-h-[52px] items-center gap-3 border-b px-3 last:border-b-0 hover:text-white md:min-h-10 md:rounded-xl md:border-b-0',
+                        current === s
+                          ? 'md:bg-white/[0.07] md:font-semibold md:text-white'
+                          : 'text-mid',
+                      )}
+                    >
+                      <span className="flex-1 text-[16px] md:text-[15px]">
+                        {t(`settings.section.${s}`)}
+                      </span>
+                      <ServiceDot section={s} status={status.data} />
+                      <span aria-hidden className="text-muted md:hidden">
+                        ›
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </nav>
       <div
@@ -142,64 +160,108 @@ export default function SettingsPage() {
         <Section open={open} visible={visible} id="account">
           <Account />
         </Section>
+        <Section open={open} visible={visible} id="media">
+          <UniverseSettings />
+        </Section>
         {visible.includes('users') && (
           <Section open={open} visible={visible} id="users">
             <Users />
           </Section>
         )}
-        {visible.includes('connections') &&
-          (settings.error ? (
-            <ErrorNote error={settings.error} />
-          ) : !settings.data ? (
-            <Skeleton className="h-96 rounded-2xl" />
-          ) : (
-            <>
-              <Section open={open} visible={visible} id="connections">
-                <Connections
-                  settings={settings.data}
-                  status={status.data}
-                  onSaved={() => Promise.all([settings.mutate(), status.mutate()])}
-                />
-              </Section>
-              <Section open={open} visible={visible} id="kavita">
-                <KavitaTargets
-                  admin={status.data?.kavita.admin ?? null}
-                  settings={settings.data}
-                  onSaved={(s) => settings.mutate(s, { revalidate: false })}
-                />
-              </Section>
-              <Section open={open} visible={visible} id="downloads">
-                <Downloads
-                  settings={settings.data}
-                  onSaved={(s) => settings.mutate(s, { revalidate: false })}
-                />
-              </Section>
-              <Section open={open} visible={visible} id="sources">
-                <p className="text-mid text-sm leading-relaxed">{t('settings.sourcesBody')}</p>
-                <Link href="/sources" className={cx(smallButton, 'self-start')}>
-                  {t('settings.manageSources')} →
-                </Link>
-              </Section>
-              <Section open={open} visible={visible} id="video">
-                <VideoExtensions
-                  settings={settings.data}
-                  onSaved={(s) => settings.mutate(s, { revalidate: false })}
-                />
-              </Section>
-              <Section open={open} visible={visible} id="catalogs">
-                <Catalogs
-                  settings={settings.data}
-                  onSaved={(s) => settings.mutate(s, { revalidate: false })}
-                />
-              </Section>
-              <Section open={open} visible={visible} id="modules">
-                <Modules />
-              </Section>
-            </>
-          ))}
+        {settings.error ? (
+          <ErrorNote error={settings.error} />
+        ) : !settings.data ? (
+          current !== 'account' &&
+          current !== 'media' &&
+          current !== 'users' && <Skeleton className="h-96 rounded-2xl" />
+        ) : (
+          <>
+            <Section open={open} visible={visible} id="suwayomi">
+              <Connection
+                service="suwayomi"
+                settings={settings.data}
+                status={status.data}
+                onSaved={reload}
+              />
+              {settings.data.suwayomiUrl && (
+                <>
+                  <SubHeading>{t('settings.section.downloads')}</SubHeading>
+                  <Downloads settings={settings.data} onSaved={keep} />
+                  <SubHeading>{t('settings.section.sources')}</SubHeading>
+                  <p className="text-mid text-sm leading-relaxed">{t('settings.sourcesBody')}</p>
+                  <Link href="/sources" className={cx(smallButton, 'self-start')}>
+                    {t('settings.manageSources')} →
+                  </Link>
+                </>
+              )}
+            </Section>
+            <Section open={open} visible={visible} id="kavita">
+              <Connection
+                service="kavita"
+                settings={settings.data}
+                status={status.data}
+                onSaved={reload}
+              />
+              {settings.data.kavitaUrl && (
+                <>
+                  <SubHeading>{t('settings.section.kavitaLibraries')}</SubHeading>
+                  <KavitaTargets
+                    admin={status.data?.kavita.admin ?? null}
+                    settings={settings.data}
+                    onSaved={keep}
+                  />
+                </>
+              )}
+            </Section>
+            <Section open={open} visible={visible} id="jellyfin">
+              <Connection
+                service="jellyfin"
+                settings={settings.data}
+                status={status.data}
+                onSaved={reload}
+              />
+              {status.data?.jellyfin?.state && status.data.jellyfin.state !== 'unconfigured' && (
+                <JellyfinOptions settings={settings.data} onSaved={reload} />
+              )}
+            </Section>
+            <Section open={open} visible={visible} id="translation">
+              <Connection
+                service="tradoc"
+                settings={settings.data}
+                status={status.data}
+                onSaved={reload}
+              />
+            </Section>
+            <Section open={open} visible={visible} id="catalogs">
+              <Catalogs settings={settings.data} onSaved={keep} />
+            </Section>
+            <Section open={open} visible={visible} id="video">
+              <VideoExtensions settings={settings.data} onSaved={keep} />
+            </Section>
+          </>
+        )}
       </div>
     </Page>
   );
+}
+
+/** A service's state beside its name in the list (green connected, red failing). */
+function ServiceDot({
+  section,
+  status,
+}: {
+  section: SectionId;
+  status: ServicesStatus | undefined;
+}) {
+  const key = section === 'translation' ? 'tradoc' : section;
+  if (!['suwayomi', 'kavita', 'jellyfin', 'tradoc'].includes(key) || !status) return null;
+  const state = (status as unknown as Record<string, { state?: string } | undefined>)[key]?.state;
+  if (!state || state === 'unconfigured') return null;
+  return <Dot tone={state === 'ok' ? 'ok' : state === 'error' ? 'bad' : 'idle'} />;
+}
+
+function SubHeading({ children }: { children: ReactNode }) {
+  return <h3 className="mt-4 text-[17px] font-semibold">{children}</h3>;
 }
 
 function Section({
@@ -213,7 +275,6 @@ function Section({
   id: SectionId;
   children: ReactNode;
 }) {
-  const index = visible.indexOf(id) + 1;
   const { t } = useI18n();
   return (
     <section
@@ -225,15 +286,12 @@ function Section({
         (open ?? visible[0]) === id ? 'md:flex' : 'md:hidden',
       )}
     >
-      <div className="flex items-baseline gap-4">
-        <span className="text-muted font-serif text-xl">{roman(index)}</span>
-        <h2
-          id={`${id}-title`}
-          className="font-display text-[26px] font-bold tracking-[-0.02em] md:text-[30px]"
-        >
-          {t(`settings.section.${id}`)}
-        </h2>
-      </div>
+      <h2
+        id={`${id}-title`}
+        className="font-display text-[26px] font-bold tracking-[-0.02em] md:text-[30px]"
+      >
+        {t(`settings.section.${id}`)}
+      </h2>
       {children}
     </section>
   );
@@ -264,11 +322,14 @@ function Row({ label, tip, children }: { label: string; tip?: string; children: 
   );
 }
 
-function Connections({
+/** One service's connection form (address, keys) with its live state. */
+function Connection({
+  service,
   settings,
   status,
   onSaved,
 }: {
+  service: 'suwayomi' | 'kavita' | 'tradoc' | 'jellyfin';
   settings: Settings;
   status: ServicesStatus | undefined;
   onSaved: () => Promise<unknown>;
@@ -346,24 +407,16 @@ function Connections({
       ],
     },
   ];
+  const s = services.find((x) => x.key === service)!;
   return (
-    <>
-      {services.map((s) => (
-        <div key={s.key} className="flex flex-col gap-3">
-          <ServiceCard
-            name={s.key}
-            state={s.state}
-            detail={s.detail}
-            fields={s.fields}
-            settings={settings}
-            onSaved={onSaved}
-          />
-          {s.key === 'jellyfin' && s.state && s.state !== 'unconfigured' && (
-            <JellyfinOptions settings={settings} onSaved={onSaved} />
-          )}
-        </div>
-      ))}
-    </>
+    <ServiceCard
+      name={s.key}
+      state={s.state}
+      detail={s.detail}
+      fields={s.fields}
+      settings={settings}
+      onSaved={onSaved}
+    />
   );
 }
 
@@ -589,7 +642,6 @@ function ServiceCard({
       className="flex flex-col gap-4 rounded-[18px] bg-white/[0.045] p-4 md:p-[22px]"
     >
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-lg font-semibold">{t(`settings.service.${name}`)}</span>
         <span className="text-mid flex items-center gap-2 text-[13px]">
           <Dot tone={tone} />
           {state ? t(`settings.state.${state}`) : '…'}
@@ -800,41 +852,6 @@ function VideoExtensions({
           {t('video.add')}
         </button>
       </form>
-    </div>
-  );
-}
-
-function Modules() {
-  const { t } = useI18n();
-  const modules = [
-    { key: 'scans', tone: 'ok' as const },
-    { key: 'novels', tone: 'warn' as const },
-    { key: 'video', tone: 'idle' as const },
-  ];
-  return (
-    <div className="grid gap-4 md:grid-cols-3">
-      {modules.map((m) => (
-        <div
-          key={m.key}
-          className={cx(
-            'flex flex-col gap-2.5 rounded-[18px] border p-5',
-            m.key === 'scans'
-              ? 'border-line-strong bg-white/[0.06]'
-              : 'border-line bg-white/[0.03]',
-          )}
-        >
-          <span className="font-display text-[22px] font-bold">
-            {t(`settings.module.${m.key}`)}
-          </span>
-          <span className="text-mid font-serif text-lg leading-snug italic">
-            {t(`settings.module.${m.key}Chain`)}
-          </span>
-          <span className="text-mid mt-2 flex items-center gap-2 text-[13px]">
-            <Dot tone={m.tone} />
-            {t(`settings.module.${m.key}State`)}
-          </span>
-        </div>
-      ))}
     </div>
   );
 }
@@ -1122,7 +1139,6 @@ function Account() {
       <Row label={t('settings.language')} tip={t('settings.languageTip')}>
         <LanguageSelect className="h-11 pr-3 pl-4" />
       </Row>
-      <UniverseSettings />
       <Row label={t('settings.adult')} tip={t('settings.adultTip')}>
         <input
           type="checkbox"
