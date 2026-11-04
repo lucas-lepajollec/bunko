@@ -32,5 +32,5 @@ export const GET = route(async (r) => {
         r.signal,
       ),
     );
-  return json({ streams: [], errors: [] });
+  return json({ streams: [], subtitles: [], errors: [] });
 });

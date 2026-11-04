@@ -1,7 +1,7 @@
 'use client';
 import type Hls from 'hls.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PlaybackInfo, VideoStream } from '@/types/shared';
+import type { PlaybackInfo, VideoStream, VideoStreams, VideoSubtitle } from '@/types/shared';
 import { send, useApi } from '@/lib/client/api';
 import {
   QUALITY_PRESETS,
@@ -21,7 +21,16 @@ const LANGUAGE_CODES: Record<string, string[]> = {
   it: ['ita', 'it'],
 };
 export type PlaySource =
-  { kind: 'jellyfin'; itemId: string } | { kind: 'stream'; stream: VideoStream };
+  | { kind: 'jellyfin'; itemId: string }
+  | { kind: 'stream'; stream: VideoStream; subtitles: VideoSubtitle[] };
+const browserPlayable = (s: VideoStream) => s.kind === 'direct' || s.kind === 'hls';
+/** Next stream to start by itself: ones the browser should decode before the doubtful ones. */
+const bestStream = (streams: VideoStream[], skip: string[] = []) => {
+  const open = streams.filter((s) => browserPlayable(s) && !skip.includes(s.id));
+  return open.find((s) => s.webReady) ?? open[0];
+};
+/** Automatic tries before the source list is shown (each stream may fail in the browser). */
+const AUTO_TRIES = 4;
 
 export interface PlayerEpisode {
   /** Work title, e.g. "Jujutsu Kaisen". */
@@ -69,7 +78,12 @@ export function Player({
     episode.jellyfinItemId ? { kind: 'jellyfin', itemId: episode.jellyfinItemId } : null,
   );
   const [picking, setPicking] = useState(!episode.jellyfinItemId);
-  const streams = useApi<{ streams: VideoStream[]; errors: string[] }>(
+  // Without a library copy the best stream starts by itself, and the next one if it fails.
+  const [autoPick, setAutoPick] = useState(!episode.jellyfinItemId);
+  const [auto, setAuto] = useState(false);
+  const [tried, setTried] = useState<string[]>([]);
+  const [showTorrents, setShowTorrents] = useState(false);
+  const streams = useApi<VideoStreams>(
     (picking || !episode.jellyfinItemId) && episode.seasonAnilistId
       ? `/api/video/streams?anilist=${episode.seasonAnilistId}&episode=${episode.episode}&lang=${language}`
       : (picking || !episode.jellyfinItemId) && episode.imdb
@@ -88,7 +102,33 @@ export function Player({
     setCurrent(episodeKey);
     setSource(episode.jellyfinItemId ? { kind: 'jellyfin', itemId: episode.jellyfinItemId } : null);
     setPicking(!episode.jellyfinItemId);
+    setAutoPick(!episode.jellyfinItemId);
+    setAuto(false);
+    setTried([]);
   }
+  const play = (stream: VideoStream, automatic: boolean) => {
+    setSource({ kind: 'stream', stream, subtitles: streams.data?.subtitles ?? [] });
+    setPicking(false);
+    setAuto(automatic);
+  };
+  if (autoPick && streams.data) {
+    setAutoPick(false);
+    const first = bestStream(streams.data.streams);
+    if (first) play(first, true);
+  }
+  /** The automatic choice failed in the browser: the next stream, or the list. */
+  const nextStream = () => {
+    if (!auto || source?.kind !== 'stream') return false;
+    const done = [...tried, source.stream.id];
+    setTried(done);
+    const next = bestStream(streams.data?.streams ?? [], done);
+    if (!next || done.length >= AUTO_TRIES) return false;
+    play(next, true);
+    return true;
+  };
+  const list = streams.data?.streams ?? [];
+  const torrents = list.filter((s) => s.kind === 'torrent');
+  const shown = showTorrents ? list : list.filter((s) => s.kind !== 'torrent');
   useEffect(() => {
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -105,8 +145,9 @@ export function Player({
     >
       {source && (
         <Screen
-          key={source.kind === 'jellyfin' ? source.itemId : (source.stream.url ?? '')}
+          key={source.kind === 'jellyfin' ? source.itemId : source.stream.id}
           source={source}
+          onUnplayable={nextStream}
           episode={episode}
           onClose={onClose}
           onFinished={onFinished}
@@ -148,32 +189,49 @@ export function Player({
                   <Spinner /> {t('player.searching')}
                 </li>
               )}
-              {streams.data?.streams.map((s, i) => {
-                const playable = s.kind === 'direct' || s.kind === 'hls';
+              {shown.map((s) => {
+                const playable = browserPlayable(s);
                 return (
                   <SourceRow
-                    key={`${s.addon}:${i}`}
+                    key={s.id}
                     title={s.name}
                     detail={s.title}
-                    badge={s.preferred ? t('player.preferred') : null}
+                    badges={[
+                      s.preferred && s.version ? t(`player.version.${s.version}`) : null,
+                      s.preferred && !s.version ? t('player.preferred') : null,
+                      s.quality ? (s.quality >= 2160 ? '4K' : `${s.quality}p`) : null,
+                      tried.includes(s.id) ? t('player.failedShort') : null,
+                    ]}
                     disabled={!playable && !s.externalUrl}
                     note={
                       playable
-                        ? null
+                        ? s.webReady
+                          ? null
+                          : t('player.mayNotPlay')
                         : s.kind === 'torrent'
                           ? t('player.torrent')
                           : t('player.external')
                     }
-                    active={source?.kind === 'stream' && source.stream === s}
+                    active={source?.kind === 'stream' && source.stream.id === s.id}
                     onClick={() => {
-                      if (playable) {
-                        setSource({ kind: 'stream', stream: s });
-                        setPicking(false);
-                      } else if (s.externalUrl) window.open(s.externalUrl, '_blank', 'noopener');
+                      if (playable) play(s, false);
+                      else if (s.externalUrl) window.open(s.externalUrl, '_blank', 'noopener');
                     }}
                   />
                 );
               })}
+              {torrents.length > 0 && !showTorrents && (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => setShowTorrents(true)}
+                    className="text-mid flex w-full flex-col gap-0.5 rounded-2xl px-3 py-2.5 text-left text-sm hover:bg-white/[0.06]"
+                  >
+                    <span>{t('player.torrentsHidden', { count: torrents.length })}</span>
+                    <span className="text-muted text-xs">{t('player.torrentsHint')}</span>
+                  </button>
+                </li>
+              )}
               {!streams.isLoading && !episode.jellyfinItemId && !streams.data?.streams.length && (
                 <li className="text-mid px-3 py-4 text-sm leading-relaxed">
                   {episode.seasonAnilistId || episode.imdb
@@ -192,7 +250,7 @@ export function Player({
 function SourceRow({
   title,
   detail,
-  badge,
+  badges,
   note,
   active,
   disabled,
@@ -200,7 +258,7 @@ function SourceRow({
 }: {
   title: string;
   detail: string;
-  badge?: string | null;
+  badges?: (string | null)[];
   note?: string | null;
   active?: boolean;
   disabled?: boolean;
@@ -219,11 +277,16 @@ function SourceRow({
       >
         <span className="flex items-center gap-2 text-[15px] font-medium">
           {title}
-          {badge && (
-            <span className="rounded-full bg-white/[0.1] px-2 py-0.5 text-[11px] font-semibold">
-              {badge}
-            </span>
-          )}
+          {badges
+            ?.filter((b): b is string => Boolean(b))
+            .map((b) => (
+              <span
+                key={b}
+                className="shrink-0 rounded-full bg-white/[0.1] px-2 py-0.5 text-[11px] font-semibold"
+              >
+                {b}
+              </span>
+            ))}
         </span>
         {detail && (
           <span className="text-muted line-clamp-2 text-xs whitespace-pre-line">{detail}</span>
@@ -241,6 +304,7 @@ function Screen({
   onFinished,
   onNext,
   onSources,
+  onUnplayable,
 }: {
   source: PlaySource;
   episode: PlayerEpisode;
@@ -248,6 +312,8 @@ function Screen({
   onFinished: () => void;
   onNext?: () => void;
   onSources: () => void;
+  /** Every way to load this stream failed: true when the player moved on to another one. */
+  onUnplayable?: () => boolean;
 }) {
   const { t, language } = useI18n();
   const video = useRef<HTMLVideoElement>(null);
@@ -326,7 +392,66 @@ function Screen({
         p?.subtitles.find((s) => s.default && s.text)?.index ??
         preferredSub);
   const textSubtitles = p?.subtitles.filter((s) => s.text && s.url) ?? [];
-  const url = source.kind === 'stream' ? source.stream.url : (p?.playUrl ?? null);
+  // An extension stream: its own link first (no load on the server), then through Bunko.
+  const candidates =
+    source.kind === 'stream'
+      ? [
+          source.stream.url &&
+          !(
+            typeof window !== 'undefined' &&
+            window.location.protocol === 'https:' &&
+            source.stream.url.startsWith('http:')
+          )
+            ? source.stream.url
+            : null,
+          source.stream.relayUrl,
+        ].filter((u): u is string => Boolean(u))
+      : [];
+  const [attempt, setAttempt] = useState(0);
+  const fallback = useRef<() => boolean>(() => false);
+  useEffect(() => {
+    fallback.current = () => {
+      if (source.kind !== 'stream') return false;
+      if (attempt < candidates.length - 1) {
+        setAttempt(attempt + 1);
+        return true;
+      }
+      return onUnplayable?.() ?? false;
+    };
+  });
+  // Subtitles of an extension stream: VOSTFR by default when the stream is not in the
+  // interface language (a VO stream plus subtitles from a subtitle extension).
+  const streamSubs =
+    source.kind === 'stream'
+      ? [
+          ...source.stream.subtitles,
+          ...source.subtitles.filter((s) => !source.stream.subtitles.some((x) => x.id === s.id)),
+        ]
+      : [];
+  const [streamSub, setStreamSub] = useState<string | null | undefined>(undefined);
+  const streamSubId =
+    streamSub !== undefined
+      ? streamSub
+      : source.kind === 'stream' && !source.stream.preferred
+        ? (streamSubs.find((s) => s.lang === language)?.id ?? null)
+        : null;
+  const shownTrack =
+    source.kind === 'jellyfin'
+      ? subtitleIndex === null
+        ? null
+        : `sub-${subtitleIndex}`
+      : streamSubId
+        ? `xsub-${streamSubId}`
+        : null;
+  const languageName = (code: string | null) => {
+    if (!code) return t('player.unknownLanguage');
+    try {
+      return new Intl.DisplayNames([language], { type: 'language' }).of(code) ?? code;
+    } catch {
+      return code;
+    }
+  };
+  const url = source.kind === 'stream' ? (candidates[attempt] ?? null) : (p?.playUrl ?? null);
   const isHls =
     source.kind === 'jellyfin'
       ? p?.playMethod === 'transcode' || /\.m3u8(\?|$)/i.test(p?.playUrl ?? '')
@@ -337,9 +462,11 @@ function Screen({
     if (!el) return;
     for (let i = 0; i < el.textTracks.length; i++) {
       const track = el.textTracks[i];
-      track.mode = track.id === `sub-${subtitleIndex}` ? 'showing' : 'disabled';
+      // Tracks hls.js adds itself (no id) follow its own subtitle choice.
+      if (!track.id) continue;
+      track.mode = track.id === shownTrack ? 'showing' : 'disabled';
     }
-  }, [subtitleIndex, p]);
+  }, [shownTrack, p, streamSubs.length]);
 
   // Attach the stream; switching audio/quality/burned subtitles keeps the position.
   useEffect(() => {
@@ -355,6 +482,7 @@ function Screen({
         setRequest((r) => ({ ...r, noDirect: true, startMs: el.currentTime * 1000 }));
         return;
       }
+      if (fallback.current()) return;
       setError(t('player.failed'));
     };
     if (isHls && !el.canPlayType('application/vnd.apple.mpegurl')) {
@@ -508,7 +636,6 @@ function Screen({
       <video
         ref={video}
         playsInline
-        crossOrigin={source.kind === 'jellyfin' ? undefined : 'anonymous'}
         className="absolute inset-0 size-full"
         onClick={toggle}
         onDoubleClick={fullscreen}
@@ -547,6 +674,16 @@ function Screen({
             label={sub.label}
             srcLang={sub.language ?? undefined}
             src={sub.url!}
+          />
+        ))}
+        {streamSubs.map((sub) => (
+          <track
+            key={sub.id}
+            id={`xsub-${sub.id}`}
+            kind="subtitles"
+            label={`${languageName(sub.lang)} · ${sub.source}`}
+            srcLang={sub.lang ?? undefined}
+            src={sub.url}
           />
         ))}
       </video>
@@ -715,9 +852,24 @@ function Screen({
                       {p.playMethod === 'direct' ? t('player.direct') : t('player.transcoding')}
                     </span>
                   </>
-                ) : hlsTracks && (hlsTracks.audio.length > 1 || hlsTracks.subtitles.length) ? (
+                ) : (hlsTracks && (hlsTracks.audio.length > 1 || hlsTracks.subtitles.length)) ||
+                  streamSubs.length ? (
                   <>
-                    {hlsTracks.audio.length > 1 && (
+                    {streamSubs.length > 0 && (
+                      <Choice
+                        label={t('player.subtitles')}
+                        value={streamSubId ?? 'off'}
+                        options={[
+                          { value: 'off', label: t('player.off') },
+                          ...streamSubs.map((s) => ({
+                            value: s.id,
+                            label: `${languageName(s.lang)} · ${s.source}`,
+                          })),
+                        ]}
+                        onChange={(v) => setStreamSub(v === 'off' ? null : v)}
+                      />
+                    )}
+                    {hlsTracks && hlsTracks.audio.length > 1 && (
                       <Choice
                         label={t('player.audio')}
                         value={String(hlsTracks.audioId)}
@@ -730,7 +882,7 @@ function Screen({
                         }}
                       />
                     )}
-                    {hlsTracks.subtitles.length > 0 && (
+                    {hlsTracks && hlsTracks.subtitles.length > 0 && (
                       <Choice
                         label={t('player.subtitles')}
                         value={String(hlsTracks.subtitleId)}
