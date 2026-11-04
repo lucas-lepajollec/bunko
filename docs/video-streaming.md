@@ -9,8 +9,10 @@ code, never plays BitTorrent/P2P, never bypasses DRM or authentication, and neve
 ## How an episode starts
 
 1. **Library first.** A Jellyfin copy plays with Jellyfin's audio, subtitles and quality.
-2. **Sources.** Otherwise every extension that knows the episode is asked once (by Kitsu, IMDb,
-   MyAnimeList or AniList id, whichever its manifest supports), in parallel, at most 10 s each.
+2. **Sources.** Otherwise every extension that knows the episode is asked once, in parallel, at
+   most 10 s each, with the first id its manifest supports: for an anime Kitsu, TMDB
+   (`tmdb:{id}:{season}:{episode}`, TMDB season numbering, only when the anime map gives it), IMDb
+   (`tt…:{season}:{episode}`), MyAnimeList, AniList; for a series or a film IMDb, then TMDB.
    Extensions offering `subtitles` are asked at the same time. Answers are kept 10 minutes, so
    reopening an episode is instant; an extension that fails is left out for 30 s, doubling up to
    10 minutes, instead of slowing every episode down.
@@ -92,7 +94,24 @@ environment:
 ```
 
 Allow the narrowest entry that works (one `host:port` rather than a whole subnet). Everything the
-allowed service redirects to is checked again.
+allowed service redirects to is checked again. Streams and subtitles whose address is on such a
+service are played through Bunko's relay only: the viewer's browser cannot reach a Docker or LAN
+host name, so no direct attempt is made.
+
+A self-hosted addon on the same Docker network as Bunko, for example a container `my-addon`
+listening on port 7000:
+
+```yaml
+services:
+  bunko:
+    environment:
+      BUNKO_VIDEO_ALLOWED_HOSTS: 'my-addon:7000'
+```
+
+then add `http://my-addon:7000/manifest.json` (or the configured address the addon gives) in
+Settings → Extensions → Streaming. When the addon runs in another Compose project, attach it to
+Bunko's existing network (`networks: { default: { name: bunko_default, external: true } }`)
+rather than creating a new one.
 
 ### Isolating the container (recommended)
 
@@ -158,4 +177,6 @@ is the last failure (`network`, `decode`, `unsupported`, `timeout`, `hls`).
   the next stream is tried.
 - **Relay bandwidth**: a relayed stream passes through the server running Bunko. Direct links are
   always tried first.
-- **Version labels** are estimates from stream names.
+- **Version labels** are estimates from stream names, read line by line: the first line that
+  names a version wins (`VO` followed by `2 ST FR` is original audio with subtitle files, not a
+  subtitled release).

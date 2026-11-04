@@ -76,12 +76,15 @@ function sendMetrics(
 export const streamsPath = (episode: PlayerEpisode, language: string) =>
   episode.seasonAnilistId
     ? `/api/video/streams?anilist=${episode.seasonAnilistId}&episode=${episode.episode}&lang=${language}`
-    : episode.imdb
-      ? `/api/video/streams?imdb=${episode.imdb.id}${
-          episode.imdb.season !== null
-            ? `&season=${episode.imdb.season}&episode=${episode.episode}`
-            : ''
-        }&lang=${language}`
+    : episode.imdb && (episode.imdb.id || episode.imdb.tmdb)
+      ? `/api/video/streams?${new URLSearchParams({
+          ...(episode.imdb.id ? { imdb: episode.imdb.id } : {}),
+          ...(episode.imdb.tmdb ? { tmdb: String(episode.imdb.tmdb) } : {}),
+          ...(episode.imdb.season !== null
+            ? { season: String(episode.imdb.season), episode: String(episode.episode) }
+            : {}),
+          lang: language,
+        }).toString()}`
       : null;
 
 export interface PlayerEpisode {
@@ -91,8 +94,11 @@ export interface PlayerEpisode {
   label: string;
   /** AniList id of the season (extensions look the episode up with it), when known. */
   seasonAnilistId: number | null;
-  /** Series and films: IMDb id, and the TMDB season of the episode (null for a film). */
-  imdb?: { id: string; season: number | null } | null;
+  /**
+   * Series and films: IMDb id and TMDB id (addons know one or the other), and the TMDB season of
+   * the episode (null for a film).
+   */
+  imdb?: { id: string | null; tmdb?: number | null; season: number | null } | null;
   /** Episode number inside its season. */
   episode: number;
   /** Jellyfin item of this episode, when the library has it. */

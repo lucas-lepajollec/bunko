@@ -29,6 +29,30 @@ const server: Server = createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(body));
   };
+  // A self-hosted addon on the local network that knows films and series by IMDb or TMDB id.
+  if (url.pathname === '/local/manifest.json')
+    return send({
+      name: 'Local Streams',
+      resources: ['stream'],
+      types: ['movie', 'series'],
+      idPrefixes: ['tt', 'tmdb:'],
+    });
+  if (url.pathname.startsWith('/local/stream/'))
+    return send({
+      streams: [
+        {
+          name: '🎬 1080p\nSource',
+          title: '🏠 Proxy · 🇯🇵 VO\n🇫🇷 2 ST FR',
+          url: `${base}/local/proxy/ep.m3u8`,
+        },
+        {
+          name: '📺 720p\nSource',
+          title: '🚀 Direct · 🇫🇷 VF\n🇫🇷 2 ST FR',
+          url: 'https://cdn.example/vf.mp4',
+        },
+        { name: '📺 720p\nSource', title: '🚀 Direct · 💬 VOSTFR', url: 'https://cdn.example/st.mp4' },
+      ],
+    });
   // A Kitsu-based anime addon; its configured address holds an account key.
   if (url.pathname === '/addon/k3y-private/manifest.json')
     return send({
@@ -218,6 +242,50 @@ it('asks video extensions with the id they know, VOSTFR first, then VF', async (
   const dubbed = await addons.episodeStreams(5, 3, 'fr');
   expect(dubbed.streams.map((s) => s.name)).toEqual(['H', 'M', 'FR', 'T', 'EN']);
   updateSettings({ videoAudio: 'original' });
+});
+
+it('asks TMDB-based addons by TMDB id and plays their local links through the relay', async () => {
+  seedAnimeIds(
+    compact([
+      { anilist_id: 5, type: 'TV', kitsu_id: 77, imdb_id: ['tt5'] },
+      { anilist_id: 6, type: 'TV', themoviedb_id: 900, season: { tvdb: 1, tmdb: 2 }, imdb_id: 'tt6' },
+      { anilist_id: 7, type: 'MOVIE', themoviedb_id: 901 },
+      { anilist_id: 8, type: 'TV', themoviedb_id: 902 },
+    ]),
+  );
+  const ids = (anilist: number, episode: number) =>
+    addons.episodeIds(anilist, episode).map((i) => i.id);
+  // The TMDB season of the map, before IMDb (whose season is TVDB's).
+  expect(ids(6, 4)).toEqual(['tmdb:900:2:4', 'tt6:1:4', 'anilist:6:4']);
+  expect(ids(7, 1)).toEqual(['tmdb:901', 'anilist:7:1']);
+  // No TMDB season known: no guess.
+  expect(ids(8, 1)).toEqual(['anilist:8:1']);
+
+  updateSettings({ videoAddons: [`${base}/local/manifest.json`] });
+  calls.length = 0;
+  const result = await addons.episodeStreams(6, 4, 'fr');
+  expect(calls).toContain('GET /local/stream/series/tmdb:900:2:4.json');
+  // "VO" then "2 French subtitle files": original audio, not a subtitled release.
+  expect(result.streams.map((s) => [s.title.split('\n')[0], s.version])).toEqual([
+    ['🚀 Direct · 💬 VOSTFR', 'sub'],
+    ['🚀 Direct · 🇫🇷 VF', 'dub'],
+    ['🏠 Proxy · 🇯🇵 VO', 'vo'],
+  ]);
+  // On the allowed local service: Bunko reaches it, the viewer's browser cannot.
+  const local = result.streams.find((s) => s.version === 'vo')!;
+  expect(local.url).toBeNull();
+  expect(local.relayUrl).toMatch(/^\/api\/video\/relay\/[\w-]+$/);
+  expect(result.streams.find((s) => s.version === 'dub')!.url).toBe('https://cdn.example/vf.mp4');
+
+  // A series known only by its TMDB id.
+  calls.length = 0;
+  await addons.titleStreams({ imdb: null, tmdb: 1399 }, { season: 1, episode: 2 }, 'fr');
+  expect(calls).toContain('GET /local/stream/series/tmdb:1399:1:2.json');
+  // A film known by both: IMDb, the id most addons know.
+  calls.length = 0;
+  await addons.titleStreams({ imdb: 'tt0000009', tmdb: 9 }, null, 'fr');
+  expect(calls).toContain('GET /local/stream/movie/tt0000009.json');
+  updateSettings({ videoAddons: [ADDON()] });
 });
 
 it('keeps extension addresses on the server, encrypted', async () => {
