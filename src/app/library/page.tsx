@@ -1,5 +1,11 @@
 'use client';
-import { KIND_IDS, isVideoKind, kindOfMedia, type Kind as RegistryKind } from '@/domain/kinds';
+import {
+  KIND_IDS,
+  byKindOrder,
+  isVideoKind,
+  kindOfMedia,
+  type Kind as RegistryKind,
+} from '@/domain/kinds';
 import { OwnedInventory } from '@/components/owned-inventory';
 import { MediaLink } from '@/components/media-link';
 import { Select } from '@/components/select';
@@ -255,7 +261,7 @@ function Library() {
               role="group"
               aria-label={t('catalog.kind')}
             >
-              {ALL_KINDS.map((k) => (
+              {(['all', ...byKindOrder(KIND_IDS, universe.order)] as Kind[]).map((k) => (
                 <button
                   key={k}
                   type="button"

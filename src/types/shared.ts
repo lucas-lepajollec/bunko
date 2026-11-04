@@ -609,6 +609,11 @@ export interface Settings {
   universesKnown: Exclude<DiscoverKind, 'all'>[];
   /** Offer "Everything" in the switcher (default true). */
   showAllUniverse: boolean;
+  /**
+   * Priority of the kinds, first to last: the order of the switcher, of the home shelves and of
+   * the mix in "Everything". Always holds every kind (missing ones are appended).
+   */
+  kindOrder: Exclude<DiscoverKind, 'all'>[];
   /** Where outside reading progress is read from (Bunko's own reader always counts). */
   progressSource: 'suwayomi' | 'kavita';
   favoriteSourceIds: string[];

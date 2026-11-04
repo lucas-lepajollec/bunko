@@ -1,5 +1,5 @@
 'use client';
-import { KIND_IDS, KINDS as KIND_DEFS } from '@/domain/kinds';
+import { KIND_IDS, KINDS as KIND_DEFS, byKindOrder } from '@/domain/kinds';
 import { MediaLink } from '@/components/media-link';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
@@ -44,11 +44,11 @@ export default function HomePage() {
       refreshInterval: (d) => (d?.pending ? 1500 : 300_000),
     },
   );
-  // The mixed home shows reading kinds and anime; series and films releases live on their homes.
-  const shelves = KINDS.filter((k) =>
+  // The mixed home shows every enabled kind with dated releases, in the user's priority order
+  // (series and films once TMDB is set up).
+  const shelves = byKindOrder(KINDS, universe.order).filter((k) =>
     universe.active === 'all'
-      ? // Series and films releases need TMDB: their own homes show them.
-        !KIND_DEFS[k].requires && KIND_DEFS[k].releases !== 'tmdb'
+      ? universe.enabled.includes(k) && (!KIND_DEFS[k].requires || universe.tmdb)
       : k === universe.active,
   );
   const library = useApi<TrackedMedia[]>('/api/tracked', {

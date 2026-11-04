@@ -224,12 +224,13 @@ it('fans out all formats with provider pagination and refreshes new at midnight 
     'openlibrary:OL2W',
     'openlibrary:OL3W',
   ]);
-  expect(calls).toHaveLength(4);
+  // AniList reading kinds and anime (with their films), books ×2, web novels.
+  expect(calls).toHaveLength(5);
   vi.setSystemTime(new Date('2027-01-01T00:01:00Z'));
   await discover(query);
   await settleCatalogTasks();
   expect((await discover(query)).pending).toBe(false);
-  expect(calls.filter((url) => url.includes('anilist'))).toHaveLength(2);
+  expect(calls.filter((url) => url.includes('anilist'))).toHaveLength(4);
 });
 it('keeps coalesced aggregate pages separate across accounts', async () => {
   accountsDb()

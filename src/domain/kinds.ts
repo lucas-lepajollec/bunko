@@ -156,3 +156,26 @@ export function kindOfMedia(media: {
 export function searchTypeOf(kind: DiscoverKind | undefined): SearchType | undefined {
   return !kind || kind === 'all' ? undefined : KINDS[kind].search;
 }
+
+/** A saved priority order made whole: known kinds once each, kinds added later at the end. */
+export function completeKindOrder(saved: readonly string[] | undefined): Kind[] {
+  const known = (saved ?? []).filter((k): k is Kind => (KIND_IDS as readonly string[]).includes(k));
+  return [...new Set<Kind>([...known, ...KIND_IDS])];
+}
+/** Kinds sorted by the user's priority (kinds missing from it keep the registry order). */
+export function byKindOrder<T extends Kind>(kinds: readonly T[], order: readonly Kind[]): T[] {
+  const rank = new Map(completeKindOrder(order).map((k, i) => [k, i]));
+  return [...kinds].sort((a, b) => rank.get(a)! - rank.get(b)!);
+}
+/** Works grouped by kind and dealt one kind at a time in priority order; other kinds dropped. */
+export function mixByKind<
+  T extends { type: MediaType; format: MediaFormat | null; origin?: string | null },
+>(items: readonly T[], order: readonly Kind[]): T[] {
+  const buckets = new Map<Kind, T[]>(order.map((k) => [k, []]));
+  for (const m of items) buckets.get(kindOfMedia(m))?.push(m);
+  const lanes = [...buckets.values()].filter((b) => b.length);
+  const out: T[] = [];
+  for (let i = 0; lanes.some((l) => i < l.length); i++)
+    for (const lane of lanes) if (lane[i]) out.push(lane[i]);
+  return out;
+}

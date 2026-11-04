@@ -92,11 +92,18 @@ function Planning() {
           role="group"
           aria-label={t('catalog.kind')}
         >
-          {KINDS.map((k) => (
-            <Pill key={k} active={kind === k} onClick={() => setKind(k)} className="h-10 px-[18px]">
-              {t(`kind.${k}`)}
-            </Pill>
-          ))}
+          {(['all', ...universe.enabled.filter((k) => KINDS.includes(k))] as DiscoverKind[]).map(
+            (k) => (
+              <Pill
+                key={k}
+                active={kind === k}
+                onClick={() => setKind(k)}
+                className="h-10 px-[18px]"
+              >
+                {t(`kind.${k}`)}
+              </Pill>
+            ),
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2 md:ml-auto">
           <button

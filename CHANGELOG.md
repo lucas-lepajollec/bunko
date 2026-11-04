@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Kind priority: Settings → Media types lists every kind in order, with arrows to move one up or
+  down and a box to show it. The order sets the universe switcher, the kind menus of the
+  catalog, planning and library, the home shelves and the mix in "Everything".
+- Balanced "Everything" catalog: one lane per enabled kind (AniList reading kinds, anime with
+  their films in the same request, TMDB series and films, web novels, novels, books, comics),
+  dealt kind by kind in priority order; kinds turned off are left out. It used to hold AniList
+  manga only next to four text and comic lanes.
+- The mixed home shows the week's series episodes and film releases when series or films are
+  enabled and TMDB is set up.
+
 - Background tasks in the activity panel: every job of the account (release check, catalog
   releases, source matching, Kavita scan, Jellyfin sync, anime catalog matching, covers,
   translations) with its last run, failures, waiting work and next run, and a button to run it

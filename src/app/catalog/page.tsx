@@ -210,7 +210,7 @@ function Catalog() {
         role="group"
         aria-label={t('catalog.kind')}
       >
-        {KINDS.map((k) => (
+        {(['all', ...universe.enabled] as DiscoverKind[]).map((k) => (
           <button
             key={k}
             type="button"

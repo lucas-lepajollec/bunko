@@ -57,3 +57,10 @@ it('names every job in every language', () => {
     for (const id of BACKGROUND_JOB_IDS)
       expect((dict as Record<string, string>)[`jobs.name.${id}`], `${lang} ${id}`).toBeTruthy();
 });
+
+it('keeps the kind priority order the user saves', async () => {
+  const { getSettings } = await import('@/lib/settings');
+  updateSettings({ kindOrder: ['anime', 'comic'] });
+  expect(getSettings().kindOrder.slice(0, 3)).toEqual(['anime', 'comic', 'manga']);
+  expect(getSettings().kindOrder).toHaveLength(12);
+});
