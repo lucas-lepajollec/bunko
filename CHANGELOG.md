@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Live streams (activity, imports) no longer crash the process when the browser leaves between
+  two writes (`Invalid state: Controller is already closed`).
+- AniList priority: background jobs keep to one request every 2.5 s and stop when 30 requests
+  remain in the window, so imports and release checks can no longer make the catalog
+  unavailable.
+
 - Hotspots found on a real NAS through the job telemetry:
   - **Release check (update-check)**: download history read once per check instead of once per
     work; seen/imported chapters and Kavita numbers looked up in sets instead of scanned for every

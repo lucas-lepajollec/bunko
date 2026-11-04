@@ -4,6 +4,12 @@
  * 10 s window where the process is busy, naming the jobs running then. Aggregates only: no
  * titles, ids, URLs or settings are recorded.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+const background = new AsyncLocalStorage<string>();
+/** Whether the current code runs inside a background job (not a page or API request). */
+export const inBackgroundJob = () => background.getStore() !== undefined;
+
 interface Run {
   job: string;
   tenant: number | null;
@@ -37,7 +43,7 @@ export async function measured<T>(job: string, tenant: number | null, run: () =>
   const started = performance.now();
   let failed = false;
   try {
-    return await run();
+    return await background.run(job, run);
   } catch (error) {
     failed = true;
     throw error;

@@ -98,13 +98,21 @@ export function sse(
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(output) {
-      const send = (event: string, data: unknown) => {
-        if (!signal.aborted)
-          output.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      // A browser that goes away can close the stream between two writes: writing or closing a
+      // closed stream throws, and that error must never escape (it crashed the process).
+      let open = true;
+      const write = (text: string) => {
+        if (!open || signal.aborted) return;
+        try {
+          output.enqueue(encoder.encode(text));
+        } catch {
+          open = false;
+          controller.abort();
+        }
       };
-      const heartbeat = setInterval(() => {
-        if (!signal.aborted) output.enqueue(encoder.encode(': heartbeat\n\n'));
-      }, 15_000);
+      const send = (event: string, data: unknown) =>
+        write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      const heartbeat = setInterval(() => write(': heartbeat\n\n'), 15_000);
       try {
         await run(send, signal);
       } catch (e) {
@@ -115,7 +123,13 @@ export function sse(
           });
       } finally {
         clearInterval(heartbeat);
-        if (!controller.signal.aborted) output.close();
+        if (open && !controller.signal.aborted)
+          try {
+            output.close();
+          } catch {
+            /* Already closed by the client going away. */
+          }
+        open = false;
       }
     },
     cancel() {

@@ -1,5 +1,6 @@
 import { AppError } from './errors';
 import { aniListGate, aniListObserve, isAniList } from './anilist-limit';
+import { inBackgroundJob } from './job-stats';
 export async function requestJson<T>(
   url: string | URL,
   init: RequestInit = {},
@@ -11,7 +12,11 @@ export async function requestJson<T>(
   const aniList = isAniList(url);
   if (aniList)
     // Never wait longer than this request may take; otherwise fail now and keep cached data.
-    await aniListGate(Math.min(timeoutMs / 2, 8000), init.signal ?? undefined).catch((e) => {
+    await aniListGate(
+      Math.min(timeoutMs / 2, 8000),
+      init.signal ?? undefined,
+      inBackgroundJob(),
+    ).catch((e) => {
       if ((e as { code?: string }).code === 'RATE_LIMITED')
         throw new AppError('RATE_LIMITED', 'AniList is rate limiting, try again shortly', 503);
       throw e;
