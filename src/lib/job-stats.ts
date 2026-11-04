@@ -158,6 +158,15 @@ export function trackRequest(path: string) {
   state.active.set(key, `request ${path.replace(/\/[0-9a-z:%-]{16,}/gi, '/…')}`);
   return () => state.active.delete(key);
 }
+/** Jobs running now for one account (names, without the account suffix). */
+export function runningJobs(tenant: number | null) {
+  const suffix = tenant === null ? '' : `#${tenant}`;
+  return new Set(
+    [...state.active.values()]
+      .filter((v) => !v.startsWith('request ') && v.endsWith(suffix))
+      .map((v) => (suffix ? v.slice(0, -suffix.length) : v)),
+  );
+}
 /** Recent runs and per-job totals, heaviest first. */
 export function jobStats() {
   const totals = new Map<string, { runs: number; cpuMs: number; maxCpuMs: number }>();
