@@ -73,6 +73,15 @@ line for any job above 2 s of CPU and for every 10-second window where the proce
 docker logs bunko 2>&1 | grep '\[bunko\]'
 ```
 
+When the process stays at 80 % CPU or more, Bunko also profiles itself for 15 s (at most every
+30 minutes; `BUNKO_PROFILE=off` disables it) and logs the hottest compiled positions. Map them
+to source files with the same commit built locally:
+
+```sh
+npm run build
+docker logs bunko 2>&1 | grep '\[bunko\] profile' | node scripts/perf/map-profile.mjs
+```
+
 ## Results (VM, 5,000 works)
 
 | Measure                            | Before                           | After                 |

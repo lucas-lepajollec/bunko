@@ -1,3 +1,4 @@
+import { storedCoverFileExists } from './stored-covers';
 import { storedCover, storeCover, readStoredCover } from './stored-covers';
 import type { CoverOption, TrackedMedia, UnifiedMedia } from '@/types/shared';
 import { statement, getTracked, listTracked } from './db';
@@ -132,6 +133,16 @@ export async function syncTrackedCover(
       );
     };
     const saved = storedCover(id);
+    // Already stored and nothing to send to Kavita: only make sure the file is still there,
+    // without reading the image (the sweep used to read every stored cover every cycle).
+    if (
+      !refreshCover &&
+      !force &&
+      saved?.context === context &&
+      (!series || t.kavitaCoverSync === false || t.kavitaCover.state === 'synced') &&
+      storedCoverFileExists(saved)
+    )
+      return;
     let url = saved?.context === context ? saved.origin_url : (t.coverUrl ?? '');
     let cover = !refreshCover && saved?.context === context ? readStoredCover(saved) : null;
     if (!cover) {
@@ -235,11 +246,13 @@ export async function syncTrackedCovers(parentSignal?: AbortSignal, backfillOnly
     Boolean(t.media.coverUrl || t.kavitaSeriesId !== null || t.sources.length);
   // A work with nothing to fetch a cover from waits longer each time (5 min, 10, 20… up to a
   // day) instead of being looked at every 5 minutes forever; a new image source, a Kavita link
-  // or any change of the work makes it due again at once. Works with candidates keep 5 minutes.
+  // or any change of the work makes it due again at once.
   const due = (t: TrackedMedia) => {
     const last = checked.get(t.id);
     if (!last || last.context !== key(t)) return true;
-    const wait = hasCandidate(t) ? 300_000 : Math.min(300_000 * 2 ** last.tries, 86_400_000);
+    // Repeated failures wait longer too (an image that keeps failing is not refetched every
+    // 5 minutes forever); a new candidate resets it through the key.
+    const wait = Math.min(300_000 * 2 ** last.tries, 86_400_000);
     return Date.now() - last.at >= wait;
   };
   const queue = listTracked()

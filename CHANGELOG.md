@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Hotspots found on a real NAS through the job telemetry:
+  - **Release check (update-check)**: download history read once per check instead of once per
+    work; seen/imported chapters and Kavita numbers looked up in sets instead of scanned for every
+    chapter; unchanged observed chapters and release counts are no longer rewritten (each rewrite
+    fired the version triggers and invalidated every view).
+  - **Covers**: an already stored cover with nothing to send to Kavita only checks that its file
+    exists, without reading the image; repeated failures back off (5 minutes doubling up to a
+    day) whatever the candidates.
+  - **Jellyfin**: between syncs, import runs only while series remain; catalog upgrades run once
+    per sync; matching tries the work's own AniList id before decoding its seasons; watched
+    progress is reapplied only when the index or the library changed.
+- Automatic profiling: when the process stays at 80 % CPU or more, Bunko samples itself for 15 s
+  (at most every 30 minutes) and logs the hottest compiled positions (`[bunko] profile …`).
+  `scripts/perf/map-profile.mjs` maps them to source files from the same build.
+  `BUNKO_PROFILE=off` disables it.
+
 - Release ingestion no longer rebuilds the release → work resolver (decoding the whole library
   and catalog cache) for every resolved series. The resolver is reused while identities and the
   catalog cache are unchanged: a full ingestion with 5,000 works went from 25.5 s to 1.9 s of

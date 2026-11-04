@@ -196,6 +196,8 @@ export async function runUpdateCheck(
       );
     if (signal.aborted || !ownsLease()) return;
     setWorkerValue('refresh_total', String(queue.length));
+    // Download history read once per check (it was decoded again for every work).
+    const batches = listBatches().filter((b) => b.sourceKey === namespace);
     await Promise.allSettled(
       Array.from({ length: Math.min(3, queue.length) }, async () => {
         while (queue.length && !signal.aborted && ownsLease()) {
@@ -212,12 +214,19 @@ export async function runUpdateCheck(
               'SELECT chapter_id,number,namespace FROM imported_chapters WHERE tracked_id=?',
             ).all(t.id) as { chapter_id: number; number: number | null; namespace: string }[];
             const known = new Set(
-              listBatches()
-                .filter((b) => b.sourceKey === namespace && sameMedia(b.media, t.media))
-                .flatMap((b) => b.chapterIds),
+              batches.filter((b) => sameMedia(b.media, t.media)).flatMap((b) => b.chapterIds),
             );
             const ownedVolumes = ownedVolumeNumbers(t);
-            const kavitaNumbers = matchKavita(t.media, t.kavitaSeriesId)?.numbers ?? [];
+            const kavitaNumbers = new Set(matchKavita(t.media, t.kavitaSeriesId)?.numbers ?? []);
+            // Lookups instead of scanning every seen/imported chapter for every chapter.
+            const seenNumbers = new Set(seen.flatMap((s) => (s.number === null ? [] : [s.number])));
+            const seenIds = new Set(seen.map((s) => s.chapter_id));
+            const importedNumbers = new Set(
+              imported.flatMap((s) => (s.number === null ? [] : [s.number])),
+            );
+            const importedIds = new Set(
+              imported.filter((s) => s.namespace === namespace).map((s) => s.chapter_id),
+            );
             const baselines = new Set(
               (
                 statement(
@@ -227,19 +236,11 @@ export async function runUpdateCheck(
             );
             const fresh = result.chapters
               .filter((c) => c.volume == null || !ownedVolumes.has(c.volume))
-              .filter((c) => c.number === null || !kavitaNumbers.includes(c.number))
-              .filter(
-                (c) =>
-                  !seen.some((s) =>
-                    c.number === null
-                      ? c.variants.some((v) => v.id === s.chapter_id)
-                      : s.number === c.number,
-                  ) &&
-                  !imported.some((s) =>
-                    c.number === null
-                      ? s.namespace === namespace && c.variants.some((v) => v.id === s.chapter_id)
-                      : s.number === c.number,
-                  ),
+              .filter((c) => c.number === null || !kavitaNumbers.has(c.number))
+              .filter((c) =>
+                c.number === null
+                  ? !c.variants.some((v) => seenIds.has(v.id) || importedIds.has(v.id))
+                  : !seenNumbers.has(c.number) && !importedNumbers.has(c.number),
               )
               .flatMap((c) => {
                 const v = c.variants.find(

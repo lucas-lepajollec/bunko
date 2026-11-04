@@ -9,7 +9,7 @@ import type {
   JellyfinSeriesSummary,
   UnifiedMedia,
 } from '@/types/shared';
-import { db, listTracked, statement, track, untrack } from './db';
+import { db, listTracked, statement, track, untrack, writeVersion } from './db';
 import { AppError } from './errors';
 import { endpoint } from './http';
 import { emptyMedia, normalizeTitle } from './media';
@@ -296,11 +296,15 @@ export async function maybeSyncJellyfin(signal?: AbortSignal) {
     const last = statement(
       "SELECT value FROM worker_state WHERE key='jellyfin_import_at'",
     ).get() as { value: string } | undefined;
+    // Between syncs, import again only while series remain to import (not every minute forever).
+    const progress = jellyfinImportProgress();
     if (
       getSettings().autoImportJellyfin &&
+      progress &&
+      progress.done < progress.total &&
       (!last || Date.now() - Date.parse(last.value) >= IMPORT_EVERY_MS)
     )
-      await importJellyfinAnime(signal);
+      await importJellyfinAnime(signal, false);
     return;
   }
   await syncJellyfinIndex(signal);
@@ -406,13 +410,18 @@ export function matchJellyfin(media: UnifiedMedia, link?: JellyfinLink | null) {
     const byTmdb = inRoles(index.byTmdb.get(tmdb));
     if (byTmdb) return { series: byTmdb, manual: false };
   }
-  const ids = new Set<string>();
-  if (media.anilistId) {
-    ids.add(String(media.anilistId));
-    for (const season of knownFranchise(media.anilistId)?.seasons ?? [])
-      if (season.anilistId) ids.add(String(season.anilistId));
-  }
-  const byProvider = [...ids].map((id) => inRoles(index.byAniList.get(id))).find(Boolean);
+  // The work's own AniList id first; only then its other seasons (decoding the work's seasons
+  // for every anime made each pass cost seconds on large libraries).
+  let byProvider = media.anilistId
+    ? inRoles(index.byAniList.get(String(media.anilistId)))
+    : undefined;
+  if (!byProvider && media.anilistId && index.byAniList.size)
+    for (const season of knownFranchise(media.anilistId)?.seasons ?? []) {
+      byProvider = season.anilistId
+        ? inRoles(index.byAniList.get(String(season.anilistId)))
+        : undefined;
+      if (byProvider) break;
+    }
   const wanted = new Set(
     [media.title, ...media.altTitles].map((t) => normalizeTitle(seasonOf(t).base)).filter(Boolean),
   );
@@ -538,7 +547,12 @@ export function jellyfinMedia(seriesId: string): MediaDetail {
 }
 
 /** Watched in Jellyfin moves the episode count forward (never back). */
+const progressState = tenantState(() => ({ key: '' }));
 function applyJellyfinProgress() {
+  // Nothing new in Jellyfin's index nor in the library: the watched counts are already applied.
+  const key = `${jellyfinIndex().stamp}:${writeVersion('linkage')}`;
+  if (progressState().key === key) return;
+  progressState().key = key;
   const update = statement(
     "UPDATE tracked_media SET last_read=MAX(COALESCE(last_read,0),?),progress_checked=1,status=CASE WHEN status='PLANNING' THEN 'READING' ELSE status END WHERE id=? AND COALESCE(last_read,0)<?",
   );
@@ -608,7 +622,7 @@ async function catalogWork(s: IndexedJellyfinSeries, signal?: AbortSignal) {
  * it is clear, else the Jellyfin series itself (off-catalog, editable later). A removed work is
  * not re-added. AniList limits requests, so each pass handles a batch and the next continues.
  */
-export async function importJellyfinAnime(signal?: AbortSignal) {
+export async function importJellyfinAnime(signal?: AbortSignal, afterSync = true) {
   const tracked = listTracked().filter((t) => t.type === 'ANIME');
   const linked = new Set(
     tracked.flatMap((t) => {
@@ -698,7 +712,8 @@ export async function importJellyfinAnime(signal?: AbortSignal) {
       new Date().toISOString(),
     );
   }
-  await upgradeOffCatalogWorks(signal).catch(() => undefined);
+  // Catalog upgrades of off-catalog works: once per sync, not every import pass.
+  if (afterSync) await upgradeOffCatalogWorks(signal).catch(() => undefined);
   applyJellyfinProgress();
 }
 
