@@ -35,6 +35,10 @@ code, never plays BitTorrent/P2P, never bypasses DRM or authentication, and neve
 5. **Next episode.** At 90 % of an episode the next one's source list is looked up (the list only,
    no video), so moving on is immediate.
 
+An extension stream starts again where it stopped (saved per account every 15 s, on pause and on
+close, forgotten once 90 % is watched). On iPhone, full screen is the video's own (native
+controls, subtitles included): iOS gives web pages no other.
+
 The player keeps pause, seeking (±10 s, timeline), volume, full screen, subtitle choice (the
 stream's own subtitles and up to 20 from subtitle extensions: interface language, then English), audio and subtitle tracks carried by HLS, and
 the source list.

@@ -3,6 +3,7 @@ import type Hls from 'hls.js';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { preload } from 'swr';
 import type { PlaybackInfo, VideoStream, VideoStreams, VideoSubtitle } from '@/types/shared';
+import { mutate } from 'swr';
 import { api, send, useApi } from '@/lib/client/api';
 import {
   QUALITY_PRESETS,
@@ -85,6 +86,16 @@ export const streamsPath = (episode: PlayerEpisode, language: string) =>
             : {}),
           lang: language,
         }).toString()}`
+      : null;
+
+/** Key of an episode's saved position (`anilist:21:3`, `tt0944947:1:2`, `tmdb:550`). */
+export const positionKey = (e: PlayerEpisode) =>
+  e.seasonAnilistId
+    ? `anilist:${e.seasonAnilistId}:${e.episode}`
+    : e.imdb && (e.imdb.id || e.imdb.tmdb)
+      ? `${e.imdb.id ?? `tmdb:${e.imdb.tmdb}`}${
+          e.imdb.season !== null ? `:${e.imdb.season}:${e.episode}` : ''
+        }`
       : null;
 
 export interface PlayerEpisode {
@@ -433,6 +444,46 @@ function Screen({
   const [idle, setIdle] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const finished = useRef(false);
+  // Extension streams: start where it stopped last time (Jellyfin keeps its own place).
+  const posKey = source.kind === 'stream' ? positionKey(episode) : null;
+  const saved = useApi<{ seconds: number | null }>(
+    posKey ? `/api/video/position?key=${encodeURIComponent(posKey)}` : null,
+  );
+  const positionReady = !posKey || saved.data !== undefined || saved.error !== undefined;
+  const savedStart = (saved.data?.seconds ?? 0) > 5 ? saved.data!.seconds! : 0;
+  // Where this episode is now: another stream or the relay picks up from there.
+  const here = useRef<number | null>(null);
+  useEffect(() => {
+    here.current = null;
+  }, [posKey]);
+  const savePosition = useCallback(
+    (forget = false) => {
+      const el = video.current;
+      if (!posKey || !el) return;
+      if (!forget && el.currentTime < 5) return;
+      const seconds = forget ? null : el.currentTime;
+      // Reopening the episode in this session reads the new place, not the first one fetched.
+      void mutate(`/api/video/position?key=${encodeURIComponent(posKey)}`, { seconds }, {
+        revalidate: false,
+      });
+      void send('/api/video/position', 'PUT', {
+        key: posKey,
+        seconds,
+        duration: Number.isFinite(el.duration) ? el.duration : null,
+      }).catch(() => undefined);
+    },
+    [posKey],
+  );
+  useEffect(() => {
+    if (!posKey) return;
+    const timer = setInterval(() => {
+      if (video.current && !video.current.paused && !finished.current) savePosition();
+    }, 15_000);
+    return () => {
+      clearInterval(timer);
+      if (!finished.current) savePosition();
+    };
+  }, [posKey, savePosition]);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Streams of an HLS extension source (audio / subtitle tracks the playlist carries).
   const [hlsTracks, setHlsTracks] = useState<{
@@ -567,8 +618,9 @@ function Screen({
   // Attach the stream; switching audio/quality/burned subtitles keeps the position.
   useEffect(() => {
     const el = video.current;
-    if (!el || !url) return;
-    const start = source.kind === 'jellyfin' ? (p?.startMs ?? 0) / 1000 : 0;
+    if (!el || !url || !positionReady) return;
+    const start =
+      source.kind === 'jellyfin' ? (p?.startMs ?? 0) / 1000 : (here.current ?? savedStart);
     setError(null);
     setBuffering(true);
     let cancelled = false;
@@ -665,7 +717,7 @@ function Screen({
       el.removeAttribute('src');
       el.load();
     };
-  }, [url, isHls, source.kind, p?.startMs, p?.playMethod, t]);
+  }, [url, isHls, source.kind, p?.startMs, p?.playMethod, t, positionReady, savedStart]);
 
   // Jellyfin keeps the place (resume) and learns what was watched.
   const report = useCallback(
@@ -708,8 +760,31 @@ function Screen({
     if (el) el.currentTime = Math.max(0, Math.min(el.duration || Infinity, el.currentTime + delta));
   };
   const fullscreen = () => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void frame.current?.requestFullscreen().catch(() => undefined);
+    const doc = document as Document & {
+      webkitFullscreenElement?: Element | null;
+      webkitExitFullscreen?: () => void;
+    };
+    if (document.fullscreenElement) return void document.exitFullscreen().catch(() => undefined);
+    if (doc.webkitFullscreenElement) return doc.webkitExitFullscreen?.();
+    const box = frame.current as (HTMLDivElement & { webkitRequestFullscreen?: () => void }) | null;
+    // iPhone: no fullscreen for page elements, only the video's own (native controls, with the
+    // subtitle tracks). iPad and older Safari: the prefixed version.
+    const native = () =>
+      (video.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null)
+        ?.webkitEnterFullscreen?.();
+    if (box?.requestFullscreen && document.fullscreenEnabled)
+      void box.requestFullscreen().then(
+        () =>
+          // Phones: a film fills the screen sideways.
+          void (
+            screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }
+          )
+            .lock?.('landscape')
+            .catch(() => undefined),
+        native,
+      );
+    else if (box?.webkitRequestFullscreen) box.webkitRequestFullscreen();
+    else native();
   };
   const wake = () => {
     setIdle(false);
@@ -772,6 +847,7 @@ function Screen({
         onPause={() => {
           setPlaying(false);
           report('progress');
+          if (!finished.current) savePosition();
         }}
         onWaiting={() => setBuffering(true)}
         onPlaying={() => {
@@ -798,9 +874,11 @@ function Screen({
         onTimeUpdate={(e) => {
           const el = e.currentTarget;
           setTime(el.currentTime);
+          if (source.kind === 'stream' && el.currentTime > 0) here.current = el.currentTime;
           const total = el.duration || (p?.durationMs ?? 0) / 1000;
           if (!finished.current && total > 0 && el.currentTime >= total * 0.9) {
             finished.current = true;
+            savePosition(true);
             onFinished();
           }
         }}

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Extension streams resume where they stopped, on any device of the account (saved every 15 s,
+  on pause and on close; forgotten once 90 % is watched). Jellyfin keeps its own place.
+- Full screen on iPhone: the video's own full screen (iOS has none for page elements), the
+  prefixed one on older Safari; phones turn to landscape where the browser allows it.
+- The kinds menu highlights the whole "Everything" tile; the "Film" pill on release cards is only
+  shown in mixed views, not in a films-only universe.
 - Streaming extensions that know titles by TMDB id are asked with `tmdb:` ids: series and films
   (also when Bunko has no IMDb id for them) and anime, with the TMDB season from the anime map
   (asked before IMDb, whose season is TVDB's; no guess when the map has none).

@@ -2,6 +2,8 @@
 import { MediaLink } from '@/components/media-link';
 import type { ChapterRelease } from '@/types/shared';
 import { useI18n } from '@/i18n/I18nProvider';
+import { KINDS } from '@/domain/kinds';
+import { useUniverse } from '@/lib/client/universe';
 import { ScrollRow } from './media';
 import { useRelativeTime } from './time';
 import { Cover, PosterSkeletons, cx } from './ui';
@@ -38,6 +40,13 @@ export function ReleaseCard({
   const { t } = useI18n();
   const label = useChapterLabel();
   const relative = useRelativeTime();
+  const universe = useUniverse();
+  // "Film" on every card says nothing in a films-only universe: only in mixed views.
+  const pill = !(
+    release.unit === 'film' &&
+    universe.active !== 'all' &&
+    KINDS[universe.active]?.unit === 'film'
+  );
   return (
     <MediaLink media={release.media} className={cx('group flex min-w-0 flex-col gap-2', className)}>
       <span className="relative block">
@@ -47,9 +56,11 @@ export function ReleaseCard({
           alt={release.media.title}
           className="transition-transform duration-300 group-hover:-translate-y-1"
         />
-        <span className="bg-fg text-bg absolute bottom-2 left-2 flex h-6 max-w-[calc(100%-1rem)] items-center truncate rounded-full px-2.5 text-xs font-bold">
-          {label(release)}
-        </span>
+        {pill && (
+          <span className="bg-fg text-bg absolute bottom-2 left-2 flex h-6 max-w-[calc(100%-1rem)] items-center truncate rounded-full px-2.5 text-xs font-bold">
+            {label(release)}
+          </span>
+        )}
         {release.trackedId !== null && (
           <span
             title={t('common.inLibrary')}
