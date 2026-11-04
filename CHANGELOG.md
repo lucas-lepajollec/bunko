@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Extensions page by provider: Reading (Suwayomi extensions, for manga, manhwa, manhua and comics)
+  and Streaming (Stremio addons, for anime, series and films), each saying which kinds it serves.
+  The universe on screen opens its provider; the page no longer disappears in a video universe.
+  Settings → Extensions summarises both providers (the "Video & streaming" section moved there).
+
 - Background tasks named after what they do and grouped by the service they work with
   (Suwayomi, Kavita, Jellyfin, Catalogs, TraDoc, Bunko), with a description of each. "Anime
   works" only grouped anime seasons while linking imported works to the catalog was hidden in

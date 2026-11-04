@@ -24,9 +24,9 @@ import type {
   SettingsPatch,
 } from '@/types/shared';
 import { PERMISSIONS } from '@/types/shared';
-import type { JellyfinLibrary, JellyfinRole, VideoAddon } from '@/types/shared';
+import type { JellyfinLibrary, JellyfinRole } from '@/types/shared';
 import { UNIVERSES } from '@/lib/client/universe';
-import { completeKindOrder } from '@/domain/kinds';
+import { KIND_IDS, KINDS as KIND_DEFS, completeKindOrder, isVideoKind } from '@/domain/kinds';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -42,7 +42,7 @@ const GROUPS = [
   { id: 'personal', sections: ['account', 'media'] },
   { id: 'admin', sections: ['users'] },
   { id: 'services', sections: ['suwayomi', 'kavita', 'jellyfin', 'translation'] },
-  { id: 'content', sections: ['catalogs', 'video'] },
+  { id: 'content', sections: ['catalogs', 'extensions'] },
 ] as const;
 type SectionId = (typeof GROUPS)[number]['sections'][number];
 const SECTIONS: readonly SectionId[] = GROUPS.flatMap((g) => g.sections);
@@ -53,6 +53,7 @@ const ALIASES: Record<string, SectionId> = {
   sources: 'suwayomi',
   display: 'account',
   modules: 'media',
+  video: 'extensions',
 };
 /** Every user configures their own instance; only admins also manage accounts. */
 const MEMBER_SECTIONS: readonly SectionId[] = SECTIONS.filter((s) => s !== 'users');
@@ -237,8 +238,8 @@ export default function SettingsPage() {
             <Section open={open} visible={visible} id="catalogs">
               <Catalogs settings={settings.data} onSaved={keep} />
             </Section>
-            <Section open={open} visible={visible} id="video">
-              <VideoExtensions settings={settings.data} onSaved={keep} />
+            <Section open={open} visible={visible} id="extensions">
+              <ExtensionsSummary settings={settings.data} status={status.data} />
             </Section>
           </>
         )}
@@ -776,84 +777,61 @@ function Downloads({ settings, onSaved }: { settings: Settings; onSaved: (s: Set
   );
 }
 
-/** Video extensions (Stremio addon protocol): the user adds the addons they choose by URL. */
-function VideoExtensions({
+/**
+ * Extensions by provider: Suwayomi brings reading sources, Stremio addons bring streams. Both
+ * are managed on the Extensions page; this section says what each covers and where it stands.
+ */
+function ExtensionsSummary({
   settings,
-  onSaved,
+  status,
 }: {
   settings: Settings;
-  onSaved: (s: Settings) => unknown;
+  status: ServicesStatus | undefined;
 }) {
-  const { t } = useI18n();
-  const addons = useApi<VideoAddon[]>('/api/video/addons');
-  const [url, setUrl] = useState('');
-  const [busy, setBusy] = useState(false);
-  const save = async (next: string[]) => {
-    setBusy(true);
-    try {
-      onSaved(await send<Settings>('/api/settings', 'PATCH', { videoAddons: next }));
-      await addons.mutate();
-      return true;
-    } catch (err) {
-      toast({ tone: 'bad', text: errorText(t, err) });
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  };
-  const list = settings.videoAddons ?? [];
+  const { t, n } = useI18n();
+  const sources = useApi<unknown[]>(settings.suwayomiUrl ? '/api/sources' : null);
+  const kinds = (list: string[]) => list.map((k) => t(`kind.${k}`)).join(', ');
+  const providers = [
+    {
+      id: 'reading',
+      name: 'Suwayomi',
+      hint: t('extensions.readingHint', {
+        kinds: kinds(KIND_IDS.filter((k) => KIND_DEFS[k].sources)),
+      }),
+      state: status?.suwayomi.state,
+      count: settings.suwayomiUrl
+        ? t('extensions.readingCount', { count: n(sources.data?.length ?? 0) })
+        : t('extensions.needsSuwayomi'),
+    },
+    {
+      id: 'streaming',
+      name: 'Stremio',
+      hint: t('extensions.streamingHint', { kinds: kinds(KIND_IDS.filter(isVideoKind)) }),
+      state: (settings.videoAddons ?? []).length ? 'ok' : 'unconfigured',
+      count: t('extensions.streamingCount', { count: n((settings.videoAddons ?? []).length) }),
+    },
+  ];
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-mid text-sm leading-relaxed">{t('video.addonsBody')}</p>
-      <ul className="flex flex-col gap-2">
-        {list.map((u) => {
-          const a = addons.data?.find((x) => x.url === u);
-          return (
-            <li
-              key={u}
-              className="flex items-center justify-between gap-3 rounded-2xl bg-white/[0.04] px-4 py-3"
-            >
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate font-medium">{a?.name ?? u}</span>
-                <span className={cx('truncate text-xs', a?.error ? 'text-warn' : 'text-muted')}>
-                  {a?.error ? t('video.addonUnreachable') : (a?.description ?? u)}
-                </span>
-              </span>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void save(list.filter((x) => x !== u))}
-                className={cx(smallButton, 'text-mid shrink-0')}
-              >
-                {t('video.remove')}
-              </button>
-            </li>
-          );
-        })}
-        {!list.length && <li className="text-muted text-sm">{t('video.none')}</li>}
-      </ul>
-      <form
-        className="flex flex-wrap gap-2"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          const value = url.trim();
-          if (!value || list.includes(value)) return;
-          if (await save([...list, value])) setUrl('');
-        }}
-      >
-        <input
-          type="url"
-          required
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://…/manifest.json"
-          aria-label={t('video.addUrl')}
-          className="border-line min-w-0 flex-1 rounded-full border bg-white/[0.04] px-4 py-2.5 text-sm outline-none focus:border-white/30"
-        />
-        <button type="submit" disabled={busy} className={smallButton}>
-          {t('video.add')}
-        </button>
-      </form>
+    <div className="grid gap-3 md:grid-cols-2">
+      {providers.map((p) => (
+        <div
+          key={p.id}
+          className="flex flex-col gap-2.5 rounded-[18px] bg-white/[0.045] p-4 md:p-[22px]"
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-lg font-semibold">{t(`extensions.${p.id}`)}</span>
+            <span className="text-muted text-sm">· {p.name}</span>
+            <span className="ml-auto">
+              <Dot tone={p.state === 'ok' ? 'ok' : p.state === 'error' ? 'bad' : 'idle'} />
+            </span>
+          </span>
+          <p className="text-mid text-sm leading-relaxed">{p.hint}</p>
+          <span className="text-muted text-sm">{p.count}</span>
+          <Link href={`/sources?provider=${p.id}`} className={cx(smallButton, 'mt-1 self-start')}>
+            {t('extensions.manage')} →
+          </Link>
+        </div>
+      ))}
     </div>
   );
 }

@@ -1,8 +1,11 @@
 'use client';
-import { SourcesUniverseGate } from '@/components/universe-sources';
 import { ManagedImage } from '@/components/managed-image';
 import Link from 'next/link';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { KIND_IDS, KINDS, isVideoKind } from '@/domain/kinds';
+import { useUniverse } from '@/lib/client/universe';
+import { VideoExtensions } from '@/components/video-extensions';
 import type { Extension, PublicSettings, SourceInfo, SourcePreferences } from '@/types/shared';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -23,15 +26,87 @@ import {
 
 type View = 'sources' | 'updates' | 'catalog' | 'repos';
 
-export default function SourcesPage() {
+export default function ExtensionsPage() {
   return (
-    <SourcesUniverseGate>
-      <SourcesPageContent />
-    </SourcesUniverseGate>
+    <Suspense>
+      <Extensions />
+    </Suspense>
   );
 }
 
-function SourcesPageContent() {
+type Provider = 'reading' | 'streaming';
+/**
+ * Extensions by provider: Suwayomi extensions are the reading sources (manga, manhwa, manhua,
+ * comics); Stremio addons are the streams (anime, series, films). The universe on screen picks
+ * the provider shown first; each says which kinds it serves.
+ */
+function Extensions() {
+  const { t } = useI18n();
+  const params = useSearchParams();
+  const router = useRouter();
+  const universe = useUniverse();
+  const chosen = params.get('provider');
+  const provider: Provider =
+    chosen === 'reading' || chosen === 'streaming'
+      ? chosen
+      : isVideoKind(universe.active)
+        ? 'streaming'
+        : 'reading';
+  const kinds = (list: string[]) => list.map((k) => t(`kind.${k}`)).join(', ');
+  return (
+    <Page className="pb-16">
+      <PageTitle title={t('sources.title')} />
+      <p className="text-mid -mt-4 max-w-[640px] text-sm leading-relaxed">
+        {t('extensions.subtitle')}
+      </p>
+      <div
+        role="tablist"
+        aria-label={t('sources.title')}
+        className="grid gap-2 sm:grid-cols-2 md:max-w-[720px]"
+      >
+        {(['reading', 'streaming'] as const).map((p) => (
+          <button
+            key={p}
+            type="button"
+            role="tab"
+            aria-selected={provider === p}
+            onClick={() => router.replace(`/sources?provider=${p}`, { scroll: false })}
+            className={cx(
+              'flex flex-col gap-1 rounded-2xl px-4 py-3 text-left transition-colors',
+              provider === p ? 'bg-white/[0.1]' : 'bg-white/[0.04] hover:bg-white/[0.07]',
+            )}
+          >
+            <span className="flex items-baseline gap-2">
+              <span className={cx('font-semibold', provider === p ? 'text-white' : 'text-fg')}>
+                {t(`extensions.${p}`)}
+              </span>
+              <span className="text-muted text-sm">{p === 'reading' ? 'Suwayomi' : 'Stremio'}</span>
+            </span>
+            <span className="text-muted text-xs leading-snug">
+              {p === 'reading'
+                ? kinds(KIND_IDS.filter((k) => KINDS[k].sources))
+                : kinds(KIND_IDS.filter(isVideoKind))}
+            </span>
+          </button>
+        ))}
+      </div>
+      {provider === 'reading' ? <ReadingSources /> : <StreamingAddons />}
+    </Page>
+  );
+}
+
+function StreamingAddons() {
+  const settings = useApi<PublicSettings>('/api/settings');
+  if (!settings.data) return <Skeleton className="h-40 rounded-2xl" />;
+  return (
+    <VideoExtensions
+      settings={settings.data}
+      onSaved={(s) => settings.mutate(s, { revalidate: false })}
+    />
+  );
+}
+
+function ReadingSources() {
   const { t } = useI18n();
   const [view, setView] = useState<View>('sources');
   const sources = useApi<SourceInfo[]>('/api/sources');
@@ -54,11 +129,7 @@ function SourcesPageContent() {
     }
   }
   return (
-    <Page className="pb-16">
-      <PageTitle
-        title={t('sources.title')}
-        aside={sources.data ? t('sources.aside', { count: sources.data.length }) : undefined}
-      />
+    <>
       {updates.length > 0 && (
         <div className="flex flex-col gap-3 rounded-[18px] bg-[#fbbf24]/[0.08] p-4 md:flex-row md:items-center md:gap-[18px] md:px-[22px] md:py-[18px]">
           <span className="flex items-center gap-3 font-serif text-[20px] md:text-[22px]">
@@ -121,7 +192,7 @@ function SourcesPageContent() {
           refreshing={busy === 'refresh'}
         />
       )}
-    </Page>
+    </>
   );
 }
 
