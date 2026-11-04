@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { openAsBlob } from 'node:fs';
 import {
   copyFile,
   link,
@@ -82,7 +83,17 @@ function config() {
   const s = getSettings();
   if (!s.tradocUrl || !s.tradocApiKey)
     throw new AppError('SERVICE_NOT_CONFIGURED', 'TraDoc is not configured', 409);
-  return { url: s.tradocUrl.replace(/\/+$/, ''), key: s.tradocApiKey };
+  return { url: tradocApiBase(s.tradocUrl), key: s.tradocApiKey };
+}
+/**
+ * The integration API lives under /api/v1. The address TraDoc's own page shows, or just the
+ * service address (http://nas:2507), both work: a bare address led every call to the web app.
+ */
+export function tradocApiBase(address: string) {
+  const url = address.trim().replace(/\/+$/, '');
+  if (/\/api\/v1$/i.test(url)) return url;
+  if (/\/api$/i.test(url)) return `${url}/v1`;
+  return `${url}/api/v1`;
 }
 
 /** One authenticated TraDoc call; upstream bodies and keys never reach logs or responses. */
@@ -117,14 +128,26 @@ async function tradoc(suffix: string, init: RequestInit = {}, timeoutMs = 20_000
     await response.body?.cancel();
     throw new AppError('TRADOC_NOT_FOUND', 'TraDoc translation not found', 404);
   }
+  if (response.status === 422) {
+    // TraDoc refused the request itself: usually no model for this connection.
+    await response.body?.cancel();
+    throw new AppError('TRADOC_REJECTED', 'TraDoc refused the translation', 502);
+  }
   if (!response.ok) {
     await response.body?.cancel();
     throw new AppError('TRADOC_ERROR', `TraDoc returned HTTP ${response.status}`, 502);
   }
   return response;
 }
-const tradocJson = async (suffix: string, init?: RequestInit, timeoutMs?: number) =>
-  (await tradoc(suffix, init, timeoutMs)).json() as Promise<unknown>;
+const tradocJson = async (suffix: string, init?: RequestInit, timeoutMs?: number) => {
+  const response = await tradoc(suffix, init, timeoutMs);
+  // An HTML page instead of JSON: the address points at something else than TraDoc's API.
+  if (!response.headers.get('content-type')?.includes('json')) {
+    await response.body?.cancel();
+    throw new AppError('TRADOC_BAD_ADDRESS', 'The address does not answer as the TraDoc API', 502);
+  }
+  return response.json() as Promise<unknown>;
+};
 
 export async function tradocInfo(signal?: AbortSignal) {
   return z
@@ -338,7 +361,8 @@ async function upload(job: Row) {
   const size = (await stat(file)).size;
   if (size > MAX_UPLOAD) throw new AppError('FILE_TOO_LARGE', 'File is too large', 413);
   const form = new FormData();
-  form.set('file', new Blob([new Uint8Array(await readFile(file))]), job.file_name);
+  // A file-backed blob: the book is streamed to TraDoc, not read whole into memory.
+  form.set('file', await openAsBlob(file), job.file_name);
   form.set('source_lang', job.source_lang);
   form.set('target_lang', job.target_lang);
   if (job.provider) form.set('provider', job.provider);
@@ -387,15 +411,28 @@ async function install(job: Row) {
     throw new AppError('TRADOC_ERROR', 'TraDoc returned an unusable file', 502);
   const original = await localFile(job.kavita_path);
   let output: string;
-  let backup: string | null = null;
+  let backup: string | null = job.backup_path;
+  // Every step is recorded before the next one, so a restart resumes without harm: the backup is
+  // made once (never from an already translated file) and the output path is reserved before it
+  // is written (a resumed install rewrites it instead of adding a "(2)" copy).
   if (job.mode === 'replace') {
     // The original leaves the library (Kavita must not index it twice) but stays restorable.
-    const folder = path.join(dataDir(), 'translation-backups', String(job.id));
-    await mkdir(folder, { recursive: true, mode: 0o700 });
-    backup = path.join(folder, path.basename(original));
-    await copyFile(original, backup);
+    if (!backup) {
+      const folder = path.join(dataDir(), 'translation-backups', String(job.id));
+      await mkdir(folder, { recursive: true, mode: 0o700 });
+      const target = path.join(folder, path.basename(original));
+      // Not recorded yet means the original was not replaced yet: copying it again is safe.
+      const partial = `${target}.partial`;
+      await copyFile(original, partial);
+      await rename(partial, target);
+      patch(job.id, { backup_path: target });
+      backup = target;
+    }
     await writeAtomically(original, bytes, true);
     output = original;
+  } else if (job.output_path) {
+    await writeAtomically(job.output_path, bytes, true);
+    output = job.output_path;
   } else {
     // Kavita has no per-file language: the translation becomes its own series beside the original.
     const seriesFolder = path.dirname(original);
@@ -412,6 +449,8 @@ async function install(job: Row) {
         candidate = path.join(folder, `${path.basename(original, ext)} (${i})${ext}`);
       }
     }
+    // Recorded as soon as it exists: a restart from here rewrites this file.
+    patch(job.id, { output_path: candidate });
     output = candidate;
   }
   patch(job.id, { output_path: output, backup_path: backup });
@@ -441,14 +480,20 @@ async function rescan(localPath: string) {
 async function step(job: Row) {
   if (job.state === 'queued') {
     const remote = await upload(job);
+    const state = REMOTE_STATES.has(remote.status)
+      ? (remote.status as TranslationState)
+      : 'pending';
+    // Already finished on TraDoc (a resumed or very short job): the file still has to be
+    // installed, never marked completed without it.
     patch(job.id, {
       remote_id: remote.id,
-      state: REMOTE_STATES.has(remote.status) ? (remote.status as TranslationState) : 'pending',
+      state: state === 'completed' ? 'importing' : state,
       progress: (remote.progress?.percent ?? 0) / 100,
-      error: null,
+      error: state === 'failed' ? 'TRADOC_FAILED' : null,
       next_check_at: Date.now() + POLL_MS,
     });
-    return;
+    if (state !== 'completed') return;
+    job = row(job.id);
   }
   if (job.state !== 'importing') {
     const remote = remoteSchema.parse(

@@ -8,7 +8,7 @@ process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
 process.env.BUNKO_WORKER = 'false';
 const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant();
-const { track, getTracked, listTracked, statement } = await import('@/lib/db');
+const { track, getTracked, listTracked, statement, db } = await import('@/lib/db');
 const { emptyMedia } = await import('@/lib/media');
 const { adultStats } = await import('@/lib/adult');
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
@@ -71,4 +71,31 @@ it('rebuilds identities only when an identity changes', () => {
   statement('UPDATE tracked_media SET anilist_id=? WHERE id=?').run(123456, one.id);
   getTracked(one.id);
   expect(adultStats.rebuilds - before).toBe(1);
+});
+
+it('reads one work cheaply after each write, whatever the release history', () => {
+  // A background pass writes, then reads the same work several times: no table scan of the
+  // releases (up to 30,000 rows) and no repeated rebuild of that work.
+  const insert = statement('INSERT INTO chapter_releases(id,released_at,payload) VALUES(?,?,?)');
+  db().transaction(() => {
+    for (let i = 0; i < 20000; i++)
+      insert.run(
+        `scale-release-${i}`,
+        '2026-10-01',
+        JSON.stringify({
+          unit: i % 3 ? 'chapter' : 'volume',
+          provider: 'mangadex',
+          media: { id: `anilist:${i}`, type: 'MANGA', anilistId: i },
+        }),
+      );
+  })();
+  const ids = listTracked()
+    .map((t) => t.id)
+    .slice(0, 200);
+  const started = performance.now();
+  for (const id of ids) {
+    statement('UPDATE tracked_media SET last_read=COALESCE(last_read,0)+1 WHERE id=?').run(id);
+    for (let i = 0; i < 4; i++) expect(getTracked(id)?.id).toBe(id);
+  }
+  expect((performance.now() - started) / ids.length).toBeLessThan(5);
 });
