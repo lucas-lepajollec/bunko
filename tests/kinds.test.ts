@@ -3,7 +3,7 @@ import { KIND_IDS, KINDS, kindOfMedia, searchTypeOf, isVideoKind } from '@/domai
 import { messages } from '@/i18n/messages';
 import { discoverQuery, settingsPatch } from '@/lib/validation';
 import { normalizeHome } from '@/lib/home-shape';
-import type { MediaFormat } from '@/types/shared';
+import type { MediaFormat, MediaType } from '@/types/shared';
 
 // Every format the app knows. Adding one to MediaFormat without listing it here fails tsc below.
 const FORMATS = [
@@ -61,4 +61,31 @@ it('accepts every kind wherever a kind is chosen, and gives each a home shelf', 
   // Every kind enabled at once (a fixed maximum once rejected the full list).
   expect(settingsPatch.safeParse({ universes: [...KIND_IDS] }).success).toBe(true);
   expect(Object.keys(normalizeHome({}).latest).sort()).toEqual([...KIND_IDS].sort());
+});
+
+it('orders kinds by priority and mixes "Everything" kind by kind', async () => {
+  const { completeKindOrder, byKindOrder, mixByKind } = await import('@/domain/kinds');
+  // A saved order is made whole: unknown kinds dropped, missing ones appended.
+  const order = completeKindOrder(['anime', 'nope', 'comic', 'anime']);
+  expect(order.slice(0, 2)).toEqual(['anime', 'comic']);
+  expect([...order].sort()).toEqual([...KIND_IDS].sort());
+  expect(byKindOrder(['manga', 'comic', 'anime'], order)).toEqual(['anime', 'comic', 'manga']);
+  expect(settingsPatch.safeParse({ kindOrder: order }).success).toBe(true);
+  const work = (id: string, type: MediaType, format: MediaFormat | null) => ({
+    id,
+    type,
+    format,
+    origin: 'JP',
+  });
+  const items = [
+    work('c1', 'MANGA', 'COMIC'),
+    work('c2', 'MANGA', 'COMIC'),
+    work('c3', 'MANGA', 'COMIC'),
+    work('m1', 'MANGA', 'MANGA'),
+    work('a1', 'ANIME', null),
+    work('n1', 'NOVEL', 'NOVEL'),
+  ];
+  // Comics first in priority, then anime; manga last; novels turned off.
+  const mixed = mixByKind(items, ['comic', 'anime', 'manga']).map((m) => m.id);
+  expect(mixed).toEqual(['c1', 'a1', 'm1', 'c2', 'c3']);
 });

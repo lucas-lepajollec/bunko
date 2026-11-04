@@ -12,7 +12,7 @@ import { catalogSettingsRows, writeCatalogSettings } from './catalog-settings-st
 import { currentUser } from './user-context';
 import { requireAdmin } from './auth';
 import { catalogSettingKeys, type CatalogSetting } from '@/types/shared';
-import { KIND_IDS } from '@/domain/kinds';
+import { KIND_IDS, completeKindOrder } from '@/domain/kinds';
 import type {
   DiscoverKind,
   PublicSettings,
@@ -125,6 +125,7 @@ function serverSettings(): Settings {
     universes: [],
     universesKnown: [],
     showAllUniverse: true,
+    kindOrder: [...KIND_IDS],
     favoriteSourceIds: [],
     extensionRepos: [],
     updateIntervalMinutes: 15,
@@ -141,6 +142,7 @@ function serverSettings(): Settings {
     });
   }
   result.updateIntervalMinutes = Math.max(5, Math.min(1440, result.updateIntervalMinutes));
+  result.kindOrder = completeKindOrder(result.kindOrder);
   // A list chosen before series, films or animation films existed: those start enabled.
   if (result.universes.length)
     for (const kind of LATER_KINDS)

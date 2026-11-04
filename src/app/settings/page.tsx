@@ -26,6 +26,8 @@ import type {
 import { PERMISSIONS } from '@/types/shared';
 import type { JellyfinLibrary, JellyfinRole, VideoAddon } from '@/types/shared';
 import { UNIVERSES } from '@/lib/client/universe';
+import { completeKindOrder } from '@/domain/kinds';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LanguageSelect, Page } from '@/components/shell';
@@ -1663,6 +1665,7 @@ function UniverseSettings() {
   const settings = useApi<Settings>('/api/settings');
   const data = settings.data;
   const enabled = data?.universes?.length ? data.universes : UNIVERSES;
+  const order = completeKindOrder(data?.kindOrder);
   async function save(patch: Partial<Settings>) {
     try {
       await send('/api/settings', 'PATCH', patch);
@@ -1673,32 +1676,62 @@ function UniverseSettings() {
   }
   return (
     <div className="flex flex-col gap-3 rounded-[18px] bg-white/[0.045] p-4 text-sm md:p-[22px]">
-      <span className="font-semibold">{t('universe.settingsTitle')}</span>
       <p className="text-mid leading-relaxed">{t('universe.settingsHint')}</p>
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('universe.settingsTitle')}>
-        {UNIVERSES.map((k) => {
+      <p className="text-mid leading-relaxed">{t('universe.orderHint')}</p>
+      <ol
+        className="flex flex-col overflow-hidden rounded-2xl bg-white/[0.04]"
+        aria-label={t('universe.settingsTitle')}
+      >
+        {order.map((k, i) => {
           const on = enabled.includes(k);
+          const name = t(`kind.${k}`);
+          const move = (to: number) => {
+            const next = [...order];
+            next.splice(i, 1);
+            next.splice(to, 0, k);
+            void save({ kindOrder: next });
+          };
           return (
-            <button
+            <li
               key={k}
-              type="button"
-              aria-pressed={on}
-              disabled={!data || (on && enabled.length === 1)}
-              onClick={() =>
-                void save({
-                  universes: on ? enabled.filter((x) => x !== k) : [...enabled, k],
-                })
-              }
-              className={cx(
-                'h-9 rounded-full px-3.5 disabled:opacity-60',
-                on ? 'bg-fg text-bg font-semibold' : 'text-mid bg-white/[0.06] hover:text-white',
-              )}
+              className="border-line flex min-h-[52px] items-center gap-2 border-b px-3 last:border-b-0"
             >
-              {t(`kind.${k}`)}
-            </button>
+              <span className="text-muted w-6 text-right text-xs tabular-nums">{i + 1}</span>
+              <span className={cx('flex-1', !on && 'text-muted')}>{name}</span>
+              <button
+                type="button"
+                disabled={!data || i === 0}
+                onClick={() => move(i - 1)}
+                aria-label={t('universe.moveUp', { name })}
+                className="text-mid flex size-9 items-center justify-center rounded-full hover:bg-white/[0.07] hover:text-white disabled:opacity-25"
+              >
+                <ChevronUp className="size-4" aria-hidden />
+              </button>
+              <button
+                type="button"
+                disabled={!data || i === order.length - 1}
+                onClick={() => move(i + 1)}
+                aria-label={t('universe.moveDown', { name })}
+                className="text-mid flex size-9 items-center justify-center rounded-full hover:bg-white/[0.07] hover:text-white disabled:opacity-25"
+              >
+                <ChevronDown className="size-4" aria-hidden />
+              </button>
+              <input
+                type="checkbox"
+                checked={on}
+                disabled={!data || (on && enabled.length === 1)}
+                aria-label={t('universe.show', { name })}
+                onChange={() =>
+                  void save({
+                    universes: on ? enabled.filter((x) => x !== k) : [...enabled, k],
+                  })
+                }
+                className="accent-fg ml-1 size-[18px] shrink-0"
+              />
+            </li>
           );
         })}
-      </div>
+      </ol>
       <label className="flex min-h-11 items-center justify-between gap-4">
         <span className="flex flex-col gap-0.5">
           <span>{t('universe.allOption')}</span>

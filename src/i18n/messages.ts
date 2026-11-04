@@ -1118,6 +1118,11 @@ const en: Dictionary = {
   'universe.all': 'Everything',
   'universe.label': 'Universe',
   'universe.hint': 'The whole interface shows only this kind.',
+  'universe.orderHint':
+    'The order is the priority: it sets the switcher, the home shelves and the mix in “Everything”.',
+  'universe.moveUp': 'Move {name} up',
+  'universe.moveDown': 'Move {name} down',
+  'universe.show': 'Show {name}',
   'universe.settingsTitle': 'Universes',
   'universe.settingsHint':
     'Choose the kinds you use. The switcher in the header (bottom bar on phones) changes the whole interface to one of them and loads only it; the library keeps every kind one tap away.',
@@ -2424,6 +2429,11 @@ const fr: Dictionary = {
   'universe.all': 'Tout',
   'universe.label': 'Univers',
   'universe.hint': 'Toute l’interface n’affiche que ce type.',
+  'universe.orderHint':
+    'L’ordre fixe la priorité : il range le sélecteur, les étagères de l’accueil et le mélange du mode « Tout ».',
+  'universe.moveUp': 'Monter {name}',
+  'universe.moveDown': 'Descendre {name}',
+  'universe.show': 'Afficher {name}',
   'universe.settingsTitle': 'Univers',
   'universe.settingsHint':
     'Choisis les types que tu utilises. Le sélecteur de l’en-tête (barre du bas sur téléphone) bascule toute l’interface sur l’un d’eux et ne charge que lui ; la bibliothèque garde tous les types à portée de main.',
@@ -3723,6 +3733,11 @@ const es: Dictionary = {
   'universe.all': 'Todo',
   'universe.label': 'Universo',
   'universe.hint': 'Toda la interfaz muestra solo este tipo.',
+  'universe.orderHint':
+    'El orden es la prioridad: ordena el selector, las estanterías de inicio y la mezcla de «Todo».',
+  'universe.moveUp': 'Subir {name}',
+  'universe.moveDown': 'Bajar {name}',
+  'universe.show': 'Mostrar {name}',
   'universe.settingsTitle': 'Universos',
   'universe.settingsHint':
     'Elige los tipos que usas. El selector de la cabecera (barra inferior en el móvil) cambia toda la interfaz a uno de ellos y solo carga ese; la biblioteca mantiene todos los tipos a mano.',
@@ -5031,6 +5046,11 @@ const de: Dictionary = {
   'universe.all': 'Alles',
   'universe.label': 'Bereich',
   'universe.hint': 'Die ganze Oberfläche zeigt nur diese Art.',
+  'universe.orderHint':
+    'Die Reihenfolge ist die Priorität: Sie ordnet den Umschalter, die Regale der Startseite und die Mischung in „Alles“.',
+  'universe.moveUp': '{name} nach oben',
+  'universe.moveDown': '{name} nach unten',
+  'universe.show': '{name} anzeigen',
   'universe.settingsTitle': 'Bereiche',
   'universe.settingsHint':
     'Wähle die Arten, die du nutzt. Der Umschalter in der Kopfzeile (unten auf dem Handy) stellt die ganze Oberfläche auf eine davon um und lädt nur sie; die Bibliothek behält alle Arten griffbereit.',
@@ -6332,6 +6352,11 @@ const it: Dictionary = {
   'universe.all': 'Tutto',
   'universe.label': 'Universo',
   'universe.hint': 'Tutta l’interfaccia mostra solo questo tipo.',
+  'universe.orderHint':
+    'L’ordine è la priorità: ordina il selettore, gli scaffali della home e il mix di «Tutto».',
+  'universe.moveUp': 'Sposta su {name}',
+  'universe.moveDown': 'Sposta giù {name}',
+  'universe.show': 'Mostra {name}',
   'universe.settingsTitle': 'Universi',
   'universe.settingsHint':
     'Scegli i tipi che usi. Il selettore nell’intestazione (barra in basso sul telefono) porta tutta l’interfaccia su uno di essi e carica solo quello; la libreria tiene tutti i tipi a portata di mano.',

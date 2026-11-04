@@ -256,7 +256,8 @@ describe('adult visibility on catalog surfaces', () => {
     expect((await discover({})).items.map((m) => m.id)).toEqual(['anilist:1']);
     updateSettings({ adultContent: true });
     expect((await discover({})).items).toHaveLength(2);
-    expect(requests.filter((r) => r.url.includes('anilist'))).toHaveLength(2);
+    // Two AniList lanes per "Everything" page (reading kinds, anime), for each adult mode.
+    expect(requests.filter((r) => r.url.includes('anilist'))).toHaveLength(4);
   });
   it('filters full/quick search, local catalog and provider results; enabled mode restores all providers', async () => {
     recordSourceFlags([nsfw]);

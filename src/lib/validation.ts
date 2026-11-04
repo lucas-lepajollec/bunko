@@ -326,6 +326,7 @@ export const settingsPatch = z
     universe: z.enum(['all', ...KIND_IDS]).optional(),
     universes: z.array(z.enum(KIND_IDS)).max(KIND_IDS.length).optional(),
     showAllUniverse: z.boolean().optional(),
+    kindOrder: z.array(z.enum(KIND_IDS)).max(KIND_IDS.length).optional(),
     favoriteSourceIds: z.array(sourceId).max(100).optional(),
     extensionRepos: z.array(httpUrl).max(20).optional(),
     updateIntervalMinutes: z.number().int().min(5).max(1440).optional(),

@@ -7,6 +7,7 @@ import { discover, discoverAniList, withTracking } from './catalog';
 import { cached, storedMetadata, metadataStatus } from './metadata-cache';
 import { mediaVisibility, includeProviderAdults } from './adult';
 import { tenantState } from './tenant-context';
+import { getSettings } from './settings';
 const rankingFailures = tenantState(() => new Set<string>());
 
 export function composeHome(
@@ -129,12 +130,15 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
     !kind && (await import('./db')).listTracked().some((t) => t.type === 'ANIME');
   const episodes =
     (kind && KINDS[kind].releases === 'anilist') || followsAnime ? await recentEpisodes() : [];
-  // Series and films: the week's TMDB episodes and releases (cached sheets, bounded wait).
+  // Series and films: the week's TMDB episodes and releases (cached sheets, bounded wait); the
+  // mixed home has them too when series or films are enabled.
+  const enabled = getSettings().universes;
+  const mixedTmdb = !kind && (!enabled.length || enabled.some((k) => KINDS[k].releases === 'tmdb'));
   const tmdbWeek =
-    kind && KINDS[kind].releases === 'tmdb'
+    (kind && KINDS[kind].releases === 'tmdb') || mixedTmdb
       ? await Promise.race([
           (await import('./tmdb-releases'))
-            .tmdbReleases(kind, new Date(Date.now() - 7 * 86400_000), new Date())
+            .tmdbReleases(kind ?? 'all', new Date(Date.now() - 7 * 86400_000), new Date())
             .catch(() => []),
           new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
         ])

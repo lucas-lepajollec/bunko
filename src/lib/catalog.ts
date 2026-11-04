@@ -1,4 +1,5 @@
 import { seasonRef } from './anime-franchise';
+import { KIND_IDS, byKindOrder, mixByKind, type Kind } from '@/domain/kinds';
 import { rememberMediaPreview, mediaPreview } from './media-preview';
 import { deduplicate } from './search-engine';
 import { rakutenDetail } from './rakuten';
@@ -125,17 +126,47 @@ export async function discover(
 ): Promise<DiscoverPage> {
   if (q.kind && q.kind !== 'all') return discoverLane(q, signal, raw);
   signal?.throwIfAborted();
-  const key = `discover:all:v2:${JSON.stringify(q)}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}:${includeProviderAdults()}:${metronScope()}:${credentialScope(getSettings().hardcoverToken)}`;
+  // "Everything": one lane per enabled kind, mixed kind by kind in the user's priority order, so
+  // no kind (comics, novels…) floods the page and video kinds are part of it.
+  const settings = getSettings();
+  const order = byKindOrder(
+    settings.universes.length ? settings.universes : [...KIND_IDS],
+    settings.kindOrder,
+  );
+  const on = (k: Kind) => order.includes(k);
+  const { tmdbConfigured, discoverTmdb } = await import('./tmdb');
+  // TMDB lanes have none of AniList's filters: a filtered page leaves them out.
+  const filtered = Boolean(q.genre || q.status || q.tags?.length || q.minScore || q.year);
+  const tmdb = tmdbConfigured() && !filtered;
   const lane = (kind: DiscoverQuery['kind']) => () => discoverLane({ ...q, kind }, undefined, true);
-  const result = await discoverAll(key, q.page ?? 1, {
-    anilist: lane('all'),
-    novel: lane('novel'),
-    book: lane('book'),
-    webnovel: lane('webnovel'),
-    ...(metronConfigured() ? { comic: lane('comic') } : {}),
-  });
-  return { ...result, items: raw ? result.items : withTracking(result.items).filter(visibleMedia) };
+  const sort = q.sort ?? 'trending';
+  const providers: Record<string, () => Promise<DiscoverPage>> = {
+    ...((['manga', 'manhwa', 'manhua', 'lightnovel'] as Kind[]).some(on)
+      ? { anilist: lane('all') }
+      : {}),
+    // One AniList anime request also brings the anime films when both kinds are on.
+    ...(on('anime')
+      ? {
+          anime: () =>
+            discoverAniList({ ...q, kind: 'anime' }, undefined, true, false, on('animation')),
+        }
+      : {}),
+    ...(tmdb && on('series') ? { series: () => discoverTmdb('tv', sort, q.page ?? 1) } : {}),
+    ...(tmdb && on('movies') ? { movies: () => discoverTmdb('movie', sort, q.page ?? 1) } : {}),
+    ...(on('animation') && !on('anime') ? { animation: lane('animation') } : {}),
+    ...(on('webnovel') ? { webnovel: lane('webnovel') } : {}),
+    ...(on('novel') ? { novel: lane('novel') } : {}),
+    ...(on('book') ? { book: lane('book') } : {}),
+    ...(on('comic') && metronConfigured() ? { comic: lane('comic') } : {}),
+  };
+  // Only kinds without a reachable catalog (series without TMDB…): an empty page, not an outage.
+  if (!Object.keys(providers).length) return { items: [], page: q.page ?? 1, hasNextPage: false };
+  const key = `discover:all:v3:${JSON.stringify(q)}:${order.join(',')}:${tmdb}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}:${includeProviderAdults()}:${metronScope()}:${credentialScope(settings.hardcoverToken)}`;
+  const result = await discoverAll(key, q.page ?? 1, providers);
+  const items = mixByKind(result.items, order);
+  return { ...result, items: raw ? items : withTracking(items).filter(visibleMedia) };
 }
+
 /** Interactive pages expose completed provider lanes while the others continue independently. */
 export async function progressiveDiscover(
   q: DiscoverQuery,
@@ -218,6 +249,8 @@ export async function discoverAniList(
   signal?: AbortSignal,
   raw = false,
   waitForRefresh = false,
+  /** Anime with their films (the mixed catalog splits them by kind afterwards). */
+  withFilms = false,
 ): Promise<DiscoverPage> {
   signal?.throwIfAborted();
   const kind = q.kind ?? 'all';
@@ -234,7 +267,7 @@ export async function discoverAniList(
   if (kind === 'lightnovel') variables.format = 'NOVEL';
   // Anime films are their own kind (animation films); the anime kind keeps series and OVAs.
   else if (kind === 'animation') variables.format = 'MOVIE';
-  else if (kind === 'anime') variables.formatNot = 'MOVIE';
+  else if (kind === 'anime' && !withFilms) variables.formatNot = 'MOVIE';
   else if (kind !== 'all') variables.formatNot = 'NOVEL';
   if (kind === 'manga') variables.country = 'JP';
   if (kind === 'manhwa') variables.country = 'KR';
