@@ -13,6 +13,7 @@ import { currentUser } from './user-context';
 import { requireAdmin } from './auth';
 import { catalogSettingKeys, type CatalogSetting } from '@/types/shared';
 import { KIND_IDS, completeKindOrder } from '@/domain/kinds';
+import { createHash } from 'node:crypto';
 import type {
   DiscoverKind,
   PublicSettings,
@@ -105,6 +106,7 @@ function serverSettings(): Settings {
     autoImportJellyfin: true,
     jellyfinLibraries: {},
     videoAddons: [],
+    videoAudio: 'original',
     tradocUrl: '',
     tradocApiKey: '',
     googleBooksApiKey: '',
@@ -138,7 +140,9 @@ function serverSettings(): Settings {
     Object.assign(result, {
       [row.key]: secretKeys.includes(row.key as SecretSetting)
         ? decrypt(row.value)
-        : JSON.parse(row.value),
+        : row.key === 'videoAddons'
+          ? readAddonList(row.value)
+          : JSON.parse(row.value),
     });
   }
   result.updateIntervalMinutes = Math.max(5, Math.min(1440, result.updateIntervalMinutes));
@@ -150,6 +154,20 @@ function serverSettings(): Settings {
         result.universes = [...result.universes, kind];
   if (!db().inTransaction) state.snapshot = { version, value: result };
   return result;
+}
+/** Stable id of a video extension (its manifest address without the file name). */
+export const addonId = (url: string) =>
+  createHash('sha256')
+    .update(url.replace(/\/manifest\.json(?:\?.*)?$/, '').replace(/\/+$/, ''))
+    .digest('hex')
+    .slice(0, 12);
+/** Addon addresses hold account keys: stored encrypted (lists saved before that are plain JSON). */
+function readAddonList(raw: string): string[] {
+  try {
+    return JSON.parse(decrypt(raw)) as string[];
+  } catch {
+    return JSON.parse(raw) as string[];
+  }
 }
 let catalogSnapshot:
   { rows: ReturnType<typeof catalogSettingsRows>; value: Partial<Settings> } | undefined;
@@ -178,6 +196,8 @@ export function publicSettings(): PublicSettings {
   }
   const canManage = currentUser()?.role === 'admin';
   if (!canManage) safe.metronUsername = '';
+  // Addon addresses may hold account keys: the browser gets ids (see /api/video/addons).
+  safe.videoAddons = settings.videoAddons.map(addonId);
   return {
     ...safe,
     secretsConfigured,
@@ -268,7 +288,9 @@ export function updateSettings(patch: SettingsPatch) {
           key,
           secretKeys.includes(key as SecretSetting)
             ? encrypt(String(value))
-            : JSON.stringify(value),
+            : key === 'videoAddons'
+              ? encrypt(JSON.stringify(value))
+              : JSON.stringify(value),
         );
       }
       if (shared.length) writeCatalogSettings(accountsDb(), sharedRows);

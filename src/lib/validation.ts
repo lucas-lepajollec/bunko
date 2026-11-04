@@ -217,7 +217,9 @@ export const settingsPatch = z
     jellyfinApiKey: z.string().max(2000).optional(),
     jellyfinUser: z.string().trim().max(100).optional(),
     autoImportJellyfin: z.boolean().optional(),
-    videoAddons: z.array(z.string().url().max(500)).max(20).optional(),
+    // Configured addon addresses carry their options (often base64) in the path: long.
+    videoAddons: z.array(z.string().url().max(4000)).max(20).optional(),
+    videoAudio: z.enum(['original', 'dubbed']).optional(),
     jellyfinLibraries: z
       .record(
         z.string().min(1).max(100),

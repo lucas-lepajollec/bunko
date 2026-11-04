@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Streaming extensions (Stremio addons) play like a library: the best stream starts by itself
+  and the next one is tried when the browser cannot play it. Streams are ranked by version in
+  the interface language — subtitled original first, or dubbed first (Settings → Extensions →
+  Streaming) — then by what browsers decode (1080p before 4K/HEVC). Labels show VOSTFR / VF /
+  MULTI (or SUB / DUB in English) and the quality; torrent streams are folded away (they need a
+  debrid service configured in the addon, which then returns direct links).
+- Streams play through Bunko when the browser cannot load them itself: request headers asked
+  by the addon, plain HTTP on an HTTPS page, HLS without CORS. Relay links are sealed per
+  account and expire; HLS playlists are rewritten so every segment, key and rendition follows.
+- Subtitle extensions: addons offering subtitles are asked for each episode, and subtitles that
+  come with a stream are kept. SRT and ASS/SSA (gzipped or Latin-1 too) are converted to WebVTT;
+  a stream in another language turns on subtitles in the interface language by default.
+- Addon addresses often hold account keys: they are stored encrypted and never sent to the
+  browser (the list shows the host and the addon's name). `stremio://` install links are
+  accepted; an address that does not answer with a manifest is refused instead of stored.
+
 - Extensions page by provider: Reading (Suwayomi extensions, for manga, manhwa, manhua and comics)
   and Streaming (Stremio addons, for anime, series and films), each saying which kinds it serves.
   The universe on screen opens its provider; the page no longer disappears in a video universe.

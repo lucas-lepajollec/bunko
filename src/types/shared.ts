@@ -128,23 +128,52 @@ export interface PlaybackInfo {
 }
 /** A video extension (Stremio addon protocol) as configured. */
 export interface VideoAddon {
-  url: string;
+  /** Stable id of the manifest address (the address itself may hold account keys: server only). */
+  id: string;
+  host: string;
   name: string | null;
   description: string | null;
-  error: string | null;
+  /** What the extension offers for an episode. */
+  resources: ('stream' | 'subtitles')[];
+  error: 'unreachable' | null;
+}
+/** A subtitle file offered by an extension, converted to WebVTT by Bunko. */
+export interface VideoSubtitle {
+  id: string;
+  /** ISO 639-1 code when the extension says which language it is. */
+  lang: string | null;
+  /** Extension that offered it. */
+  source: string;
+  url: string;
 }
 /** One stream offered by a video extension for an episode. */
 export interface VideoStream {
+  id: string;
   addon: string;
   name: string;
   title: string;
-  /** Direct link the browser can play (HTTP file or HLS). */
-  url: string | null;
-  /** Torrent or external page: listed, not playable in the browser. */
+  /** Direct file, HLS playlist, torrent (needs a debrid service in the addon) or other site. */
   kind: 'direct' | 'hls' | 'torrent' | 'external';
+  /** Link the browser may load itself (null when the addon asks for request headers). */
+  url: string | null;
+  /** The same stream through Bunko: headers, plain HTTP on an HTTPS page, no CORS. */
+  relayUrl: string | null;
   externalUrl: string | null;
-  /** Matches the preferred languages (VOSTFR/VF… from the interface language). */
+  /** In the interface language (subtitled, dubbed or several audio tracks). */
   preferred: boolean;
+  version: 'sub' | 'dub' | 'multi' | null;
+  /** Vertical resolution read from the labels (1080, 720, 2160…). */
+  quality: number | null;
+  /** False when the addon or the codec says browsers may not decode it. */
+  webReady: boolean;
+  /** Subtitles that come with this stream. */
+  subtitles: VideoSubtitle[];
+}
+export interface VideoStreams {
+  streams: VideoStream[];
+  /** Subtitles of the episode from subtitle extensions (any stream of it). */
+  subtitles: VideoSubtitle[];
+  errors: string[];
 }
 /** One season of an anime work (AniList lists each season as its own entry). */
 export interface AnimeSeason {
@@ -560,8 +589,10 @@ export interface Settings {
   jellyfinUrl: string;
   jellyfinApiKey: string;
   jellyfinUser: string;
-  /** Video extensions: Stremio addon manifest URLs. */
+  /** Video extensions: Stremio addon manifest URLs (stored encrypted, never sent to the browser). */
   videoAddons: string[];
+  /** Version tried first: original audio with subtitles, or dubbed. */
+  videoAudio: 'original' | 'dubbed';
   /** Role per Jellyfin library id; libraries not listed use the detected role. */
   jellyfinLibraries: Record<string, JellyfinRole>;
   /** Follow Jellyfin anime automatically (matched to AniList when unambiguous). Default true. */
