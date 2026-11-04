@@ -443,3 +443,16 @@ it('reads a Jellyfin episode for the player and reports where it stopped', async
   ).toEqual({ finished: true });
   expect(calls.some((c) => c.startsWith(`POST /UserPlayedItems/${ITEM}`))).toBe(true);
 });
+
+it('remembers where an extension stream stopped, per account', async () => {
+  const positions = await import('@/lib/video-positions');
+  positions.saveVideoPosition('anilist:21:3', 612.4, 1420);
+  expect(positions.videoPosition('anilist:21:3')).toBe(612.4);
+  positions.saveVideoPosition('anilist:21:3', 700, 1420);
+  expect(positions.videoPosition('anilist:21:3')).toBe(700);
+  // Another account has its own places.
+  expect(inTenant(2, () => positions.videoPosition('anilist:21:3'))).toBeNull();
+  // Watched to the end: forgotten.
+  positions.saveVideoPosition('anilist:21:3', null, null);
+  expect(positions.videoPosition('anilist:21:3')).toBeNull();
+});

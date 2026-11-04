@@ -134,6 +134,8 @@ export function db(): Database.Database {
       media_id TEXT NOT NULL, chapter_id INTEGER NOT NULL, number REAL, page INTEGER NOT NULL,
       page_count INTEGER NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(media_id,chapter_id));
     CREATE INDEX IF NOT EXISTS reader_progress_latest ON reader_progress(media_id,updated_at DESC);
+    CREATE TABLE IF NOT EXISTS video_positions (
+      key TEXT PRIMARY KEY, seconds REAL NOT NULL, duration REAL, updated_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS reader_chapters (
       namespace TEXT NOT NULL, chapter_id INTEGER NOT NULL, payload TEXT NOT NULL, at INTEGER NOT NULL,
       PRIMARY KEY(namespace,chapter_id));
