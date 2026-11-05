@@ -11,9 +11,13 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import type { ReaderChapter, ReaderProgressUpdate } from '@/types/shared';
+import type {
+  MediaDetail,
+  ReaderChapter,
+  ReaderProgressUpdate,
+} from '@/types/shared';
 import { useSWRConfig } from 'swr';
-import { api, mediaHref, useApi } from '@/lib/client/api';
+import { api, mediaHref, send, useApi } from '@/lib/client/api';
 import { ReaderProgressWriter } from '@/lib/client/reader-progress';
 import { useI18n } from '@/i18n/I18nProvider';
 import { ErrorNote, Spinner, cx } from '@/components/ui';
@@ -88,6 +92,8 @@ function ChapterReader({ chapter, media }: { chapter: string; media: string | nu
       : null,
   );
 
+  // "Pick up where you left off": the work (title, cover, kind) and this chapter.
+  const sheet = useApi<MediaDetail>(media ? `/api/media?id=${encodeURIComponent(media)}` : null);
   const progress = useMemo(
     () =>
       new ReaderProgressWriter(async (value) => {
@@ -117,6 +123,34 @@ function ChapterReader({ chapter, media }: { chapter: string; media: string | nu
     };
     progress.update(body);
   }, [current, activeChapterId, activeNumber, media, pages.length, progress]);
+  // "Pick up where you left off": this chapter and the place in it (a few seconds after the
+  // last page turn), for any work, followed or not.
+  useEffect(() => {
+    const m = sheet.data;
+    const label = data.data?.label;
+    if (!m?.title || !media || !label || !pages.length) return;
+    const timer = setTimeout(() => {
+      void send('/api/continue', 'PUT', {
+        media: {
+          id: media,
+          title: m.title,
+          coverUrl: m.coverUrl,
+          type: m.type,
+          format: m.format,
+          origin: m.origin,
+          adult: Boolean(m.adult),
+          color: m.color,
+        },
+        kind: 'read',
+        label,
+        href: `/read/${chapter}?media=${encodeURIComponent(media)}`,
+        position: (current + 1) / pages.length,
+      })
+        .then(() => mutate('/api/continue'))
+        .catch(() => undefined);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [sheet.data, data.data?.label, media, chapter, current, pages.length, mutate]);
   useEffect(() => {
     const flush = () => {
       void progress.flush();

@@ -2,10 +2,9 @@
 import Link from 'next/link';
 import type { AuthState, TrackedMedia } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
-import { continueReading } from '@/lib/client/reading';
 import { universeAsides, useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
-import { ReadingCard } from '@/components/reading';
+import { ContinueCard, useContinue } from '@/components/reading';
 import { PosterCard } from '@/components/media';
 import { FavoriteButton } from '@/components/favorite';
 import { Page } from '@/components/shell';
@@ -27,11 +26,12 @@ export default function ProfilePage() {
     dedupingInterval: 0,
   });
   const entries = library.data ?? [];
-  const reading = continueReading(entries);
+  // Everything in progress for the universe on screen, followed or not.
+  const resume = useContinue();
   const favorites = entries.filter((e) => e.favorite);
   // The profile lists every kind together: its subtitle says reading, watching or both.
   const universe = useUniverse();
-  const recent = universeAsides('all', universe.enabled).recent;
+  const recent = universeAsides(universe.active, universe.enabled).recent;
   return (
     <Page className="pb-16">
       <PageTitle title={t('profile.title')} aside={auth.data?.username} />
@@ -49,14 +49,14 @@ export default function ProfilePage() {
       </div>
       <section id="continue" className="scroll-mt-28 flex flex-col gap-5">
         <SectionHeading title={t('home.resume')} aside={t(recent)} />
-        {library.error && <ErrorNote error={library.error} />}
-        {!library.data && !library.error && <Skeleton className="h-36 rounded-2xl" />}
-        {library.data && !reading.length && (
+        {resume.error && <ErrorNote error={resume.error} />}
+        {!resume.data && !resume.error && <Skeleton className="h-36 rounded-2xl" />}
+        {resume.data && !resume.shown.length && (
           <Empty title={t('profile.empty')}>{t('profile.emptyBody')}</Empty>
         )}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {reading.map((e) => (
-            <ReadingCard key={e.id} entry={e} className="w-full md:w-full" />
+          {resume.shown.map((item) => (
+            <ContinueCard key={item.media.id} item={item} className="w-full md:w-full" />
           ))}
         </div>
       </section>

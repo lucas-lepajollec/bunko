@@ -1,6 +1,14 @@
 'use client';
 import { useState } from 'react';
-import type { AnimeSeason, JellyfinPresence, TrackedMedia, VideoDetail } from '@/types/shared';
+import { useSearchParams } from 'next/navigation';
+import type {
+  AnimeSeason,
+  ContinueMedia,
+  JellyfinPresence,
+  TrackedMedia,
+  VideoDetail,
+} from '@/types/shared';
+import { mediaHref } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { cx } from './ui';
 import { Player, type PlayerEpisode } from './player';
@@ -14,6 +22,7 @@ const FIRST = 48;
  */
 export function EpisodeList({
   title,
+  media,
   artwork,
   film: filmProp,
   anilistId,
@@ -25,6 +34,8 @@ export function EpisodeList({
 }: {
   /** Work title (shown in the player). */
   title: string;
+  /** The work, for "Pick up where you left off" (resuming reopens the episode here). */
+  media?: ContinueMedia;
   /** The work's banner or cover, for episodes without their own still. */
   artwork?: string | null;
   /** A single film: one large "watch" card instead of an episode grid. */
@@ -78,7 +89,14 @@ export function EpisodeList({
   const played = new Set(inJf?.played ?? []);
   const owned = new Set(inJf?.owned ?? []);
   const watchedHere = Math.min(Math.max(0, read - offset), season.list.length);
-  const [playing, setPlaying] = useState<{ season: number; episode: number } | null>(null);
+  // `?play=<season index>.<episode>` (from "Pick up where you left off") opens that episode.
+  const params = useSearchParams();
+  const [playing, setPlaying] = useState<{ season: number; episode: number } | null>(() => {
+    const m = /^(\d{1,3})\.(\d{1,5})$/.exec(params.get('play') ?? '');
+    if (!m) return null;
+    const at = { season: Number(m[1]), episode: Number(m[2]) };
+    return seasons[at.season] && at.episode >= 1 ? at : null;
+  });
   // Resume: the episode after the last one watched (across the work).
   const resumeAt = (() => {
     const next = read + 1;
@@ -103,14 +121,17 @@ export function EpisodeList({
       seasonAnilistId: s.anilistId ?? anilistId,
       imdb:
         video.ids?.imdb || video.ids?.tmdb
-        ? {
-            id: video.ids.imdb ?? null,
-            tmdb: video.ids.tmdb ?? null,
-            season: video.ids.kind === 'movie' ? null : (s.tmdbSeason ?? s.number),
-          }
-        : null,
+          ? {
+              id: video.ids.imdb ?? null,
+              tmdb: video.ids.tmdb ?? null,
+              season: video.ids.kind === 'movie' ? null : (s.tmdbSeason ?? s.number),
+            }
+          : null,
       episode: at.episode,
       jellyfinItemId: jf?.episodeIds[at.episode] ?? null,
+      ...(media
+        ? { resume: { media, href: `${mediaHref(media.id)}?play=${at.season}.${at.episode}` } }
+        : {}),
     };
   };
   const nextOf = (at: { season: number; episode: number }) => {

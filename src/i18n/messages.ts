@@ -31,6 +31,9 @@ export function interpolate(template: string, variables?: Record<string, string 
 type Dictionary = Record<string, string>;
 
 const en: Dictionary = {
+  'continue.at': '{percent} % · {when}',
+  'continue.remove': 'Remove {title} from Pick up',
+  'continue.removeShort': 'Remove from the row',
   'catalog.tagGroup.demographic': 'Audience',
   'catalog.tagGroup.fantasy': 'Fantasy',
   'catalog.tagGroup.action': 'Action',
@@ -1554,6 +1557,9 @@ const en: Dictionary = {
 };
 
 const fr: Dictionary = {
+  'continue.at': '{percent} % · {when}',
+  'continue.remove': 'Retirer {title} de Reprendre',
+  'continue.removeShort': 'Retirer de la liste',
   'catalog.tagGroup.demographic': 'Public',
   'catalog.tagGroup.fantasy': 'Fantastique',
   'catalog.tagGroup.action': 'Action',
@@ -3093,6 +3099,9 @@ const fr: Dictionary = {
 };
 
 const es: Dictionary = {
+  'continue.at': '{percent} % · {when}',
+  'continue.remove': 'Quitar {title} de Retomar',
+  'continue.removeShort': 'Quitar de la lista',
   'catalog.tagGroup.demographic': 'Público',
   'catalog.tagGroup.fantasy': 'Fantasía',
   'catalog.tagGroup.action': 'Acción',
@@ -4624,6 +4633,9 @@ const es: Dictionary = {
 };
 
 const de: Dictionary = {
+  'continue.at': '{percent} % · {when}',
+  'continue.remove': '{title} aus Weitermachen entfernen',
+  'continue.removeShort': 'Aus der Liste entfernen',
   'catalog.tagGroup.demographic': 'Zielgruppe',
   'catalog.tagGroup.fantasy': 'Fantasy',
   'catalog.tagGroup.action': 'Action',
@@ -6162,6 +6174,9 @@ const de: Dictionary = {
 };
 
 const it: Dictionary = {
+  'continue.at': '{percent} % · {when}',
+  'continue.remove': 'Togli {title} da Riprendi',
+  'continue.removeShort': 'Togli dall’elenco',
   'catalog.tagGroup.demographic': 'Pubblico',
   'catalog.tagGroup.fantasy': 'Fantasy',
   'catalog.tagGroup.action': 'Azione',

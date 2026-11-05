@@ -2,12 +2,11 @@
 import { KIND_IDS, KINDS as KIND_DEFS, byKindOrder } from '@/domain/kinds';
 import { MediaLink } from '@/components/media-link';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import type { ChapterRelease, HomeFeed, TrackedMedia } from '@/types/shared';
+import { useEffect, useState } from 'react';
+import type { ChapterRelease, HomeFeed } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
-import { continueReading } from '@/lib/client/reading';
-import { ReadingCard } from '@/components/reading';
-import { inUniverse, universeAsides, useUniverse } from '@/lib/client/universe';
+import { ContinueCard, useContinue } from '@/components/reading';
+import { universeAsides, useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from '@/components/load-notice';
 import { Backdrop } from '@/components/backdrop';
@@ -51,17 +50,8 @@ export default function HomePage() {
       ? universe.enabled.includes(k) && (!KIND_DEFS[k].requires || universe.tmdb)
       : k === universe.active,
   );
-  const library = useApi<TrackedMedia[]>('/api/tracked', {
-    revalidateOnMount: true,
-    dedupingInterval: 0,
-  });
-  const resume = useMemo(
-    () =>
-      continueReading(library.data ?? [])
-        .filter((e) => inUniverse(universe.active, e.media))
-        .slice(0, 8),
-    [library.data, universe.active],
-  );
+  // Everything started in the reader or player, followed or not, for the universe on screen.
+  const resume = useContinue(8).shown;
   const asides = universeAsides(universe.active, universe.enabled);
   let n = 0;
   return (
@@ -83,8 +73,8 @@ export default function HomePage() {
               linkLabel={t('profile.allReading')}
             />
             <ScrollRow>
-              {resume.map((e) => (
-                <ReadingCard key={e.id} entry={e} />
+              {resume.map((item) => (
+                <ContinueCard key={item.media.id} item={item} />
               ))}
             </ScrollRow>
           </section>
