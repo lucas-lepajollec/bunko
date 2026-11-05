@@ -243,6 +243,17 @@ export default function SettingsPage() {
                   )}
                 </div>
               ))}
+              {(['prowlarr', 'qbittorrent'] as const).map((service) => (
+                <div key={service} className="flex flex-col gap-3">
+                  <SubHeading>{t(`settings.service.${service}`)}</SubHeading>
+                  <Connection
+                    service={service}
+                    settings={settings.data!}
+                    status={status.data}
+                    onSaved={reload}
+                  />
+                </div>
+              ))}
             </Section>
             <Section open={open} visible={visible} id="translation">
               <Connection
@@ -277,7 +288,12 @@ function ServiceDot({
   if (!['suwayomi', 'kavita', 'jellyfin', 'tradoc', 'arr'].includes(key) || !status) return null;
   const states = status as unknown as Record<string, { state?: string } | undefined>;
   // Sonarr & Radarr share one entry: red if either fails, green if one works.
-  const arr = [states.sonarr?.state, states.radarr?.state].filter((x) => x && x !== 'unconfigured');
+  const arr = [
+    states.sonarr?.state,
+    states.radarr?.state,
+    states.prowlarr?.state,
+    states.qbittorrent?.state,
+  ].filter((x) => x && x !== 'unconfigured');
   const state =
     key === 'arr'
       ? arr.includes('error')
@@ -359,14 +375,30 @@ function Connection({
   status,
   onSaved,
 }: {
-  service: 'suwayomi' | 'kavita' | 'tradoc' | 'jellyfin' | 'sonarr' | 'radarr';
+  service:
+    | 'suwayomi'
+    | 'kavita'
+    | 'tradoc'
+    | 'jellyfin'
+    | 'sonarr'
+    | 'radarr'
+    | 'prowlarr'
+    | 'qbittorrent';
   settings: Settings;
   status: ServicesStatus | undefined;
   onSaved: () => Promise<unknown>;
 }) {
   const { t } = useI18n();
   const services: {
-    key: 'suwayomi' | 'kavita' | 'tradoc' | 'jellyfin' | 'sonarr' | 'radarr';
+    key:
+      | 'suwayomi'
+      | 'kavita'
+      | 'tradoc'
+      | 'jellyfin'
+      | 'sonarr'
+      | 'radarr'
+      | 'prowlarr'
+      | 'qbittorrent';
     fields: {
       name: keyof SettingsPatch;
       label: string;
@@ -422,7 +454,7 @@ function Connection({
         { name: 'jellyfinUser', label: t('settings.jellyfinUser') },
       ],
     },
-    ...(['sonarr', 'radarr'] as const).map((key) => ({
+    ...(['sonarr', 'radarr', 'prowlarr'] as const).map((key) => ({
       key,
       state: status?.[key]?.state,
       detail: status?.[key]?.version ? `v${status[key]!.version}` : null,
@@ -436,6 +468,21 @@ function Connection({
         },
       ],
     })),
+    {
+      key: 'qbittorrent',
+      state: status?.qbittorrent?.state,
+      detail: status?.qbittorrent?.version ?? null,
+      fields: [
+        { name: 'qbittorrentUrl', label: t('settings.address'), type: 'url' },
+        { name: 'qbittorrentUsername', label: t('settings.username') },
+        {
+          name: 'qbittorrentPassword',
+          label: t('settings.password'),
+          type: 'password',
+          secret: 'qbittorrentPassword',
+        },
+      ],
+    },
     {
       key: 'tradoc',
       state: status?.tradoc?.state,
@@ -635,7 +682,15 @@ function ServiceCard({
   settings,
   onSaved,
 }: {
-  name: 'suwayomi' | 'kavita' | 'tradoc' | 'jellyfin' | 'sonarr' | 'radarr';
+  name:
+    | 'suwayomi'
+    | 'kavita'
+    | 'tradoc'
+    | 'jellyfin'
+    | 'sonarr'
+    | 'radarr'
+    | 'prowlarr'
+    | 'qbittorrent';
   state: string | undefined;
   detail?: string | null;
   fields: {

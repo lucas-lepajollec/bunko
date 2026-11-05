@@ -6,6 +6,7 @@ import type {
   DownloadBatch,
   DownloadStatus,
   DownloadsSnapshot,
+  MediaGrab,
   PublicSettings,
 } from '@/types/shared';
 import { ApiFailure, openStream, send, useApi } from '@/lib/client/api';
@@ -13,6 +14,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import { InfoBubble, toast } from '@/components/notify';
+import { MediaGrabs } from '@/components/media-grabs';
 import {
   Cover,
   Dot,
@@ -36,6 +38,8 @@ export default function DownloadsPage() {
   const [view, setView] = useState<View>('active');
   const settings = useApi<PublicSettings>('/api/settings');
   const engine = useSuwayomi();
+  // Series & films only (no Suwayomi): the chapter downloader's tabs and notices stay out of the way.
+  const grabs = useApi<MediaGrab[]>('/api/arr/grabs');
   useEffect(
     () =>
       openStream(
@@ -53,6 +57,8 @@ export default function DownloadsPage() {
     [streamRun],
   );
   const batches = snapshot?.batches ?? [];
+  const readingOff =
+    engine.state === 'unconfigured' && Boolean(grabs.data?.length) && batches.length === 0;
   const active = batches.filter((b) => b.state !== 'completed' && b.state !== 'error');
   const failed = batches.filter(hasFailures);
   const history = batches.filter((b) => b.state === 'completed' && !hasFailures(b));
@@ -78,6 +84,7 @@ export default function DownloadsPage() {
               : undefined
           }
         />
+        <MediaGrabs />
         <div className="md:hidden">
           <Link
             href="/library?view=updates"
@@ -86,40 +93,44 @@ export default function DownloadsPage() {
             {t('nav.updates')} <span aria-hidden>›</span>
           </Link>
         </div>
-        <Tabs
-          value={view}
-          onChange={setView}
-          label={t('downloads.filter')}
-          items={[
-            { id: 'active', label: t('downloads.active'), count: active.length },
-            { id: 'failed', label: t('downloads.failed'), count: failed.length, tone: 'bad' },
-            { id: 'history', label: t('downloads.history') },
-          ]}
-        />
-        {engine.state && engine.state !== 'ok' ? (
-          <SuwayomiNotice />
-        ) : (
-          streamError && (
-            <div className="flex items-center gap-3">
-              <ErrorNote error={new ApiFailure(streamError, 0)} />
-              <button
-                type="button"
-                className={smallButton}
-                onClick={() => setStreamRun((run) => run + 1)}
-              >
-                {t('common.retry')}
-              </button>
-            </div>
-          )
+        {!readingOff && (
+          <>
+            <Tabs
+              value={view}
+              onChange={setView}
+              label={t('downloads.filter')}
+              items={[
+                { id: 'active', label: t('downloads.active'), count: active.length },
+                { id: 'failed', label: t('downloads.failed'), count: failed.length, tone: 'bad' },
+                { id: 'history', label: t('downloads.history') },
+              ]}
+            />
+            {engine.state && engine.state !== 'ok' ? (
+              <SuwayomiNotice />
+            ) : (
+              streamError && (
+                <div className="flex items-center gap-3">
+                  <ErrorNote error={new ApiFailure(streamError, 0)} />
+                  <button
+                    type="button"
+                    className={smallButton}
+                    onClick={() => setStreamRun((run) => run + 1)}
+                  >
+                    {t('common.retry')}
+                  </button>
+                </div>
+              )
+            )}
+            {snapshot && shown.length === 0 && (
+              <Empty title={t(`downloads.empty.${view}`)}>
+                {view === 'active' ? t('downloads.emptyBody') : null}
+              </Empty>
+            )}
+            {shown.map((b) => (
+              <BatchCard key={b.id} batch={b} />
+            ))}
+          </>
         )}
-        {snapshot && shown.length === 0 && (
-          <Empty title={t(`downloads.empty.${view}`)}>
-            {view === 'active' ? t('downloads.emptyBody') : null}
-          </Empty>
-        )}
-        {shown.map((b) => (
-          <BatchCard key={b.id} batch={b} />
-        ))}
       </div>
       <aside className="mt-10 flex flex-col gap-5 md:mt-[30px]">
         <div className="flex flex-col gap-3.5 rounded-[18px] bg-white/[0.05] p-5 md:p-[22px]">

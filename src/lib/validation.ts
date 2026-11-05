@@ -238,6 +238,9 @@ export const settingsPatch = z
     sonarrAnimeRootFolder: z.string().max(1000).optional(),
     radarrQualityProfile: z.number().int().min(0).max(1_000_000).optional(),
     radarrRootFolder: z.string().max(1000).optional(),
+    qbittorrentUrl: z.union([httpUrl, z.literal('')]).optional(),
+    qbittorrentUsername: z.string().max(300).optional(),
+    qbittorrentPassword: z.string().max(2000).optional(),
     tmdbApiKey: z
       .string()
       .trim()
