@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Same side margins on every page: the page keeps the scrollbar's room (`scrollbar-gutter`), so
+  content no longer shifts between short and long pages; the header and the home hero are placed
+  from the page width instead of `100vw` (they sat half a scrollbar off the content); a work's
+  settings page uses the common width.
+- Library toolbar on phones: selection (icon only), status and sort stay on one row, scrolling
+  sideways if needed.
 - Library selection mode: select works one by one or all shown ones (filters apply), then mark them
   read/watched, change their status, add or remove favorites, or remove them from the library.
   Removing, finishing and status changes ask for confirmation; removed works are not brought back

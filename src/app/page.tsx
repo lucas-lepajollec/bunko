@@ -187,10 +187,10 @@ function Hero({
         <Cover
           src={m.coverUrl}
           alt=""
-          className="absolute top-[120px] right-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))] hidden w-[180px] md:block"
+          className="absolute top-[120px] right-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] hidden w-[180px] md:block"
         />
       )}
-      <div className="absolute inset-x-4 bottom-8 flex flex-col gap-3 md:inset-x-auto md:top-[150px] md:bottom-auto md:left-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))] md:w-[680px] md:gap-[18px]">
+      <div className="absolute inset-x-4 bottom-8 flex flex-col gap-3 md:inset-x-auto md:top-[150px] md:bottom-auto md:left-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] md:w-[680px] md:gap-[18px]">
         {/* Without a wide banner the background stays plain: show the cover itself. */}
         <div className="text-soft flex flex-wrap items-center gap-3 text-[11px] tracking-[0.16em] uppercase md:text-xs">
           <span className="h-[3px] w-6 rounded-full" style={{ background: 'var(--accent)' }} />
@@ -224,7 +224,7 @@ function Hero({
         </div>
       </div>
       {items.length > 1 && (
-        <div className="absolute right-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))] bottom-[140px] hidden items-center gap-3 md:flex">
+        <div className="absolute right-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] bottom-[140px] hidden items-center gap-3 md:flex">
           {items.map((item, i) => {
             // The selected cover is the largest; neighbours shrink and fade with distance.
             const current = index % items.length;
