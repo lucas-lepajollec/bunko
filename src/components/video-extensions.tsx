@@ -8,6 +8,11 @@ import { Segmented, cx, errorText, smallButton } from './ui';
 import { Switch } from './work-settings';
 
 type Settings = PublicSettings;
+const HEALTH_LABEL = {
+  ok: 'video.healthOk',
+  warning: 'video.healthWarning',
+  down: 'video.healthDown',
+} as const;
 
 /**
  * Video extensions (Stremio addon protocol): the user adds the addons they choose by manifest
@@ -104,6 +109,35 @@ export function VideoExtensions({
                     ? t('video.addonUnreachable')
                     : a.host}
               </span>
+              {a.health && (
+                <span className="text-muted text-xs">
+                  {t('video.healthSummary', {
+                    ok: a.health.summary.ok,
+                    warning: a.health.summary.warning,
+                    down: a.health.summary.down,
+                    off: a.health.summary.off,
+                  })}
+                </span>
+              )}
+              {a.health && a.health.sources.some((s) => !s.enabled || s.status !== 'ok') && (
+                <details className="text-muted text-xs">
+                  <summary className="cursor-pointer">{t('video.healthDetails')}</summary>
+                  <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                    {a.health.sources
+                      .filter((s) => !s.enabled || s.status !== 'ok')
+                      .map((s) => (
+                        <li
+                          key={s.name}
+                          className={
+                            !s.enabled ? 'text-muted' : s.status === 'down' ? 'text-bad' : 'text-warn'
+                          }
+                        >
+                          {s.name} · {t(s.enabled ? HEALTH_LABEL[s.status] : 'video.healthOff')}
+                        </li>
+                      ))}
+                  </ul>
+                </details>
+              )}
             </span>
             <button
               type="button"

@@ -126,6 +126,17 @@ export interface PlaybackInfo {
     url: string | null;
   }[];
 }
+/** One source reported by an extension's optional `health.json`. */
+export interface VideoAddonSource {
+  name: string;
+  status: 'ok' | 'warning' | 'down';
+  enabled: boolean;
+}
+/** Optional per-source health an extension may publish next to its manifest. */
+export interface VideoAddonHealth {
+  summary: { total: number; ok: number; warning: number; down: number; off: number };
+  sources: VideoAddonSource[];
+}
 /** A video extension (Stremio addon protocol) as configured. */
 export interface VideoAddon {
   /** Stable id of the manifest address (the address itself may hold account keys: server only). */
@@ -137,6 +148,8 @@ export interface VideoAddon {
   resources: ('stream' | 'subtitles')[];
   /** `private`: on the LAN, not allowed by BUNKO_VIDEO_ALLOWED_HOSTS. */
   error: 'unreachable' | 'private' | null;
+  /** Per-source health when the extension exposes `health.json`; null otherwise. */
+  health: VideoAddonHealth | null;
 }
 /** A subtitle file offered by an extension, converted to WebVTT by Bunko. */
 export interface VideoSubtitle {

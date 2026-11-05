@@ -39,6 +39,33 @@ const manifestSchema = z
 type Manifest = z.infer<typeof manifestSchema>;
 type Resource = 'stream' | 'subtitles';
 
+/** Optional, generic per-source health: an extension may expose it at `{baseManifest}/health.json`. */
+const healthSchema = z
+  .object({
+    schema: z.literal(1).optional(),
+    summary: z
+      .object({
+        total: z.number().optional(),
+        ok: z.number(),
+        warning: z.number(),
+        down: z.number(),
+        off: z.number(),
+      })
+      .passthrough(),
+    sources: z
+      .array(
+        z
+          .object({
+            name: z.string(),
+            status: z.enum(['ok', 'warning', 'down']),
+            enabled: z.boolean().optional(),
+          })
+          .passthrough(),
+      )
+      .default([]),
+  })
+  .passthrough();
+
 const base = (url: string) => url.replace(/\/manifest\.json(?:\?.*)?$/, '').replace(/\/+$/, '');
 
 /** `stremio://host/…` install links are the same manifest over HTTPS. */
@@ -71,13 +98,45 @@ const resourcesOf = (m: Manifest) =>
     (r): r is Resource => r === 'stream' || r === 'subtitles',
   );
 
+/**
+ * Reads the optional health document next to the manifest. Absent, unreadable or invalid means
+ * "no health", never an error: the extension keeps working exactly as before.
+ */
+async function addonHealth(url: string, signal?: AbortSignal) {
+  return cached(`addon-health:${addonId(url)}`, 60_000, async () => {
+    try {
+      const data = await safeJson(`${base(url)}/health.json`, {
+        timeoutMs: 3000,
+        signal: AbortSignal.any([AbortSignal.timeout(4000), ...(signal ? [signal] : [])]),
+      });
+      const parsed = healthSchema.parse(data);
+      return {
+        summary: {
+          total: parsed.summary.total ?? parsed.sources.length,
+          ok: parsed.summary.ok,
+          warning: parsed.summary.warning,
+          down: parsed.summary.down,
+          off: parsed.summary.off,
+        },
+        sources: parsed.sources.map((s) => ({
+          name: s.name,
+          status: s.status,
+          enabled: s.enabled !== false,
+        })),
+      };
+    } catch {
+      return null;
+    }
+  });
+}
+
 export async function videoAddons(signal?: AbortSignal): Promise<VideoAddon[]> {
   return Promise.all(
     getSettings().videoAddons.map(async (url) => {
       const id = addonId(url);
       const host = new URL(base(url)).host;
       try {
-        const m = await manifest(url, signal);
+        const [m, health] = await Promise.all([manifest(url, signal), addonHealth(url, signal)]);
         return {
           id,
           host,
@@ -85,10 +144,19 @@ export async function videoAddons(signal?: AbortSignal): Promise<VideoAddon[]> {
           description: m.description ?? null,
           resources: resourcesOf(m),
           error: null,
+          health,
         };
       } catch (e) {
         const error = (e as AppError).code === 'DESTINATION_REFUSED' ? 'private' : 'unreachable';
-        return { id, host, name: null, description: null, resources: [], error } as VideoAddon;
+        return {
+          id,
+          host,
+          name: null,
+          description: null,
+          resources: [],
+          error,
+          health: null,
+        } as VideoAddon;
       }
     }),
   );
