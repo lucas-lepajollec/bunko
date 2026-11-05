@@ -1,7 +1,7 @@
 'use client';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   MediaRelease,
   MediaRequestState,
@@ -122,6 +122,29 @@ const RESOLUTION_RANK: Record<string, number> = {
   '480P': 1,
 };
 
+type Tab = 'arr' | 'prowlarr';
+interface Pane {
+  results: MediaRelease[] | null;
+  loading: boolean;
+  error: unknown;
+  startedAt: number | null;
+}
+
+/** Seconds since a search started (indexers can take a while). */
+function Elapsed({ since }: { since: number }) {
+  const { n } = useI18n();
+  const [now, setNow] = useState(since);
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span className="text-muted tabular-nums">
+      · {n(Math.max(0, Math.round((now - since) / 1000)))} s
+    </span>
+  );
+}
+
 function MediaSearchDialog({
   media,
   arr,
@@ -147,10 +170,27 @@ function MediaSearchDialog({
     return list;
   }, [media, film]);
   const [query, setQuery] = useState(suggestions[0] ?? media.title);
-  const [results, setResults] = useState<MediaRelease[] | null>(null);
+  // Each tab keeps its own results: going to Prowlarr and back loses nothing.
   // Opening on the Sonarr/Radarr tab starts by preparing the work there.
-  const [loading, setLoading] = useState(Boolean(arr));
-  const [error, setError] = useState<unknown>(null);
+  const [panes, setPanes] = useState<Record<Tab, Pane>>({
+    arr: { results: null, loading: Boolean(arr), error: null, startedAt: null },
+    prowlarr: { results: null, loading: false, error: null, startedAt: null },
+  });
+  const patch = (which: Tab, next: Partial<Pane>) =>
+    setPanes((x) => ({ ...x, [which]: { ...x[which], ...next } }));
+  const { results, loading, error, startedAt } = panes[tab];
+  // A season search shows season packs; single episodes on demand.
+  const [packsOnly, setPacksOnly] = useState(true);
+  const [kind, setKind] = useState<'all' | 'tv' | 'movie'>('all');
+  const searches = useRef<Record<Tab, AbortController | null>>({ arr: null, prowlarr: null });
+  useEffect(
+    () => () => {
+      // Closing the window stops the searches still running.
+      searches.current.arr?.abort();
+      searches.current.prowlarr?.abort();
+    },
+    [],
+  );
   const [sort, setSort] = useState<Sort>('seeders');
   const [filter, setFilter] = useState('');
   const [sent, setSent] = useState<Record<string, 'sending' | 'sent' | 'error'>>({});
@@ -167,12 +207,9 @@ function MediaSearchDialog({
         );
         // A film has nothing to choose: its interactive search starts right away.
         if (next.service === 'radarr') return search('arr', null);
-        setLoading(false);
+        patch('arr', { loading: false });
       })
-      .catch((e) => {
-        setError(e);
-        setLoading(false);
-      });
+      .catch((e) => patch('arr', { error: e, loading: false }));
   }
   useEffect(() => {
     if (arr) prepare();
@@ -180,24 +217,29 @@ function MediaSearchDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function search(where: 'arr' | 'prowlarr', seasonNumber: number | null, q = query) {
-    setLoading(true);
-    setError(null);
-    setResults(null);
+  async function search(where: Tab, seasonNumber: number | null, q = query) {
+    searches.current[where]?.abort();
+    const controller = new AbortController();
+    searches.current[where] = controller;
+    patch(where, { loading: true, error: null, results: null, startedAt: Date.now() });
     try {
       const params = new URLSearchParams(
         where === 'prowlarr'
-          ? { service: 'prowlarr', q, kind: film ? 'movie' : 'tv' }
+          ? { service: 'prowlarr', q, kind }
           : {
               mediaId: media.id,
               ...(seasonNumber !== null ? { season: String(seasonNumber) } : {}),
             },
       );
-      setResults(await api<MediaRelease[]>(`/api/arr/search?${params}`));
+      // Indexers are slow (a minute or more is common): wait up to 10 minutes.
+      const found = await api<MediaRelease[]>(`/api/arr/search?${params}`, {
+        signal: controller.signal,
+        timeoutMs: 600_000,
+      });
+      patch(where, { results: found, loading: false });
     } catch (e) {
-      setError(e);
-    } finally {
-      setLoading(false);
+      if (controller.signal.aborted) return;
+      patch(where, { error: e, loading: false });
     }
   }
 
@@ -222,9 +264,13 @@ function MediaSearchDialog({
     }
   }
 
+  const sonarrSeason = tab === 'arr' && target?.service === 'sonarr';
+  const seasonPacks = sonarrSeason && packsOnly;
+  const episodesHidden = seasonPacks ? (results ?? []).filter((r) => !r.fullSeason).length : 0;
   const shown = useMemo(() => {
     const words = filter.toLowerCase().split(/\s+/).filter(Boolean);
     return (results ?? [])
+      .filter((r) => !seasonPacks || r.fullSeason)
       .filter((r) => words.every((w) => `${r.title} ${r.indexer}`.toLowerCase().includes(w)))
       .sort((a, b) =>
         sort === 'size'
@@ -236,7 +282,7 @@ function MediaSearchDialog({
                   (RESOLUTION_RANK[a.resolution ?? ''] ?? 0) || (b.seeders ?? 0) - (a.seeders ?? 0)
               : (b.seeders ?? -1) - (a.seeders ?? -1),
       );
-  }, [results, filter, sort]);
+  }, [results, filter, sort, seasonPacks]);
 
   const size = (bytes: number) =>
     bytes >= 1024 ** 3
@@ -304,10 +350,8 @@ function MediaSearchDialog({
                   disabled={!enabled}
                   onClick={() => {
                     setTab(id);
-                    setResults(null);
-                    setError(null);
-                    if (id === 'arr' && !target) {
-                      setLoading(true);
+                    if (id === 'arr' && !target && !panes.arr.loading) {
+                      patch('arr', { loading: true, error: null });
                       prepare();
                     }
                   }}
@@ -330,7 +374,7 @@ function MediaSearchDialog({
                     value={season === null ? '' : String(season)}
                     onChange={(v) => {
                       setSeason(Number(v));
-                      setResults(null);
+                      patch('arr', { results: null });
                     }}
                     options={target.seasons.map((x) => ({
                       value: String(x.number),
@@ -346,7 +390,7 @@ function MediaSearchDialog({
                         aria-pressed={season === x.number}
                         onClick={() => {
                           setSeason(x.number);
-                          setResults(null);
+                          patch('arr', { results: null });
                         }}
                         className={cx(
                           'h-9 shrink-0 rounded-full px-3.5 text-[13px] whitespace-nowrap',
@@ -382,12 +426,22 @@ function MediaSearchDialog({
                   if (query.trim()) void search('prowlarr', null);
                 }}
               >
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 md:flex-nowrap">
                   <input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     aria-label={t('arr.query')}
-                    className="h-11 min-w-0 flex-1 rounded-full bg-white/[0.07] px-4 text-[15px] outline-none focus:bg-white/[0.1]"
+                    className="h-11 min-w-0 flex-1 basis-full rounded-full md:basis-auto bg-white/[0.07] px-4 text-[15px] outline-none focus:bg-white/[0.1]"
+                  />
+                  <Select
+                    label={t('arr.category')}
+                    value={kind}
+                    onChange={(v) => setKind(v as 'all' | 'tv' | 'movie')}
+                    options={(['all', 'tv', 'movie'] as const).map((x) => ({
+                      value: x,
+                      label: t(`arr.category.${x}`),
+                    }))}
+                    className="h-11 shrink-0"
                   />
                   <button
                     type="submit"
@@ -420,6 +474,21 @@ function MediaSearchDialog({
             {results && results.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="text-mid">{t('arr.results', { count: n(shown.length) })}</span>
+                {sonarrSeason && (
+                  <button
+                    type="button"
+                    aria-pressed={packsOnly}
+                    onClick={() => setPacksOnly((x) => !x)}
+                    className={cx(
+                      'h-9 rounded-full px-3.5 text-[13px] whitespace-nowrap',
+                      packsOnly
+                        ? 'bg-white/[0.16] text-white'
+                        : 'text-mid bg-white/[0.06] hover:text-white',
+                    )}
+                  >
+                    {t('arr.packsOnly')}
+                  </button>
+                )}
                 <input
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
@@ -445,6 +514,7 @@ function MediaSearchDialog({
               <div className="text-mid flex items-center gap-3 py-10 text-sm">
                 <Spinner />
                 {tab === 'arr' && !target ? t('arr.preparing') : t('arr.searching')}
+                {startedAt && <Elapsed since={startedAt} />}
               </div>
             )}
             {error ? <p className="text-bad py-6 text-sm">{errorText(t, error)}</p> : null}
@@ -454,6 +524,22 @@ function MediaSearchDialog({
             {!loading && results?.length === 0 && (
               <p className="text-muted py-6 font-serif text-lg italic">{t('arr.noResults')}</p>
             )}
+            {!loading &&
+              results &&
+              results.length > 0 &&
+              shown.length === 0 &&
+              episodesHidden > 0 && (
+                <p className="text-mid flex flex-wrap items-center gap-3 py-6 text-sm">
+                  {t('arr.noPacks')}
+                  <button
+                    type="button"
+                    onClick={() => setPacksOnly(false)}
+                    className="underline underline-offset-4 hover:text-white"
+                  >
+                    {t('arr.showEpisodes', { count: n(episodesHidden) })}
+                  </button>
+                </p>
+              )}
             <ul className="flex flex-col gap-2">
               {shown.map((r) => {
                 const state = sent[r.guid];

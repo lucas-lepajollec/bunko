@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- qBittorrent ≥ 5.2: an API key (`qbt_…`, Preferences → WebUI → API Key) can replace the login.
+- Interactive searches wait up to 10 minutes (the browser gave up after 30 s) and show the time
+  elapsed; closing the window stops them.
+- A season search from a work's sheet shows full-season releases; single episodes on demand.
+- Prowlarr: all categories by default (a category menu narrows it); TV searches include the anime
+  category, which many anime indexers use alone.
+- The Sonarr/Radarr and Prowlarr tabs keep their own results when switching between them.
 - Downloads of series, anime and films are chosen by hand, never searched automatically: the
   Download button (or "Complete (n/m)" when part of it is on disk) opens an interactive search.
   The Sonarr/Radarr tab lists their releases for a season or the film (quality, languages, full

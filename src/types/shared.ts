@@ -606,6 +606,8 @@ export interface Settings {
   qbittorrentUrl: string;
   qbittorrentUsername: string;
   qbittorrentPassword: string;
+  /** qBittorrent ≥ 5.2 API key (qbt_…), used instead of the login when set. */
+  qbittorrentApiKey: string;
   /** Jellyfin server address and API key; `jellyfinUser` names whose watched state counts. */
   jellyfinUrl: string;
   jellyfinApiKey: string;
@@ -682,6 +684,7 @@ export type SecretSetting =
   | 'prowlarrApiKey'
   | 'radarrApiKey'
   | 'qbittorrentPassword'
+  | 'qbittorrentApiKey'
   | 'tradocApiKey'
   | 'jellyfinApiKey'
   | 'googleBooksApiKey'

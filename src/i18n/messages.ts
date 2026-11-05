@@ -31,6 +31,15 @@ export function interpolate(template: string, variables?: Record<string, string 
 type Dictionary = Record<string, string>;
 
 const en: Dictionary = {
+  'arr.packsOnly': 'Full seasons only',
+  'arr.noPacks': 'No full-season release for this season.',
+  'arr.showEpisodes': 'Show the {count} single-episode releases',
+  'arr.category': 'Category',
+  'arr.category.all': 'All categories',
+  'arr.category.tv': 'Series & anime',
+  'arr.category.movie': 'Films',
+  'settings.qbittorrentApiKey': 'API key (qBittorrent ≥ 5.2)',
+  'settings.qbittorrentUsername': 'Username (without API key)',
   'arr.seasonLabel': 'Season',
   'title.downloadSeries': 'Download the series · {count} chapters',
   'title.downloadSeriesVol': 'Download the series · {count} volumes',
@@ -52,7 +61,7 @@ const en: Dictionary = {
   'arr.sort.size': 'Largest',
   'arr.sort.date': 'Newest',
   'arr.preparing': 'Preparing the work in Sonarr/Radarr…',
-  'arr.searching': 'Asking the indexers (up to a minute)…',
+  'arr.searching': 'Asking the indexers (often a minute or more)…',
   'arr.prowlarrHint':
     'Search the indexers by name. Pick one of the suggested names or type your own: release names often differ a little.',
   'arr.noResults': 'Nothing found',
@@ -1510,6 +1519,15 @@ const en: Dictionary = {
 };
 
 const fr: Dictionary = {
+  'arr.packsOnly': 'Saisons complètes uniquement',
+  'arr.noPacks': 'Aucune saison complète trouvée pour cette saison.',
+  'arr.showEpisodes': 'Afficher les {count} sorties d’épisodes seuls',
+  'arr.category': 'Catégorie',
+  'arr.category.all': 'Toutes catégories',
+  'arr.category.tv': 'Séries & animes',
+  'arr.category.movie': 'Films',
+  'settings.qbittorrentApiKey': 'Clé API (qBittorrent ≥ 5.2)',
+  'settings.qbittorrentUsername': 'Utilisateur (sans clé API)',
   'arr.seasonLabel': 'Saison',
   'title.downloadSeries': 'Télécharger la série · {count} chapitres',
   'title.downloadSeriesVol': 'Télécharger la série · {count} tomes',
@@ -1531,7 +1549,7 @@ const fr: Dictionary = {
   'arr.sort.size': 'Plus lourds',
   'arr.sort.date': 'Plus récents',
   'arr.preparing': 'Préparation de l’œuvre dans Sonarr/Radarr…',
-  'arr.searching': 'Interrogation des indexeurs (jusqu’à une minute)…',
+  'arr.searching': 'Interrogation des indexeurs (souvent une minute ou plus)…',
   'arr.prowlarrHint':
     'Cherche directement dans les indexeurs par nom. Prends un des noms proposés ou tape le tien : les noms des sorties varient souvent un peu.',
   'arr.noResults': 'Rien trouvé',
@@ -3005,6 +3023,15 @@ const fr: Dictionary = {
 };
 
 const es: Dictionary = {
+  'arr.packsOnly': 'Solo temporadas completas',
+  'arr.noPacks': 'No hay temporada completa para esta temporada.',
+  'arr.showEpisodes': 'Mostrar los {count} lanzamientos de episodios sueltos',
+  'arr.category': 'Categoría',
+  'arr.category.all': 'Todas las categorías',
+  'arr.category.tv': 'Series y anime',
+  'arr.category.movie': 'Películas',
+  'settings.qbittorrentApiKey': 'Clave API (qBittorrent ≥ 5.2)',
+  'settings.qbittorrentUsername': 'Usuario (sin clave API)',
   'arr.seasonLabel': 'Temporada',
   'title.downloadSeries': 'Descargar la serie · {count} capítulos',
   'title.downloadSeriesVol': 'Descargar la serie · {count} tomos',
@@ -3026,7 +3053,7 @@ const es: Dictionary = {
   'arr.sort.size': 'Más grandes',
   'arr.sort.date': 'Más recientes',
   'arr.preparing': 'Preparando la obra en Sonarr/Radarr…',
-  'arr.searching': 'Consultando los indexadores (hasta un minuto)…',
+  'arr.searching': 'Consultando los indexadores (a menudo un minuto o más)…',
   'arr.prowlarrHint':
     'Busca directamente en los indexadores por nombre. Elige uno de los nombres propuestos o escribe el tuyo: los nombres de los lanzamientos suelen variar un poco.',
   'arr.noResults': 'No se encontró nada',
@@ -4492,6 +4519,15 @@ const es: Dictionary = {
 };
 
 const de: Dictionary = {
+  'arr.packsOnly': 'Nur ganze Staffeln',
+  'arr.noPacks': 'Kein Staffel-Release für diese Staffel gefunden.',
+  'arr.showEpisodes': 'Die {count} Einzelfolgen-Releases zeigen',
+  'arr.category': 'Kategorie',
+  'arr.category.all': 'Alle Kategorien',
+  'arr.category.tv': 'Serien & Anime',
+  'arr.category.movie': 'Filme',
+  'settings.qbittorrentApiKey': 'API-Schlüssel (qBittorrent ≥ 5.2)',
+  'settings.qbittorrentUsername': 'Benutzer (ohne API-Schlüssel)',
   'arr.seasonLabel': 'Staffel',
   'title.downloadSeries': 'Serie herunterladen · {count} Kapitel',
   'title.downloadSeriesVol': 'Serie herunterladen · {count} Bände',
@@ -4513,7 +4549,7 @@ const de: Dictionary = {
   'arr.sort.size': 'Größte',
   'arr.sort.date': 'Neueste',
   'arr.preparing': 'Werk wird in Sonarr/Radarr vorbereitet…',
-  'arr.searching': 'Indexer werden abgefragt (bis zu einer Minute)…',
+  'arr.searching': 'Indexer werden abgefragt (oft eine Minute oder länger)…',
   'arr.prowlarrHint':
     'Suche direkt in den Indexern nach Namen. Nimm einen vorgeschlagenen Namen oder tippe deinen eigenen: Release-Namen weichen oft etwas ab.',
   'arr.noResults': 'Nichts gefunden',
@@ -5986,6 +6022,15 @@ const de: Dictionary = {
 };
 
 const it: Dictionary = {
+  'arr.packsOnly': 'Solo stagioni complete',
+  'arr.noPacks': 'Nessuna stagione completa trovata per questa stagione.',
+  'arr.showEpisodes': 'Mostra le {count} uscite di singoli episodi',
+  'arr.category': 'Categoria',
+  'arr.category.all': 'Tutte le categorie',
+  'arr.category.tv': 'Serie e anime',
+  'arr.category.movie': 'Film',
+  'settings.qbittorrentApiKey': 'Chiave API (qBittorrent ≥ 5.2)',
+  'settings.qbittorrentUsername': 'Utente (senza chiave API)',
   'arr.seasonLabel': 'Stagione',
   'title.downloadSeries': 'Scarica la serie · {count} capitoli',
   'title.downloadSeriesVol': 'Scarica la serie · {count} volumi',
@@ -6007,7 +6052,7 @@ const it: Dictionary = {
   'arr.sort.size': 'Più grandi',
   'arr.sort.date': 'Più recenti',
   'arr.preparing': 'Preparazione dell’opera in Sonarr/Radarr…',
-  'arr.searching': 'Interrogazione degli indexer (fino a un minuto)…',
+  'arr.searching': 'Interrogazione degli indexer (spesso un minuto o più)…',
   'arr.prowlarrHint':
     'Cerca direttamente negli indexer per nome. Scegli uno dei nomi proposti o scrivi il tuo: i nomi delle uscite variano spesso un po’.',
   'arr.noResults': 'Nessun risultato',
