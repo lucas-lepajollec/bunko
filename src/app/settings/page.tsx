@@ -474,7 +474,13 @@ function Connection({
       detail: status?.qbittorrent?.version ?? null,
       fields: [
         { name: 'qbittorrentUrl', label: t('settings.address'), type: 'url' },
-        { name: 'qbittorrentUsername', label: t('settings.username') },
+        {
+          name: 'qbittorrentApiKey',
+          label: t('settings.qbittorrentApiKey'),
+          type: 'password',
+          secret: 'qbittorrentApiKey',
+        },
+        { name: 'qbittorrentUsername', label: t('settings.qbittorrentUsername') },
         {
           name: 'qbittorrentPassword',
           label: t('settings.password'),

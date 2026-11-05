@@ -245,7 +245,7 @@ export async function prepareSearch(mediaId: string): Promise<MediaSearchTarget>
         'sonarr',
         `/api/v3/series/lookup?term=${encodeURIComponent(`tvdb:${target.id}`)}`,
         {},
-        30_000,
+        90_000,
       );
       if (!found) throw new AppError('NOT_FOUND', 'Sonarr does not know this series', 404);
       const options = await arrOptions('sonarr');
@@ -283,7 +283,7 @@ export async function prepareSearch(mediaId: string): Promise<MediaSearchTarget>
       'radarr',
       `/api/v3/movie/lookup/tmdb?tmdbId=${target.id}`,
       {},
-      30_000,
+      90_000,
     );
     const options = await arrOptions('radarr');
     await arr('radarr', '/api/v3/movie', {
@@ -395,7 +395,7 @@ export async function interactiveSearch(
     if (!series) throw new AppError('NOT_FOUND', 'The series is not in Sonarr yet', 404);
     const query = new URLSearchParams({ seriesId: String(series.id) });
     if (season !== null) query.set('seasonNumber', String(season));
-    const rows = await arr<RawRelease[]>('sonarr', `/api/v3/release?${query}`, { signal }, 180_000);
+    const rows = await arr<RawRelease[]>('sonarr', `/api/v3/release?${query}`, { signal }, 600_000);
     return rows.map((r) => toRelease('sonarr', r));
   }
   const [movie] = await arr<RadarrMovie[]>('radarr', `/api/v3/movie?tmdbId=${target.id}`);
@@ -404,7 +404,7 @@ export async function interactiveSearch(
     'radarr',
     `/api/v3/release?movieId=${movie.id}`,
     { signal },
-    180_000,
+    600_000,
   );
   return rows.map((r) => toRelease('radarr', r));
 }
@@ -417,9 +417,10 @@ export async function prowlarrSearch(
 ): Promise<MediaRelease[]> {
   const params = new URLSearchParams({ query, type: 'search' });
   // Newznab categories: 5000 TV (anime 5070 included), 2000 films.
-  if (kind === 'tv') params.append('categories', '5000');
+  // Anime indexers often file under 5070 only: ask for it explicitly with TV.
+  if (kind === 'tv') for (const c of ['5000', '5070']) params.append('categories', c);
   if (kind === 'movie') params.append('categories', '2000');
-  const rows = await arr<RawRelease[]>('prowlarr', `/api/v1/search?${params}`, { signal }, 120_000);
+  const rows = await arr<RawRelease[]>('prowlarr', `/api/v1/search?${params}`, { signal }, 600_000);
   return rows.map((r) => toRelease('prowlarr', r));
 }
 

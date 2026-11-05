@@ -241,6 +241,7 @@ export const settingsPatch = z
     qbittorrentUrl: z.union([httpUrl, z.literal('')]).optional(),
     qbittorrentUsername: z.string().max(300).optional(),
     qbittorrentPassword: z.string().max(2000).optional(),
+    qbittorrentApiKey: z.string().max(2000).optional(),
     tmdbApiKey: z
       .string()
       .trim()

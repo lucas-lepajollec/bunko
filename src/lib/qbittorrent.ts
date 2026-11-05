@@ -32,7 +32,12 @@ async function call(path: string, init: RequestInit = {}, timeoutMs = 8000): Pro
         // qBittorrent refuses API calls whose Referer/Origin is another host (CSRF protection).
         Referer: base,
         Origin: new URL(base).origin,
-        ...(state.sid ? { Cookie: `SID=${state.sid}` } : {}),
+        // qBittorrent ≥ 5.2: an API key replaces the login session.
+        ...(s.qbittorrentApiKey
+          ? { Authorization: `Bearer ${s.qbittorrentApiKey}` }
+          : state.sid
+            ? { Cookie: `SID=${state.sid}` }
+            : {}),
         ...init.headers,
       },
     });
@@ -66,12 +71,13 @@ async function login() {
 /** One authenticated call, logging in again once when the session expired. */
 async function api(path: string): Promise<Response> {
   let response = await call(path);
-  if (response.status === 403) {
+  // With an API key there is no session to renew: a refusal means the key is wrong.
+  if ((response.status === 403 || response.status === 401) && !getSettings().qbittorrentApiKey) {
     await response.body?.cancel();
     await login();
     response = await call(path);
   }
-  if (response.status === 403) {
+  if (response.status === 403 || response.status === 401) {
     await response.body?.cancel();
     throw new AppError('QBITTORRENT_UNAUTHORIZED', 'qBittorrent rejected the login', 502);
   }

@@ -58,7 +58,9 @@ const serve = (service: string) =>
       calls.push({ service, method: req.method!, path: p, query: url.searchParams, body });
       if (service === 'qbittorrent') {
         if (p === '/api/v2/auth/login') return send('Ok.', 'text/plain');
-        if (req.headers.cookie !== 'SID=fixture') return (res.writeHead(403), res.end());
+        const bearer = req.headers.authorization;
+        if (bearer ? bearer !== 'Bearer qbt_fixture' : req.headers.cookie !== 'SID=fixture')
+          return (res.writeHead(403), res.end());
         if (p === '/api/v2/torrents/info') return send(torrentList);
         if (p === '/api/v2/app/version') return send('v5.0.0', 'text/plain');
       }
@@ -129,6 +131,7 @@ beforeEach(() => {
     qbittorrentUrl: base(3),
     qbittorrentUsername: 'admin',
     qbittorrentPassword: 'secret',
+    qbittorrentApiKey: '',
     sonarrRootFolder: '/tv',
     sonarrAnimeRootFolder: '/anime',
   });
@@ -192,7 +195,7 @@ it('searches Prowlarr by name in the right categories', async () => {
   const [r] = await requests.prowlarrSearch('Show S01', 'tv');
   const call = calls.find((c) => c.service === 'prowlarr')!;
   expect(call.query.get('query')).toBe('Show S01');
-  expect(call.query.getAll('categories')).toEqual(['5000']);
+  expect(call.query.getAll('categories')).toEqual(['5000', '5070']);
   expect(r).toMatchObject({ service: 'prowlarr', languages: ['MULTI', 'Japanese'], codec: 'HEVC' });
 });
 
@@ -256,4 +259,13 @@ it('says when a work has no identity or the service is not set up', async () => 
   expect(await requests.mediaRequestState('tmdbmovie:603')).toMatchObject({
     state: 'unconfigured',
   });
+});
+
+it('uses a qBittorrent API key instead of logging in', async () => {
+  const { qbittorrentVersion } = await import('@/lib/qbittorrent');
+  updateSettings({ qbittorrentApiKey: 'qbt_fixture' });
+  expect(await qbittorrentVersion()).toBe('v5.0.0');
+  expect(calls.some((c) => c.path === '/api/v2/auth/login')).toBe(false);
+  updateSettings({ qbittorrentApiKey: 'qbt_wrong' });
+  await expect(qbittorrentVersion()).rejects.toMatchObject({ code: 'QBITTORRENT_UNAUTHORIZED' });
 });

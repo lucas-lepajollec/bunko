@@ -15,18 +15,25 @@ export class ApiFailure extends Error {
 
 export const UNAUTHORIZED_EVENT = 'bunko:unauthorized';
 
-export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function api<T>(
+  path: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+): Promise<T> {
   let response: Response;
   const headers = new Headers(init.headers);
   const signal = AbortSignal.any([
     ...(init.signal ? [init.signal] : []),
-    AbortSignal.timeout(!init.method || ['GET', 'HEAD'].includes(init.method) ? 30_000 : 120_000),
+    AbortSignal.timeout(
+      init.timeoutMs ?? (!init.method || ['GET', 'HEAD'].includes(init.method) ? 30_000 : 120_000),
+    ),
   ]);
   headers.set('Accept-Language', getUiLanguage());
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   try {
+    const { timeoutMs: _timeout, ...rest } = init;
+    void _timeout;
     response = await fetch(path, {
-      ...init,
+      ...rest,
       credentials: 'same-origin',
       headers,
       signal,
