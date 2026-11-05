@@ -351,6 +351,14 @@ export function releaseTags(title: string) {
         : null;
   return { languages, resolution, codec };
 }
+export interface SonarrEpisode {
+  id: number;
+  number: number;
+  absolute: number | null;
+  title: string | null;
+  hasFile: boolean;
+  airDate: string | null;
+}
 function toRelease(service: SearchService, r: RawRelease): MediaRelease {
   const tags = releaseTags(r.title);
   const arrLanguages = (r.languages ?? [])
@@ -377,7 +385,11 @@ function toRelease(service: SearchService, r: RawRelease): MediaRelease {
     rejections: (r.rejections ?? [])
       .map((x) => (typeof x === 'string' ? x : (x.reason ?? '')))
       .filter(Boolean),
-    fullSeason: r.fullSeason ?? false,
+    // Anime batches ("01-12") come as multi-episode releases, not "full season" ones.
+    fullSeason:
+      (r.fullSeason ?? false) ||
+      (r.episodeNumbers?.length ?? 0) > 1 ||
+      (r.absoluteEpisodeNumbers?.length ?? 0) > 1,
     episodes: r.episodeNumbers?.length ? r.episodeNumbers : (r.absoluteEpisodeNumbers ?? []),
     infoUrl: r.infoUrl && /^https?:\/\//.test(r.infoUrl) ? r.infoUrl : null,
   };
@@ -388,13 +400,17 @@ export async function interactiveSearch(
   mediaId: string,
   season: number | null,
   signal?: AbortSignal,
+  episodeId?: number,
 ): Promise<MediaRelease[]> {
   const target = await arrTarget(mediaId);
   if (target.service === 'sonarr') {
     const [series] = await arr<SonarrDetail[]>('sonarr', `/api/v3/series?tvdbId=${target.id}`);
     if (!series) throw new AppError('NOT_FOUND', 'The series is not in Sonarr yet', 404);
-    const query = new URLSearchParams({ seriesId: String(series.id) });
-    if (season !== null) query.set('seasonNumber', String(season));
+    // Like Sonarr's own buttons: one episode (episodeId) or a whole season (seriesId+season).
+    const query = episodeId
+      ? new URLSearchParams({ episodeId: String(episodeId) })
+      : new URLSearchParams({ seriesId: String(series.id) });
+    if (!episodeId && season !== null) query.set('seasonNumber', String(season));
     const rows = await arr<RawRelease[]>('sonarr', `/api/v3/release?${query}`, { signal }, 600_000);
     return rows.map((r) => toRelease('sonarr', r));
   }
@@ -407,6 +423,34 @@ export async function interactiveSearch(
     600_000,
   );
   return rows.map((r) => toRelease('radarr', r));
+}
+
+/** Episodes of one season in Sonarr, for an episode's interactive search. */
+export async function seasonEpisodes(mediaId: string, season: number): Promise<SonarrEpisode[]> {
+  const target = await arrTarget(mediaId);
+  if (target.service !== 'sonarr') return [];
+  const [series] = await arr<SonarrDetail[]>('sonarr', `/api/v3/series?tvdbId=${target.id}`);
+  if (!series) throw new AppError('NOT_FOUND', 'The series is not in Sonarr yet', 404);
+  const rows = await arr<
+    {
+      id: number;
+      episodeNumber: number;
+      absoluteEpisodeNumber?: number;
+      title?: string;
+      hasFile?: boolean;
+      airDateUtc?: string;
+    }[]
+  >('sonarr', `/api/v3/episode?seriesId=${series.id}&seasonNumber=${season}`);
+  return rows
+    .map((e) => ({
+      id: e.id,
+      number: e.episodeNumber,
+      absolute: e.absoluteEpisodeNumber ?? null,
+      title: e.title ?? null,
+      hasFile: Boolean(e.hasFile),
+      airDate: e.airDateUtc ?? null,
+    }))
+    .sort((a, b) => a.number - b.number);
 }
 
 /** Prowlarr: a search by name in every indexer (TV or film categories). */

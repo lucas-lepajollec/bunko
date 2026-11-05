@@ -97,6 +97,20 @@ const serve = (service: string) =>
             ? [{ id: 2, hasFile: false, monitored: false }]
             : [],
         );
+      if (p === '/api/v3/episode')
+        return send([
+          { id: 12, episodeNumber: 2, absoluteEpisodeNumber: 2, title: 'Two', hasFile: false },
+          { id: 11, episodeNumber: 1, absoluteEpisodeNumber: 1, title: 'One', hasFile: true },
+        ]);
+      if (p === '/api/v3/release' && req.method === 'GET' && url.searchParams.get('episodeId'))
+        return send([
+          { ...release('[Group] Show - 02 [1080p]'), fullSeason: false, episodeNumbers: [2] },
+          {
+            ...release('[Group] Show (01-12) [1080p]'),
+            fullSeason: false,
+            absoluteEpisodeNumbers: [1, 2, 3],
+          },
+        ]);
       if (p === '/api/v3/series/lookup') return send([{ title: 'Lookup', tvdbId: 81797 }]);
       if (p === '/api/v3/movie/lookup/tmdb') return send({ title: 'Lookup', tmdbId: 129 });
       if (p === '/api/v3/release' && req.method === 'GET')
@@ -268,4 +282,21 @@ it('uses a qBittorrent API key instead of logging in', async () => {
   expect(calls.some((c) => c.path === '/api/v2/auth/login')).toBe(false);
   updateSettings({ qbittorrentApiKey: 'qbt_wrong' });
   await expect(qbittorrentVersion()).rejects.toMatchObject({ code: 'QBITTORRENT_UNAUTHORIZED' });
+});
+
+it('searches one episode like Sonarr, and counts anime batches as season packs', async () => {
+  await requests.prepareSearch('anilist:21');
+  const episodes = await requests.seasonEpisodes('anilist:21', 1);
+  expect(episodes.map((e) => [e.id, e.number, e.hasFile])).toEqual([
+    [11, 1, true],
+    [12, 2, false],
+  ]);
+  const found = await requests.interactiveSearch('anilist:21', 1, undefined, 12);
+  const call = calls.findLast((c) => c.path === '/api/v3/release' && c.method === 'GET')!;
+  expect(call.query.get('episodeId')).toBe('12');
+  expect(call.query.get('seriesId')).toBeNull();
+  expect(found.map((r) => [r.title, r.fullSeason])).toEqual([
+    ['[Group] Show - 02 [1080p]', false],
+    ['[Group] Show (01-12) [1080p]', true],
+  ]);
 });

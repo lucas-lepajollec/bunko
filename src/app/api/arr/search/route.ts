@@ -15,6 +15,7 @@ const query = z.union([
     service: z.literal('arr').default('arr'),
     mediaId: z.string().min(1).max(200),
     season: z.coerce.number().int().min(0).max(10_000).optional(),
+    episodeId: z.coerce.number().int().positive().max(2_147_483_647).optional(),
   }),
 ]);
 
@@ -25,6 +26,6 @@ export const GET = route(async (r) => {
   return json(
     input.service === 'prowlarr'
       ? await prowlarrSearch(input.q, input.kind, r.signal)
-      : await interactiveSearch(input.mediaId, input.season ?? null, r.signal),
+      : await interactiveSearch(input.mediaId, input.season ?? null, r.signal, input.episodeId),
   );
 });
