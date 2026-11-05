@@ -31,6 +31,11 @@ export function interpolate(template: string, variables?: Record<string, string 
 type Dictionary = Record<string, string>;
 
 const en: Dictionary = {
+  'arr.scope.season': 'Whole season',
+  'arr.scope.episode': 'One episode',
+  'arr.episodeLabel': 'Episode',
+  'arr.episodeShort': 'Ep. {n}',
+  'arr.noEpisodes': 'No episodes',
   'arr.packsOnly': 'Full seasons only',
   'arr.noPacks': 'No full-season release for this season.',
   'arr.showEpisodes': 'Show the {count} single-episode releases',
@@ -1525,6 +1530,11 @@ const en: Dictionary = {
 };
 
 const fr: Dictionary = {
+  'arr.scope.season': 'Saison entière',
+  'arr.scope.episode': 'Un épisode',
+  'arr.episodeLabel': 'Épisode',
+  'arr.episodeShort': 'Ép. {n}',
+  'arr.noEpisodes': 'Aucun épisode',
   'arr.packsOnly': 'Saisons complètes uniquement',
   'arr.noPacks': 'Aucune saison complète trouvée pour cette saison.',
   'arr.showEpisodes': 'Afficher les {count} sorties d’épisodes seuls',
@@ -3035,6 +3045,11 @@ const fr: Dictionary = {
 };
 
 const es: Dictionary = {
+  'arr.scope.season': 'Temporada entera',
+  'arr.scope.episode': 'Un episodio',
+  'arr.episodeLabel': 'Episodio',
+  'arr.episodeShort': 'Ep. {n}',
+  'arr.noEpisodes': 'Sin episodios',
   'arr.packsOnly': 'Solo temporadas completas',
   'arr.noPacks': 'No hay temporada completa para esta temporada.',
   'arr.showEpisodes': 'Mostrar los {count} lanzamientos de episodios sueltos',
@@ -4537,6 +4552,11 @@ const es: Dictionary = {
 };
 
 const de: Dictionary = {
+  'arr.scope.season': 'Ganze Staffel',
+  'arr.scope.episode': 'Eine Folge',
+  'arr.episodeLabel': 'Folge',
+  'arr.episodeShort': 'Folge {n}',
+  'arr.noEpisodes': 'Keine Folgen',
   'arr.packsOnly': 'Nur ganze Staffeln',
   'arr.noPacks': 'Kein Staffel-Release für diese Staffel gefunden.',
   'arr.showEpisodes': 'Die {count} Einzelfolgen-Releases zeigen',
@@ -6046,6 +6066,11 @@ const de: Dictionary = {
 };
 
 const it: Dictionary = {
+  'arr.scope.season': 'Stagione intera',
+  'arr.scope.episode': 'Un episodio',
+  'arr.episodeLabel': 'Episodio',
+  'arr.episodeShort': 'Ep. {n}',
+  'arr.noEpisodes': 'Nessun episodio',
   'arr.packsOnly': 'Solo stagioni complete',
   'arr.noPacks': 'Nessuna stagione completa trovata per questa stagione.',
   'arr.showEpisodes': 'Mostra le {count} uscite di singoli episodi',

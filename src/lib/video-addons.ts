@@ -56,12 +56,13 @@ const healthSchema = z
       .array(
         z
           .object({
-            name: z.string(),
+            name: z.string().max(80),
             status: z.enum(['ok', 'warning', 'down']),
             enabled: z.boolean().optional(),
           })
           .passthrough(),
       )
+      .max(200)
       .default([]),
   })
   .passthrough();

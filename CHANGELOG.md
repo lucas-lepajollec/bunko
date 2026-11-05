@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Sonarr interactive search, like Sonarr's own buttons: a whole season or one episode (episode
+  list with absolute numbers and what is already on disk). Anime batches ("01-12") count as season
+  packs, so they show with "full seasons only".
+- Extension health: the source list read from `health.json` is bounded (200 sources, short names).
 - qBittorrent ≥ 5.2: an API key (`qbt_…`, Preferences → WebUI → API Key) can replace the login.
 - Interactive searches wait up to 10 minutes (the browser gave up after 30 s) and show the time
   elapsed; closing the window stops them.

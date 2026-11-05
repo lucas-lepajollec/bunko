@@ -123,6 +123,13 @@ const RESOLUTION_RANK: Record<string, number> = {
 };
 
 type Tab = 'arr' | 'prowlarr';
+interface SonarrEpisodeRow {
+  id: number;
+  number: number;
+  absolute: number | null;
+  title: string | null;
+  hasFile: boolean;
+}
 interface Pane {
   results: MediaRelease[] | null;
   loading: boolean;
@@ -181,6 +188,20 @@ function MediaSearchDialog({
   const { results, loading, error, startedAt } = panes[tab];
   // A season search shows season packs; single episodes on demand.
   const [packsOnly, setPacksOnly] = useState(true);
+  // Like Sonarr: search a whole season, or one episode (anime seasons are slow to search whole).
+  const [scope, setScope] = useState<'season' | 'episode'>('season');
+  const [episodeId, setEpisodeId] = useState<number | null>(null);
+  const episodes = useApi<SonarrEpisodeRow[]>(
+    tab === 'arr' && target?.service === 'sonarr' && scope === 'episode' && season !== null
+      ? `/api/arr/episodes?mediaId=${encodeURIComponent(media.id)}&season=${season}`
+      : null,
+  );
+  const episodeList = episodes.data ?? [];
+  const chosenEpisode =
+    episodeList.find((e) => e.id === episodeId) ??
+    episodeList.find((e) => !e.hasFile) ??
+    episodeList[0] ??
+    null;
   const [kind, setKind] = useState<'all' | 'tv' | 'movie'>('all');
   const searches = useRef<Record<Tab, AbortController | null>>({ arr: null, prowlarr: null });
   useEffect(
@@ -217,7 +238,12 @@ function MediaSearchDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function search(where: Tab, seasonNumber: number | null, q = query) {
+  async function search(
+    where: Tab,
+    seasonNumber: number | null,
+    q = query,
+    episodeId: number | null = null,
+  ) {
     searches.current[where]?.abort();
     const controller = new AbortController();
     searches.current[where] = controller;
@@ -229,6 +255,7 @@ function MediaSearchDialog({
           : {
               mediaId: media.id,
               ...(seasonNumber !== null ? { season: String(seasonNumber) } : {}),
+              ...(episodeId !== null ? { episodeId: String(episodeId) } : {}),
             },
       );
       // Indexers are slow (a minute or more is common): wait up to 10 minutes.
@@ -264,7 +291,7 @@ function MediaSearchDialog({
     }
   }
 
-  const sonarrSeason = tab === 'arr' && target?.service === 'sonarr';
+  const sonarrSeason = tab === 'arr' && target?.service === 'sonarr' && scope === 'season';
   const seasonPacks = sonarrSeason && packsOnly;
   const episodesHidden = seasonPacks ? (results ?? []).filter((r) => !r.fullSeason).length : 0;
   const shown = useMemo(() => {
@@ -407,13 +434,65 @@ function MediaSearchDialog({
                     ))}
                   </div>
                 )}
+                <span className="flex rounded-full bg-white/[0.06] p-0.5 text-[13px]">
+                  {(['season', 'episode'] as const).map((x) => (
+                    <button
+                      key={x}
+                      type="button"
+                      aria-pressed={scope === x}
+                      onClick={() => {
+                        setScope(x);
+                        patch('arr', { results: null, error: null });
+                      }}
+                      className={cx(
+                        'h-8 rounded-full px-3.5',
+                        scope === x ? 'bg-white/[0.16] text-white' : 'text-mid hover:text-white',
+                      )}
+                    >
+                      {t(`arr.scope.${x}`)}
+                    </button>
+                  ))}
+                </span>
+                {scope === 'episode' && (
+                  <Select
+                    label={t('arr.episodeLabel')}
+                    value={chosenEpisode ? String(chosenEpisode.id) : ''}
+                    onChange={(v) => {
+                      setEpisodeId(Number(v));
+                      patch('arr', { results: null });
+                    }}
+                    options={
+                      episodeList.length
+                        ? episodeList.map((e) => ({
+                            value: String(e.id),
+                            label: `${t('arr.episodeShort', { n: n(e.number) })}${
+                              e.absolute && e.absolute !== e.number ? ` (${n(e.absolute)})` : ''
+                            }${e.title ? ` · ${e.title}` : ''}${e.hasFile ? ' ✓' : ''}`,
+                          }))
+                        : [{ value: '', label: episodes.isLoading ? '…' : t('arr.noEpisodes') }]
+                    }
+                  />
+                )}
                 <button
                   type="button"
-                  disabled={loading || season === null}
-                  onClick={() => void search('arr', season)}
+                  disabled={loading || season === null || (scope === 'episode' && !chosenEpisode)}
+                  onClick={() =>
+                    void search(
+                      'arr',
+                      season,
+                      query,
+                      scope === 'episode' ? (chosenEpisode?.id ?? null) : null,
+                    )
+                  }
                   className="bg-fg text-bg h-9 rounded-full px-4 text-[13px] font-semibold disabled:opacity-50"
                 >
-                  {t('arr.searchSeason', { season: seasonName(season ?? 1) })}
+                  {scope === 'episode' && chosenEpisode
+                    ? t('arr.searchSeason', {
+                        season: `${seasonName(season ?? 1)} · ${t('arr.episodeShort', {
+                          n: n(chosenEpisode.number),
+                        })}`,
+                      })
+                    : t('arr.searchSeason', { season: seasonName(season ?? 1) })}
                 </button>
               </div>
             )}
