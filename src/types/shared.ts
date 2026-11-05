@@ -294,8 +294,12 @@ export interface DiscoverQuery {
 /** GET /api/catalog/filters?kind= — what the catalog can filter for this kind and account. */
 export interface CatalogFilters {
   genres: string[];
-  /** AniList tags grouped by category; 18+ tags only when the account shows 18+. */
-  tags: { category: string; names: string[] }[];
+  /** 18+ genres, listed apart (empty unless the account allows 18+). */
+  adultGenres: string[];
+  /** Tags by group (`catalog.tagGroup.<category>`); the `adult` group only with 18+ allowed. */
+  tags: { category: string; names: string[]; adult?: boolean }[];
+  /** Series and films: tags are TMDB keywords, found by searching (`/api/catalog/keywords`). */
+  keywordSearch: boolean;
   status: boolean;
   year: boolean;
   season: boolean;
@@ -665,6 +669,8 @@ export interface Settings {
    * (see `MyAccount.adultContent`).
    */
   adultContent: boolean;
+  /** With 18+ allowed: the whole interface shows 18+ works only (kinds menu switch). */
+  adultMode: boolean;
   /** With 18+ off, also leave out extensions marked NSFW (default true). */
   hideNsfwSources: boolean;
   /**

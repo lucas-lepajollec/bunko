@@ -2,6 +2,7 @@
 import { useSWRConfig } from 'swr';
 import type { DiscoverKind, PublicSettings, UnifiedMedia } from '@/types/shared';
 import { send, useApi } from './api';
+import { clearPersistentCache } from './cache';
 import {
   KIND_IDS,
   KINDS,
@@ -46,7 +47,29 @@ export function useUniverse() {
     await mutate((key) => typeof key === 'string' && key.startsWith('/api/'));
   }
   const tmdb = Boolean(data?.catalogs?.configured.tmdb);
-  return { active, enabled, order, tmdb, allowAll, ready: Boolean(data), set };
+  // 18+ allowed in the settings: the kinds menu can switch the whole interface to 18+ only.
+  const adultAllowed = Boolean(data?.adultContent);
+  const adultMode = adultAllowed && Boolean(data?.adultMode);
+  async function setAdultMode(next: boolean) {
+    if (!data) return;
+    await mutate('/api/settings', { ...data, adultMode: next }, { revalidate: false });
+    await send('/api/settings', 'PATCH', { adultMode: next });
+    // Nothing loaded for the other mode may stay on screen or in the saved cache.
+    clearPersistentCache({ resume: true });
+    await mutate((key) => typeof key === 'string' && key.startsWith('/api/'));
+  }
+  return {
+    active,
+    enabled,
+    order,
+    tmdb,
+    allowAll,
+    adultAllowed,
+    adultMode,
+    setAdultMode,
+    ready: Boolean(data),
+    set,
+  };
 }
 
 /** A work's kind (the registry's single rule, shared with the server). */
@@ -75,7 +98,8 @@ export function universeAsides(active: DiscoverKind, enabled: readonly Universe[
     enabled.some((k) => KINDS[k].family === 'reading');
   const onlyVideo = active === 'all' && enabled.every((k) => KINDS[k].family === 'video');
   return {
-    recent: video || onlyVideo ? 'profile.recent.video' : mixed ? 'profile.recent.all' : 'profile.recent',
+    recent:
+      video || onlyVideo ? 'profile.recent.video' : mixed ? 'profile.recent.all' : 'profile.recent',
     top: active === 'all' ? 'home.topWeekAside' : video ? 'home.topAside.video' : 'home.topAside',
     latest: (k: Universe) =>
       KINDS[k].unit === 'film'

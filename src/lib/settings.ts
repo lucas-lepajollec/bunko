@@ -136,6 +136,7 @@ function serverSettings(): Settings {
     libraryTargets: {},
     autoImportKavita: true,
     adultContent: false,
+    adultMode: false,
     hideNsfwSources: true,
     progressSource: 'suwayomi',
     universe: 'all',
@@ -233,6 +234,8 @@ export function publicSettings(): PublicSettings {
 export function updateSettings(patch: SettingsPatch) {
   // Saving the kind list records which kinds the user has seen (none is re-enabled later).
   if (patch.universes) patch = { ...patch, universesKnown: ALL_KINDS };
+  // Turning 18+ off also leaves the 18+ only mode: allowing it again starts mixed.
+  if (patch.adultContent === false) patch = { ...patch, adultMode: false };
   const shared = Object.entries(patch).filter(([key]) =>
     catalogSettingKeys.includes(key as CatalogSetting),
   );

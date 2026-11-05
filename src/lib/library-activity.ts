@@ -5,7 +5,7 @@ import { activeSourceMatch, sourceMatchQueue } from './source-match-state';
 import { workerValue, refreshRunning } from './updates';
 import { getSettings } from './settings';
 import { listTracked, listBatches, writeVersion } from './db';
-import { visibleTracked } from './adult';
+import { adultScope, visibleTracked } from './adult';
 import { jellyfinImportProgress } from './jellyfin';
 
 export function libraryActivity(): LibraryActivity {
@@ -88,7 +88,8 @@ export function libraryActivity(): LibraryActivity {
       progress: writeVersion('progress'),
       releases: writeVersion('releases'),
     },
-    hiddenAdult: entries.length - visible.length,
+    // Only the 18+ hidden from a normal account is announced (18+ only mode hides by choice).
+    hiddenAdult: adultScope() === 'off' ? entries.length - visible.length : 0,
     jellyfinImport: (() => {
       const p = jellyfinImportProgress();
       return p && p.done < p.total ? p : null;

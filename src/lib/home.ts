@@ -5,7 +5,7 @@ import type { ChapterRelease, DiscoverKind, HomeFeed } from '@/types/shared';
 import { releaseStore, refreshReleases, mediaKind, releaseLoadingState } from './releases';
 import { discover, discoverAniList, withTracking } from './catalog';
 import { cached, storedMetadata, metadataStatus } from './metadata-cache';
-import { mediaVisibility, includeProviderAdults } from './adult';
+import { mediaVisibility, adultKey } from './adult';
 import { tenantState } from './tenant-context';
 import { discoverQuery } from './validation';
 import { getSettings } from './settings';
@@ -93,8 +93,8 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
   // Reading releases are not video: those homes never start their ingestion.
   if (!video) void refreshReleases().catch(() => {});
   const key = kind
-    ? `home:top:${kind}:${includeProviderAdults()}`
-    : `home:top:${includeProviderAdults()}${mixScope()}`;
+    ? `home:top:${kind}:${adultKey()}`
+    : `home:top:${adultKey()}${mixScope()}`;
   const stored = storedMetadata<HomeFeed['top'] | HomeFeed>(key)?.value;
   const top = Array.isArray(stored) ? stored : normalizeHome(stored).top;
   void cached<HomeFeed['top']>(

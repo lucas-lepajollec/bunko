@@ -40,7 +40,8 @@ export function UniverseMenu() {
   const isVideo = (k: DiscoverKind) => isVideoKind(k);
   const reading = universe.enabled.filter((k) => !isVideo(k));
   const video = universe.enabled.filter(isVideo);
-  if (reading.length + video.length + (universe.allowAll ? 1 : 0) < 2) return null;
+  if (reading.length + video.length + (universe.allowAll ? 1 : 0) < 2 && !universe.adultAllowed)
+    return null;
   const item = (k: DiscoverKind, tall = false) => (
     <button
       key={k}
@@ -85,6 +86,7 @@ export function UniverseMenu() {
         )}
       >
         {label(t, universe.active)}
+        {universe.adultMode && <span className="text-warn text-[11px] font-semibold">18+</span>}
         <svg
           width="10"
           height="10"
@@ -141,8 +143,50 @@ export function UniverseMenu() {
             </div>
           )}
         </div>
+        {universe.adultAllowed && (
+          <AdultSwitch
+            on={universe.adultMode}
+            onChange={(next) => {
+              setOpen(false);
+              void universe.setAdultMode(next);
+            }}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+/** The whole interface in 18+ only, or back to everything else (when 18+ is allowed). */
+function AdultSwitch({ on, onChange }: { on: boolean; onChange: (next: boolean) => void }) {
+  const { t } = useI18n();
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+      className="border-line mt-3 flex w-full items-center gap-3 rounded-xl border-t px-3 pt-3 pb-1 text-left"
+    >
+      <span className="flex flex-1 flex-col gap-0.5">
+        <span className="text-[15px]">{t('universe.adultMode')}</span>
+        <span className="text-muted text-[12px] leading-snug">{t('universe.adultModeHint')}</span>
+      </span>
+      <span
+        aria-hidden
+        className={cx(
+          'relative h-6 w-10 shrink-0 rounded-full transition-colors',
+          on ? 'bg-[#c2410c]' : 'bg-white/[0.16]',
+        )}
+      >
+        <span
+          className={cx(
+            'absolute top-0.5 size-5 rounded-full bg-white transition-[left]',
+            on ? 'left-[18px]' : 'left-0.5',
+          )}
+        />
+      </span>
+    </button>
   );
 }
 
@@ -156,7 +200,7 @@ export function UniverseTab() {
     ...(universe.allowAll ? ['all' as const] : []),
     ...universe.enabled,
   ];
-  if (options.length < 2) return null;
+  if (options.length < 2 && !universe.adultAllowed) return null;
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger className="relative flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] text-[#8c867e]">
@@ -206,6 +250,15 @@ export function UniverseTab() {
               </button>
             ))}
           </div>
+          {universe.adultAllowed && (
+            <AdultSwitch
+              on={universe.adultMode}
+              onChange={(next) => {
+                setOpen(false);
+                void universe.setAdultMode(next);
+              }}
+            />
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

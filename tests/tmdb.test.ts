@@ -82,6 +82,12 @@ const routes: Record<string, unknown> = {
     episodes: [{ episode_number: 1, name: 'Future', air_date: '2099-01-01' }],
   },
   '/3/tv/on_the_air': { results: [] },
+  '/3/discover/tv': {
+    page: 1,
+    total_pages: 1,
+    results: [{ id: 77, name: 'Heist Show', genre_ids: [10759], original_language: 'en' }],
+  },
+  '/3/search/keyword': { results: [{ id: 9663, name: 'heist' }] },
   '/3/discover/movie': {
     results: [
       {
@@ -165,4 +171,29 @@ it('lists the week of followed series episodes and film releases', async () => {
   expect(films.map((r) => [r.media.title, r.unit, r.releasedAt])).toEqual([
     ['New Film', 'film', '2021-11-05'],
   ]);
+});
+
+it('filters series by genre, status, year, keyword and score through TMDB discover', async () => {
+  updateSettings({ tmdbApiKey: 'tmdb-key' });
+  expect(await tmdb.tmdbGenres('tv')).toEqual(['Animation', 'Action & Adventure']);
+  const [keyword] = await tmdb.tmdbKeywords('heist');
+  expect(keyword).toEqual({ value: '9663~heist', label: 'heist' });
+  calls.length = 0;
+  const page = await tmdb.discoverTmdb('tv', 'trending', 1, 'exclude', {
+    genre: 'Action & Adventure',
+    status: 'FINISHED',
+    year: 2020,
+    tags: [keyword.value],
+    minScore: 70,
+  });
+  expect(page.items.map((m) => m.title)).toEqual(['Heist Show']);
+  const call = new URL(`http://x${calls.find((c) => c.startsWith('/3/discover/tv'))!}`);
+  expect(Object.fromEntries(call.searchParams)).toMatchObject({
+    with_genres: '10759',
+    with_status: '3|4',
+    first_air_date_year: '2020',
+    with_keywords: '9663',
+    'vote_average.gte': '7',
+    sort_by: 'popularity.desc',
+  });
 });
