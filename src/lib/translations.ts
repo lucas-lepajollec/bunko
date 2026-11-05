@@ -113,7 +113,15 @@ async function tradoc(suffix: string, init: RequestInit = {}, timeoutMs = 20_000
       redirect: 'error',
       headers: { Accept: 'application/json', Authorization: `Bearer ${c.key}`, ...init.headers },
     });
-  } catch {
+  } catch (error) {
+    // The underlying reason (ECONNREFUSED, ENOTFOUND, a body that could not be read…), never
+    // the address or key.
+    const cause = (error as { cause?: { code?: string; message?: string } }).cause;
+    console.warn(
+      `[bunko] tradoc request failed: ${signal.aborted ? 'timeout' : (cause?.code ?? cause?.message ?? (error as Error).name)}`,
+    );
+    if (/blob could not be read/i.test(cause?.message ?? ''))
+      throw new AppError('FILE_UNREADABLE', 'Bunko cannot read this file', 409);
     throw new AppError(
       signal.aborted ? 'TRADOC_TIMEOUT' : 'TRADOC_UNREACHABLE',
       'TraDoc could not be reached',
@@ -208,6 +216,23 @@ async function localFile(kavitaPath: string) {
   if (!actual || !inside(await realpath(libraryRoot()), actual) || !(await stat(actual)).isFile())
     throw new AppError('FILE_UNREACHABLE', 'File is not reachable from Bunko', 409);
   return actual;
+}
+
+async function readable(file: string) {
+  try {
+    const handle = await open(file, 'r');
+    try {
+      await handle.read(Buffer.alloc(1), 0, 1, 0);
+    } finally {
+      await handle.close();
+    }
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code ?? 'read error';
+    console.warn(
+      `[bunko] translation file not readable by Bunko (uid ${process.getuid?.()}): ${code}`,
+    );
+    throw new AppError('FILE_UNREADABLE', 'Bunko cannot read this file', 409);
+  }
 }
 
 /** The work's translatable files, read live from Kavita (books are not chapter-indexed). */
@@ -360,6 +385,9 @@ async function upload(job: Row) {
   const file = await localFile(job.kavita_path);
   const size = (await stat(file)).size;
   if (size > MAX_UPLOAD) throw new AppError('FILE_TOO_LARGE', 'File is too large', 413);
+  // Read once before sending: a file Bunko may list but not read (owner/permissions of the
+  // library mount) would otherwise fail inside fetch and look like TraDoc being unreachable.
+  await readable(file);
   const form = new FormData();
   // A file-backed blob: the book is streamed to TraDoc, not read whole into memory.
   form.set('file', await openAsBlob(file), job.file_name);
@@ -518,9 +546,7 @@ async function step(job: Row) {
 export async function processTranslations(signal: AbortSignal) {
   const settings = getSettings();
   if (!settings.tradocUrl || !settings.tradocApiKey) return;
-  const due = rows().filter(
-    (r) => ACTIVE.includes(r.state) && r.next_check_at <= Date.now(),
-  );
+  const due = rows().filter((r) => ACTIVE.includes(r.state) && r.next_check_at <= Date.now());
   for (const job of due.reverse()) {
     if (signal.aborted) return;
     try {
@@ -532,7 +558,9 @@ export async function processTranslations(signal: AbortSignal) {
         code,
       );
       // One line per failure (code only: never the address, key or upstream body).
-      console.warn(`[bunko] translation ${job.id} ${job.state}: ${code}${transient ? ' (retrying)' : ''}`);
+      console.warn(
+        `[bunko] translation ${job.id} ${job.state}: ${code}${transient ? ' (retrying)' : ''}`,
+      );
       patch(job.id, {
         state: transient ? job.state : 'error',
         error: code,

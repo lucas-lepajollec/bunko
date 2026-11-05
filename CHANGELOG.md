@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Library selection mode: select works one by one or all shown ones (filters apply), then mark them
+  read/watched, change their status, add or remove favorites, or remove them from the library.
+  Removing, finishing and status changes ask for confirmation; removed works are not brought back
+  by Kavita or Jellyfin imports. `POST /api/tracked/bulk`.
+- TraDoc: a book Bunko can list but not read (library permissions) is now reported as such
+  (`FILE_UNREADABLE`) instead of "TraDoc unreachable"; failed TraDoc requests log their underlying
+  reason (`[bunko] tradoc request failed: ECONNREFUSED`…).
 - TraDoc translations get their own worker lane: an upload no longer waits behind the Kavita
   index or a long release check, and running jobs are followed while the rest of the cycle works.
   A retried failure (TraDoc unreachable or too slow) is now shown on the job instead of an

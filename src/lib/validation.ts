@@ -411,6 +411,16 @@ export const trackPatch = z
   })
   .refine((v) => !(v.media && v.offCatalog), 'Choose a catalog identity or detach it');
 
+/** Several library works at once (the library's selection mode). */
+export const trackBulk = z
+  .object({
+    ids: z.array(id).min(1).max(5000),
+    action: z.enum(['remove', 'complete', 'status', 'favorite', 'unfavorite']),
+    status: readingStatus.optional(),
+  })
+  .strict()
+  .refine((v) => v.action !== 'status' || v.status, 'Choose a status');
+
 export const sourcePreferences = z
   .object({
     enabledSourceIds: z
