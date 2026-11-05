@@ -53,7 +53,7 @@ export function UniverseMenu() {
       }}
       className={cx(
         'flex flex-col gap-0.5 rounded-xl px-3 py-2.5 text-left transition-colors',
-        tall && 'h-full w-full justify-start bg-white/[0.04] p-4',
+        tall && 'w-full',
         universe.active === k ? 'bg-white/[0.09]' : 'hover:bg-white/[0.06]',
       )}
     >
@@ -123,7 +123,7 @@ export function UniverseMenu() {
               <span className="text-muted px-3 pt-1 pb-1.5 text-[11px] tracking-[0.16em] uppercase">
                 {t('universe.groupAll')}
               </span>
-              <div className="flex-1">{item('all', true)}</div>
+              {item('all', true)}
             </div>
           )}
           <div className="flex flex-col gap-1">

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import type { AuthState, TrackedMedia } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { continueReading } from '@/lib/client/reading';
+import { universeAsides, useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { ReadingCard } from '@/components/reading';
 import { PosterCard } from '@/components/media';
@@ -28,6 +29,9 @@ export default function ProfilePage() {
   const entries = library.data ?? [];
   const reading = continueReading(entries);
   const favorites = entries.filter((e) => e.favorite);
+  // The profile lists every kind together: its subtitle says reading, watching or both.
+  const universe = useUniverse();
+  const recent = universeAsides('all', universe.enabled).recent;
   return (
     <Page className="pb-16">
       <PageTitle title={t('profile.title')} aside={auth.data?.username} />
@@ -44,7 +48,7 @@ export default function ProfilePage() {
         </Link>
       </div>
       <section id="continue" className="scroll-mt-28 flex flex-col gap-5">
-        <SectionHeading title={t('home.resume')} aside={t('profile.recent')} />
+        <SectionHeading title={t('home.resume')} aside={t(recent)} />
         {library.error && <ErrorNote error={library.error} />}
         {!library.data && !library.error && <Skeleton className="h-36 rounded-2xl" />}
         {library.data && !reading.length && (

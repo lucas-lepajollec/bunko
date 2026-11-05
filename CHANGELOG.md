@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- TraDoc translations get their own worker lane: an upload no longer waits behind the Kavita
+  index or a long release check, and running jobs are followed while the rest of the cycle works.
+  A retried failure (TraDoc unreachable or too slow) is now shown on the job instead of an
+  endless "waiting to be sent", logged as `[bunko] translation <id> <state>: <code>`, and waits
+  its retry delay; "Run now" in the activity panel retries at once.
+- Home and profile subtitles follow the universe: reading or watching words for "Pick up where
+  you left off" and the weekly top, "episode by episode" or "newest first" for episodes and films.
+  The catalog's release view says "Latest releases" in a mixed universe with video.
+- The "In library" badge keeps only its check mark on narrow posters (phones, dense grids).
+- The kinds menu: the "Everything" tile is the size of its content again.
+- The activity panel scrolls inside itself on phones and stays above the tab bar.
+- Planning on phones: the current day's ring is no longer cut at the top and bottom.
+- Signing in reloads the page, so nothing a previous account loaded in this tab stays in memory.
 - Extension streams resume where they stopped, on any device of the account (saved every 15 s,
   on pause and on close; forgotten once 90 % is watched). Jellyfin keeps its own place.
 - Full screen on iPhone: the video's own full screen (iOS has none for page elements), the

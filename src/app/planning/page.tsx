@@ -144,7 +144,7 @@ function Planning() {
 
       {/* Mobile: one day at a time. */}
       <div
-        className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 lg:hidden"
+        className="no-scrollbar -mx-4 -my-1 flex gap-1.5 overflow-x-auto px-4 py-1 lg:hidden"
         role="tablist"
       >
         {days.map((d) => (

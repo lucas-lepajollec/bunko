@@ -41,7 +41,7 @@ import {
 } from './updates';
 import { sharedConcurrencyGate } from './concurrency';
 import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
-import { processTranslations } from './translations';
+import { processTranslations, translationsWaiting } from './translations';
 import { jellyfinImportProgress, maybeSyncJellyfin } from './jellyfin';
 import { measured } from './job-stats';
 import { recorded } from './job-runs';
@@ -592,11 +592,27 @@ async function workerTickBackground() {
       await waitForWorker(60_000, signal);
     }
   });
+  // Translations have their own lane too: an upload never waits behind the Kavita index or a
+  // long release check, and running jobs are followed while the rest of the cycle works.
+  let translations: ReturnType<typeof background> | undefined;
+  const startTranslations = () => {
+    if (translations?.running || !translationsWaiting()) return;
+    translations = background(async () => {
+      while (!signal.aborted && ownsLease()) {
+        await job('translations', () => processTranslations(signal)).catch(() => undefined);
+        // Keep following jobs only while other lanes hold this tick; the next tick resumes.
+        const busy = covers.running || maintenance?.running || matching?.running;
+        if (!busy || !translationsWaiting(60_000)) break;
+        await waitForWorker(30_000, signal);
+      }
+    });
+  };
   let finalCovers: ReturnType<typeof background> | undefined;
   let maintenanceError: unknown;
   try {
     do {
       startMatching();
+      startTranslations();
       for (const batch of listBatches().filter((b) => !['completed', 'error'].includes(b.state))) {
         if (!ownsLease()) return;
         await processBatch(batch, signal);
@@ -608,7 +624,6 @@ async function workerTickBackground() {
           // Reading release checks only when a reading kind is enabled (empty = every kind).
           if (ownsLease() && updateCheckDue() && readingEnabled())
             await job('update-check', () => runUpdateCheck(createBatch, signal, ownsLease));
-          if (ownsLease()) await job('translations', () => processTranslations(signal));
         } catch (error) {
           maintenanceError = error;
         }
@@ -623,7 +638,8 @@ async function workerTickBackground() {
         continue;
       // A source request can arrive after an empty initial queue, during slow maintenance/transfers.
       startMatching();
-      let pending = [matching, covers, video, maintenance, finalCovers].filter(
+      startTranslations();
+      let pending = [matching, covers, video, maintenance, translations, finalCovers].filter(
         (task) => task?.running,
       );
       if (!pending.length) {
@@ -643,6 +659,7 @@ async function workerTickBackground() {
     await matching?.promise;
     await covers.promise;
     await video.promise;
+    await translations?.promise;
     if (maintenanceError) throw maintenanceError;
   } finally {
     controller.abort();
@@ -650,6 +667,7 @@ async function workerTickBackground() {
     await covers.promise;
     await video.promise;
     await maintenance?.promise;
+    await translations?.promise;
     await finalCovers?.promise;
     clearInterval(lease);
     state.running = false;

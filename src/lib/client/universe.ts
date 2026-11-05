@@ -62,3 +62,26 @@ export const inUniverse = (
 ) => active === 'all' || kindOf(media) === active;
 
 export { searchTypeOf, type SearchType } from '@/domain/kinds';
+
+/**
+ * Section subtitles that follow the universe: reading words for reading kinds, watching words
+ * for video kinds, neutral ones when "everything" mixes both.
+ */
+export function universeAsides(active: DiscoverKind, enabled: readonly Universe[]) {
+  const video = active !== 'all' && KINDS[active].family === 'video';
+  const mixed =
+    active === 'all' &&
+    enabled.some((k) => KINDS[k].family === 'video') &&
+    enabled.some((k) => KINDS[k].family === 'reading');
+  const onlyVideo = active === 'all' && enabled.every((k) => KINDS[k].family === 'video');
+  return {
+    recent: video || onlyVideo ? 'profile.recent.video' : mixed ? 'profile.recent.all' : 'profile.recent',
+    top: active === 'all' ? 'home.topWeekAside' : video ? 'home.topAside.video' : 'home.topAside',
+    latest: (k: Universe) =>
+      KINDS[k].unit === 'film'
+        ? 'home.latestAside'
+        : KINDS[k].unit === 'episode'
+          ? 'home.latestKindAside.episode'
+          : 'home.latestKindAside',
+  };
+}
