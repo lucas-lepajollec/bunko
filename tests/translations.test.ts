@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, expect, it } from 'vitest';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -321,5 +322,26 @@ it('refuses files that do not belong to the work and manga works', async () => {
   });
   await expect(translations.translatableFiles(manga.id)).rejects.toMatchObject({
     code: 'UNSUPPORTED_FORMAT',
+  });
+});
+
+it('says the file cannot be read instead of blaming TraDoc', async () => {
+  const [file] = await translations.translatableFiles(trackedId);
+  await translations.requestTranslations({
+    trackedId,
+    paths: [file.path],
+    sourceLang: 'en',
+    targetLang: 'fr',
+    mode: 'separate',
+  });
+  chmodSync(book, 0o000);
+  try {
+    await run();
+  } finally {
+    chmodSync(book, 0o644);
+  }
+  expect(translations.listTranslations(trackedId)[0]).toMatchObject({
+    state: 'error',
+    error: 'FILE_UNREADABLE',
   });
 });

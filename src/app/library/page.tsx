@@ -20,6 +20,7 @@ import type {
   UpdatesFeed,
 } from '@/types/shared';
 import { KavitaUnmatched } from '@/components/kavita';
+import { SelectionBar, SelectionMark } from '@/components/library-selection';
 import { LibraryUpdates } from '@/components/updates';
 import { api, useApi } from '@/lib/client/api';
 import { send } from '@/lib/client/api';
@@ -111,6 +112,19 @@ function Library() {
   const shownShelf: View = video ? 'ALL' : shelf;
   // Newest release / air date first by default, for every kind.
   const [sort, setSort] = useState<Sort>('released');
+  // Selection mode: tapping a work selects it; the bottom bar acts on the selection.
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const toggle = (id: number) =>
+    setPicked((old) => {
+      const next = new Set(old);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  const stopSelecting = () => {
+    setSelecting(false);
+    setPicked(new Set());
+  };
   const updates = useApi<UpdatesFeed>('/api/updates');
   // Never hide titles silently: say how many the 18+ setting keeps out of view.
   const activity = useApi<LibraryActivity>('/api/library/activity');
@@ -310,6 +324,16 @@ function Library() {
                 </button>
               )}
               <div className="ml-auto flex flex-wrap items-center gap-2">
+                {entries.length > 0 && (
+                  <button
+                    type="button"
+                    aria-pressed={selecting}
+                    onClick={() => (selecting ? stopSelecting() : setSelecting(true))}
+                    className={cx(smallButton, selecting && 'bg-fg text-bg hover:bg-fg')}
+                  >
+                    {t(selecting ? 'library.selectDone' : 'library.select')}
+                  </button>
+                )}
                 <Select
                   label={t('library.statusLabel')}
                   value={status}
@@ -376,64 +400,106 @@ function Library() {
           )}
           <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] md:gap-y-9 xl:grid-cols-7">
             {!library.data && !library.error && <PosterSkeletons count={14} />}
-            {shown.map((e) => (
-              <MediaLink key={e.id} media={e.media} className="group flex min-w-0 flex-col gap-2.5">
-                <span className="relative block">
-                  <Cover
-                    src={e.coverUrl ?? e.media.coverUrl}
-                    fallbacks={e.coverFallbacks}
-                    alt={e.title}
-                    className="transition-transform duration-300 group-hover:-translate-y-1"
-                  />
-                  {e.type === 'MANGA' && e.sourceMatch !== 'linked' && (
-                    <span
-                      className={cx(
-                        'absolute inset-x-2 bottom-2 flex items-center gap-1.5 rounded-full bg-black/80 px-2 py-1 text-[11px]',
-                        'text-mid',
-                      )}
-                    >
-                      {e.sourceMatch === 'searching' && <Spinner className="size-3" />}
-                      {e.sourceMatch === 'not-found' && <Dot tone="warn" className="size-1.5" />}
-                      <span className="truncate">{t(`library.match.${e.sourceMatch}`)}</span>
-                    </span>
+            {shown.map((e) => {
+              const card = (
+                <>
+                  <span className="relative block">
+                    {selecting && <SelectionMark selected={picked.has(e.id)} />}
+                    <Cover
+                      src={e.coverUrl ?? e.media.coverUrl}
+                      fallbacks={e.coverFallbacks}
+                      alt={e.title}
+                      className="transition-transform duration-300 group-hover:-translate-y-1"
+                    />
+                    {e.type === 'MANGA' && e.sourceMatch !== 'linked' && (
+                      <span
+                        className={cx(
+                          'absolute inset-x-2 bottom-2 flex items-center gap-1.5 rounded-full bg-black/80 px-2 py-1 text-[11px]',
+                          'text-mid',
+                        )}
+                      >
+                        {e.sourceMatch === 'searching' && <Spinner className="size-3" />}
+                        {e.sourceMatch === 'not-found' && <Dot tone="warn" className="size-1.5" />}
+                        <span className="truncate">{t(`library.match.${e.sourceMatch}`)}</span>
+                      </span>
+                    )}
+                    {e.newChapters > 0 && (
+                      <span className="bg-fg text-bg absolute top-2 right-2 flex h-6 items-center rounded-full px-2 text-xs font-bold">
+                        +{n(e.newChapters)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="line-clamp-2 text-xs leading-snug font-medium md:text-sm">
+                    {e.title}
+                  </span>
+                  <ProgressBar progress={e.progress} color={e.media.color} />
+                  <span className="text-muted -mt-1 hidden truncate text-xs md:block">
+                    {e.progress?.read != null && (
+                      <>
+                        {t(
+                          e.type === 'ANIME'
+                            ? 'library.watchedN'
+                            : e.unit === 'volume'
+                              ? 'library.readNVol'
+                              : 'library.readN',
+                          { n: n(e.progress.read) },
+                        )}
+                        {e.type !== 'ANIME' && ' · '}
+                      </>
+                    )}
+                    {e.type !== 'ANIME' && <OwnedInventory entry={e} compact />}
+                    {Boolean(e.progress?.released) && (
+                      <>
+                        {' · '}
+                        {t(e.unit === 'volume' ? 'library.releasedNVol' : 'library.releasedN', {
+                          n: n(e.progress.released!),
+                        })}
+                      </>
+                    )}
+                  </span>
+                </>
+              );
+              return selecting ? (
+                <button
+                  key={e.id}
+                  type="button"
+                  aria-pressed={picked.has(e.id)}
+                  onClick={() => toggle(e.id)}
+                  className={cx(
+                    'group flex min-w-0 flex-col gap-2.5 text-left transition-opacity',
+                    picked.size > 0 && !picked.has(e.id) && 'opacity-60',
                   )}
-                  {e.newChapters > 0 && (
-                    <span className="bg-fg text-bg absolute top-2 right-2 flex h-6 items-center rounded-full px-2 text-xs font-bold">
-                      +{n(e.newChapters)}
-                    </span>
-                  )}
-                </span>
-                <span className="line-clamp-2 text-xs leading-snug font-medium md:text-sm">
-                  {e.title}
-                </span>
-                <ProgressBar progress={e.progress} color={e.media.color} />
-                <span className="text-muted -mt-1 hidden truncate text-xs md:block">
-                  {e.progress?.read != null && (
-                    <>
-                      {t(
-                        e.type === 'ANIME'
-                          ? 'library.watchedN'
-                          : e.unit === 'volume'
-                            ? 'library.readNVol'
-                            : 'library.readN',
-                        { n: n(e.progress.read) },
-                      )}
-                      {e.type !== 'ANIME' && ' · '}
-                    </>
-                  )}
-                  {e.type !== 'ANIME' && <OwnedInventory entry={e} compact />}
-                  {Boolean(e.progress?.released) && (
-                    <>
-                      {' · '}
-                      {t(e.unit === 'volume' ? 'library.releasedNVol' : 'library.releasedN', {
-                        n: n(e.progress.released!),
-                      })}
-                    </>
-                  )}
-                </span>
-              </MediaLink>
-            ))}
+                >
+                  {card}
+                </button>
+              ) : (
+                <MediaLink
+                  key={e.id}
+                  media={e.media}
+                  className="group flex min-w-0 flex-col gap-2.5"
+                >
+                  {card}
+                </MediaLink>
+              );
+            })}
           </div>
+          {selecting && (
+            <>
+              {/* Room below the grid so the bar never hides the last row. */}
+              <div aria-hidden className="h-40 md:h-28" />
+              <SelectionBar
+                selected={entries.filter((e) => picked.has(e.id))}
+                visible={shown.length}
+                onSelectAll={() => setPicked(new Set(shown.map((e) => e.id)))}
+                onClear={() => setPicked(new Set())}
+                onClose={stopSelecting}
+                onDone={async (removed) => {
+                  if (removed) setPicked(new Set());
+                  await Promise.all([library.mutate(), activity.mutate()]);
+                }}
+              />
+            </>
+          )}
         </>
       )}
     </Page>

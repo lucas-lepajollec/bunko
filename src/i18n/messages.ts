@@ -31,6 +31,31 @@ export function interpolate(template: string, variables?: Record<string, string 
 type Dictionary = Record<string, string>;
 
 const en: Dictionary = {
+  'library.select': 'Select',
+  'library.selectDone': 'Done',
+  'library.selected': 'Selected: {count}',
+  'library.selectAll': 'Select all',
+  'library.selectNone': 'Clear',
+  'library.selectHint': 'Tap works to select them',
+  'bulk.complete': 'Mark as finished',
+  'bulk.complete.reading': 'Mark as read',
+  'bulk.complete.video': 'Mark as watched',
+  'bulk.status': 'Status…',
+  'bulk.favorite': 'Add to favorites',
+  'bulk.unfavorite': 'Remove from favorites',
+  'bulk.remove': 'Remove',
+  'bulk.confirm.remove': 'Remove {count} works from the library?',
+  'bulk.confirm.removeBody':
+    'Their tracking, progress and settings in Bunko are deleted. Files in Kavita or Jellyfin are not touched, and an import will not add them back.',
+  'bulk.confirm.complete': 'Mark {count} works as finished?',
+  'bulk.confirm.completeBody':
+    'Their status becomes “Finished” and progress moves up to the last chapter or episode known (never back).',
+  'bulk.confirm.status': 'Move {count} works to “{status}”?',
+  'bulk.confirm.statusBody': 'Only the status changes; progress stays as it is.',
+  'bulk.done': '{count} works updated',
+  'bulk.removed': '{count} works removed',
+  'error.FILE_UNREADABLE':
+    'Bunko can see this file but not read it: give the Bunko container (user 1000) read access to the library.',
   'catalog.viewReleases': 'Latest releases',
   'catalog.noReleases.any': 'No recent releases for these filters',
   'home.topAside.video': 'what everyone is watching this week',
@@ -1408,6 +1433,31 @@ const en: Dictionary = {
 };
 
 const fr: Dictionary = {
+  'library.select': 'Sélectionner',
+  'library.selectDone': 'Fermer',
+  'library.selected': 'Sélection : {count}',
+  'library.selectAll': 'Tout sélectionner',
+  'library.selectNone': 'Tout désélectionner',
+  'library.selectHint': 'Touche les œuvres pour les sélectionner',
+  'bulk.complete': 'Marquer comme terminé',
+  'bulk.complete.reading': 'Marquer comme lu',
+  'bulk.complete.video': 'Marquer comme vu',
+  'bulk.status': 'Statut…',
+  'bulk.favorite': 'Ajouter aux favoris',
+  'bulk.unfavorite': 'Retirer des favoris',
+  'bulk.remove': 'Retirer',
+  'bulk.confirm.remove': 'Retirer {count} œuvres de la bibliothèque ?',
+  'bulk.confirm.removeBody':
+    'Leur suivi, leur progression et leurs réglages dans Bunko sont supprimés. Les fichiers dans Kavita ou Jellyfin ne sont pas touchés, et un import ne les rajoutera pas.',
+  'bulk.confirm.complete': 'Marquer {count} œuvres comme terminées ?',
+  'bulk.confirm.completeBody':
+    'Leur statut passe à « Terminé » et la progression avance jusqu’au dernier chapitre ou épisode connu (sans jamais reculer).',
+  'bulk.confirm.status': 'Passer {count} œuvres en « {status} » ?',
+  'bulk.confirm.statusBody': 'Seul le statut change ; la progression reste telle quelle.',
+  'bulk.done': '{count} œuvres mises à jour',
+  'bulk.removed': '{count} œuvres retirées',
+  'error.FILE_UNREADABLE':
+    'Bunko voit ce fichier mais ne peut pas le lire : donne au conteneur Bunko (utilisateur 1000) le droit de lecture sur la bibliothèque.',
   'catalog.viewReleases': 'Dernières sorties',
   'catalog.noReleases.any': 'Aucune sortie récente pour ces filtres',
   'home.topAside.video': 'ce que tout le monde regarde cette semaine',
@@ -2801,6 +2851,31 @@ const fr: Dictionary = {
 };
 
 const es: Dictionary = {
+  'library.select': 'Seleccionar',
+  'library.selectDone': 'Listo',
+  'library.selected': 'Selección: {count}',
+  'library.selectAll': 'Seleccionar todo',
+  'library.selectNone': 'Quitar selección',
+  'library.selectHint': 'Toca las obras para seleccionarlas',
+  'bulk.complete': 'Marcar como terminado',
+  'bulk.complete.reading': 'Marcar como leído',
+  'bulk.complete.video': 'Marcar como visto',
+  'bulk.status': 'Estado…',
+  'bulk.favorite': 'Añadir a favoritos',
+  'bulk.unfavorite': 'Quitar de favoritos',
+  'bulk.remove': 'Quitar',
+  'bulk.confirm.remove': '¿Quitar {count} obras de la biblioteca?',
+  'bulk.confirm.removeBody':
+    'Se borran su seguimiento, progreso y ajustes en Bunko. Los archivos en Kavita o Jellyfin no se tocan y una importación no los volverá a añadir.',
+  'bulk.confirm.complete': '¿Marcar {count} obras como terminadas?',
+  'bulk.confirm.completeBody':
+    'Su estado pasa a «Terminado» y el progreso avanza hasta el último capítulo o episodio conocido (nunca retrocede).',
+  'bulk.confirm.status': '¿Pasar {count} obras a «{status}»?',
+  'bulk.confirm.statusBody': 'Solo cambia el estado; el progreso se mantiene.',
+  'bulk.done': '{count} obras actualizadas',
+  'bulk.removed': '{count} obras quitadas',
+  'error.FILE_UNREADABLE':
+    'Bunko ve este archivo pero no puede leerlo: da al contenedor de Bunko (usuario 1000) permiso de lectura en la biblioteca.',
   'catalog.viewReleases': 'Últimos lanzamientos',
   'catalog.noReleases.any': 'No hay lanzamientos recientes con estos filtros',
   'home.topAside.video': 'lo que todos ven esta semana',
@@ -4186,6 +4261,31 @@ const es: Dictionary = {
 };
 
 const de: Dictionary = {
+  'library.select': 'Auswählen',
+  'library.selectDone': 'Fertig',
+  'library.selected': 'Ausgewählt: {count}',
+  'library.selectAll': 'Alle auswählen',
+  'library.selectNone': 'Auswahl aufheben',
+  'library.selectHint': 'Tippe auf Werke, um sie auszuwählen',
+  'bulk.complete': 'Als abgeschlossen markieren',
+  'bulk.complete.reading': 'Als gelesen markieren',
+  'bulk.complete.video': 'Als gesehen markieren',
+  'bulk.status': 'Status…',
+  'bulk.favorite': 'Zu Favoriten',
+  'bulk.unfavorite': 'Aus Favoriten entfernen',
+  'bulk.remove': 'Entfernen',
+  'bulk.confirm.remove': '{count} Werke aus der Bibliothek entfernen?',
+  'bulk.confirm.removeBody':
+    'Verfolgung, Fortschritt und Einstellungen in Bunko werden gelöscht. Dateien in Kavita oder Jellyfin bleiben unberührt, und ein Import fügt sie nicht wieder hinzu.',
+  'bulk.confirm.complete': '{count} Werke als abgeschlossen markieren?',
+  'bulk.confirm.completeBody':
+    'Der Status wird „Abgeschlossen“ und der Fortschritt rückt bis zum letzten bekannten Kapitel oder zur letzten Folge vor (nie zurück).',
+  'bulk.confirm.status': '{count} Werke auf „{status}“ setzen?',
+  'bulk.confirm.statusBody': 'Nur der Status ändert sich; der Fortschritt bleibt.',
+  'bulk.done': '{count} Werke aktualisiert',
+  'bulk.removed': '{count} Werke entfernt',
+  'error.FILE_UNREADABLE':
+    'Bunko sieht diese Datei, kann sie aber nicht lesen: Gib dem Bunko-Container (Benutzer 1000) Leserechte auf die Bibliothek.',
   'catalog.viewReleases': 'Neueste Veröffentlichungen',
   'catalog.noReleases.any': 'Keine neuen Veröffentlichungen für diese Filter',
   'home.topAside.video': 'was diese Woche alle schauen',
@@ -5578,6 +5678,31 @@ const de: Dictionary = {
 };
 
 const it: Dictionary = {
+  'library.select': 'Seleziona',
+  'library.selectDone': 'Fatto',
+  'library.selected': 'Selezionate: {count}',
+  'library.selectAll': 'Seleziona tutto',
+  'library.selectNone': 'Deseleziona tutto',
+  'library.selectHint': 'Tocca le opere per selezionarle',
+  'bulk.complete': 'Segna come finito',
+  'bulk.complete.reading': 'Segna come letto',
+  'bulk.complete.video': 'Segna come visto',
+  'bulk.status': 'Stato…',
+  'bulk.favorite': 'Aggiungi ai preferiti',
+  'bulk.unfavorite': 'Togli dai preferiti',
+  'bulk.remove': 'Rimuovi',
+  'bulk.confirm.remove': 'Rimuovere {count} opere dalla libreria?',
+  'bulk.confirm.removeBody':
+    'Il loro monitoraggio, i progressi e le impostazioni in Bunko vengono eliminati. I file in Kavita o Jellyfin non vengono toccati e un’importazione non li riaggiungerà.',
+  'bulk.confirm.complete': 'Segnare {count} opere come finite?',
+  'bulk.confirm.completeBody':
+    'Lo stato diventa «Finito» e i progressi avanzano fino all’ultimo capitolo o episodio noto (mai indietro).',
+  'bulk.confirm.status': 'Spostare {count} opere in «{status}»?',
+  'bulk.confirm.statusBody': 'Cambia solo lo stato; i progressi restano invariati.',
+  'bulk.done': '{count} opere aggiornate',
+  'bulk.removed': '{count} opere rimosse',
+  'error.FILE_UNREADABLE':
+    'Bunko vede questo file ma non può leggerlo: concedi al container di Bunko (utente 1000) il permesso di lettura sulla libreria.',
   'catalog.viewReleases': 'Ultime uscite',
   'catalog.noReleases.any': 'Nessuna uscita recente per questi filtri',
   'home.topAside.video': 'quello che tutti guardano questa settimana',
