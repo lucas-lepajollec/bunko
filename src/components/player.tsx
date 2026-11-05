@@ -495,7 +495,26 @@ function Screen({
     subtitles: { id: number; name: string }[];
     audioId: number;
     subtitleId: number;
+    /** Variants of a multi-quality playlist; `levelId` -1 = automatic. */
+    levels: { id: number; height: number; bitrate: number }[];
+    levelId: number;
+    /** Variant playing now (automatic mode included). */
+    currentId: number;
   } | null>(null);
+  // What the video element really decodes: shows whether a "1080p" label is true.
+  const [decoded, setDecoded] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const el = video.current;
+    if (!el) return;
+    const read = () =>
+      setDecoded(el.videoHeight ? { width: el.videoWidth, height: el.videoHeight } : null);
+    el.addEventListener('loadedmetadata', read);
+    el.addEventListener('resize', read);
+    return () => {
+      el.removeEventListener('loadedmetadata', read);
+      el.removeEventListener('resize', read);
+    };
+  }, []);
 
   const jellyfinItem = source.kind === 'jellyfin' ? source.itemId : null;
   useEffect(() => {
@@ -691,10 +710,29 @@ function Screen({
       onFail(code === 2 ? 'network' : code === 3 ? 'decode' : 'unsupported');
     };
     el.addEventListener('loadeddata', () => clearTimeout(startup), { once: true });
-    if (isHls && !el.canPlayType('application/vnd.apple.mpegurl')) {
+    const playNative = () => {
+      el.src = url;
+      const seek = () => {
+        if (start) el.currentTime = start;
+        void el.play().catch(() => undefined);
+      };
+      el.addEventListener('loadedmetadata', seek, { once: true });
+      el.addEventListener('error', mediaError, { once: true });
+    };
+    // Safari (Mac, iPhone, iPad) plays HLS well itself, with its own quality choice and the
+    // iPhone's native full screen. Recent Chrome also claims native HLS, but starts on the
+    // smallest variant and offers no quality choice: there, hls.js plays it.
+    const appleNative =
+      Boolean(el.canPlayType('application/vnd.apple.mpegurl')) &&
+      /AppleWebKit/.test(navigator.userAgent) &&
+      !/Chrome|Chromium|Edg|Android/.test(navigator.userAgent);
+    if (isHls && !appleNative) {
       void import('hls.js').then(({ default: HlsJs }) => {
         if (cancelled) return;
-        if (!HlsJs.isSupported()) return onFail('unsupported');
+        if (!HlsJs.isSupported()) {
+          if (el.canPlayType('application/vnd.apple.mpegurl')) return playNative();
+          return onFail('unsupported');
+        }
         // jellyfin-web's settings: 30 s of buffer, generous manifest timeout (transcodes start slowly).
         const h = new HlsJs({
           startPosition: start,
@@ -702,6 +740,11 @@ function Screen({
           maxMaxBufferLength: 30,
           backBufferLength: Infinity,
           manifestLoadingTimeOut: 20_000,
+          // hls.js assumes 0.5 Mbit/s before measuring and starts multi-quality playlists at
+          // their lowest variant: assume a home network instead, it steps down if needed.
+          abrEwmaDefaultEstimate: 8_000_000,
+          // Without it hls.js starts on the playlist's first variant, often the smallest.
+          startLevel: -1,
         });
         hls.current = h;
         h.on(HlsJs.Events.ERROR, (_e, data) => {
@@ -723,25 +766,23 @@ function Screen({
             })),
             audioId: h.audioTrack,
             subtitleId: h.subtitleTrack,
+            levels: h.levels
+              .map((l, i) => ({ id: i, height: l.height, bitrate: l.bitrate }))
+              .filter((l) => l.height > 0),
+            levelId: h.autoLevelEnabled ? -1 : h.currentLevel,
+            currentId: h.currentLevel,
           });
         h.on(HlsJs.Events.MANIFEST_PARSED, () => {
           if (source.kind === 'stream') syncTracks();
           void el.play().catch(() => undefined);
         });
         h.on(HlsJs.Events.AUDIO_TRACK_SWITCHED, syncTracks);
+        h.on(HlsJs.Events.LEVEL_SWITCHED, syncTracks);
         h.on(HlsJs.Events.SUBTITLE_TRACK_SWITCH, syncTracks);
         h.loadSource(url);
         h.attachMedia(el);
       });
-    } else {
-      el.src = url;
-      const seek = () => {
-        if (start) el.currentTime = start;
-        void el.play().catch(() => undefined);
-      };
-      el.addEventListener('loadedmetadata', seek, { once: true });
-      el.addEventListener('error', mediaError, { once: true });
-    }
+    } else playNative();
     return () => {
       cancelled = true;
       clearTimeout(startup);
@@ -1106,9 +1147,39 @@ function Screen({
                       {p.playMethod === 'direct' ? t('player.direct') : t('player.transcoding')}
                     </span>
                   </>
-                ) : (hlsTracks && (hlsTracks.audio.length > 1 || hlsTracks.subtitles.length)) ||
+                ) : (hlsTracks &&
+                    (hlsTracks.audio.length > 1 ||
+                      hlsTracks.subtitles.length ||
+                      hlsTracks.levels.length > 1)) ||
                   streamSubs.length ? (
                   <>
+                    {hlsTracks && hlsTracks.levels.length > 1 && (
+                      <Choice
+                        label={t('player.quality')}
+                        value={String(hlsTracks.levelId)}
+                        options={[
+                          {
+                            value: '-1',
+                            label:
+                              hlsTracks.levelId === -1 && hlsTracks.levels[hlsTracks.currentId]
+                                ? t('player.autoAt', {
+                                    height: hlsTracks.levels[hlsTracks.currentId].height,
+                                  })
+                                : t('player.auto'),
+                          },
+                          ...[...hlsTracks.levels]
+                            .sort((a, b) => b.height - a.height || b.bitrate - a.bitrate)
+                            .map((l) => ({
+                              value: String(l.id),
+                              label: `${l.height}p · ${(l.bitrate / 1e6).toFixed(1)} Mb/s`,
+                            })),
+                        ]}
+                        onChange={(v) => {
+                          // A chosen variant stays; "Auto" lets hls.js adapt again.
+                          if (hls.current) hls.current.currentLevel = Number(v);
+                        }}
+                      />
+                    )}
                     {streamSubs.length > 0 && (
                       <Choice
                         label={t('player.subtitles')}
@@ -1155,6 +1226,11 @@ function Screen({
                   </>
                 ) : (
                   <span className="text-muted">{t('player.noOptions')}</span>
+                )}
+                {decoded && (
+                  <span className="text-muted px-1 text-xs tabular-nums">
+                    {t('player.decoded', { width: decoded.width, height: decoded.height })}
+                  </span>
                 )}
               </div>
             )}

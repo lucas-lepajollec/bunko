@@ -37,6 +37,17 @@ const server: Server = createServer((req, res) => {
       types: ['movie', 'series'],
       idPrefixes: ['tt', 'tmdb:'],
     });
+  // An aggregating addon that takes ~9 s to answer (many sources behind it).
+  if (url.pathname === '/local/stream/movie/tt0000777.json') {
+    setTimeout(
+      () =>
+        send({
+          streams: [{ name: 'Slow', title: 'VOSTFR 1080p', url: 'https://cdn.example/slow.mp4' }],
+        }),
+      9000,
+    );
+    return;
+  }
   if (url.pathname.startsWith('/local/stream/'))
     return send({
       streams: [
@@ -50,7 +61,11 @@ const server: Server = createServer((req, res) => {
           title: '🚀 Direct · 🇫🇷 VF\n🇫🇷 2 ST FR',
           url: 'https://cdn.example/vf.mp4',
         },
-        { name: '📺 720p\nSource', title: '🚀 Direct · 💬 VOSTFR', url: 'https://cdn.example/st.mp4' },
+        {
+          name: '📺 720p\nSource',
+          title: '🚀 Direct · 💬 VOSTFR',
+          url: 'https://cdn.example/st.mp4',
+        },
       ],
     });
   // A Kitsu-based anime addon; its configured address holds an account key.
@@ -248,7 +263,13 @@ it('asks TMDB-based addons by TMDB id and plays their local links through the re
   seedAnimeIds(
     compact([
       { anilist_id: 5, type: 'TV', kitsu_id: 77, imdb_id: ['tt5'] },
-      { anilist_id: 6, type: 'TV', themoviedb_id: 900, season: { tvdb: 1, tmdb: 2 }, imdb_id: 'tt6' },
+      {
+        anilist_id: 6,
+        type: 'TV',
+        themoviedb_id: 900,
+        season: { tvdb: 1, tmdb: 2 },
+        imdb_id: 'tt6',
+      },
       { anilist_id: 7, type: 'MOVIE', themoviedb_id: 901 },
       { anilist_id: 8, type: 'TV', themoviedb_id: 902 },
     ]),
@@ -456,3 +477,12 @@ it('remembers where an extension stream stopped, per account', async () => {
   positions.saveVideoPosition('anilist:21:3', null, null);
   expect(positions.videoPosition('anilist:21:3')).toBeNull();
 });
+
+it('waits for a slow aggregating extension instead of dropping it', async () => {
+  updateSettings({ videoAddons: [`${base}/local/manifest.json`] });
+  addons.resetAddonRest();
+  const result = await addons.titleStreams({ imdb: 'tt0000777', tmdb: 777 }, null, 'fr');
+  expect(result.errors).toEqual([]);
+  expect(result.streams.map((s) => s.name)).toEqual(['Slow']);
+  updateSettings({ videoAddons: [ADDON()] });
+}, 30_000);
