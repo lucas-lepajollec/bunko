@@ -477,9 +477,14 @@ function Title({ media }: { media: MediaDetail }) {
                 className={primaryButton}
               >
                 {missing.length
-                  ? byVolume
-                    ? t('title.completeSeriesVol', { count: missingVolumeCount })
-                    : t('title.completeSeries', { count: missing.length })
+                  ? // Nothing owned yet: "Download"; some of it: "Complete".
+                    owned.size === 0 && ownedVolumes.size === 0
+                    ? byVolume
+                      ? t('title.downloadSeriesVol', { count: missingVolumeCount })
+                      : t('title.downloadSeries', { count: missing.length })
+                    : byVolume
+                      ? t('title.completeSeriesVol', { count: missingVolumeCount })
+                      : t('title.completeSeries', { count: missing.length })
                   : checking || (!chapters.data && sources.length > 0)
                     ? t('title.loadingChapters')
                     : incomplete
@@ -502,7 +507,7 @@ function Title({ media }: { media: MediaDetail }) {
                 {t('jellyfin.open')}
               </a>
             )}
-            {video && <MediaDownload mediaId={media.id} />}
+            {video && <MediaDownload media={media} />}
             {video && entry && (
               <button
                 type="button"

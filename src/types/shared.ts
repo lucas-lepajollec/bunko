@@ -602,6 +602,10 @@ export interface Settings {
   sonarrAnimeRootFolder: string;
   radarrQualityProfile: number;
   radarrRootFolder: string;
+  /** qBittorrent Web UI: progress of what Prowlarr sends to it (and of everything else). */
+  qbittorrentUrl: string;
+  qbittorrentUsername: string;
+  qbittorrentPassword: string;
   /** Jellyfin server address and API key; `jellyfinUser` names whose watched state counts. */
   jellyfinUrl: string;
   jellyfinApiKey: string;
@@ -677,6 +681,7 @@ export type SecretSetting =
   | 'sonarrApiKey'
   | 'prowlarrApiKey'
   | 'radarrApiKey'
+  | 'qbittorrentPassword'
   | 'tradocApiKey'
   | 'jellyfinApiKey'
   | 'googleBooksApiKey'
@@ -971,6 +976,8 @@ export interface ServicesStatus {
   /** Sonarr (series, anime) and Radarr (films). */
   sonarr?: { state: ServiceState; version: string | null };
   radarr?: { state: ServiceState; version: string | null };
+  prowlarr?: { state: ServiceState; version: string | null };
+  qbittorrent?: { state: ServiceState; version: string | null };
 }
 export type ArrService = 'sonarr' | 'radarr';
 /** GET /api/arr/options?service= — what the settings let the user choose. */
@@ -996,6 +1003,58 @@ export interface MediaRequestState {
   /** Share of the queued downloads already received (0–1), when the client reports sizes. */
   progress?: number | null;
   monitored?: boolean;
+  /** Prowlarr is set up: a manual search by name is possible even without Sonarr/Radarr. */
+  prowlarr?: boolean;
+}
+export type SearchService = ArrService | 'prowlarr';
+/** POST /api/arr/prepare — the work is in Sonarr/Radarr (added unmonitored, never searched). */
+export interface MediaSearchTarget {
+  service: ArrService;
+  /** Sonarr: seasons with their episodes and files on disk. */
+  seasons: { number: number; episodes: number; files: number }[];
+}
+/** One release of an interactive search (Sonarr/Radarr) or a manual Prowlarr search. */
+export interface MediaRelease {
+  service: SearchService;
+  guid: string;
+  indexerId: number;
+  title: string;
+  indexer: string;
+  size: number;
+  seeders: number | null;
+  leechers: number | null;
+  /** Quality as Sonarr/Radarr name it (e.g. WEBDL-1080p); Prowlarr: from the title. */
+  quality: string | null;
+  resolution: string | null;
+  codec: string | null;
+  languages: string[];
+  publishDate: string | null;
+  protocol: string;
+  /** Sonarr/Radarr would not pick it themselves (their reasons); it can still be taken. */
+  rejected: boolean;
+  rejections: string[];
+  fullSeason: boolean;
+  episodes: number[];
+  infoUrl: string | null;
+}
+/** GET /api/arr/grabs — what was sent from Bunko, with live progress. */
+export interface MediaGrab {
+  id: number;
+  mediaId: string;
+  title: string;
+  coverUrl: string | null;
+  service: SearchService;
+  releaseTitle: string;
+  size: number | null;
+  createdAt: string;
+  state:
+    'sent' | 'queued' | 'downloading' | 'paused' | 'importing' | 'completed' | 'failed' | 'gone';
+  progress: number | null;
+  /** Bytes per second while downloading. */
+  speed: number | null;
+  /** Seconds left, when the client knows. */
+  eta: number | null;
+  message: string | null;
 }
 
 /* ---- Book translation through TraDoc (contract for /api/translations/*) ---- */

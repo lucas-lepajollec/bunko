@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Downloads of series, anime and films are chosen by hand, never searched automatically: the
+  Download button (or "Complete (n/m)" when part of it is on disk) opens an interactive search.
+  The Sonarr/Radarr tab lists their releases for a season or the film (quality, languages, full
+  season or episodes, size, seeders, indexer, age, and why Sonarr/Radarr would not pick it
+  themselves); the Prowlarr tab searches the indexers by name, with the work's names suggested,
+  for releases Sonarr/Radarr miss. Each release is sent with one click; the window stays open.
+  Works are added to Sonarr/Radarr unmonitored and without any search.
+- Downloads page: a "Series & films" section follows what was sent (Sonarr/Radarr queues and
+  qBittorrent: progress, speed, time left, failures).
+- Settings: Prowlarr and qBittorrent (read-only use of the torrent list) next to Sonarr/Radarr.
+- Reading works: "Download the series" when nothing is owned yet, "Complete the series" once part
+  of it is.
 - Downloads for series, anime and films through Sonarr and Radarr (Settings → Sonarr & Radarr):
   a work's sheet gets a Download button that adds it with the chosen quality profile and folder
   (anime as Sonarr's anime type, in their own folder if set) and starts the search; the sheet then
