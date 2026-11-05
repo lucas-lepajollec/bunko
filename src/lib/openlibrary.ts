@@ -1,4 +1,5 @@
 import type { DiscoverPage, DiscoverQuery, MediaDetail, UnifiedMedia } from '@/types/shared';
+import { adultScope } from './adult';
 import { emptyMedia, cleanSynopsis } from './media';
 import { cached, metadataStatus } from './metadata-cache';
 import { sharedConcurrencyGate } from './concurrency';
@@ -173,8 +174,13 @@ export async function discoverBooks(q: DiscoverQuery): Promise<BookDiscoverPage>
   const page = q.page ?? 1,
     perPage = q.perPage ?? 24;
   // Search's subject facets and documented trending/readinglog/rating sorts avoid N+1 sheet requests.
-  const subject =
-    q.kind === 'book'
+  // 18+ only: erotica (novels) and books about sexuality (non-fiction).
+  const adultOnly = adultScope() === 'only';
+  const subject = adultOnly
+    ? q.kind === 'book'
+      ? '(subject:"sex instruction" OR subject:"sex manuals" OR subject:"sexual intercourse")'
+      : '(subject:erotica OR subject:"erotic fiction" OR subject:"erotic stories")'
+    : q.kind === 'book'
       ? '(subject:nonfiction OR subject:history OR subject:science OR subject:biography)'
       : 'subject:fiction';
   const year = new Date().getUTCFullYear();
@@ -219,9 +225,11 @@ export async function discoverBooks(q: DiscoverQuery): Promise<BookDiscoverPage>
       items: data.docs
         .filter((d) => workId(d.key))
         .map(fromOpenLibrary)
+        .map((m) => (adultOnly ? { ...m, adult: true } : m))
         .filter(
           (m) =>
-            m.format === wanted &&
+            // Erotica is fiction even when Open Library calls a work non-fiction.
+            (m.format === wanted || (adultOnly && q.kind !== 'book')) &&
             (q.year == null || m.year === q.year) &&
             (q.sort !== 'new' || (m.year != null && m.year <= year)),
         ),

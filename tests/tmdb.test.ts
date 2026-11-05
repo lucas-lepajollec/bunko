@@ -197,3 +197,17 @@ it('filters series by genre, status, year, keyword and score through TMDB discov
     sort_by: 'popularity.desc',
   });
 });
+
+it('lists titles rated 18 in 18+ only mode, classified as such', async () => {
+  updateSettings({ tmdbApiKey: 'tmdb-key', adultContent: true, adultMode: true });
+  calls.length = 0;
+  const page = await tmdb.discoverTmdb('tv', 'trending', 1);
+  expect(page.items.every((m) => m.adult)).toBe(true);
+  const call = new URL(`http://x${calls.find((c) => c.startsWith('/3/discover/tv'))!}`);
+  expect(Object.fromEntries(call.searchParams)).toMatchObject({
+    include_adult: 'true',
+    certification_country: 'FR',
+    certification: '18',
+  });
+  updateSettings({ adultContent: false });
+});
