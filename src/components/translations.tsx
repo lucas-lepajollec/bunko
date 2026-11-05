@@ -119,6 +119,12 @@ function JobRow({ job, onChange }: { job: TranslationJob; onChange: () => void }
             : ''}
         </span>
       </div>
+      {/* A retried failure (TraDoc down or slow) says why the job is still waiting. */}
+      {job.error && !['error', 'failed'].includes(job.state) && (
+        <span className="text-warn text-xs">
+          {t(`error.${job.error}`) === `error.${job.error}` ? job.error : t(`error.${job.error}`)}
+        </span>
+      )}
       <span className="text-muted text-xs">
         {job.sourceLang.toUpperCase()} → {job.targetLang.toUpperCase()}
         {job.model ? ` · ${job.model}` : ''} ·{' '}

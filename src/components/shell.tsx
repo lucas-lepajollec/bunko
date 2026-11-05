@@ -39,7 +39,6 @@ export function Providers({ children }: { children: ReactNode }) {
 
 function AuthGate({ children }: { children: ReactNode }) {
   const { data, error, isLoading, mutate } = useApi<AuthState>('/api/auth');
-  const { mutate: mutateAll } = useSWRConfig();
   useEffect(() => {
     const onUnauthorized = () => void mutate(undefined, { revalidate: true });
     window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
@@ -73,7 +72,9 @@ function AuthGate({ children }: { children: ReactNode }) {
         onDone={async () => {
           // A new session starts from a clean cache, whoever used this browser before.
           clearPersistentCache({ resume: true });
-          await mutateAll(() => true, undefined, { revalidate: true });
+          // Reload: no list kept in this tab's memory (paged lists included) can outlive the
+          // previous account.
+          window.location.reload();
         }}
       />
     );

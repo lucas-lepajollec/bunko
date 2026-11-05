@@ -7,7 +7,7 @@ import type { ChapterRelease, HomeFeed, TrackedMedia } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { continueReading } from '@/lib/client/reading';
 import { ReadingCard } from '@/components/reading';
-import { inUniverse, useUniverse } from '@/lib/client/universe';
+import { inUniverse, universeAsides, useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from '@/components/load-notice';
 import { Backdrop } from '@/components/backdrop';
@@ -62,6 +62,7 @@ export default function HomePage() {
         .slice(0, 8),
     [library.data, universe.active],
   );
+  const asides = universeAsides(universe.active, universe.enabled);
   let n = 0;
   return (
     <main className="relative">
@@ -77,7 +78,7 @@ export default function HomePage() {
             <SectionHeading
               num={++n}
               title={t('home.resume')}
-              aside={t('profile.recent')}
+              aside={t(asides.recent)}
               href="/profile#continue"
               linkLabel={t('profile.allReading')}
             />
@@ -92,7 +93,7 @@ export default function HomePage() {
           <SectionHeading
             num={++n}
             title={t('home.topWeek')}
-            aside={t('home.topWeekAside')}
+            aside={t(asides.top)}
             href={universe.active === 'all' ? '/catalog' : `/catalog?kind=${universe.active}`}
             linkLabel={t('home.allShelf')}
           />
@@ -107,7 +108,7 @@ export default function HomePage() {
             <SectionHeading
               num={++n}
               title={t(`home.latestKind.${k}`)}
-              aside={t('home.latestKindAside')}
+              aside={t(asides.latest(k))}
               href={`/catalog?view=chapters&kind=${k}`}
               linkLabel={t('home.allReleases')}
             />

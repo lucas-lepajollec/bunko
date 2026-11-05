@@ -31,6 +31,12 @@ export function interpolate(template: string, variables?: Record<string, string 
 type Dictionary = Record<string, string>;
 
 const en: Dictionary = {
+  'catalog.viewReleases': 'Latest releases',
+  'catalog.noReleases.any': 'No recent releases for these filters',
+  'home.topAside.video': 'what everyone is watching this week',
+  'home.latestKindAside.episode': 'episode by episode',
+  'profile.recent.video': 'what you watched last',
+  'profile.recent.all': 'right where you stopped',
   'profile.title': 'Profile',
   'profile.account': 'Account settings',
   'profile.allReading': 'All current reading',
@@ -1402,6 +1408,12 @@ const en: Dictionary = {
 };
 
 const fr: Dictionary = {
+  'catalog.viewReleases': 'Dernières sorties',
+  'catalog.noReleases.any': 'Aucune sortie récente pour ces filtres',
+  'home.topAside.video': 'ce que tout le monde regarde cette semaine',
+  'home.latestKindAside.episode': 'épisode par épisode',
+  'profile.recent.video': 'tes derniers visionnages',
+  'profile.recent.all': 'là où tu t’es arrêté',
   'profile.title': 'Profil',
   'profile.account': 'Paramètres du compte',
   'profile.allReading': 'Toutes mes lectures',
@@ -2789,6 +2801,12 @@ const fr: Dictionary = {
 };
 
 const es: Dictionary = {
+  'catalog.viewReleases': 'Últimos lanzamientos',
+  'catalog.noReleases.any': 'No hay lanzamientos recientes con estos filtros',
+  'home.topAside.video': 'lo que todos ven esta semana',
+  'home.latestKindAside.episode': 'episodio a episodio',
+  'profile.recent.video': 'lo último que viste',
+  'profile.recent.all': 'justo donde lo dejaste',
   'profile.title': 'Perfil',
   'profile.account': 'Ajustes de la cuenta',
   'profile.allReading': 'Todas mis lecturas',
@@ -4168,6 +4186,12 @@ const es: Dictionary = {
 };
 
 const de: Dictionary = {
+  'catalog.viewReleases': 'Neueste Veröffentlichungen',
+  'catalog.noReleases.any': 'Keine neuen Veröffentlichungen für diese Filter',
+  'home.topAside.video': 'was diese Woche alle schauen',
+  'home.latestKindAside.episode': 'Folge für Folge',
+  'profile.recent.video': 'zuletzt angesehen',
+  'profile.recent.all': 'genau dort, wo du aufgehört hast',
   'profile.title': 'Profil',
   'profile.account': 'Kontoeinstellungen',
   'profile.allReading': 'Alle aktuellen Lektüren',
@@ -5554,6 +5578,12 @@ const de: Dictionary = {
 };
 
 const it: Dictionary = {
+  'catalog.viewReleases': 'Ultime uscite',
+  'catalog.noReleases.any': 'Nessuna uscita recente per questi filtri',
+  'home.topAside.video': 'quello che tutti guardano questa settimana',
+  'home.latestKindAside.episode': 'episodio per episodio',
+  'profile.recent.video': 'le tue ultime visioni',
+  'profile.recent.all': 'proprio dove ti eri fermato',
   'profile.title': 'Profilo',
   'profile.account': 'Impostazioni account',
   'profile.allReading': 'Tutte le mie letture',

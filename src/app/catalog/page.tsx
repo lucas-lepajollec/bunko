@@ -1,5 +1,5 @@
 'use client';
-import { KIND_IDS, KINDS as KIND_DEFS } from '@/domain/kinds';
+import { KIND_IDS, KINDS as KIND_DEFS, isVideoKind } from '@/domain/kinds';
 import { Select } from '@/components/select';
 import { Suspense, useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -253,7 +253,9 @@ function Catalog() {
                     'chapters',
                     t(
                       kind === 'all'
-                        ? 'catalog.viewChapters'
+                        ? universe.enabled.some(isVideoKind)
+                          ? 'catalog.viewReleases'
+                          : 'catalog.viewChapters'
                         : KIND_DEFS[kind].unit === 'episode'
                           ? 'catalog.viewEpisodes'
                           : KIND_DEFS[kind].unit === 'film'
@@ -349,7 +351,13 @@ function Catalog() {
             !releases.data?.some((p) => p.partial) &&
             !releases.error &&
             releaseItems.length === 0 && (
-              <Empty title={t('catalog.noReleases')}>{t('home.noReleasesBody')}</Empty>
+              <Empty
+                title={t(
+                  kind !== 'all' && KIND_DEFS[kind].unit === 'chapter'
+                    ? 'catalog.noReleases'
+                    : 'catalog.noReleases.any',
+                )}
+              >{t('home.noReleasesBody')}</Empty>
             )}
           {releases.data?.[releases.data.length - 1]?.nextCursor && !releasesMore && (
             <button

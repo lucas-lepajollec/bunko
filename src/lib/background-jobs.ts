@@ -125,7 +125,13 @@ const JOBS: Definition[] = [
       const t = activeTranslations();
       return t.total ? { done: t.done, total: t.total } : null;
     },
-    run: () => wakeWorker(),
+    run: () => {
+      // "Run now" also skips the wait after a failed attempt (TraDoc was down, timed out…).
+      statement(
+        "UPDATE translation_jobs SET next_check_at=0 WHERE state IN ('queued','pending','running','importing')",
+      ).run();
+      wakeWorker();
+    },
   },
 ];
 

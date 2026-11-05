@@ -519,7 +519,7 @@ export async function processTranslations(signal: AbortSignal) {
   const settings = getSettings();
   if (!settings.tradocUrl || !settings.tradocApiKey) return;
   const due = rows().filter(
-    (r) => ACTIVE.includes(r.state) && (r.state === 'queued' || r.next_check_at <= Date.now()),
+    (r) => ACTIVE.includes(r.state) && r.next_check_at <= Date.now(),
   );
   for (const job of due.reverse()) {
     if (signal.aborted) return;
@@ -531,6 +531,8 @@ export async function processTranslations(signal: AbortSignal) {
       const transient = ['TRADOC_UNREACHABLE', 'TRADOC_TIMEOUT', 'KAVITA_SCAN_ERROR'].includes(
         code,
       );
+      // One line per failure (code only: never the address, key or upstream body).
+      console.warn(`[bunko] translation ${job.id} ${job.state}: ${code}${transient ? ' (retrying)' : ''}`);
       patch(job.id, {
         state: transient ? job.state : 'error',
         error: code,
@@ -597,6 +599,17 @@ export async function controlTranslation(id: number, action: TranslationAction) 
       return null;
   }
   return view(row(id));
+}
+
+/** Whether a translation job waits for the worker now or soon (its own worker lane). */
+export function translationsWaiting(withinMs = 0): boolean {
+  return Boolean(
+    db()
+      .prepare(
+        "SELECT 1 FROM translation_jobs WHERE state IN ('queued','pending','running','importing') AND next_check_at<=? LIMIT 1",
+      )
+      .get(Date.now() + withinMs),
+  );
 }
 
 /** Translation jobs still running (for the activity panel): finished share and the current file. */

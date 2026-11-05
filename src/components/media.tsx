@@ -24,7 +24,7 @@ export function PosterCard({
   const { t } = useI18n();
   return (
     <MediaLink media={media} className={cx('group flex min-w-0 flex-col gap-2.5', className)}>
-      <span className="relative block">
+      <span className="@container relative block">
         <Cover
           src={media.coverUrl}
           priority={priority}
@@ -32,12 +32,16 @@ export function PosterCard({
         />
         {badge ??
           (media.kavita ? (
-            <span className="bg-bg/85 absolute top-2 right-2 flex h-6 items-center gap-1 rounded-full px-2 text-[11px] font-semibold">
+            <span className="bg-bg/85 absolute top-2 right-2 flex h-6 max-w-[calc(100%-1rem)] items-center gap-1 truncate rounded-full px-2 text-[11px] font-semibold">
               {t('kavita.badge', { n: media.kavita.chapters })}
             </span>
           ) : (
             media.trackedId !== null && (
-              <span className="bg-bg/85 absolute top-2 right-2 flex h-6 items-center gap-1 rounded-full px-2 text-[11px] font-semibold">
+              // Narrow posters (phones) keep only the check mark, like the release cards.
+              <span
+                title={t('common.inLibrary')}
+                className="bg-bg/85 absolute top-2 right-2 flex h-6 min-w-6 items-center justify-center gap-1 rounded-full px-1.5 text-[11px] font-semibold @[180px]:px-2"
+              >
                 <svg
                   width="11"
                   height="11"
@@ -49,7 +53,7 @@ export function PosterCard({
                 >
                   <path d="m5 12 5 5 9-10" />
                 </svg>
-                {t('common.inLibrary')}
+                <span className="sr-only @[180px]:not-sr-only">{t('common.inLibrary')}</span>
               </span>
             )
           ))}

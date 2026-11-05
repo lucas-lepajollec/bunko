@@ -257,3 +257,24 @@ it('shows import progress and disconnects, removing only what Jellyfin added', a
   expect(publicSettings()).toMatchObject({ jellyfinUrl: '' });
   expect(jellyfin.jellyfinConfigured()).toBe(false);
 });
+
+it('imports Jellyfin anime into the account that connected it only', async () => {
+  const { accountsDb } = await import('@/lib/accounts-store');
+  const { inTenant } = await import('@/lib/tenant-context');
+  const { runTenantWorkers } = await import('@/lib/downloads');
+  accountsDb()
+    .prepare(
+      `INSERT OR IGNORE INTO users(id,username,role,password_hash,session_epoch,created_at)
+      VALUES(2,'SecondAdmin','admin','h','e','2026-01-01')`,
+    )
+    .run();
+  updateSettings({ autoImportJellyfin: true });
+  await jellyfin.syncJellyfinIndex();
+  expect(listTracked().length).toBeGreaterThan(0);
+  await runTenantWorkers();
+  inTenant(2, () => {
+    expect(publicSettings().jellyfinUrl).toBe('');
+    expect(listTracked()).toEqual([]);
+    expect(jellyfin.jellyfinImportedIds()).toEqual([]);
+  });
+});

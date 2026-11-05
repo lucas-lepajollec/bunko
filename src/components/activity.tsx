@@ -138,7 +138,7 @@ export function ActivityCenter() {
         <div
           role="dialog"
           aria-label={t('notices.label')}
-          className="border-line fixed inset-x-3 top-[68px] z-50 flex max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-2xl border bg-[#141210]/97 p-4 text-sm shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl md:absolute md:inset-x-auto md:top-full md:right-0 md:mt-2 md:w-[360px]"
+          className="border-line fixed inset-x-3 top-[68px] z-50 flex max-h-[calc(100dvh-68px-7rem-env(safe-area-inset-bottom))] touch-pan-y flex-col gap-3 overflow-y-auto overscroll-contain rounded-2xl *:shrink-0 md:max-h-[min(70vh,calc(100dvh-96px))] border bg-[#141210]/97 p-4 text-sm shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl md:absolute md:inset-x-auto md:top-full md:right-0 md:mt-2 md:w-[360px]"
         >
           <span className="font-display text-lg font-bold">{t('notices.title')}</span>
           {tasks.map((task) => {
