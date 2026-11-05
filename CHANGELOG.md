@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Catalog filters for series and films (TMDB): genres, status, year, minimum score and keywords as
+  tags (searched as you type).
+- Tags come in clear groups (audience, fantasy, action, romance, setting, characters, format…).
+  Mature genres and tags are only offered when allowed in the settings, apart from the others;
+  the kinds menu can then switch the interface to that content alone.
 - Streaming extensions get 25 s to list an episode's streams (was 8 s): aggregating extensions
   that ask many sources answer in 10–20 s and were dropped. A slow answer no longer puts the
   extension to rest, and a failed or empty lookup is not kept: reopening the episode asks again.

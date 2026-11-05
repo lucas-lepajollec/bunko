@@ -10,6 +10,8 @@ import { sourceFormat } from './library-kinds';
 import {
   visibleMedia,
   includeProviderAdults,
+  adultKey,
+  adultScope,
   nsfwSourceFilter,
   rememberAdultIdentities,
 } from './adult';
@@ -164,7 +166,7 @@ async function anilist(
   signal?: AbortSignal,
 ): Promise<UnifiedMedia[]> {
   const body = {
-    query: `query($search: String!, $type: MediaType!) { Page(perPage: 30) { media(search: $search, type: $type${includeProviderAdults() ? '' : ', isAdult: false'}) { ${aniFields} staff(perPage: 10) { edges { role node { name { full } } } } } } }`,
+    query: `query($search: String!, $type: MediaType!) { Page(perPage: 30) { media(search: $search, type: $type${adultScope() === 'only' ? ', isAdult: true' : includeProviderAdults() ? '' : ', isAdult: false'}) { ${aniFields} staff(perPage: 10) { edges { role node { name { full } } } } } } }`,
     variables: { search: query, type: type === 'ANIME' ? 'ANIME' : 'MANGA' },
   };
   const result = await requestJson<{ data?: { Page: { media: AniMedia[] } }; errors?: unknown[] }>(
@@ -189,9 +191,11 @@ async function mangadex(query: string, signal?: AbortSignal): Promise<UnifiedMed
   url.searchParams.set('limit', '30');
   url.searchParams.set('order[relevance]', 'desc');
   ['cover_art', 'author'].forEach((v) => url.searchParams.append('includes[]', v));
-  (includeProviderAdults()
-    ? ['safe', 'suggestive', 'erotica', 'pornographic']
-    : ['safe', 'suggestive']
+  (adultScope() === 'only'
+    ? ['erotica', 'pornographic']
+    : includeProviderAdults()
+      ? ['safe', 'suggestive', 'erotica', 'pornographic']
+      : ['safe', 'suggestive']
   ).forEach((v) => url.searchParams.append('contentRating[]', v));
   url.searchParams.append('excludedTags[]', DEX_DOUJINSHI);
   const r = await requestJson<{ data: DexManga[] }>(url, { signal }, 2500);
@@ -229,7 +233,7 @@ export async function search(
   progressive = false,
 ): Promise<SearchResponse> {
   const start = Date.now();
-  const key = `${includeProviderAdults()}:${type}:${query.toLowerCase()}`;
+  const key = `${adultKey()}:${type}:${query.toLowerCase()}`;
   const jobs: { provider: Provider; cacheProvider?: string; run: () => Promise<UnifiedMedia[]> }[] =
     [{ provider: 'anilist', run: () => anilist(query, type) }];
   if (!type || type === 'MANGA') jobs.push({ provider: 'mangadex', run: () => mangadex(query) });

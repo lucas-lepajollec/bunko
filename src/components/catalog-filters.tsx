@@ -1,6 +1,6 @@
 'use client';
 import * as Dialog from '@radix-ui/react-dialog';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CatalogFilters, DiscoverKind, Season } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -66,10 +66,15 @@ export function CatalogFilterBar({
             ...(f?.genres ?? [])
               .map((g) => ({ value: g, label: genreLabel(g) }))
               .sort((a, b) => a.label.localeCompare(b.label, language)),
+            // 18+ genres apart, at the end, marked as such.
+            ...(f?.adultGenres ?? []).map((g) => ({
+              value: g,
+              label: `${genreLabel(g)} · 18+`,
+            })),
           ]}
           className={control}
         />
-        {!releasesView && (f?.tags.length ?? 0) > 0 && (
+        {!releasesView && ((f?.tags.length ?? 0) > 0 || f?.keywordSearch) && (
           <button
             type="button"
             onClick={() => setTagsOpen(true)}
@@ -186,7 +191,7 @@ export function CatalogFilterBar({
               className="flex h-8 items-center gap-1.5 rounded-full bg-white/[0.08] px-3 hover:bg-white/[0.12]"
               aria-label={t('catalog.removeTag', { tag })}
             >
-              {tagLabel(tag, language)}
+              {tagName(tag, language)}
               <span aria-hidden className="text-muted">
                 ✕
               </span>
@@ -197,6 +202,7 @@ export function CatalogFilterBar({
       {tagsOpen && f && (
         <TagPicker
           groups={f.tags}
+          keywordSearch={f.keywordSearch}
           selected={values.tags}
           onClose={() => setTagsOpen(false)}
           onApply={(tags) => {
@@ -209,13 +215,21 @@ export function CatalogFilterBar({
   );
 }
 
+/** A tag's label: AniList names are translated; TMDB keywords travel as `id~name`. */
+function tagName(tag: string, language: Parameters<typeof tagLabel>[1]) {
+  const keyword = /^\d+~(.+)$/.exec(tag);
+  return keyword ? keyword[1] : tagLabel(tag, language);
+}
+
 function TagPicker({
   groups,
+  keywordSearch,
   selected,
   onClose,
   onApply,
 }: {
   groups: CatalogFilters['tags'];
+  keywordSearch: boolean;
   selected: string[];
   onClose: () => void;
   onApply: (tags: string[]) => void;
@@ -224,12 +238,38 @@ function TagPicker({
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<string[]>(selected);
   const collator = useMemo(() => new Intl.Collator(language), [language]);
+  // Series and films: TMDB keywords, searched as the user types.
+  const [typed, setTyped] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setTyped(query.trim()), 300);
+    return () => clearTimeout(id);
+  }, [query]);
+  const keywords = useApi<{ value: string; label: string }[]>(
+    keywordSearch && typed.length >= 2
+      ? `/api/catalog/keywords?q=${encodeURIComponent(typed)}`
+      : null,
+  );
   // Labels in the interface language where a translation exists, sorted alphabetically.
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
+    if (keywordSearch)
+      return [
+        {
+          category: 'keywords',
+          adult: false,
+          tags: [
+            // What is already chosen stays visible, then the matches.
+            ...picked.map((name) => ({ name, label: tagName(name, language) })),
+            ...(keywords.data ?? [])
+              .filter((k) => !picked.includes(k.value))
+              .map((k) => ({ name: k.value, label: k.label })),
+          ],
+        },
+      ].filter((g) => g.tags.length);
     return groups
       .map((g) => ({
         category: g.category,
+        adult: Boolean(g.adult),
         tags: g.names
           .map((name) => ({ name, label: tagLabel(name, language) }))
           .filter(
@@ -238,7 +278,7 @@ function TagPicker({
           .sort((a, b) => collator.compare(a.label, b.label)),
       }))
       .filter((g) => g.tags.length);
-  }, [groups, query, language, collator]);
+  }, [groups, query, language, collator, keywordSearch, keywords.data, picked]);
   const toggle = (name: string) =>
     setPicked((p) =>
       p.includes(name) ? p.filter((x) => x !== name) : p.length >= 10 ? p : [...p, name],
@@ -284,7 +324,7 @@ function TagPicker({
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('catalog.tagsSearch')}
+                placeholder={keywordSearch ? t('catalog.keywordsSearch') : t('catalog.tagsSearch')}
                 aria-label={t('catalog.tagsSearch')}
                 className="placeholder:text-mid min-w-0 flex-1 bg-transparent text-[15px] outline-none"
               />
@@ -293,7 +333,16 @@ function TagPicker({
           <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 md:px-7">
             {shown.map((g) => (
               <section key={g.category} className="flex flex-col gap-2">
-                <h3 className="text-muted text-xs tracking-[0.14em] uppercase">{g.category}</h3>
+                <h3
+                  className={cx(
+                    'text-xs tracking-[0.14em] uppercase',
+                    g.adult ? 'text-warn' : 'text-muted',
+                  )}
+                >
+                  {t(`catalog.tagGroup.${g.category}`) === `catalog.tagGroup.${g.category}`
+                    ? g.category
+                    : t(`catalog.tagGroup.${g.category}`)}
+                </h3>
                 <div className="flex flex-wrap gap-1.5">
                   {g.tags.map((tag) => (
                     <button
@@ -314,7 +363,13 @@ function TagPicker({
                 </div>
               </section>
             ))}
-            {!shown.length && <p className="text-muted text-sm">{t('catalog.tagsNone')}</p>}
+            {!shown.length && (
+              <p className="text-muted text-sm">
+                {keywordSearch && typed.length < 2
+                  ? t('catalog.keywordsHint')
+                  : t('catalog.tagsNone')}
+              </p>
+            )}
           </div>
           <div className="border-line flex items-center gap-3 border-t p-4 md:px-7">
             <span className="text-muted text-sm">

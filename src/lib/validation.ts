@@ -304,6 +304,7 @@ export const settingsPatch = z
       .optional(),
     autoImportKavita: z.boolean().optional(),
     adultContent: z.boolean().optional(),
+    adultMode: z.boolean().optional(),
     libraryTargets: z
       .object(
         Object.fromEntries(

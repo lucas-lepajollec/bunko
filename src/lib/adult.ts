@@ -143,9 +143,21 @@ function adultState() {
   if (!db().inTransaction) identitiesCache().value = state;
   return state;
 }
-export function includeProviderAdults() {
-  return getSettings().adultContent || [...adultState().overrides.values()].some((v) => !v.adult);
+/**
+ * What the account shows: `off` no 18+ anywhere, `on` 18+ next to everything else, `only` the
+ * whole interface switched to 18+ works (chosen from the kinds menu; needs 18+ allowed).
+ */
+export type AdultScope = 'off' | 'on' | 'only';
+export function adultScope(): AdultScope {
+  const s = getSettings();
+  return !s.adultContent ? 'off' : s.adultMode ? 'only' : 'on';
 }
+export function includeProviderAdults() {
+  return adultScope() !== 'off' || [...adultState().overrides.values()].some((v) => !v.adult);
+}
+/** Cache scope of provider answers that depend on the 18+ choice. */
+export const adultKey = () =>
+  adultScope() === 'only' ? 'only' : String(includeProviderAdults());
 /** Keep a response's effective flag out of durable automatic metadata. */
 export function automaticMedia<T extends UnifiedMedia>(media: T): T {
   const { adultOverride, ...raw } = media;
@@ -218,20 +230,19 @@ export function mediaAdult(
   return adultClassifier()(media);
 }
 export function mediaVisibility() {
-  const enabled = getSettings().adultContent;
+  const scope = adultScope();
   const classify = adultClassifier();
-  return (media: UnifiedMedia) => enabled || !classify(media);
+  return (media: UnifiedMedia) =>
+    scope === 'on' ? true : scope === 'only' ? classify(media) : !classify(media);
 }
 export function visibleMedia(media: UnifiedMedia) {
   return mediaVisibility()(media);
 }
 export function visibleTracked(entries: TrackedMedia[]) {
-  return getSettings().adultContent
-    ? entries
-    : (() => {
-        const classify = adultClassifier();
-        return entries.filter((t) => !classify(t.media));
-      })();
+  const scope = adultScope();
+  if (scope === 'on') return entries;
+  const classify = adultClassifier();
+  return entries.filter((t) => (scope === 'only') === classify(t.media));
 }
 /**
  * With 18+ off and "hide 18+ extensions" on (the default), extensions their authors mark NSFW are

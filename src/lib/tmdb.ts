@@ -95,6 +95,34 @@ async function genreNames(kind: TmdbKind): Promise<Map<number, string>> {
     return new Map();
   }
 }
+/** Genre names of series or films in the interface language (catalog filter). */
+export async function tmdbGenres(kind: TmdbKind): Promise<string[]> {
+  return [...(await genreNames(kind)).values()];
+}
+/**
+ * TMDB keywords matching a word (the catalog's tags for series and films). A chosen keyword
+ * travels as `id~name` so the URL keeps its label.
+ */
+export async function tmdbKeywords(query: string): Promise<{ value: string; label: string }[]> {
+  const data = await tmdbJson<{ results: { id: number; name: string }[] }>(
+    '/search/keyword',
+    { query },
+    24 * HOUR,
+  );
+  return data.results
+    .slice(0, 30)
+    .map((k) => ({ value: `${k.id}~${k.name.slice(0, 50)}`, label: k.name }));
+}
+export interface TmdbFilters {
+  genre?: string;
+  status?: 'RELEASING' | 'FINISHED';
+  year?: number;
+  tags?: string[];
+  minScore?: number;
+}
+const filtered = (f?: TmdbFilters) =>
+  Boolean(f && (f.genre || f.status || f.year || f.tags?.length || f.minScore));
+
 /** Japanese animation is anime: AniList shows it, TMDB lists leave it out. */
 export const isAnime = (m: TmdbItem) =>
   (m.genre_ids ?? m.genres?.map((g) => g.id) ?? []).includes(16) && m.original_language === 'ja';
@@ -138,9 +166,11 @@ export async function discoverTmdb(
   page: number,
   /** Films: `only` = animated films (their own kind), `exclude` = live-action films. */
   animation: 'only' | 'exclude' = 'exclude',
+  filters?: TmdbFilters,
 ): Promise<DiscoverPage> {
   const today = new Date().toISOString().slice(0, 10);
   const params: Record<string, string> = { language: language(), page: String(page) };
+  if (filtered(filters)) return discoverFiltered(kind, sort, page, animation, filters!, params);
   const onlyAnimation = kind === 'movie' && animation === 'only';
   if (onlyAnimation) {
     params.with_genres = '16';
@@ -184,6 +214,52 @@ export async function discoverTmdb(
           !(m.genre_ids ?? m.genres?.map((g) => g.id) ?? []).includes(16),
       )
       .map((m) => fromTmdb(m, kind, genres)),
+    page: data.page,
+    hasNextPage: data.page < Math.min(data.total_pages, 50),
+  };
+}
+
+/** Catalog filters: TMDB's discover endpoint (trending lists take no filter). */
+async function discoverFiltered(
+  kind: TmdbKind,
+  sort: DiscoverSort,
+  page: number,
+  animation: 'only' | 'exclude',
+  f: TmdbFilters,
+  params: Record<string, string>,
+): Promise<DiscoverPage> {
+  const today = new Date().toISOString().slice(0, 10);
+  const date = kind === 'tv' ? 'first_air_date' : 'primary_release_date';
+  const genres = await genreNames(kind);
+  const genreId = f.genre
+    ? [...genres.entries()].find(([, name]) => name === f.genre)?.[0]
+    : undefined;
+  const withGenres = [
+    ...(kind === 'movie' && animation === 'only' ? [16] : []),
+    ...(genreId ? [genreId] : []),
+  ];
+  if (withGenres.length) params.with_genres = withGenres.join(',');
+  if (kind === 'movie' && animation === 'exclude') params.without_genres = '16';
+  if (f.year)
+    params[kind === 'tv' ? 'first_air_date_year' : 'primary_release_year'] = String(f.year);
+  // Returning series / in production; ended or cancelled.
+  if (kind === 'tv' && f.status) params.with_status = f.status === 'RELEASING' ? '0|2' : '3|4';
+  const keywords = (f.tags ?? []).map((t) => t.split('~')[0]).filter((t) => /^\d+$/.test(t));
+  if (keywords.length) params.with_keywords = keywords.join(',');
+  if (f.minScore) {
+    params['vote_average.gte'] = String(f.minScore / 10);
+    params['vote_count.gte'] = '50';
+  }
+  params.sort_by =
+    sort === 'score' ? 'vote_average.desc' : sort === 'new' ? `${date}.desc` : 'popularity.desc';
+  if (sort === 'score') params['vote_count.gte'] = '200';
+  if (sort === 'new') params[`${date}.lte`] = today;
+  const data = await tmdbJson<{ results: TmdbItem[]; page: number; total_pages: number }>(
+    `/discover/${kind}`,
+    params,
+  );
+  return {
+    items: data.results.filter((m) => !isAnime(m)).map((m) => fromTmdb(m, kind, genres)),
     page: data.page,
     hasNextPage: data.page < Math.min(data.total_pages, 50),
   };

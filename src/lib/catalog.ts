@@ -1,5 +1,5 @@
 import { seasonRef } from './anime-franchise';
-import { KIND_IDS, byKindOrder, mixByKind, type Kind } from '@/domain/kinds';
+import { KINDS, KIND_IDS, byKindOrder, mixByKind, type Kind } from '@/domain/kinds';
 import { rememberMediaPreview, mediaPreview } from './media-preview';
 import { deduplicate } from './search-engine';
 import { rakutenDetail } from './rakuten';
@@ -20,6 +20,8 @@ import {
   adultResolver,
   rememberAdultIdentities,
   includeProviderAdults,
+  adultKey,
+  adultScope,
   visibleMedia,
   mediaVisibility,
   recordSourceFlags,
@@ -133,7 +135,11 @@ export async function discover(
     settings.universes.length ? settings.universes : [...KIND_IDS],
     settings.kindOrder,
   );
-  const on = (k: Kind) => order.includes(k);
+  // 18+ only: the catalogs that rate works (AniList) are the only ones left.
+  const adultOnly = adultScope() === 'only';
+  const on = (k: Kind) =>
+    order.includes(k) &&
+    (!adultOnly || ['manga', 'manhwa', 'manhua', 'lightnovel', 'anime', 'animation'].includes(k));
   const { tmdbConfigured, discoverTmdb } = await import('./tmdb');
   // TMDB lanes have none of AniList's filters: a filtered page leaves them out.
   const filtered = Boolean(q.genre || q.status || q.tags?.length || q.minScore || q.year);
@@ -161,7 +167,7 @@ export async function discover(
   };
   // Only kinds without a reachable catalog (series without TMDB…): an empty page, not an outage.
   if (!Object.keys(providers).length) return { items: [], page: q.page ?? 1, hasNextPage: false };
-  const key = `discover:all:v3:${JSON.stringify(q)}:${order.join(',')}:${tmdb}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}:${includeProviderAdults()}:${metronScope()}:${credentialScope(settings.hardcoverToken)}`;
+  const key = `discover:all:v3:${JSON.stringify(q)}:${order.join(',')}:${tmdb}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}:${adultKey()}:${metronScope()}:${credentialScope(settings.hardcoverToken)}`;
   const result = await discoverAll(key, q.page ?? 1, providers);
   const items = mixByKind(result.items, order);
   return { ...result, items: raw ? items : withTracking(items).filter(visibleMedia) };
@@ -182,7 +188,7 @@ export async function progressiveDiscover(
           ...(hardcoverConfigured() ? { hardcover: () => discoverHardcover(q) } : {}),
         }
       : { [q.kind]: () => discover(q, undefined, true) };
-  const key = `discover:progressive:v2:${JSON.stringify(q)}:${includeProviderAdults()}:${metronScope()}:${credentialScope(getSettings().hardcoverToken)}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}`;
+  const key = `discover:progressive:v2:${JSON.stringify(q)}:${adultKey()}:${metronScope()}:${credentialScope(getSettings().hardcoverToken)}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}`;
   const page = await discoverAll(key, q.page ?? 1, providers, true);
   return { ...page, items: withTracking(page.items).filter(visibleMedia) };
 }
@@ -195,6 +201,9 @@ async function discoverLane(
   signal?.throwIfAborted();
   const kind = q.kind ?? 'all';
   const page = q.page ?? 1;
+  // 18+ only: book, web novel and comic catalogs do not rate works, nothing to show from them.
+  if (adultScope() === 'only' && ['novel', 'book', 'webnovel', 'comic'].includes(kind))
+    return { items: [], page, hasNextPage: false };
   if (kind === 'novel' || kind === 'book') {
     const outcomes = await Promise.allSettled([
       discoverBooks(q),
@@ -261,7 +270,7 @@ export async function discoverAniList(
     page,
     perPage,
     sort: sorts[sort],
-    adult: includeProviderAdults() ? undefined : false,
+    adult: adultScope() === 'only' ? true : includeProviderAdults() ? undefined : false,
     type: kind === 'anime' || kind === 'animation' ? 'ANIME' : 'MANGA',
   };
   if (kind === 'lightnovel') variables.format = 'NOVEL';
@@ -360,11 +369,54 @@ const FALLBACK_GENRES = [
   'Thriller',
 ];
 /** Filters each catalog lane can honour, for this account's 18+ choice. */
+/**
+ * Tag groups in display order. AniList's categories ("Theme-Romance", "Cast-Traits"…) are folded
+ * into groups a reader recognises; 18+ tags (AniList's adult ones and a few mature themes) form
+ * their own group, shown only when the account allows 18+ (first in 18+ only mode).
+ */
+const TAG_GROUPS: [group: string, match: RegExp][] = [
+  ['demographic', /^Demographic/],
+  ['fantasy', /^Theme-Fantasy/],
+  ['action', /^Theme-Action/],
+  ['romance', /^Theme-Romance/],
+  ['drama', /^Theme-Drama/],
+  ['comedy', /^Theme-Comedy/],
+  ['scifi', /^Theme-Sci-Fi/],
+  ['sliceOfLife', /^Theme-Slice of Life/],
+  ['sport', /^Theme-Game-Sport/],
+  ['games', /^Theme-Game/],
+  ['arts', /^Theme-Arts/],
+  ['setting', /^Setting/],
+  ['cast', /^Cast/],
+  ['other', /^Theme/],
+  ['format', /^Technical/],
+];
+/** Not flagged 18+ by AniList, but not something to offer outside 18+. */
+const MATURE_TAGS = new Set(['Nudity', 'Ero Guro', 'Psychosexual', 'Incest']);
+const ADULT_GENRES = ['Ecchi', 'Hentai'];
+
 export async function catalogFilters(
   kind: DiscoverQuery['kind'] = 'all',
   signal?: AbortSignal,
 ): Promise<CatalogFilters> {
-  const adult = getSettings().adultContent;
+  const scope = adultScope();
+  const adult = scope !== 'off';
+  // Series and films: TMDB's own genres and keywords, its statuses and years.
+  if (kind !== 'all' && KINDS[kind].catalog === 'tmdb') {
+    const tv = KINDS[kind].search === 'TV';
+    const { tmdbGenres } = await import('./tmdb');
+    return {
+      genres: await tmdbGenres(tv ? 'tv' : 'movie').catch(() => []),
+      adultGenres: [],
+      tags: [],
+      keywordSearch: true,
+      status: tv,
+      year: true,
+      season: false,
+      score: true,
+      adult: false,
+    };
+  }
   const anilistLane = !['comic', 'webnovel', 'novel', 'book'].includes(kind);
   let tagCollection: {
     MediaTagCollection: { name: string; category: string; isAdult: boolean }[];
@@ -383,28 +435,36 @@ export async function catalogFilters(
     }
   const groups = new Map<string, string[]>();
   for (const tag of tagCollection?.MediaTagCollection ?? []) {
-    if (tag.isAdult && !adult) continue;
-    // "Cast-Main Cast" → "Cast": broad categories keep the picker short.
-    const category = tag.category.split('-')[0] || 'Other';
-    groups.set(category, [...(groups.get(category) ?? []), tag.name]);
+    const mature = tag.isAdult || MATURE_TAGS.has(tag.name) || tag.category === 'Sexual Content';
+    if (mature && !adult) continue;
+    const group = mature
+      ? 'adult'
+      : (TAG_GROUPS.find(([, match]) => match.test(tag.category))?.[0] ?? 'other');
+    groups.set(group, [...(groups.get(group) ?? []), tag.name]);
   }
+  const order = [...TAG_GROUPS.map(([g]) => g), 'adult'];
+  const rank = (g: string) => (g === 'adult' && scope === 'only' ? -1 : order.indexOf(g));
+  const all = await (async () => {
+    try {
+      return await genres(signal);
+    } catch {
+      // AniList unreachable: its stable genre list keeps the filters usable.
+      return FALLBACK_GENRES;
+    }
+  })();
   return {
-    // AniList unreachable: its stable genre list keeps the filters usable.
-    genres: await (async () => {
-      try {
-        return await genres(signal);
-      } catch {
-        return FALLBACK_GENRES.filter((g) => adult || g !== 'Hentai');
-      }
-    })(),
+    genres: all.filter((g) => !ADULT_GENRES.includes(g)),
+    adultGenres: adult ? all.filter((g) => ADULT_GENRES.includes(g)) : [],
     tags: [...groups.entries()]
-      .map(([category, names]) => ({ category, names: names.sort() }))
-      .sort((a, b) => a.category.localeCompare(b.category)),
+      .map(([category, names]) => ({ category, names: names.sort(), adult: category === 'adult' }))
+      .sort((a, b) => rank(a.category) - rank(b.category)),
+    keywordSearch: false,
     status: !BOOK_KINDS.has(kind),
     year: true,
     season: anilistLane,
     score: anilistLane,
-    adult: adult && anilistLane,
+    // "18+ only" filter: mixed mode only (the 18+ only mode already shows nothing else).
+    adult: scope === 'on' && anilistLane,
   };
 }
 export async function genres(signal?: AbortSignal): Promise<string[]> {
@@ -412,8 +472,7 @@ export async function genres(signal?: AbortSignal): Promise<string[]> {
   const data = await cached('genres', 24 * 3600_000, () =>
     anilist<{ GenreCollection: string[] }>('query { GenreCollection }', {}),
   );
-  const include = getSettings().adultContent;
-  return data.GenreCollection.filter((g) => include || g !== 'Hentai');
+  return data.GenreCollection;
 }
 function videoDetail(m: AniDetail): VideoDetail {
   const next = m.nextAiringEpisode;
