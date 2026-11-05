@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Streaming extensions get 25 s to list an episode's streams (was 8 s): aggregating extensions
+  that ask many sources answer in 10–20 s and were dropped. A slow answer no longer puts the
+  extension to rest, and a failed or empty lookup is not kept: reopening the episode asks again.
+- Player quality for HLS streams: hls.js plays them in Chrome too (recent Chrome claimed native
+  HLS, started on the smallest variant and offered no choice; Safari and iPhone keep their native
+  player), starts at the quality the connection allows instead of the playlist's first variant,
+  and the settings menu offers Auto / each variant. The menu also shows the resolution actually
+  decoded, to tell a real 1080p from a label.
 - Sonarr interactive search, like Sonarr's own buttons: a whole season or one episode (episode
   list with absolute numbers and what is already on disk). Anime batches ("01-12") count as season
   packs, so they show with "full seasons only".

@@ -31,6 +31,9 @@ export function interpolate(template: string, variables?: Record<string, string 
 type Dictionary = Record<string, string>;
 
 const en: Dictionary = {
+  'player.auto': 'Auto',
+  'player.autoAt': 'Auto ({height}p)',
+  'player.decoded': 'Playing {width}×{height}',
   'arr.scope.season': 'Whole season',
   'arr.scope.episode': 'One episode',
   'arr.episodeLabel': 'Episode',
@@ -1530,6 +1533,9 @@ const en: Dictionary = {
 };
 
 const fr: Dictionary = {
+  'player.auto': 'Auto',
+  'player.autoAt': 'Auto ({height}p)',
+  'player.decoded': 'Lecture en {width}×{height}',
   'arr.scope.season': 'Saison entière',
   'arr.scope.episode': 'Un épisode',
   'arr.episodeLabel': 'Épisode',
@@ -3045,6 +3051,9 @@ const fr: Dictionary = {
 };
 
 const es: Dictionary = {
+  'player.auto': 'Auto',
+  'player.autoAt': 'Auto ({height}p)',
+  'player.decoded': 'Reproduciendo a {width}×{height}',
   'arr.scope.season': 'Temporada entera',
   'arr.scope.episode': 'Un episodio',
   'arr.episodeLabel': 'Episodio',
@@ -4552,6 +4561,9 @@ const es: Dictionary = {
 };
 
 const de: Dictionary = {
+  'player.auto': 'Auto',
+  'player.autoAt': 'Auto ({height}p)',
+  'player.decoded': 'Wiedergabe in {width}×{height}',
   'arr.scope.season': 'Ganze Staffel',
   'arr.scope.episode': 'Eine Folge',
   'arr.episodeLabel': 'Folge',
@@ -6066,6 +6078,9 @@ const de: Dictionary = {
 };
 
 const it: Dictionary = {
+  'player.auto': 'Auto',
+  'player.autoAt': 'Auto ({height}p)',
+  'player.decoded': 'Riproduzione a {width}×{height}',
   'arr.scope.season': 'Stagione intera',
   'arr.scope.episode': 'Un episodio',
   'arr.episodeLabel': 'Episodio',

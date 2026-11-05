@@ -386,13 +386,21 @@ function subtitleOf(s: z.infer<typeof subtitleSchema>, source: string): VideoSub
   };
 }
 
-/** One extension endpoint; a slow extension does not hold the episode back more than 10 s. */
-function addonJson(url: string, path: string, signal?: AbortSignal) {
+/**
+ * One extension endpoint. Stream lists get 25 s: aggregating extensions ask many sources and
+ * commonly answer in 10–20 s (the browser waits 30 s). Other endpoints keep 8 s.
+ */
+const STREAM_TIMEOUT_MS = 25_000;
+function addonJson(url: string, path: string, signal?: AbortSignal, timeoutMs = 8000) {
   return safeJson(`${base(url)}${path}`, {
-    timeoutMs: 8000,
-    signal: AbortSignal.any([AbortSignal.timeout(10_000), ...(signal ? [signal] : [])]),
+    timeoutMs,
+    signal: AbortSignal.any([AbortSignal.timeout(timeoutMs + 2000), ...(signal ? [signal] : [])]),
   });
 }
+/** A slow answer is not a broken extension: it is not put to rest for it. */
+const isTimeout = (error: unknown) =>
+  (error as { code?: string }).code === 'STREAM_TIMEOUT' ||
+  ['TimeoutError', 'AbortError'].includes((error as Error)?.name);
 
 /**
  * An extension that failed is left out for a while (30 s, doubling up to 10 min) instead of
@@ -478,6 +486,13 @@ function remembered(
     recent.delete(key);
     throw error;
   });
+  // Only complete answers are kept: after a failed or empty lookup, asking again asks again.
+  void value.then(
+    (r) => {
+      if (r.errors.length || !r.streams.length) recent.delete(key);
+    },
+    () => undefined,
+  );
   recent.set(key, { at: now, value });
   if (recent.size > 200) recent.delete(recent.keys().next().value!);
   return value;
@@ -516,7 +531,12 @@ async function streamsFor(
         const id = ids.find((i) => supports(m, i, wanted));
         if (!id) return null;
         const type = id.types.find((t) => m.types.includes(t)) ?? id.types[0];
-        return addonJson(url, `/${wanted}/${type}/${idPath(id.id)}.json`);
+        return addonJson(
+          url,
+          `/${wanted}/${type}/${idPath(id.id)}.json`,
+          undefined,
+          wanted === 'stream' ? STREAM_TIMEOUT_MS : 10_000,
+        );
       };
       const [streamData, subtitleData] = await Promise.all([
         ask('stream').then(
@@ -524,8 +544,8 @@ async function streamsFor(
             noteResult(url, true);
             return data;
           },
-          () => {
-            noteResult(url, false);
+          (error) => {
+            if (!isTimeout(error)) noteResult(url, false);
             errors.push(m.name);
             return null;
           },
