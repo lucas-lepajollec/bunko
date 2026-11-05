@@ -303,7 +303,8 @@ function Catalog() {
               {t('tmdb.missing')}
             </p>
           )}
-          {!tmdbKind && (
+          {/* Series and films filter through TMDB once its key is set. */}
+          {(!tmdbKind || settings.data?.catalogs?.configured.tmdb) && (
             <CatalogFilterBar
               kind={kind}
               values={filterValues}
