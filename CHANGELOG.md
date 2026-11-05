@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Downloads for series, anime and films through Sonarr and Radarr (Settings → Sonarr & Radarr):
+  a work's sheet gets a Download button that adds it with the chosen quality profile and folder
+  (anime as Sonarr's anime type, in their own folder if set) and starts the search; the sheet then
+  shows "waiting for a release", "complete (3/24)", the download's progress from the queue (as the
+  download client, e.g. qBittorrent, reports it) or "downloaded". Anime are found through the
+  offline id map (TVDB, TMDB for anime films), series through TMDB's TVDB id.
+  `GET/POST /api/arr/request`, `GET /api/arr/options`; `RADARR_URL` / `RADARR_API_KEY` seed the
+  first account like the other services.
+- Player: subtitles sit a little above the bottom edge.
+- "If you liked" posters no longer lose their top when they lift on hover.
 - Same side margins on every page: the page keeps the scrollbar's room (`scrollbar-gutter`), so
   content no longer shifts between short and long pages; the header and the home hero are placed
   from the page width instead of `100vw` (they sat half a scrollbar off the content); a work's

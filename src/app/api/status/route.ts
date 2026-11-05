@@ -8,6 +8,7 @@ import { kavitaAdmin } from '@/lib/kavita-client';
 import { endpoint } from '@/lib/http';
 import { tradocInfo } from '@/lib/translations';
 import { jellyfinInfo } from '@/lib/jellyfin';
+import { arrConfigured, arrInfo } from '@/lib/media-requests';
 /** Reachability of the services the interface depends on; never returns upstream details. */
 export const GET = route(async (r) => {
   const settings = getSettings();
@@ -16,6 +17,8 @@ export const GET = route(async (r) => {
     kavita: { state: 'unconfigured', admin: null },
     tradoc: { state: 'unconfigured', version: null },
     jellyfin: { state: 'unconfigured', version: null },
+    sonarr: { state: 'unconfigured', version: null },
+    radarr: { state: 'unconfigured', version: null },
   };
   await Promise.all([
     (async () => {
@@ -63,6 +66,15 @@ export const GET = route(async (r) => {
         status.tradoc = { state: 'error', version: null };
       }
     })(),
+    ...(['sonarr', 'radarr'] as const).map(async (service) => {
+      if (!arrConfigured(service)) return;
+      try {
+        const info = await arrInfo(service, r.signal);
+        status[service] = { state: 'ok', version: info.version ?? null };
+      } catch {
+        status[service] = { state: 'error', version: null };
+      }
+    }),
   ]);
   return json(status);
 });

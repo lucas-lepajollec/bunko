@@ -231,6 +231,13 @@ export const settingsPatch = z
     tradocApiKey: z.string().max(2000).optional(),
     prowlarrUrl: z.union([httpUrl, z.literal('')]).optional(),
     prowlarrApiKey: z.string().max(2000).optional(),
+    radarrUrl: z.union([httpUrl, z.literal('')]).optional(),
+    radarrApiKey: z.string().max(2000).optional(),
+    sonarrQualityProfile: z.number().int().min(0).max(1_000_000).optional(),
+    sonarrRootFolder: z.string().max(1000).optional(),
+    sonarrAnimeRootFolder: z.string().max(1000).optional(),
+    radarrQualityProfile: z.number().int().min(0).max(1_000_000).optional(),
+    radarrRootFolder: z.string().max(1000).optional(),
     tmdbApiKey: z
       .string()
       .trim()

@@ -1,4 +1,5 @@
 'use client';
+import { MediaDownload } from '@/components/media-download';
 import { MediaLink } from '@/components/media-link';
 import { LoadNotice } from '@/components/load-notice';
 import { Select } from '@/components/select';
@@ -501,6 +502,7 @@ function Title({ media }: { media: MediaDetail }) {
                 {t('jellyfin.open')}
               </a>
             )}
+            {video && <MediaDownload mediaId={media.id} />}
             {video && entry && (
               <button
                 type="button"
@@ -794,7 +796,7 @@ function Title({ media }: { media: MediaDetail }) {
             title={t('title.recommendations')}
             aside={t('title.recommendationsAside')}
           />
-          <div className="no-scrollbar -mx-4 flex gap-3.5 overflow-x-auto px-4 md:mx-0 md:grid md:grid-cols-6 md:gap-6 md:px-0 xl:grid-cols-8">
+          <div className="no-scrollbar -mx-4 -my-2 flex gap-3.5 overflow-x-auto px-4 py-2 md:mx-0 md:overflow-visible md:grid md:grid-cols-6 md:gap-6 md:px-0 xl:grid-cols-8">
             {media.recommendations.slice(0, 8).map((m) => (
               <PosterCard key={m.id} media={m} className="w-28 shrink-0 md:w-auto" />
             ))}

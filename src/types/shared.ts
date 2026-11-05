@@ -593,6 +593,15 @@ export interface Settings {
   sonarrApiKey: string;
   prowlarrUrl: string;
   prowlarrApiKey: string;
+  /** Radarr (films). Sonarr and Radarr options: 0 / '' = the service's first profile / folder. */
+  radarrUrl: string;
+  radarrApiKey: string;
+  sonarrQualityProfile: number;
+  sonarrRootFolder: string;
+  /** Folder for anime series (Sonarr's anime type); empty = the series folder. */
+  sonarrAnimeRootFolder: string;
+  radarrQualityProfile: number;
+  radarrRootFolder: string;
   /** Jellyfin server address and API key; `jellyfinUser` names whose watched state counts. */
   jellyfinUrl: string;
   jellyfinApiKey: string;
@@ -667,6 +676,7 @@ export type SecretSetting =
   | 'kavitaApiKey'
   | 'sonarrApiKey'
   | 'prowlarrApiKey'
+  | 'radarrApiKey'
   | 'tradocApiKey'
   | 'jellyfinApiKey'
   | 'googleBooksApiKey'
@@ -958,6 +968,34 @@ export interface ServicesStatus {
   jellyfin: { state: ServiceState; version: string | null };
   /** TraDoc translation engine; `version` is TraDoc's own version when reachable. */
   tradoc: { state: ServiceState; version: string | null };
+  /** Sonarr (series, anime) and Radarr (films). */
+  sonarr?: { state: ServiceState; version: string | null };
+  radarr?: { state: ServiceState; version: string | null };
+}
+export type ArrService = 'sonarr' | 'radarr';
+/** GET /api/arr/options?service= — what the settings let the user choose. */
+export interface ArrOptions {
+  profiles: { id: number; name: string }[];
+  folders: { path: string; freeSpace: number | null }[];
+}
+/** GET /api/arr/request?mediaId= — a work's place in Sonarr/Radarr. */
+export interface MediaRequestState {
+  service: ArrService | null;
+  configured: boolean;
+  /**
+   * unsupported: no TVDB/TMDB identity; unconfigured: the service is not set up; absent: not in
+   * it; wanted: monitored, nothing on disk; partial: some episodes; downloading: in the download
+   * client's queue; available: everything on disk.
+   */
+  state:
+    'unsupported' | 'unconfigured' | 'absent' | 'wanted' | 'partial' | 'downloading' | 'available';
+  error: string | null;
+  files?: number;
+  total?: number;
+  queued?: number;
+  /** Share of the queued downloads already received (0–1), when the client reports sizes. */
+  progress?: number | null;
+  monitored?: boolean;
 }
 
 /* ---- Book translation through TraDoc (contract for /api/translations/*) ---- */

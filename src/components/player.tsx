@@ -463,9 +463,13 @@ function Screen({
       if (!forget && el.currentTime < 5) return;
       const seconds = forget ? null : el.currentTime;
       // Reopening the episode in this session reads the new place, not the first one fetched.
-      void mutate(`/api/video/position?key=${encodeURIComponent(posKey)}`, { seconds }, {
-        revalidate: false,
-      });
+      void mutate(
+        `/api/video/position?key=${encodeURIComponent(posKey)}`,
+        { seconds },
+        {
+          revalidate: false,
+        },
+      );
       void send('/api/video/position', 'PUT', {
         key: posKey,
         seconds,
@@ -614,6 +618,36 @@ function Screen({
       track.mode = track.id === shownTrack ? 'showing' : 'disabled';
     }
   }, [shownTrack, p, streamSubs.length]);
+  // Subtitles sit a little above the bottom edge (browsers put the last line right on it).
+  // Cues are placed two lines up unless the file positions them itself.
+  useEffect(() => {
+    const el = video.current;
+    if (!el) return;
+    const lift = (track: TextTrack) => {
+      for (const cue of Array.from(track.cues ?? [])) {
+        if (typeof VTTCue !== 'undefined' && cue instanceof VTTCue && cue.line === 'auto') {
+          cue.snapToLines = true;
+          cue.line = -3;
+        }
+      }
+    };
+    const onChange = (e: Event) => lift(e.target as TextTrack);
+    const watched = new Set<TextTrack>();
+    const watch = () => {
+      for (const track of Array.from(el.textTracks)) {
+        if (watched.has(track)) continue;
+        watched.add(track);
+        lift(track);
+        track.addEventListener('cuechange', onChange);
+      }
+    };
+    watch();
+    el.textTracks.addEventListener('addtrack', watch);
+    return () => {
+      el.textTracks.removeEventListener('addtrack', watch);
+      for (const track of watched) track.removeEventListener('cuechange', onChange);
+    };
+  }, [p, streamSubs.length]);
 
   // Attach the stream; switching audio/quality/burned subtitles keeps the position.
   useEffect(() => {
@@ -770,15 +804,14 @@ function Screen({
     // iPhone: no fullscreen for page elements, only the video's own (native controls, with the
     // subtitle tracks). iPad and older Safari: the prefixed version.
     const native = () =>
-      (video.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null)
-        ?.webkitEnterFullscreen?.();
+      (
+        video.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null
+      )?.webkitEnterFullscreen?.();
     if (box?.requestFullscreen && document.fullscreenEnabled)
       void box.requestFullscreen().then(
         () =>
           // Phones: a film fills the screen sideways.
-          void (
-            screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }
-          )
+          void (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> })
             .lock?.('landscape')
             .catch(() => undefined),
         native,
