@@ -48,6 +48,8 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   scrollbar-color: #2e2a27 transparent;
+  /* Same side margins on every page: short pages keep the scrollbar's room, nothing shifts. */
+  scrollbar-gutter: stable;
 }
 
 body {

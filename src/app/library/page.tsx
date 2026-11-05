@@ -323,15 +323,38 @@ function Library() {
                   {t('library.matchAll', { count: n(withoutSources.length) })}
                 </button>
               )}
-              <div className="ml-auto flex flex-wrap items-center gap-2">
+              {/* One row: selection, status and sort; on phones it scrolls like the kind chips. */}
+              <div className="no-scrollbar -mx-4 flex w-[calc(100%+2rem)] items-center gap-2 overflow-x-auto px-4 *:shrink-0 md:mx-0 md:ml-auto md:w-auto md:overflow-visible md:px-0">
                 {entries.length > 0 && (
                   <button
                     type="button"
                     aria-pressed={selecting}
+                    aria-label={t(selecting ? 'library.selectDone' : 'library.select')}
                     onClick={() => (selecting ? stopSelecting() : setSelecting(true))}
-                    className={cx(smallButton, selecting && 'bg-fg text-bg hover:bg-fg')}
+                    className={cx(
+                      smallButton,
+                      'px-3 sm:px-4',
+                      selecting && 'bg-fg text-bg hover:bg-fg',
+                    )}
                   >
-                    {t(selecting ? 'library.selectDone' : 'library.select')}
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      <rect x="3" y="3" width="18" height="18" rx="5" />
+                      <path d="m8 12 3 3 5-6" />
+                    </svg>
+                    {/* Phones keep the icon only (named for screen readers). */}
+                    <span className="hidden sm:inline">
+                      {t(selecting ? 'library.selectDone' : 'library.select')}
+                    </span>
                   </button>
                 )}
                 <Select
@@ -353,7 +376,7 @@ function Library() {
                   ]}
                 />
                 <div className="text-muted flex items-center gap-2">
-                  {t('catalog.sort')}
+                  <span className="hidden md:inline">{t('catalog.sort')}</span>
                   <Select
                     label={t('catalog.sort')}
                     value={sort}

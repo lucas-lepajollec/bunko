@@ -48,7 +48,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   if (isLoading)
     return (
       <div className="min-h-dvh" aria-busy="true">
-        <div className="flex h-14 items-center gap-2.5 px-4 text-white md:h-20 md:px-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))]">
+        <div className="flex h-14 items-center gap-2.5 px-4 text-white md:h-20 md:px-[max(2.5rem,calc((100%-1760px)/2+2.5rem))]">
           <Logo />
           <span className="font-display text-[19px] font-extrabold tracking-[-0.03em] md:text-[21px]">
             {PRODUCT_NAME}
@@ -280,7 +280,7 @@ function Header() {
     <header
       className={cx(
         // Content aligns with the 1760px page column on wide screens; no hard edge under the bar.
-        'fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-6 px-4 transition-[background-color,backdrop-filter] duration-300 md:h-20 md:gap-5 xl:gap-11 md:px-[max(2.5rem,calc((100vw-1760px)/2+2.5rem))]',
+        'fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-6 px-4 transition-[background-color,backdrop-filter] duration-300 md:h-20 md:gap-5 xl:gap-11 md:px-[max(2.5rem,calc((100%-1760px)/2+2.5rem))]',
         solid ? 'bg-bg/90 backdrop-blur-md' : 'bg-gradient-to-b from-black/45 to-transparent',
       )}
     >

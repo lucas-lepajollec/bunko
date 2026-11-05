@@ -49,7 +49,7 @@ function WorkSettingsRoute() {
   });
   if (detail.error && !detail.data)
     return (
-      <main className="mx-auto max-w-[760px] px-4 pt-24 md:pt-32">
+      <main className="mx-auto w-full max-w-[1760px] px-4 pt-20 md:px-10 md:pt-32">
         <Empty title={t('title.unavailable')}>
           <ErrorNote error={detail.error} />
         </Empty>
@@ -57,7 +57,7 @@ function WorkSettingsRoute() {
     );
   if (!detail.data)
     return (
-      <main className="mx-auto flex max-w-[760px] flex-col gap-4 px-4 pt-24 md:pt-32">
+      <main className="mx-auto flex w-full max-w-[1760px] flex-col gap-4 px-4 pt-20 md:px-10 md:pt-32">
         <Skeleton className="h-14 w-2/3" />
         <Skeleton className="h-10" />
         <Skeleton className="h-64" />
@@ -135,7 +135,7 @@ function WorkSettings({ media }: { media: MediaDetail }) {
 
   return (
     <main
-      className="mx-auto flex max-w-[1400px] flex-col gap-6 px-4 pt-20 pb-28 md:px-10 md:pt-28"
+      className="mx-auto flex w-full max-w-[1760px] flex-col gap-6 px-4 pt-20 pb-28 md:px-10 md:pt-32"
       style={{ ['--accent' as string]: media.color ?? '#9fb6ff' }}
     >
       <Link href={mediaHref(media.id)} className="text-mid self-start text-sm hover:text-white">
