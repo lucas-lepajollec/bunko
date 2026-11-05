@@ -1,8 +1,8 @@
 import type { ChapterRelease, UnifiedMedia } from '@/types/shared';
 import { KINDS, type Kind } from '@/domain/kinds';
 import { listTracked } from './db';
-import { fromTmdb, isAnime, tmdbConfigured, tmdbDetail, tmdbJson } from './tmdb';
-import { mediaVisibility } from './adult';
+import { ADULT_ONLY_PARAMS, fromTmdb, isAnime, tmdbConfigured, tmdbDetail, tmdbJson } from './tmdb';
+import { adultScope, mediaVisibility } from './adult';
 import { eachConcurrent } from './concurrency';
 
 const HOUR = 3600_000;
@@ -125,6 +125,7 @@ async function filmReleases(from: string, to: string, animation: boolean) {
       'primary_release_date.lte': to,
       sort_by: 'popularity.desc',
       ...(animation ? { with_genres: '16' } : { without_genres: '16' }),
+      ...(adultScope() === 'only' ? ADULT_ONLY_PARAMS : {}),
     },
     6 * HOUR,
   ).catch(() => ({ results: [] }));
@@ -133,7 +134,8 @@ async function filmReleases(from: string, to: string, animation: boolean) {
     .filter((m) => !isAnime(m as never))
     .slice(0, 30)
     .map((m): ChapterRelease => {
-      const media = fromTmdb(m as never, 'movie');
+      const rated = fromTmdb(m as never, 'movie');
+      const media = adultScope() === 'only' ? { ...rated, adult: true } : rated;
       return {
         id: `tmdb:${media.id}`,
         media,

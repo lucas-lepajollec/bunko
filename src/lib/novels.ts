@@ -1,4 +1,5 @@
 import type { DiscoverPage, DiscoverQuery } from '@/types/shared';
+import { adultScope } from './adult';
 import { mangaUpdates } from './mangaupdates';
 import { cached, storedMetadata, saveMetadata, discoveryStatus } from './metadata-cache';
 import { fromMangaUpdates, updatesNovelFormat, type UpdatesRecord } from './media';
@@ -69,7 +70,12 @@ export async function discoverWebNovels(q: DiscoverQuery): Promise<DiscoverPage>
     orderby: { trending: 'week_pos', popular: 'list_reading', score: 'rating', new: 'year' }[
       q.sort ?? 'trending'
     ],
-    ...(q.genre ? { genre: [q.genre] } : {}),
+    // 18+ only: MangaUpdates' "Adult" genre (sexual content), with the chosen genre if any.
+    ...(q.genre || adultScope() === 'only'
+      ? {
+          genre: [...(q.genre ? [q.genre] : []), ...(adultScope() === 'only' ? ['Adult'] : [])],
+        }
+      : {}),
     ...(q.year ? { year: String(q.year) } : {}),
     ...(q.status === 'FINISHED' ? { filter: 'completed' } : {}),
   };

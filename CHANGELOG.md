@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Content preference, "alone" view: series and films (TMDB, rated 18 in France), novels and books
+  (Open Library subjects), web novels (MangaUpdates genre) now have results, and airing anime of
+  that kind appear in the latest episodes; Hardcover and comics have no such rating and stay out.
 - Catalog filters for series and films (TMDB): genres, status, year, minimum score and keywords as
   tags (searched as you type).
 - Tags come in clear groups (audience, fantasy, action, romance, setting, characters, format…).

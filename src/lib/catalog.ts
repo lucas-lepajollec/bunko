@@ -135,11 +135,10 @@ export async function discover(
     settings.universes.length ? settings.universes : [...KIND_IDS],
     settings.kindOrder,
   );
-  // 18+ only: the catalogs that rate works (AniList) are the only ones left.
+  // 18+ only: comics have no 18+ catalog (Metron does not rate works).
   const adultOnly = adultScope() === 'only';
-  const on = (k: Kind) =>
-    order.includes(k) &&
-    (!adultOnly || ['manga', 'manhwa', 'manhua', 'lightnovel', 'anime', 'animation'].includes(k));
+  const on = (k: Kind) => order.includes(k) && (!adultOnly || k !== 'comic');
+
   const { tmdbConfigured, discoverTmdb } = await import('./tmdb');
   // TMDB lanes have none of AniList's filters: a filtered page leaves them out.
   const filtered = Boolean(q.genre || q.status || q.tags?.length || q.minScore || q.year);
@@ -185,7 +184,9 @@ export async function progressiveDiscover(
     q.kind === 'novel' || q.kind === 'book'
       ? {
           openlibrary: () => discoverBooks(q),
-          ...(hardcoverConfigured() ? { hardcover: () => discoverHardcover(q) } : {}),
+          ...(hardcoverConfigured() && adultScope() !== 'only'
+            ? { hardcover: () => discoverHardcover(q) }
+            : {}),
         }
       : { [q.kind]: () => discover(q, undefined, true) };
   const key = `discover:progressive:v2:${JSON.stringify(q)}:${adultKey()}:${metronScope()}:${credentialScope(getSettings().hardcoverToken)}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}`;
@@ -201,13 +202,12 @@ async function discoverLane(
   signal?.throwIfAborted();
   const kind = q.kind ?? 'all';
   const page = q.page ?? 1;
-  // 18+ only: book, web novel and comic catalogs do not rate works, nothing to show from them.
-  if (adultScope() === 'only' && ['novel', 'book', 'webnovel', 'comic'].includes(kind))
-    return { items: [], page, hasNextPage: false };
+  // 18+ only: Metron does not rate comics, nothing to show from them.
+  if (adultScope() === 'only' && kind === 'comic') return { items: [], page, hasNextPage: false };
   if (kind === 'novel' || kind === 'book') {
     const outcomes = await Promise.allSettled([
       discoverBooks(q),
-      ...(hardcoverConfigured() ? [discoverHardcover(q)] : []),
+      ...(hardcoverConfigured() && adultScope() !== 'only' ? [discoverHardcover(q)] : []),
     ]);
     const pages = outcomes.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
     if (!pages.length) throw (outcomes[0] as PromiseRejectedResult).reason;
@@ -857,7 +857,14 @@ export async function animeAiring(
   const seen = new Set<string>();
   const visible = mediaVisibility();
   // Every reasonably known show, not only the most popular ones.
-  return [...mine, ...popular.filter((r) => (r.media.popularity ?? 0) >= 2_000)]
+  // 18+ only: 18+ shows are much less popular; every one airing is kept.
+  const adultOnly = adultScope() === 'only';
+  return [
+    ...mine,
+    ...popular.filter(
+      (r) => (r.media.popularity ?? 0) >= 2_000 || (adultOnly && Boolean(r.media.isAdult)),
+    ),
+  ]
     .filter((r) => {
       const k = `${r.media.id}:${r.episode}`;
       if (seen.has(k)) return false;

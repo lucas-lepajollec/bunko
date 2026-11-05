@@ -5,6 +5,7 @@ import type {
   MediaDetail,
   UnifiedMedia,
 } from '@/types/shared';
+import { adultScope } from './adult';
 import { AppError } from './errors';
 import { emptyMedia } from './media';
 import { cached } from './metadata-cache';
@@ -113,6 +114,12 @@ export async function tmdbKeywords(query: string): Promise<{ value: string; labe
     .slice(0, 30)
     .map((k) => ({ value: `${k.id}~${k.name.slice(0, 50)}`, label: k.name }));
 }
+/** TMDB discover parameters for 18+ only: titles rated 18 in France, adult ones included. */
+export const ADULT_ONLY_PARAMS = {
+  include_adult: 'true',
+  certification_country: 'FR',
+  certification: '18',
+};
 export interface TmdbFilters {
   genre?: string;
   status?: 'RELEASING' | 'FINISHED';
@@ -170,7 +177,9 @@ export async function discoverTmdb(
 ): Promise<DiscoverPage> {
   const today = new Date().toISOString().slice(0, 10);
   const params: Record<string, string> = { language: language(), page: String(page) };
-  if (filtered(filters)) return discoverFiltered(kind, sort, page, animation, filters!, params);
+  // 18+ only: what TMDB rates 18 (France) or flags adult, through its discover endpoint.
+  if (filtered(filters) || adultScope() === 'only')
+    return discoverFiltered(kind, sort, page, animation, filters ?? {}, params);
   const onlyAnimation = kind === 'movie' && animation === 'only';
   if (onlyAnimation) {
     params.with_genres = '16';
@@ -254,12 +263,18 @@ async function discoverFiltered(
     sort === 'score' ? 'vote_average.desc' : sort === 'new' ? `${date}.desc` : 'popularity.desc';
   if (sort === 'score') params['vote_count.gte'] = '200';
   if (sort === 'new') params[`${date}.lte`] = today;
+  const adultOnly = adultScope() === 'only';
+  if (adultOnly) Object.assign(params, ADULT_ONLY_PARAMS);
   const data = await tmdbJson<{ results: TmdbItem[]; page: number; total_pages: number }>(
     `/discover/${kind}`,
     params,
   );
   return {
-    items: data.results.filter((m) => !isAnime(m)).map((m) => fromTmdb(m, kind, genres)),
+    items: data.results
+      .filter((m) => !isAnime(m))
+      .map((m) => fromTmdb(m, kind, genres))
+      // Rated 18 by the query itself: classified as such everywhere it is shown or followed.
+      .map((m) => (adultOnly ? { ...m, adult: true } : m)),
     page: data.page,
     hasNextPage: data.page < Math.min(data.total_pages, 50),
   };
@@ -270,7 +285,7 @@ export async function searchTmdb(q: string, kind?: TmdbKind): Promise<UnifiedMed
   const data = await tmdbJson<{ results: TmdbItem[] }>(kind ? `/search/${kind}` : '/search/multi', {
     query: q,
     language: language(),
-    include_adult: 'false',
+    include_adult: adultScope() === 'off' ? 'false' : 'true',
   });
   const [tv, movie] = await Promise.all([genreNames('tv'), genreNames('movie')]);
   return data.results

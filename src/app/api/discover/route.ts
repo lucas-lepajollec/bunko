@@ -7,7 +7,6 @@ import { discoverAniList, progressiveDiscover, withTracking } from '@/lib/catalo
 import type { UnifiedMedia } from '@/types/shared';
 import { groupAnimeSeasons } from '@/lib/anime-works';
 import { discoverTmdb, tmdbConfigured } from '@/lib/tmdb';
-import { adultScope } from '@/lib/adult';
 export const GET = route(async (r) => {
   const q = discoverQuery.parse(Object.fromEntries(new URL(r.url).searchParams));
   // Series and films come from TMDB (nothing without its key).
@@ -19,9 +18,7 @@ export const GET = route(async (r) => {
     minScore: q.minScore,
   };
   if (q.kind && q.kind !== 'all' && KINDS[q.kind].catalog === 'tmdb') {
-    // TMDB does not rate series and films for adults: nothing in 18+ only mode.
-    if (!tmdbConfigured() || adultScope() === 'only')
-      return json({ items: [], page: 1, hasNextPage: false });
+    if (!tmdbConfigured()) return json({ items: [], page: 1, hasNextPage: false });
     const page = await discoverTmdb(
       KINDS[q.kind].search === 'TV' ? 'tv' : 'movie',
       q.sort ?? 'trending',
@@ -33,7 +30,7 @@ export const GET = route(async (r) => {
   }
   // Animated films: anime films (AniList) and western animation films (TMDB), interleaved.
   if (q.kind && q.kind !== 'all' && KINDS[q.kind].catalog === 'anilist+tmdb') {
-    const western = tmdbConfigured() && !q.genre && !q.tags?.length && adultScope() !== 'only';
+    const western = tmdbConfigured() && !q.genre && !q.tags?.length;
     const [anime, westernPage] = await Promise.all([
       discoverAniList({ ...q, kind: 'animation' }, r.signal).catch(() => null),
       // AniList genres and tags mean nothing to TMDB: a filter on them keeps AniList only.
