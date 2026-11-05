@@ -31,6 +31,38 @@ export function interpolate(template: string, variables?: Record<string, string 
 type Dictionary = Record<string, string>;
 
 const en: Dictionary = {
+  'settings.section.arr': 'Sonarr & Radarr',
+  'settings.service.sonarr': 'Sonarr',
+  'settings.service.radarr': 'Radarr',
+  'settings.service.sonarrTip':
+    'Sonarr downloads series and anime through your download client (qBittorrent…). Address and API key: Sonarr → Settings → General.',
+  'settings.service.radarrTip':
+    'Radarr downloads films through your download client (qBittorrent…). Address and API key: Radarr → Settings → General.',
+  'arr.intro':
+    'Series and anime go to Sonarr, films to Radarr. A work’s sheet then gets a Download button, and shows the download’s progress as your download client reports it.',
+  'arr.profile': 'Quality profile',
+  'arr.folderSeries': 'Folder for series',
+  'arr.folderMovies': 'Folder for films',
+  'arr.folderAnime': 'Folder for anime',
+  'arr.folderAnimeTip':
+    'Anime are added as Sonarr’s “anime” series type (absolute numbering), in this folder.',
+  'arr.first': 'Default ({name})',
+  'arr.sameAsSeries': 'Same as series',
+  'arr.free': '{n} GB free',
+  'arr.download': 'Download',
+  'arr.searchAgain': 'Search again',
+  'arr.complete': 'Complete ({files}/{total})',
+  'arr.downloading': 'Downloading',
+  'arr.available': 'Downloaded · {service}',
+  'arr.wanted': 'Waiting for a release in {service}',
+  'arr.added': 'Added to {service}; the search has started',
+  'arr.searching': '{service} is searching again',
+  'error.ARR_UNREACHABLE': 'Sonarr/Radarr cannot be reached.',
+  'error.ARR_TIMEOUT': 'Sonarr/Radarr did not answer in time.',
+  'error.ARR_UNAUTHORIZED': 'Sonarr/Radarr rejected the API key.',
+  'error.ARR_ERROR': 'Sonarr/Radarr returned an error.',
+  'error.ARR_BAD_ADDRESS': 'This address does not answer as the Sonarr/Radarr API.',
+  'error.NO_ARR_ID': 'Sonarr/Radarr cannot identify this work (no TVDB/TMDB id).',
   'library.select': 'Select',
   'library.selectDone': 'Done',
   'library.selected': 'Selected: {count}',
@@ -1433,6 +1465,38 @@ const en: Dictionary = {
 };
 
 const fr: Dictionary = {
+  'settings.section.arr': 'Sonarr & Radarr',
+  'settings.service.sonarr': 'Sonarr',
+  'settings.service.radarr': 'Radarr',
+  'settings.service.sonarrTip':
+    'Sonarr télécharge les séries et les animes via ton client de téléchargement (qBittorrent…). Adresse et clé API : Sonarr → Settings → General.',
+  'settings.service.radarrTip':
+    'Radarr télécharge les films via ton client de téléchargement (qBittorrent…). Adresse et clé API : Radarr → Settings → General.',
+  'arr.intro':
+    'Les séries et les animes vont dans Sonarr, les films dans Radarr. La fiche d’une œuvre propose alors un bouton Télécharger et suit la progression telle que ton client de téléchargement la donne.',
+  'arr.profile': 'Profil de qualité',
+  'arr.folderSeries': 'Dossier des séries',
+  'arr.folderMovies': 'Dossier des films',
+  'arr.folderAnime': 'Dossier des animes',
+  'arr.folderAnimeTip':
+    'Les animes sont ajoutés avec le type « anime » de Sonarr (numérotation absolue), dans ce dossier.',
+  'arr.first': 'Par défaut ({name})',
+  'arr.sameAsSeries': 'Comme les séries',
+  'arr.free': '{n} Go libres',
+  'arr.download': 'Télécharger',
+  'arr.searchAgain': 'Relancer la recherche',
+  'arr.complete': 'Compléter ({files}/{total})',
+  'arr.downloading': 'Téléchargement',
+  'arr.available': 'Téléchargé · {service}',
+  'arr.wanted': 'En attente d’une sortie dans {service}',
+  'arr.added': 'Ajouté à {service}, recherche lancée',
+  'arr.searching': '{service} relance la recherche',
+  'error.ARR_UNREACHABLE': 'Sonarr/Radarr est injoignable.',
+  'error.ARR_TIMEOUT': 'Sonarr/Radarr n’a pas répondu à temps.',
+  'error.ARR_UNAUTHORIZED': 'Sonarr/Radarr a refusé la clé API.',
+  'error.ARR_ERROR': 'Sonarr/Radarr a renvoyé une erreur.',
+  'error.ARR_BAD_ADDRESS': 'Cette adresse ne répond pas comme l’API de Sonarr/Radarr.',
+  'error.NO_ARR_ID': 'Sonarr/Radarr ne peut pas identifier cette œuvre (pas d’id TVDB/TMDB).',
   'library.select': 'Sélectionner',
   'library.selectDone': 'Fermer',
   'library.selected': 'Sélection : {count}',
@@ -2851,6 +2915,38 @@ const fr: Dictionary = {
 };
 
 const es: Dictionary = {
+  'settings.section.arr': 'Sonarr & Radarr',
+  'settings.service.sonarr': 'Sonarr',
+  'settings.service.radarr': 'Radarr',
+  'settings.service.sonarrTip':
+    'Sonarr descarga series y anime con tu cliente de descargas (qBittorrent…). Dirección y clave API: Sonarr → Settings → General.',
+  'settings.service.radarrTip':
+    'Radarr descarga películas con tu cliente de descargas (qBittorrent…). Dirección y clave API: Radarr → Settings → General.',
+  'arr.intro':
+    'Las series y el anime van a Sonarr, las películas a Radarr. La ficha de una obra muestra entonces un botón Descargar y el progreso que da tu cliente de descargas.',
+  'arr.profile': 'Perfil de calidad',
+  'arr.folderSeries': 'Carpeta de series',
+  'arr.folderMovies': 'Carpeta de películas',
+  'arr.folderAnime': 'Carpeta de anime',
+  'arr.folderAnimeTip':
+    'El anime se añade con el tipo «anime» de Sonarr (numeración absoluta), en esta carpeta.',
+  'arr.first': 'Por defecto ({name})',
+  'arr.sameAsSeries': 'Igual que las series',
+  'arr.free': '{n} GB libres',
+  'arr.download': 'Descargar',
+  'arr.searchAgain': 'Buscar de nuevo',
+  'arr.complete': 'Completar ({files}/{total})',
+  'arr.downloading': 'Descargando',
+  'arr.available': 'Descargado · {service}',
+  'arr.wanted': 'Esperando un lanzamiento en {service}',
+  'arr.added': 'Añadido a {service}; búsqueda iniciada',
+  'arr.searching': '{service} vuelve a buscar',
+  'error.ARR_UNREACHABLE': 'No se puede contactar con Sonarr/Radarr.',
+  'error.ARR_TIMEOUT': 'Sonarr/Radarr no respondió a tiempo.',
+  'error.ARR_UNAUTHORIZED': 'Sonarr/Radarr rechazó la clave API.',
+  'error.ARR_ERROR': 'Sonarr/Radarr devolvió un error.',
+  'error.ARR_BAD_ADDRESS': 'Esta dirección no responde como la API de Sonarr/Radarr.',
+  'error.NO_ARR_ID': 'Sonarr/Radarr no puede identificar esta obra (sin id TVDB/TMDB).',
   'library.select': 'Seleccionar',
   'library.selectDone': 'Listo',
   'library.selected': 'Selección: {count}',
@@ -4261,6 +4357,38 @@ const es: Dictionary = {
 };
 
 const de: Dictionary = {
+  'settings.section.arr': 'Sonarr & Radarr',
+  'settings.service.sonarr': 'Sonarr',
+  'settings.service.radarr': 'Radarr',
+  'settings.service.sonarrTip':
+    'Sonarr lädt Serien und Anime über deinen Download-Client (qBittorrent…). Adresse und API-Schlüssel: Sonarr → Settings → General.',
+  'settings.service.radarrTip':
+    'Radarr lädt Filme über deinen Download-Client (qBittorrent…). Adresse und API-Schlüssel: Radarr → Settings → General.',
+  'arr.intro':
+    'Serien und Anime gehen an Sonarr, Filme an Radarr. Die Seite eines Werks zeigt dann eine Download-Schaltfläche und den Fortschritt, den dein Download-Client meldet.',
+  'arr.profile': 'Qualitätsprofil',
+  'arr.folderSeries': 'Ordner für Serien',
+  'arr.folderMovies': 'Ordner für Filme',
+  'arr.folderAnime': 'Ordner für Anime',
+  'arr.folderAnimeTip':
+    'Anime werden mit Sonarrs Serientyp „Anime“ (absolute Nummerierung) in diesem Ordner hinzugefügt.',
+  'arr.first': 'Standard ({name})',
+  'arr.sameAsSeries': 'Wie Serien',
+  'arr.free': '{n} GB frei',
+  'arr.download': 'Herunterladen',
+  'arr.searchAgain': 'Erneut suchen',
+  'arr.complete': 'Vervollständigen ({files}/{total})',
+  'arr.downloading': 'Wird geladen',
+  'arr.available': 'Heruntergeladen · {service}',
+  'arr.wanted': 'Wartet auf ein Release in {service}',
+  'arr.added': 'Zu {service} hinzugefügt; Suche gestartet',
+  'arr.searching': '{service} sucht erneut',
+  'error.ARR_UNREACHABLE': 'Sonarr/Radarr ist nicht erreichbar.',
+  'error.ARR_TIMEOUT': 'Sonarr/Radarr hat nicht rechtzeitig geantwortet.',
+  'error.ARR_UNAUTHORIZED': 'Sonarr/Radarr hat den API-Schlüssel abgelehnt.',
+  'error.ARR_ERROR': 'Sonarr/Radarr hat einen Fehler gemeldet.',
+  'error.ARR_BAD_ADDRESS': 'Diese Adresse antwortet nicht wie die Sonarr/Radarr-API.',
+  'error.NO_ARR_ID': 'Sonarr/Radarr kann dieses Werk nicht zuordnen (keine TVDB/TMDB-ID).',
   'library.select': 'Auswählen',
   'library.selectDone': 'Fertig',
   'library.selected': 'Ausgewählt: {count}',
@@ -5678,6 +5806,38 @@ const de: Dictionary = {
 };
 
 const it: Dictionary = {
+  'settings.section.arr': 'Sonarr & Radarr',
+  'settings.service.sonarr': 'Sonarr',
+  'settings.service.radarr': 'Radarr',
+  'settings.service.sonarrTip':
+    'Sonarr scarica serie e anime tramite il tuo client di download (qBittorrent…). Indirizzo e chiave API: Sonarr → Settings → General.',
+  'settings.service.radarrTip':
+    'Radarr scarica i film tramite il tuo client di download (qBittorrent…). Indirizzo e chiave API: Radarr → Settings → General.',
+  'arr.intro':
+    'Serie e anime vanno a Sonarr, i film a Radarr. La scheda di un’opera mostra allora un pulsante Scarica e l’avanzamento indicato dal tuo client di download.',
+  'arr.profile': 'Profilo di qualità',
+  'arr.folderSeries': 'Cartella delle serie',
+  'arr.folderMovies': 'Cartella dei film',
+  'arr.folderAnime': 'Cartella degli anime',
+  'arr.folderAnimeTip':
+    'Gli anime vengono aggiunti con il tipo «anime» di Sonarr (numerazione assoluta), in questa cartella.',
+  'arr.first': 'Predefinito ({name})',
+  'arr.sameAsSeries': 'Come le serie',
+  'arr.free': '{n} GB liberi',
+  'arr.download': 'Scarica',
+  'arr.searchAgain': 'Cerca di nuovo',
+  'arr.complete': 'Completa ({files}/{total})',
+  'arr.downloading': 'Download in corso',
+  'arr.available': 'Scaricato · {service}',
+  'arr.wanted': 'In attesa di un’uscita in {service}',
+  'arr.added': 'Aggiunto a {service}; ricerca avviata',
+  'arr.searching': '{service} cerca di nuovo',
+  'error.ARR_UNREACHABLE': 'Sonarr/Radarr non è raggiungibile.',
+  'error.ARR_TIMEOUT': 'Sonarr/Radarr non ha risposto in tempo.',
+  'error.ARR_UNAUTHORIZED': 'Sonarr/Radarr ha rifiutato la chiave API.',
+  'error.ARR_ERROR': 'Sonarr/Radarr ha restituito un errore.',
+  'error.ARR_BAD_ADDRESS': 'Questo indirizzo non risponde come l’API di Sonarr/Radarr.',
+  'error.NO_ARR_ID': 'Sonarr/Radarr non può identificare quest’opera (nessun id TVDB/TMDB).',
   'library.select': 'Seleziona',
   'library.selectDone': 'Fatto',
   'library.selected': 'Selezionate: {count}',

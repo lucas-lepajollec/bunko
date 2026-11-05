@@ -24,7 +24,7 @@ import type {
   SettingsPatch,
 } from '@/types/shared';
 import { PERMISSIONS } from '@/types/shared';
-import type { JellyfinLibrary, JellyfinRole } from '@/types/shared';
+import type { ArrOptions, JellyfinLibrary, JellyfinRole } from '@/types/shared';
 import { UNIVERSES } from '@/lib/client/universe';
 import { KIND_IDS, KINDS as KIND_DEFS, completeKindOrder, isVideoKind } from '@/domain/kinds';
 import { ChevronDown, ChevronUp } from 'lucide-react';
@@ -41,7 +41,7 @@ import { Dot, ErrorNote, Skeleton, cx, errorText, field, smallButton } from '@/c
 const GROUPS = [
   { id: 'personal', sections: ['account', 'media'] },
   { id: 'admin', sections: ['users'] },
-  { id: 'services', sections: ['suwayomi', 'kavita', 'jellyfin', 'translation'] },
+  { id: 'services', sections: ['suwayomi', 'kavita', 'jellyfin', 'arr', 'translation'] },
   { id: 'content', sections: ['catalogs', 'extensions'] },
 ] as const;
 type SectionId = (typeof GROUPS)[number]['sections'][number];
@@ -227,6 +227,23 @@ export default function SettingsPage() {
                 <JellyfinOptions settings={settings.data} onSaved={reload} />
               )}
             </Section>
+            <Section open={open} visible={visible} id="arr">
+              <p className="text-mid text-sm leading-relaxed">{t('arr.intro')}</p>
+              {(['sonarr', 'radarr'] as const).map((service) => (
+                <div key={service} className="flex flex-col gap-3">
+                  <SubHeading>{t(`settings.service.${service}`)}</SubHeading>
+                  <Connection
+                    service={service}
+                    settings={settings.data!}
+                    status={status.data}
+                    onSaved={reload}
+                  />
+                  {status.data?.[service]?.state === 'ok' && (
+                    <ArrChoices service={service} settings={settings.data!} onSaved={reload} />
+                  )}
+                </div>
+              ))}
+            </Section>
             <Section open={open} visible={visible} id="translation">
               <Connection
                 service="tradoc"
@@ -257,8 +274,18 @@ function ServiceDot({
   status: ServicesStatus | undefined;
 }) {
   const key = section === 'translation' ? 'tradoc' : section;
-  if (!['suwayomi', 'kavita', 'jellyfin', 'tradoc'].includes(key) || !status) return null;
-  const state = (status as unknown as Record<string, { state?: string } | undefined>)[key]?.state;
+  if (!['suwayomi', 'kavita', 'jellyfin', 'tradoc', 'arr'].includes(key) || !status) return null;
+  const states = status as unknown as Record<string, { state?: string } | undefined>;
+  // Sonarr & Radarr share one entry: red if either fails, green if one works.
+  const arr = [states.sonarr?.state, states.radarr?.state].filter((x) => x && x !== 'unconfigured');
+  const state =
+    key === 'arr'
+      ? arr.includes('error')
+        ? 'error'
+        : arr.includes('ok')
+          ? 'ok'
+          : undefined
+      : states[key]?.state;
   if (!state || state === 'unconfigured') return null;
   return <Dot tone={state === 'ok' ? 'ok' : state === 'error' ? 'bad' : 'idle'} />;
 }
@@ -332,14 +359,14 @@ function Connection({
   status,
   onSaved,
 }: {
-  service: 'suwayomi' | 'kavita' | 'tradoc' | 'jellyfin';
+  service: 'suwayomi' | 'kavita' | 'tradoc' | 'jellyfin' | 'sonarr' | 'radarr';
   settings: Settings;
   status: ServicesStatus | undefined;
   onSaved: () => Promise<unknown>;
 }) {
   const { t } = useI18n();
   const services: {
-    key: 'suwayomi' | 'kavita' | 'tradoc' | 'jellyfin';
+    key: 'suwayomi' | 'kavita' | 'tradoc' | 'jellyfin' | 'sonarr' | 'radarr';
     fields: {
       name: keyof SettingsPatch;
       label: string;
@@ -395,6 +422,20 @@ function Connection({
         { name: 'jellyfinUser', label: t('settings.jellyfinUser') },
       ],
     },
+    ...(['sonarr', 'radarr'] as const).map((key) => ({
+      key,
+      state: status?.[key]?.state,
+      detail: status?.[key]?.version ? `v${status[key]!.version}` : null,
+      fields: [
+        { name: `${key}Url` as keyof SettingsPatch, label: t('settings.address'), type: 'url' },
+        {
+          name: `${key}ApiKey` as keyof SettingsPatch,
+          label: t('settings.apiKey'),
+          type: 'password',
+          secret: `${key}ApiKey` as SecretSetting,
+        },
+      ],
+    })),
     {
       key: 'tradoc',
       state: status?.tradoc?.state,
@@ -594,7 +635,7 @@ function ServiceCard({
   settings,
   onSaved,
 }: {
-  name: 'suwayomi' | 'kavita' | 'tradoc' | 'jellyfin';
+  name: 'suwayomi' | 'kavita' | 'tradoc' | 'jellyfin' | 'sonarr' | 'radarr';
   state: string | undefined;
   detail?: string | null;
   fields: {
@@ -706,6 +747,71 @@ function ServiceCard({
         {error && <span className="text-bad text-sm">{error}</span>}
       </div>
     </form>
+  );
+}
+
+/** Sonarr/Radarr: the quality profile and folders new works are added with. */
+function ArrChoices({
+  service,
+  settings,
+  onSaved,
+}: {
+  service: 'sonarr' | 'radarr';
+  settings: Settings;
+  onSaved: () => Promise<unknown>;
+}) {
+  const { t } = useI18n();
+  const options = useApi<ArrOptions>(`/api/arr/options?service=${service}`);
+  const save = async (patch: SettingsPatch) => {
+    try {
+      await send('/api/settings', 'PATCH', patch);
+      await onSaved();
+    } catch (err) {
+      toast({ tone: 'bad', text: errorText(t, err) });
+    }
+  };
+  if (options.error) return <ErrorNote error={options.error} />;
+  if (!options.data) return <Skeleton className="h-24 rounded-2xl" />;
+  const gb = (bytes: number | null) =>
+    bytes === null ? '' : ` · ${t('arr.free', { n: Math.round(bytes / 1024 ** 3) })}`;
+  const folders = (empty: string) => [
+    { value: '', label: empty },
+    ...options.data!.folders.map((f) => ({ value: f.path, label: `${f.path}${gb(f.freeSpace)}` })),
+  ];
+  const profile =
+    service === 'sonarr' ? settings.sonarrQualityProfile : settings.radarrQualityProfile;
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl bg-white/[0.03] p-3 text-sm">
+      <Row label={t('arr.profile')}>
+        <Select
+          label={t('arr.profile')}
+          value={String(profile)}
+          onChange={(v) => save({ [`${service}QualityProfile`]: Number(v) } as SettingsPatch)}
+          options={[
+            { value: '0', label: t('arr.first', { name: options.data.profiles[0]?.name ?? '—' }) },
+            ...options.data.profiles.map((p) => ({ value: String(p.id), label: p.name })),
+          ]}
+        />
+      </Row>
+      <Row label={t(service === 'sonarr' ? 'arr.folderSeries' : 'arr.folderMovies')}>
+        <Select
+          label={t(service === 'sonarr' ? 'arr.folderSeries' : 'arr.folderMovies')}
+          value={service === 'sonarr' ? settings.sonarrRootFolder : settings.radarrRootFolder}
+          onChange={(v) => save({ [`${service}RootFolder`]: v } as SettingsPatch)}
+          options={folders(t('arr.first', { name: options.data.folders[0]?.path ?? '—' }))}
+        />
+      </Row>
+      {service === 'sonarr' && (
+        <Row label={t('arr.folderAnime')} tip={t('arr.folderAnimeTip')}>
+          <Select
+            label={t('arr.folderAnime')}
+            value={settings.sonarrAnimeRootFolder}
+            onChange={(v) => save({ sonarrAnimeRootFolder: v })}
+            options={folders(t('arr.sameAsSeries'))}
+          />
+        </Row>
+      )}
+    </div>
   );
 }
 

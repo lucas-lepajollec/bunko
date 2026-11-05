@@ -19,6 +19,8 @@ export interface AnimeIds {
   tvdbSeason: number | null;
   tmdb: number | null;
   tmdbSeason: number | null;
+  /** TMDB movie id of an anime film (the map keeps TV and movie ids apart). */
+  tmdbMovie?: number | null;
   imdb: string | null;
   anidb: number | null;
   kitsu: number | null;
@@ -62,6 +64,12 @@ export function compact(raw: Raw[]): AnimeIds[] {
         tvdbSeason: r.season?.tvdb ?? null,
         tmdb,
         tmdbSeason: r.season?.tmdb ?? null,
+        tmdbMovie:
+          typeof r.themoviedb_id === 'object'
+            ? (r.themoviedb_id?.movie ?? null)
+            : r.type === 'MOVIE'
+              ? (r.themoviedb_id ?? null)
+              : null,
         imdb: imdb ?? null,
         anidb: r.anidb_id ?? null,
         kitsu: r.kitsu_id ?? null,
