@@ -138,6 +138,9 @@ export function db(): Database.Database {
       id INTEGER PRIMARY KEY AUTOINCREMENT, media_id TEXT NOT NULL, title TEXT NOT NULL,
       cover_url TEXT, service TEXT NOT NULL, release_title TEXT NOT NULL, size INTEGER,
       created_at INTEGER NOT NULL, hidden INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS continue_items (
+      media_id TEXT PRIMARY KEY, media_json TEXT NOT NULL, kind TEXT NOT NULL, label TEXT NOT NULL,
+      href TEXT NOT NULL, position REAL, updated_at INTEGER NOT NULL, hidden INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS video_positions (
       key TEXT PRIMARY KEY, seconds REAL NOT NULL, duration REAL, updated_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS reader_chapters (

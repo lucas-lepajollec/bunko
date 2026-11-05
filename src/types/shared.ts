@@ -1029,6 +1029,29 @@ export interface MediaRequestState {
   prowlarr?: boolean;
 }
 export type SearchService = ArrService | 'prowlarr';
+/** The few fields of a work "Pick up where you left off" needs (kind, 18+, card). */
+export type ContinueMedia = Pick<
+  UnifiedMedia,
+  'id' | 'title' | 'coverUrl' | 'type' | 'format' | 'origin' | 'adult' | 'color' | 'kindOverride'
+>;
+/** PUT /api/continue — something started in Bunko's reader or player. */
+export interface ContinueUpdate {
+  media: ContinueMedia;
+  kind: 'read' | 'watch';
+  /** "Ch. 12", "S2 · Ep. 5"… */
+  label: string;
+  /** Where "resume" goes: the reader page or the sheet opening the player on the episode. */
+  href: string;
+  /** Inside the chapter or episode, 0–1, when known. */
+  position: number | null;
+}
+/** GET /api/continue — newest first, already filtered by the 18+ preference. */
+export interface ContinueItem extends ContinueUpdate {
+  updatedAt: string;
+  /** Library entry when the work is followed (progress bar). */
+  trackedId: number | null;
+  progress: LibraryProgress | null;
+}
 /** POST /api/arr/prepare — the work is in Sonarr/Radarr (added unmonitored, never searched). */
 export interface MediaSearchTarget {
   service: ArrService;

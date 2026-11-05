@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- "Pick up where you left off" lists everything started in Bunko's reader or player, followed or
+  not, any kind (home and profile follow the universe on screen and the content preference),
+  with where it stopped (chapter or episode, % inside it). Resuming reopens the chapter, or the
+  sheet with the player on that episode (`?play=`). A watched episode moves the card on to the
+  next one; the last one leaves the row; a card can be removed by hand. Followed works whose
+  progress comes from Kavita, Jellyfin or Suwayomi are still listed.
+- Player: the position is also saved when the player is closed before its 15-second save.
 - Catalog: the filter row (genres, keywords, status, year, score) now shows for series and films
   once TMDB is set up; the page hid it for those kinds.
 - Content preference, "alone" view: series and films (TMDB, rated 18 in France), novels and books

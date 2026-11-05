@@ -2,7 +2,13 @@
 import type Hls from 'hls.js';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { preload } from 'swr';
-import type { PlaybackInfo, VideoStream, VideoStreams, VideoSubtitle } from '@/types/shared';
+import type {
+  ContinueMedia,
+  PlaybackInfo,
+  VideoStream,
+  VideoStreams,
+  VideoSubtitle,
+} from '@/types/shared';
 import { mutate } from 'swr';
 import { api, send, useApi } from '@/lib/client/api';
 import {
@@ -114,6 +120,19 @@ export interface PlayerEpisode {
   episode: number;
   /** Jellyfin item of this episode, when the library has it. */
   jellyfinItemId: string | null;
+  /** The work and the link that reopens this episode ("Pick up where you left off"). */
+  resume?: { media: ContinueMedia; href: string };
+}
+/** Records the episode in "Pick up where you left off" (never blocks playback). */
+export function noteWatching(e: PlayerEpisode, position: number | null) {
+  if (!e.resume) return;
+  void send('/api/continue', 'PUT', {
+    media: e.resume.media,
+    kind: 'watch',
+    label: e.label,
+    href: e.resume.href,
+    position,
+  }).catch(() => undefined);
 }
 
 const clock = (seconds: number) => {
@@ -215,6 +234,12 @@ export function Player({
   const nextPath = next ? streamsPath(next, language) : null;
   const finishing = () => {
     if (nextPath && !next?.jellyfinItemId) void preload(nextPath, (p: string) => api(p));
+    // Watched: "Pick up" moves on to the next episode, or leaves the row after the last one.
+    if (next?.resume) noteWatching(next, 0);
+    else if (episode.resume)
+      void send('/api/continue', 'DELETE', { mediaId: episode.resume.media.id }).catch(
+        () => undefined,
+      );
     onFinished();
   };
   const list = streams.data?.streams ?? [];
@@ -456,9 +481,16 @@ function Screen({
   useEffect(() => {
     here.current = null;
   }, [posKey]);
+  const lastVideo = useRef<HTMLVideoElement | null>(null);
+  // Parents rebuild the episode object on every render: read it through a ref.
+  const current = useRef(episode);
+  useEffect(() => {
+    current.current = episode;
+  }, [episode]);
   const savePosition = useCallback(
     (forget = false) => {
-      const el = video.current;
+      // Closing the player detaches the element before this last save: use the one kept below.
+      const el = video.current ?? lastVideo.current;
       if (!posKey || !el) return;
       if (!forget && el.currentTime < 5) return;
       const seconds = forget ? null : el.currentTime;
@@ -475,6 +507,11 @@ function Screen({
         seconds,
         duration: Number.isFinite(el.duration) ? el.duration : null,
       }).catch(() => undefined);
+      if (!forget)
+        noteWatching(
+          current.current,
+          Number.isFinite(el.duration) && el.duration > 0 ? el.currentTime / el.duration : null,
+        );
     },
     [posKey],
   );
@@ -506,6 +543,7 @@ function Screen({
   useEffect(() => {
     const el = video.current;
     if (!el) return;
+    lastVideo.current = el;
     const read = () =>
       setDecoded(el.videoHeight ? { width: el.videoWidth, height: el.videoHeight } : null);
     el.addEventListener('loadedmetadata', read);

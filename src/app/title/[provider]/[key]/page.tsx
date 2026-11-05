@@ -633,6 +633,16 @@ function Title({ media }: { media: MediaDetail }) {
                 <EpisodeList
                   film={filmSheet}
                   title={media.title}
+                  media={{
+                    id: media.id,
+                    title: entry?.title ?? media.title,
+                    coverUrl: entry?.coverUrl ?? media.coverUrl,
+                    type: media.type,
+                    format: media.format,
+                    origin: media.origin,
+                    adult: Boolean(media.adult),
+                    color: media.color,
+                  }}
                   artwork={media.bannerUrl ?? media.coverUrl}
                   anilistId={media.anilistId}
                   video={seasonParam ? { ...video, focus: seasonParam } : video}
