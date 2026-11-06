@@ -2018,6 +2018,15 @@ function LiveSettings({
                 })}
           </span>
         )}
+        {/* Live TV from streaming extensions (added on the Extensions page). */}
+        <span className="text-muted text-xs">
+          {s?.extensions?.entries
+            ? t('live.settings.extensionsStatus', {
+                entries: n(s.extensions.entries),
+                matched: n(s.extensions.matched),
+              })
+            : t('live.settings.extensionsNone')}
+        </span>
       </div>
       <div className="flex flex-col gap-2">
         <span className="text-sm font-semibold">{t('live.settings.guides')}</span>

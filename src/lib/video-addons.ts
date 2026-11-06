@@ -34,6 +34,24 @@ const manifestSchema = z
     resources: z.array(resource).default([]),
     types: z.array(z.string()).default([]),
     idPrefixes: z.array(z.string()).optional(),
+    catalogs: z
+      .array(
+        z
+          .object({
+            type: z.string(),
+            id: z.string().max(200),
+            name: z.string().optional(),
+            extra: z
+              .array(
+                z.object({ name: z.string(), isRequired: z.boolean().optional() }).passthrough(),
+              )
+              .optional(),
+            extraRequired: z.array(z.string()).optional(),
+          })
+          .passthrough(),
+      )
+      .default([])
+      .catch([]),
   })
   .passthrough();
 type Manifest = z.infer<typeof manifestSchema>;
@@ -668,4 +686,133 @@ async function streamsFor(
     `[bunko] video sources: ${Math.round(performance.now() - started)} ms, ${settings.videoAddons.length} extensions (${errors.length} failed${skipped ? `, ${skipped} resting` : ''}), ${streams.length} streams (${playable} playable), ${sortedSubtitles.length} subtitles`,
   );
   return { streams, subtitles: sortedSubtitles, errors };
+}
+
+// ------------------------------------------------------------------ live TV (Stremio `tv`)
+
+const tvMetaSchema = z
+  .object({
+    id: z.string().min(1).max(300),
+    name: z.string().min(1).max(200),
+    poster: z.string().max(2000).optional().catch(undefined),
+    logo: z.string().max(2000).optional().catch(undefined),
+    genres: z.array(z.string()).optional().catch(undefined),
+    genre: z.array(z.string()).optional().catch(undefined),
+  })
+  .passthrough();
+export interface TvAddonChannel {
+  addon: string;
+  addonName: string;
+  metaId: string;
+  name: string;
+  logo: string | null;
+  genre: string | null;
+}
+const TV_PAGE = 100;
+const TV_MAX = 3000;
+const httpUrl = (value: string | undefined) =>
+  value && /^https?:\/\//i.test(value) ? value : null;
+
+/**
+ * Channels of the extensions that offer live TV (Stremio type `tv`): every `tv` catalog that
+ * needs no search text, read page by page (`skip`), at most a few thousand per extension. An
+ * extension that fails is left out; the others still count.
+ */
+export async function tvAddonChannels(signal?: AbortSignal): Promise<TvAddonChannel[]> {
+  const out: TvAddonChannel[] = [];
+  for (const url of getSettings().videoAddons) {
+    let m: Manifest;
+    try {
+      m = await manifest(url, signal);
+    } catch {
+      continue;
+    }
+    if (!supports(m, { prefix: '', types: ['tv'] }, 'stream') && !streamTypes(m).includes('tv'))
+      continue;
+    const id = addonId(url);
+    const seen = new Set<string>();
+    for (const catalog of m.catalogs) {
+      if (catalog.type !== 'tv') continue;
+      const required = [
+        ...(catalog.extraRequired ?? []),
+        ...(catalog.extra ?? []).filter((e) => e.isRequired).map((e) => e.name),
+      ];
+      if (required.some((name) => name !== 'skip')) continue;
+      for (let skip = 0; skip < TV_MAX && seen.size < TV_MAX; skip += TV_PAGE) {
+        const path = `/catalog/tv/${encodeURIComponent(catalog.id)}${skip ? `/skip=${skip}` : ''}.json`;
+        let metas: unknown[];
+        try {
+          const data = (await addonJson(url, path, signal, 15_000)) as { metas?: unknown };
+          metas = Array.isArray(data?.metas) ? data.metas : [];
+        } catch {
+          break;
+        }
+        let added = 0;
+        for (const raw of metas) {
+          const meta = tvMetaSchema.safeParse(raw);
+          if (!meta.success || seen.has(meta.data.id)) continue;
+          seen.add(meta.data.id);
+          added++;
+          out.push({
+            addon: id,
+            addonName: m.name,
+            metaId: meta.data.id,
+            name: meta.data.name.trim(),
+            logo: httpUrl(meta.data.logo) ?? httpUrl(meta.data.poster),
+            genre: (meta.data.genres ?? meta.data.genre)?.[0] ?? null,
+          });
+        }
+        // A catalog without paging answers the same page again: stop at the first page that
+        // brings nothing new.
+        if (!added || metas.length < TV_PAGE / 2) break;
+      }
+    }
+  }
+  return out;
+}
+const streamTypes = (m: Manifest) =>
+  m.resources.flatMap((r) =>
+    typeof r === 'string'
+      ? r === 'stream'
+        ? m.types
+        : []
+      : r.name === 'stream'
+        ? (r.types ?? m.types)
+        : [],
+  );
+
+/** The streams one extension gives for one of its channels (played through Bunko's relay). */
+export async function tvStreams(
+  addon: string,
+  metaId: string,
+  signal?: AbortSignal,
+): Promise<{ url: string; label: string; headers?: Record<string, string> }[]> {
+  const url = getSettings().videoAddons.find((u) => addonId(u) === addon);
+  if (!url || isResting(url)) return [];
+  try {
+    const data = (await addonJson(url, `/stream/tv/${idPath(metaId)}.json`, signal, 15_000)) as {
+      streams?: unknown;
+    };
+    noteResult(url, true);
+    const name = (await manifest(url, signal).catch(() => null))?.name ?? '';
+    return (Array.isArray(data?.streams) ? data.streams : []).flatMap((raw) => {
+      const st = streamSchema.safeParse(raw);
+      const link = st.success ? httpUrl(st.data.url) : null;
+      if (!st.success || !link) return [];
+      const label = [st.data.name, st.data.title?.split('\n')[0]]
+        .filter(Boolean)
+        .join(' · ')
+        .slice(0, 80);
+      return [
+        {
+          url: link,
+          label: label || name,
+          headers: safeHeaders(st.data.behaviorHints?.proxyHeaders?.request),
+        },
+      ];
+    });
+  } catch (error) {
+    if (!isTimeout(error)) noteResult(url, false);
+    return [];
+  }
 }
