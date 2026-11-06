@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, expect, it } from 'vitest';
+import { afterAll, beforeEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -139,6 +139,7 @@ http://iptv.example/movie/me/secret/9.mkv
 https://adult.example/rose.m3u8
 `;
 let requests: string[] = [];
+let tvOffered = true;
 const server: Server = createServer((req, res) => {
   const url = new URL(req.url!, 'http://x');
   requests.push(url.pathname);
@@ -188,6 +189,8 @@ const server: Server = createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/xml' });
     return void res.end('<tv></tv>');
   }
+  if (url.pathname === '/tv/manifest.json' && !tvOffered)
+    return send({ id: 'fixture.tv', name: 'Fixture TV', resources: ['stream'], types: ['movie'] });
   if (url.pathname === '/tv/manifest.json')
     return send({
       id: 'fixture.tv',
@@ -405,5 +408,22 @@ it('channels from a streaming extension join the live index and play through the
   const only = home.extensions.find((c) => c.name === 'Chaîne Extension')!;
   expect((await live.liveChannel(only.id)).streams).toHaveLength(1);
   expect(live.liveStatus().extensions).toMatchObject({ entries: 2, matched: 1 });
+  updateSettings({ videoAddons: [] });
+});
+
+it('an extension that gains live TV after it was read shows its channels on the next refresh', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  // Past what an earlier read of the extension may have stored.
+  vi.setSystemTime(Date.now() + 6 * 60_000);
+  tvOffered = false;
+  updateSettings({ videoAddons: [`${base}/tv/manifest.json`] });
+  await live.refreshLiveNow();
+  expect((await live.liveHome('fr-FR')).extensions).toEqual([]);
+  // The extension is updated: its manifest now offers live TV.
+  tvOffered = true;
+  vi.setSystemTime(Date.now() + 6 * 60_000);
+  await live.refreshLiveNow();
+  vi.useRealTimers();
+  expect((await live.liveHome('fr-FR')).extensions.length).toBe(2);
   updateSettings({ videoAddons: [] });
 });

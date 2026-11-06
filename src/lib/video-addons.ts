@@ -103,14 +103,20 @@ export function normalizeAddonUrl(raw: string) {
     : `${base(url.toString())}/manifest.json`;
 }
 
-async function manifest(url: string, signal?: AbortSignal): Promise<Manifest> {
-  return cached(`addon-manifest:${addonId(url)}`, 6 * 3600_000, async () => {
-    const data = await safeJson(`${base(url)}/manifest.json`, {
-      timeoutMs: 8000,
-      signal: AbortSignal.any([AbortSignal.timeout(10_000), ...(signal ? [signal] : [])]),
-    });
-    return manifestSchema.parse(data);
-  });
+/** `ttl`: how old a stored manifest may be; an older one is asked again and awaited. */
+async function manifest(url: string, signal?: AbortSignal, ttl?: number): Promise<Manifest> {
+  return cached(
+    `addon-manifest:${addonId(url)}`,
+    ttl ?? 6 * 3600_000,
+    async () => {
+      const data = await safeJson(`${base(url)}/manifest.json`, {
+        timeoutMs: 8000,
+        signal: AbortSignal.any([AbortSignal.timeout(10_000), ...(signal ? [signal] : [])]),
+      });
+      return manifestSchema.parse(data);
+    },
+    { waitForRefresh: ttl !== undefined },
+  );
 }
 const resourcesOf = (m: Manifest) =>
   [...new Set(m.resources.map((r) => (typeof r === 'string' ? r : r.name)))].filter(
@@ -732,7 +738,9 @@ export async function tvAddonChannels(signal?: AbortSignal): Promise<TvAddonChan
   for (const url of getSettings().videoAddons) {
     let m: Manifest;
     try {
-      m = await manifest(url, signal);
+      // An extension that just gained live TV must be seen at once: this read happens twice a
+      // day at most, so the manifest is asked again unless it is a few minutes old.
+      m = await manifest(url, signal, 5 * 60_000);
     } catch {
       continue;
     }
@@ -772,7 +780,9 @@ export async function tvAddonChannels(signal?: AbortSignal): Promise<TvAddonChan
             genre: genres[0] ?? null,
             categories: genres.filter((g): g is string => typeof g === 'string' && !!g),
             country: meta.data.country ? meta.data.country.toUpperCase() : null,
-            languages: (meta.data.languages ?? []).filter((l): l is string => typeof l === 'string'),
+            languages: (meta.data.languages ?? []).filter(
+              (l): l is string => typeof l === 'string',
+            ),
             nsfw: meta.data.nsfw === true,
             verified: meta.data.verified !== false,
           });

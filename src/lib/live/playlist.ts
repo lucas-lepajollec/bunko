@@ -256,11 +256,12 @@ export async function refreshAddonChannels() {
   const source = getSettings().videoAddons.join('|') + '|' + adultScope();
   s.source = source;
   const { tvAddonChannels } = await import('../video-addons');
-  const channels = (getSettings().videoAddons.length ? await tvAddonChannels().catch(() => []) : [])
-    .filter((c) => {
-      const scope = adultScope();
-      return scope === 'only' ? c.nsfw : scope === 'on' ? true : !c.nsfw;
-    });
+  const channels = (
+    getSettings().videoAddons.length ? await tvAddonChannels().catch(() => []) : []
+  ).filter((c) => {
+    const scope = adultScope();
+    return scope === 'only' ? c.nsfw : scope === 'on' ? true : !c.nsfw;
+  });
   const entries: PlaylistEntry[] = channels.map((c) => ({
     name: c.name,
     logo: c.logo,
@@ -277,8 +278,8 @@ export async function refreshAddonChannels() {
   }));
   const matched = matchEntries(entries);
   const insert = statement(
-      'INSERT OR REPLACE INTO live_playlist (key,position,name,logo,grp,tvg_id,url,referrer,user_agent,channel_id,country,languages,categories,nsfw,verified) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-    );
+    'INSERT OR REPLACE INTO live_playlist (key,position,name,logo,grp,tvg_id,url,referrer,user_agent,channel_id,country,languages,categories,nsfw,verified) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+  );
   db().transaction(() => {
     statement("DELETE FROM live_playlist WHERE url LIKE 'addon:%'").run();
     entries.forEach((e, i) =>
@@ -308,7 +309,10 @@ export async function refreshAddonChannels() {
 export async function ensureAddonChannels() {
   const s = addonState();
   const source = getSettings().videoAddons.join('|') + '|' + adultScope();
-  if (s.source === source && Date.now() - s.at < PLAYLIST_TTL) return;
+  // Nothing found last time while extensions are set: look again sooner (an extension may have
+  // just gained live TV, or was briefly unreachable).
+  const ttl = s.count || !getSettings().videoAddons.length ? PLAYLIST_TTL : 30 * 60_000;
+  if (s.source === source && Date.now() - s.at < ttl) return;
   const first = s.source !== source || s.at === 0;
   s.loading ??= refreshAddonChannels()
     .catch(() => undefined)
