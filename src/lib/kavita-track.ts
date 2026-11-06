@@ -65,7 +65,9 @@ const PROVIDER_RANK: Record<'text' | 'book' | 'comics', string[]> = {
   book: ['hardcover', 'openlibrary', 'anilist', 'mangaupdates', 'mangadex'],
   comics: ['anilist', 'mangadex', 'mangaupdates'],
 };
-export type MatchMiss = 'no-candidate' | 'below-threshold' | 'ambiguous' | 'unreachable';
+/** Why a work stayed off-catalog; `conflict`: the work found is already followed by another entry. */
+export type MatchMiss =
+  'no-candidate' | 'below-threshold' | 'ambiguous' | 'unreachable' | 'conflict';
 export async function catalogMatch(
   series: IndexedSeries,
   signal?: AbortSignal,
@@ -245,7 +247,8 @@ const triedAt = (value: string | null) => {
   try {
     return Number((JSON.parse(value) as { at?: number }).at) || 0;
   } catch {
-    return Date.parse(value) || 0;
+    // A bare date written by the first version (strict matching, no reason kept): look again.
+    return 0;
   }
 };
 /** Works still off-catalog after the job looked them up, with the reason (activity centre). */
@@ -274,7 +277,7 @@ export function relinkMisses(): NonNullable<BackgroundJob['unlinked']> {
  * job is run by hand. A clear match gives the work its catalog identity; a work the user
  * detached on purpose is left alone.
  */
-export async function relinkKavitaWorks(signal?: AbortSignal, budget = 8) {
+export async function relinkKavitaWorks(signal?: AbortSignal, budget = 20) {
   const { adoptCatalogIdentity } = await import('./library-matching');
   const detached = new Set(
     (statement('SELECT id FROM tracked_media WHERE off_catalog=1').all() as { id: number }[]).map(
@@ -304,19 +307,17 @@ export async function relinkKavitaWorks(signal?: AbortSignal, budget = 8) {
       continue;
     }
     if (signal?.aborted) break;
-    // Why it stayed off-catalog, for the activity centre (a catalog that did not answer proves
-    // nothing: asked again on the next run).
-    const miss: MatchMiss = report.incomplete
-      ? 'unreachable'
-      : media
-        ? 'ambiguous'
-        : (report.miss ?? 'no-candidate');
+    // Why it stayed off-catalog, for the activity centre. A catalog that did not answer is
+    // asked again in three hours rather than at every run (it must not hold the others back).
+    const miss: MatchMiss = media
+      ? 'conflict'
+      : (report.miss ?? (report.incomplete ? 'unreachable' : 'no-candidate'));
     setWorkerValue(
       key,
       JSON.stringify({
-        at: report.incomplete ? 0 : Date.now(),
+        at: report.incomplete ? Date.now() - RETRY_MS + 3 * 3600_000 : Date.now(),
         miss,
-        best: report.best ?? null,
+        best: media ? media.title : (report.best ?? null),
       }),
     );
   }

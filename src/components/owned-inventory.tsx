@@ -26,7 +26,10 @@ export function OwnedInventory({
     <span>
       {parts.length
         ? parts.join(' · ')
-        : t(compact ? 'library.ownedN' : 'title.owned', { n: n(0) })}
+        : // A book or novel in Kavita is one file without chapter or volume numbers.
+          entry.inKavita
+          ? t('title.inKavitaFile')
+          : t(compact ? 'library.ownedN' : 'title.owned', { n: n(0) })}
     </span>
   );
 }

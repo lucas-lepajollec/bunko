@@ -784,6 +784,12 @@ export interface JellyfinSeriesSummary {
 export interface TrackedMedia {
   id: number;
   jellyfinLink?: JellyfinLink | null;
+  /** A Kavita series holds this work's files (even a single book with no chapter numbers). */
+  inKavita?: boolean;
+  /** Episodes (or the film) the Jellyfin library holds for this work; absent outside video. */
+  jellyfinOwned?: number;
+  /** Episodes of the work aired so far, when the catalog knows (airing anime and series). */
+  airedEpisodes?: number | null;
   /** Personal like, independent of reading status and owning/downloading the work. */
   favorite?: boolean;
   anilistId: number | null;
@@ -891,7 +897,7 @@ export interface BackgroundJob {
   unlinked?: {
     mediaId: string;
     title: string;
-    miss: 'no-candidate' | 'below-threshold' | 'ambiguous' | 'unreachable';
+    miss: 'no-candidate' | 'below-threshold' | 'ambiguous' | 'unreachable' | 'conflict';
     /** Closest catalog title found, with its score. */
     best: string | null;
   }[];
