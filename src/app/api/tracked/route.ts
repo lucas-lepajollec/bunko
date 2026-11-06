@@ -29,12 +29,12 @@ import { ownedStock } from '@/lib/owned-chapters';
 import { declareVolumes, parseVolumeDeclaration, stockContext } from '@/lib/owned-stock';
 import { getSettings } from '@/lib/settings';
 import { replaceSources } from '@/lib/tracked-sources';
+import { withVideoOwnership } from '@/lib/video-ownership';
 export const GET = route(async (r) => {
   const { refresh } = z
     .object({ refresh: z.literal('progress').optional() })
     .parse(Object.fromEntries(new URL(r.url).searchParams));
   if (refresh) await refreshProgressOnDemand();
-  const { withVideoOwnership } = await import('@/lib/video-ownership');
   return json(withVideoOwnership(visibleTracked(listTracked())));
 });
 export const POST = route(async (r) => {
