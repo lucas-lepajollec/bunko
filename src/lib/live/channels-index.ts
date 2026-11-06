@@ -175,7 +175,8 @@ export async function refreshChannelIndex() {
         logo.get(c.id)?.url ?? null,
         web(c.website),
         c.network ?? null,
-        c.is_nsfw ? 1 : 0,
+        // Flagged by the index, or filed under its adult category.
+        c.is_nsfw || (c.categories ?? []).includes('xxx') ? 1 : 0,
         JSON.stringify(own),
         own.length ? 1 : 0,
         [c.name, ...alt].map(foldName).join(' '),

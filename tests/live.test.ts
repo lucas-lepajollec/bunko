@@ -135,6 +135,8 @@ http://iptv.example/live/me/secret/102.ts
 https://local.example/stream.m3u8
 #EXTINF:-1 group-title="VOD",Un film
 http://iptv.example/movie/me/secret/9.mkv
+#EXTINF:-1 group-title="XXX | Adult",Nuit Rose
+https://adult.example/rose.m3u8
 `;
 let requests: string[] = [];
 const server: Server = createServer((req, res) => {
@@ -206,6 +208,7 @@ beforeEach(async () => {
     livePlaylistUrl: '',
     liveCountries: [],
     adultContent: false,
+    adultMode: false,
   });
   requests = [];
   await live.refreshLiveNow();
@@ -324,7 +327,7 @@ it('the user’s playlist makes subscribed channels playable', async () => {
   expect(requests).toContain('/epg.xml');
   const status = live.liveStatus();
   expect(JSON.stringify(status)).not.toContain('secret');
-  expect(status.playlist).toMatchObject({ configured: true, entries: 3, matched: 2, error: null });
+  expect(status.playlist).toMatchObject({ configured: true, entries: 4, matched: 2, error: null });
   const own = home.playlist.find((c) => c.id.startsWith('m3u:'))!;
   live.setFavorite(own.id, true);
   live.setFavorite('France24.fr', true);
@@ -337,7 +340,26 @@ it('the user’s playlist makes subscribed channels playable', async () => {
 it('parses playlists and cleans channel names', () => {
   const { entries, guide: tvg } = parseM3u(playlist);
   expect(tvg).toContain('epg.xml');
-  expect(entries.map((e) => e.name)).toEqual(['FR: Canal+ HD', 'TF1 FHD', 'Ma chaîne locale']);
+  expect(entries.map((e) => e.name)).toEqual([
+    'FR: Canal+ HD',
+    'TF1 FHD',
+    'Ma chaîne locale',
+    'Nuit Rose',
+  ]);
   expect(cleanName('FR: Canal+ HD')).toEqual({ folded: 'canal+', country: 'FR' });
   expect(cleanName('|UK| BBC One FHD')).toEqual({ folded: 'bbcone', country: 'UK' });
+});
+
+it('adult playlist entries follow the 18+ setting: hidden, mixed in, or alone', async () => {
+  updateSettings({ livePlaylistUrl: `${base}/playlist.m3u` });
+  const names = async () => (await live.liveHome('fr-FR')).playlist.map((c) => c.name);
+  expect(await names()).not.toContain('Nuit Rose');
+  updateSettings({ adultContent: true });
+  expect(await names()).toEqual(expect.arrayContaining(['Nuit Rose', 'Ma chaîne locale']));
+  updateSettings({ adultMode: true });
+  expect(await names()).toEqual(['Nuit Rose']);
+  // The other channels are out of the 18+ view too, the adult one opens.
+  expect((await live.liveHome('fr-FR')).onNow).toEqual([]);
+  const id = (await live.liveHome('fr-FR')).playlist[0].id;
+  expect((await live.liveChannel(id)).playable).toBe(true);
 });
