@@ -1,17 +1,6 @@
 import path from 'node:path';
 import { openAsBlob } from 'node:fs';
-import {
-  copyFile,
-  link,
-  mkdir,
-  open,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  stat,
-  unlink,
-} from 'node:fs/promises';
+import { copyFile, link, mkdir, open, readFile, rename, rm, stat, unlink } from 'node:fs/promises';
 import { z } from 'zod';
 import type {
   TrackedMedia,
@@ -25,16 +14,11 @@ import type {
 import { dataDir, db, getTracked } from './db';
 import { AppError } from './errors';
 import { endpoint } from './http';
-import { kavitaJson, scanKavitaFolder } from './kavita-client';
+import { scanKavitaFolder } from './kavita-client';
+import { assertReadable, localKavitaFile, seriesFiles } from './kavita-files';
 import { matchKavita, requestKavitaSync } from './kavita-index';
 import { isTextKind } from './library-kinds';
-import {
-  inside,
-  libraryRoot,
-  mapKavitaPath,
-  safeLibraryDirectory,
-  storedLibraries,
-} from './library-paths';
+import { inside, mapKavitaPath, safeLibraryDirectory, storedLibraries } from './library-paths';
 import { getSettings } from './settings';
 import { tenantId } from './tenant-context';
 import { tenantSignal } from './tenant-lifecycle';
@@ -206,35 +190,6 @@ function trackedText(trackedId: number): TrackedMedia {
   return tracked;
 }
 
-/** Local path of a Kavita file, refusing anything outside this account's media root. */
-async function localFile(kavitaPath: string) {
-  const local = mapKavitaPath(path.posix.dirname(kavitaPath));
-  if (!local) throw new AppError('FILE_UNREACHABLE', 'File is not reachable from Bunko', 409);
-  const folder = await safeLibraryDirectory(local);
-  const file = path.join(folder, path.posix.basename(kavitaPath));
-  const actual = await realpath(file).catch(() => null);
-  if (!actual || !inside(await realpath(libraryRoot()), actual) || !(await stat(actual)).isFile())
-    throw new AppError('FILE_UNREACHABLE', 'File is not reachable from Bunko', 409);
-  return actual;
-}
-
-async function readable(file: string) {
-  try {
-    const handle = await open(file, 'r');
-    try {
-      await handle.read(Buffer.alloc(1), 0, 1, 0);
-    } finally {
-      await handle.close();
-    }
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code ?? 'read error';
-    console.warn(
-      `[bunko] translation file not readable by Bunko (uid ${process.getuid?.()}): ${code}`,
-    );
-    throw new AppError('FILE_UNREADABLE', 'Bunko cannot read this file', 409);
-  }
-}
-
 /** The work's translatable files, read live from Kavita (books are not chapter-indexed). */
 export async function translatableFiles(
   trackedId: number,
@@ -242,58 +197,7 @@ export async function translatableFiles(
 ): Promise<TranslationFile[]> {
   const tracked = trackedText(trackedId);
   const series = matchKavita(tracked.media, tracked.kavitaSeriesId);
-  if (!series) return [];
-  const volumes = z
-    .array(
-      z
-        .object({
-          number: z.union([z.string(), z.number()]).nullable().optional(),
-          minNumber: z.number().optional(),
-          chapters: z
-            .array(
-              z
-                .object({
-                  files: z
-                    .array(
-                      z
-                        .object({ filePath: z.string(), bytes: z.number().optional() })
-                        .passthrough(),
-                    )
-                    .nullable()
-                    .optional(),
-                })
-                .passthrough(),
-            )
-            .nullable()
-            .optional(),
-        })
-        .passthrough(),
-    )
-    .parse(await kavitaJson(`/api/Series/volumes?seriesId=${series.seriesId}`, { signal }));
-  const seen = new Set<string>();
-  const files: TranslationFile[] = [];
-  for (const v of volumes) {
-    const n = Number(v.number ?? v.minNumber);
-    const volume = Number.isFinite(n) && n > 0 && n < 100_000 ? n : null;
-    for (const c of v.chapters ?? [])
-      for (const f of c.files ?? []) {
-        const kavitaPath = f.filePath.replaceAll('\\', '/');
-        if (seen.has(kavitaPath) || !FORMATS.has(path.posix.extname(kavitaPath).toLowerCase()))
-          continue;
-        seen.add(kavitaPath);
-        files.push({
-          path: kavitaPath,
-          name: path.posix.basename(kavitaPath),
-          volume,
-          sizeBytes: f.bytes ?? null,
-        });
-      }
-  }
-  return files.sort(
-    (a, b) =>
-      (a.volume ?? Infinity) - (b.volume ?? Infinity) ||
-      a.name.localeCompare(b.name, 'en', { numeric: true }),
-  );
+  return series ? seriesFiles(series.seriesId, FORMATS, signal) : [];
 }
 
 const view = (r: Row): TranslationJob => ({
@@ -349,7 +253,7 @@ export async function requestTranslations(input: TranslationRequest) {
       throw new AppError('ALREADY_TRANSLATING', 'This file is already being translated', 409);
     return file;
   });
-  for (const file of chosen) await localFile(file.path);
+  for (const file of chosen) await localKavitaFile(file.path);
   const now = new Date().toISOString();
   const insert = db().prepare(`INSERT INTO translation_jobs(tracked_id,kavita_path,file_name,
     source_lang,target_lang,provider,model,mode,state,created_at,updated_at)
@@ -382,12 +286,12 @@ async function upload(job: Row) {
     .parse(await tradocJson('/translations'))
     .find((r) => r.external_ref === externalRef(job.id));
   if (remote) return remote;
-  const file = await localFile(job.kavita_path);
+  const file = await localKavitaFile(job.kavita_path);
   const size = (await stat(file)).size;
   if (size > MAX_UPLOAD) throw new AppError('FILE_TOO_LARGE', 'File is too large', 413);
   // Read once before sending: a file Bunko may list but not read (owner/permissions of the
   // library mount) would otherwise fail inside fetch and look like TraDoc being unreachable.
-  await readable(file);
+  await assertReadable(file, 'translation');
   const form = new FormData();
   // A file-backed blob: the book is streamed to TraDoc, not read whole into memory.
   form.set('file', await openAsBlob(file), job.file_name);
@@ -437,7 +341,7 @@ async function install(job: Row) {
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (!bytes.length || bytes.length > MAX_UPLOAD)
     throw new AppError('TRADOC_ERROR', 'TraDoc returned an unusable file', 502);
-  const original = await localFile(job.kavita_path);
+  const original = await localKavitaFile(job.kavita_path);
   let output: string;
   let backup: string | null = job.backup_path;
   // Every step is recorded before the next one, so a restart resumes without harm: the backup is

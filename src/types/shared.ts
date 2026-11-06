@@ -1382,3 +1382,50 @@ export interface PasswordChange {
   currentPassword: string;
   newPassword: string;
 }
+
+/** Bunko's book reader: one EPUB or PDF file of a work in the Kavita library. */
+export interface BookProgress {
+  /** EPUB: index in the reading order; PDF: page index. */
+  part: number;
+  /** Position inside that part, 0–1. */
+  offset: number;
+  /** Whole file, 0–1. */
+  fraction: number;
+  updatedAt: string;
+}
+export interface BookFile {
+  key: string;
+  name: string;
+  volume: number | null;
+  format: 'epub' | 'pdf';
+  sizeBytes: number | null;
+  progress: BookProgress | null;
+}
+export interface BookTocEntry {
+  label: string;
+  depth: number;
+  part: number;
+  anchor: string | null;
+}
+export interface BookManifest {
+  key: string;
+  name: string;
+  volume: number | null;
+  format: 'epub' | 'pdf';
+  title: string | null;
+  /** The whole file (PDF rendering, download). */
+  url: string;
+  /** EPUB documents in reading order, with their size to weigh progress. */
+  spine: { href: string; weight: number }[];
+  toc: BookTocEntry[];
+  progress: BookProgress | null;
+  prevKey: string | null;
+  nextKey: string | null;
+}
+export interface BookProgressUpdate {
+  mediaId: string;
+  file: string;
+  part: number;
+  offset: number;
+  fraction: number;
+}

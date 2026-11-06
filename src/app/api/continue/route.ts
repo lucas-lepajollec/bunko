@@ -27,7 +27,7 @@ const update = z
     href: z
       .string()
       .max(600)
-      .regex(/^\/(read|title)\/[^\s]*$/),
+      .regex(/^\/(read|title|book)\/[^\s]*$/),
     position: z.number().min(0).max(1).nullable(),
   })
   .strict();
