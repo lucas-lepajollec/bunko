@@ -134,7 +134,7 @@ export async function refreshPlaylist() {
   const url = getSettings().livePlaylistUrl;
   s.source = url;
   if (!url) {
-    statement('DELETE FROM live_playlist').run();
+    statement("DELETE FROM live_playlist WHERE url NOT LIKE 'addon:%'").run();
     Object.assign(s, { at: Date.now(), error: null, guide: null });
     return;
   }
@@ -150,7 +150,7 @@ export async function refreshPlaylist() {
     const matched = matchEntries(entries);
     const insert = statement('INSERT OR REPLACE INTO live_playlist VALUES(?,?,?,?,?,?,?,?,?,?)');
     db().transaction(() => {
-      statement('DELETE FROM live_playlist').run();
+      statement("DELETE FROM live_playlist WHERE url NOT LIKE 'addon:%'").run();
       entries.forEach((e, i) =>
         insert.run(
           playlistKey(e.url),
@@ -183,7 +183,9 @@ export async function ensurePlaylist() {
   const stale = s.source !== url || Date.now() - s.at > PLAYLIST_TTL;
   if (!stale) return;
   // Waits when the address just changed or nothing is stored yet; otherwise refreshes behind.
-  const empty = !(statement('SELECT 1 FROM live_playlist LIMIT 1').get() as unknown);
+  const empty = !(statement(
+    "SELECT 1 FROM live_playlist WHERE url NOT LIKE 'addon:%' LIMIT 1",
+  ).get() as unknown);
   const first = Boolean(url) && ((s.at > 0 && s.source !== url) || empty);
   s.loading ??= refreshPlaylist().finally(() => {
     s.loading = null;
@@ -205,3 +207,75 @@ export interface PlaylistRow {
 }
 export const playlistRows = () =>
   statement('SELECT * FROM live_playlist ORDER BY position').all() as PlaylistRow[];
+
+// ------------------------------------------------------------------ streaming extensions
+
+/**
+ * Channels from the user's streaming extensions (Stremio type `tv`) live next to the playlist:
+ * same table, matched to the index the same way, with an `addon:<extension>|<channel>` address
+ * whose streams are asked from the extension when the channel is opened.
+ */
+export const ADDON_PREFIX = 'addon:';
+export const addonRef = (url: string) => {
+  const [addon, ...rest] = url.slice(ADDON_PREFIX.length).split('|');
+  return { addon, metaId: rest.join('|') };
+};
+const addonState = tenantState(() => ({
+  at: 0,
+  source: '',
+  loading: null as Promise<void> | null,
+  count: 0,
+}));
+export const addonChannelState = () => addonState();
+
+export async function refreshAddonChannels() {
+  const s = addonState();
+  const source = getSettings().videoAddons.join('|');
+  s.source = source;
+  const { tvAddonChannels } = await import('../video-addons');
+  const channels = source ? await tvAddonChannels().catch(() => []) : [];
+  const entries: PlaylistEntry[] = channels.map((c) => ({
+    name: c.name,
+    logo: c.logo,
+    group: c.genre ?? c.addonName,
+    tvgId: null,
+    url: `${ADDON_PREFIX}${c.addon}|${c.metaId}`,
+    referrer: null,
+    userAgent: null,
+  }));
+  const matched = matchEntries(entries);
+  const insert = statement('INSERT OR REPLACE INTO live_playlist VALUES(?,?,?,?,?,?,?,?,?,?)');
+  db().transaction(() => {
+    statement("DELETE FROM live_playlist WHERE url LIKE 'addon:%'").run();
+    entries.forEach((e, i) =>
+      insert.run(
+        playlistKey(e.url),
+        1_000_000 + i,
+        e.name,
+        e.logo,
+        e.group,
+        null,
+        e.url,
+        null,
+        null,
+        matched[i],
+      ),
+    );
+  })();
+  Object.assign(s, { at: Date.now(), count: entries.length });
+}
+
+/** Like the playlist: refreshed twice a day or when the extensions change. */
+export async function ensureAddonChannels() {
+  const s = addonState();
+  const source = getSettings().videoAddons.join('|');
+  if (s.source === source && Date.now() - s.at < PLAYLIST_TTL) return;
+  const first = s.source !== source || s.at === 0;
+  s.loading ??= refreshAddonChannels()
+    .catch(() => undefined)
+    .finally(() => {
+      s.loading = null;
+    });
+  // Wait a little for a first read so the page is not empty; never long.
+  if (first) await Promise.race([s.loading, new Promise((r) => setTimeout(r, 8000).unref?.())]);
+}

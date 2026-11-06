@@ -80,6 +80,8 @@ const en: Dictionary = {
   'live.playFailed': 'This channel cannot be played right now.',
   'live.source': 'Source',
   'live.fromPlaylist': 'My playlist',
+  'live.extensions': 'From my extensions',
+  'live.extensionsAside': 'their live TV catalogs',
   'live.freeStream': 'Free stream {n}',
   'live.settings.intro':
     'Live TV channels from the public iptv-org index (free streams; channels taken down for rights reasons are excluded), your own playlist for the channels you subscribe to, and XMLTV guides for what is on.',
@@ -93,6 +95,8 @@ const en: Dictionary = {
   'live.settings.playlistSet': 'Playlist saved (type to replace it)',
   'live.settings.remove': 'Remove',
   'live.settings.playlistStatus': '{entries} channels, {matched} recognised',
+  'live.settings.extensionsStatus': '{entries} channels from your streaming extensions, {matched} recognised',
+  'live.settings.extensionsNone': 'No streaming extension offers live TV',
   'live.settings.guides': 'Programme guides (XMLTV)',
   'live.settings.guidesHint':
     'One address per line, plain or .gz. A playlist’s own guide is added automatically.',
@@ -1769,6 +1773,8 @@ const fr: Dictionary = {
   'live.playFailed': 'Cette chaîne ne peut pas être lue pour le moment.',
   'live.source': 'Source',
   'live.fromPlaylist': 'Ma playlist',
+  'live.extensions': 'Depuis mes extensions',
+  'live.extensionsAside': 'leurs catalogues de chaînes',
   'live.freeStream': 'Flux gratuit {n}',
   'live.settings.intro':
     'Les chaînes viennent de l’index public iptv-org (flux gratuits ; les chaînes retirées pour des questions de droits sont exclues), de ta propre playlist pour les chaînes auxquelles tu es abonné, et des guides XMLTV pour les programmes.',
@@ -1782,6 +1788,8 @@ const fr: Dictionary = {
   'live.settings.playlistSet': 'Playlist enregistrée (tape pour la remplacer)',
   'live.settings.remove': 'Retirer',
   'live.settings.playlistStatus': '{entries} chaînes, {matched} reconnues',
+  'live.settings.extensionsStatus': '{entries} chaînes depuis tes extensions de streaming, {matched} reconnues',
+  'live.settings.extensionsNone': 'Aucune extension de streaming ne propose de chaînes',
   'live.settings.guides': 'Programmes TV (XMLTV)',
   'live.settings.guidesHint':
     'Une adresse par ligne, simple ou .gz. Le guide fourni par ta playlist est ajouté tout seul.',
@@ -3474,6 +3482,8 @@ const es: Dictionary = {
   'live.playFailed': 'Este canal no se puede ver ahora.',
   'live.source': 'Fuente',
   'live.fromPlaylist': 'Mi lista',
+  'live.extensions': 'De mis extensiones',
+  'live.extensionsAside': 'sus catálogos de canales',
   'live.freeStream': 'Emisión gratuita {n}',
   'live.settings.intro':
     'Los canales vienen del índice público iptv-org (emisiones gratuitas; se excluyen los retirados por derechos), de tu propia lista para los canales a los que te suscribes y de guías XMLTV para la programación.',
@@ -3487,6 +3497,8 @@ const es: Dictionary = {
   'live.settings.playlistSet': 'Lista guardada (escribe para sustituirla)',
   'live.settings.remove': 'Quitar',
   'live.settings.playlistStatus': '{entries} canales, {matched} reconocidos',
+  'live.settings.extensionsStatus': '{entries} canales de tus extensiones de streaming, {matched} reconocidos',
+  'live.settings.extensionsNone': 'Ninguna extensión de streaming ofrece canales',
   'live.settings.guides': 'Guías de TV (XMLTV)',
   'live.settings.guidesHint':
     'Una dirección por línea, normal o .gz. La guía de tu lista se añade sola.',
@@ -5171,6 +5183,8 @@ const de: Dictionary = {
   'live.playFailed': 'Dieser Sender lässt sich gerade nicht abspielen.',
   'live.source': 'Quelle',
   'live.fromPlaylist': 'Meine Playlist',
+  'live.extensions': 'Aus meinen Erweiterungen',
+  'live.extensionsAside': 'ihre Senderkataloge',
   'live.freeStream': 'Freier Stream {n}',
   'live.settings.intro':
     'Die Sender stammen aus dem öffentlichen iptv-org-Index (freie Streams; aus Rechtegründen entfernte Sender sind ausgeschlossen), aus deiner eigenen Playlist für abonnierte Sender und aus XMLTV-Programmführern.',
@@ -5184,6 +5198,8 @@ const de: Dictionary = {
   'live.settings.playlistSet': 'Playlist gespeichert (zum Ersetzen tippen)',
   'live.settings.remove': 'Entfernen',
   'live.settings.playlistStatus': '{entries} Sender, {matched} erkannt',
+  'live.settings.extensionsStatus': '{entries} Sender aus deinen Streaming-Erweiterungen, {matched} erkannt',
+  'live.settings.extensionsNone': 'Keine Streaming-Erweiterung bietet Sender an',
   'live.settings.guides': 'TV-Programme (XMLTV)',
   'live.settings.guidesHint':
     'Eine Adresse pro Zeile, normal oder .gz. Der Programmführer deiner Playlist kommt automatisch dazu.',
@@ -6875,6 +6891,8 @@ const it: Dictionary = {
   'live.playFailed': 'Questo canale non si può guardare ora.',
   'live.source': 'Fonte',
   'live.fromPlaylist': 'La mia playlist',
+  'live.extensions': 'Dalle mie estensioni',
+  'live.extensionsAside': 'i loro cataloghi di canali',
   'live.freeStream': 'Flusso gratuito {n}',
   'live.settings.intro':
     'I canali provengono dall’indice pubblico iptv-org (flussi gratuiti; esclusi quelli rimossi per diritti), dalla tua playlist per i canali a cui sei abbonato e dalle guide XMLTV per i programmi.',
@@ -6888,6 +6906,8 @@ const it: Dictionary = {
   'live.settings.playlistSet': 'Playlist salvata (scrivi per sostituirla)',
   'live.settings.remove': 'Rimuovi',
   'live.settings.playlistStatus': '{entries} canali, {matched} riconosciuti',
+  'live.settings.extensionsStatus': '{entries} canali dalle tue estensioni di streaming, {matched} riconosciuti',
+  'live.settings.extensionsNone': 'Nessuna estensione di streaming offre canali',
   'live.settings.guides': 'Guide TV (XMLTV)',
   'live.settings.guidesHint':
     'Un indirizzo per riga, normale o .gz. La guida della tua playlist si aggiunge da sola.',

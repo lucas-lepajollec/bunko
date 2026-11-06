@@ -244,6 +244,14 @@ export function LiveHomeView() {
               channels={home.data.playlist}
             />
           )}
+          {(home.data.extensions?.length ?? 0) > 0 && (
+            <Shelf
+              num={++n}
+              title={t('live.extensions')}
+              aside={t('live.extensionsAside')}
+              channels={home.data.extensions}
+            />
+          )}
           {home.data.shelves.map((s) => (
             <Shelf
               key={s.category}

@@ -20,7 +20,16 @@ import {
   type StoredStream,
 } from './channels-index';
 import { GUIDE_TTL, guideAge, guideKey, refreshGuide } from './guide';
-import { ensurePlaylist, playlistRows, playlistState, type PlaylistRow } from './playlist';
+import {
+  ADDON_PREFIX,
+  addonChannelState,
+  addonRef,
+  ensureAddonChannels,
+  ensurePlaylist,
+  playlistRows,
+  playlistState,
+  type PlaylistRow,
+} from './playlist';
 import { foldName, liveDb } from './store';
 
 /** Shared refreshes: one download at a time for the whole server. */
@@ -93,6 +102,7 @@ export async function ensureLive(waitMs = 45_000): Promise<boolean> {
       await Promise.race([loading, new Promise((r) => setTimeout(r, waitMs).unref?.())]);
   }
   await ensurePlaylist().catch(() => undefined);
+  await ensureAddonChannels().catch(() => undefined);
   if (channelCount()) refreshGuides(guideUrls());
   return !channelCount();
 }
@@ -100,8 +110,9 @@ export async function ensureLive(waitMs = 45_000): Promise<boolean> {
 /** Forces every refresh now (settings button). */
 export async function refreshLiveNow() {
   await refreshIndex();
-  const { refreshPlaylist } = await import('./playlist');
+  const { refreshPlaylist, refreshAddonChannels } = await import('./playlist');
   await refreshPlaylist();
+  await refreshAddonChannels().catch(() => undefined);
   await Promise.all(guideUrls().map((url) => refreshGuide(url).catch(() => undefined)));
 }
 
@@ -307,21 +318,38 @@ export async function liveHome(acceptLanguage: string | null): Promise<LiveHome>
       .filter((id) => id.startsWith('m3u:') && ctx.playlist.has(id))
       .map((id) => playlistOnly(id, ctx.playlist.get(id)!, ctx)),
   ];
-  const playlist = [...ctx.playlist.entries()].slice(0, 40).map(([id, rows]) => {
-    const known = all.find((c) => c.id === id);
-    if (known) return known;
-    if (!id.startsWith('m3u:')) {
-      const row = db.prepare(`SELECT * FROM live_channels WHERE id=? ${nsfwClause()}`).get(id) as
-        ChannelRow | undefined;
-      if (row) return views([row], ctx)[0];
-    }
-    return playlistOnly(id, rows, ctx);
-  });
+  const fromAddon = (rows: PlaylistRow[]) => rows.some((r) => r.url.startsWith(ADDON_PREFIX));
+  const fromM3u = (rows: PlaylistRow[]) => rows.some((r) => !r.url.startsWith(ADDON_PREFIX));
+  const shelf = (entries: [string, PlaylistRow[]][]) =>
+    entries.slice(0, 40).map(([id, rows]) => {
+      const known = all.find((c) => c.id === id);
+      if (known) return known;
+      if (!id.startsWith('m3u:')) {
+        const row = db.prepare(`SELECT * FROM live_channels WHERE id=? ${nsfwClause()}`).get(id) as
+          ChannelRow | undefined;
+        if (row) return views([row], ctx)[0];
+      }
+      return playlistOnly(id, rows, ctx);
+    });
+  const extensions = shelf([...ctx.playlist.entries()].filter(([, rows]) => fromAddon(rows)));
+  const playlist = [...ctx.playlist.entries()]
+    .filter(([, rows]) => fromM3u(rows))
+    .slice(0, 40)
+    .map(([id, rows]) => {
+      const known = all.find((c) => c.id === id);
+      if (known) return known;
+      if (!id.startsWith('m3u:')) {
+        const row = db.prepare(`SELECT * FROM live_channels WHERE id=? ${nsfwClause()}`).get(id) as
+          ChannelRow | undefined;
+        if (row) return views([row], ctx)[0];
+      }
+      return playlistOnly(id, rows, ctx);
+    });
   const shelves = SHELVES.map((category) => ({
     category,
     channels: all.filter((c) => c.categories.includes(category)).slice(0, 20),
   })).filter((s) => s.channels.length >= 3);
-  return { pending, countries, onNow, favorites, playlist, shelves };
+  return { pending, countries, onNow, favorites, playlist, extensions, shelves };
 }
 
 export async function liveCatalog(filters: {
@@ -442,19 +470,39 @@ export async function liveChannel(id: string): Promise<LiveChannelDetail> {
     if (agent) h['User-Agent'] = agent;
     return Object.keys(h).length ? h : undefined;
   };
-  // The user's subscription first, then the free streams.
+  // Channels from streaming extensions: their streams are asked when the channel opens.
+  const { tvStreams } = await import('../video-addons');
+  const addonStreams = (
+    await Promise.all(
+      own
+        .filter((p) => p.url.startsWith(ADDON_PREFIX))
+        .map((p) => {
+          const ref = addonRef(p.url);
+          return tvStreams(ref.addon, ref.metaId, AbortSignal.timeout(20_000)).catch(() => []);
+        }),
+    )
+  ).flat();
+  // The user's subscription first, then the extensions, then the free streams.
   const streams: LiveStreamChoice[] = [
-    ...own.map((p) => ({
-      label: p.name,
+    ...own
+      .filter((p) => !p.url.startsWith(ADDON_PREFIX))
+      .map((p) => ({
+        label: p.name,
+        quality: null,
+        fromPlaylist: true,
+        // Xtream-style servers send raw MPEG-TS on `.ts`; the same channel is HLS on `.m3u8`.
+        url: relayPath({
+          url: /\/live\/[^?#]+\.ts(?:$|\?)/i.test(p.url)
+            ? p.url.replace(/\.ts(?=$|\?)/i, '.m3u8')
+            : p.url,
+          headers: headers(p.referrer, p.user_agent),
+        }),
+      })),
+    ...addonStreams.map((a) => ({
+      label: a.label,
       quality: null,
-      fromPlaylist: true,
-      // Xtream-style servers send raw MPEG-TS on `.ts`; the same channel is HLS on `.m3u8`.
-      url: relayPath({
-        url: /\/live\/[^?#]+\.ts(?:$|\?)/i.test(p.url)
-          ? p.url.replace(/\.ts(?=$|\?)/i, '.m3u8')
-          : p.url,
-        headers: headers(p.referrer, p.user_agent),
-      }),
+      fromPlaylist: false,
+      url: relayPath({ url: a.url, headers: a.headers }),
     })),
     ...(row ? (JSON.parse(row.streams) as StoredStream[]) : []).map((s) => ({
       label: streamLabel(s) ?? '',
@@ -488,7 +536,9 @@ export function liveStatus(): LiveStatus {
   const count = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
   const indexAge = channelIndexAge();
   const p = playlistState();
-  const rows = playlistRows();
+  const all = playlistRows();
+  const rows = all.filter((r) => !r.url.startsWith(ADDON_PREFIX));
+  const extensionRows = all.filter((r) => r.url.startsWith(ADDON_PREFIX));
   return {
     channels: count('SELECT COUNT(*) AS n FROM live_channels'),
     playable: count('SELECT COUNT(*) AS n FROM live_channels WHERE playable=1'),
@@ -509,6 +559,11 @@ export function liveStatus(): LiveStatus {
       matched: rows.filter((r) => r.channel_id).length,
       at: p.at ? new Date(p.at).toISOString() : null,
       error: p.error,
+    },
+    extensions: {
+      entries: extensionRows.length,
+      matched: extensionRows.filter((r) => r.channel_id).length,
+      at: addonChannelState().at ? new Date(addonChannelState().at).toISOString() : null,
     },
   };
 }

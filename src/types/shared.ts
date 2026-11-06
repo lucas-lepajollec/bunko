@@ -1504,6 +1504,8 @@ export interface LiveHome {
   onNow: LiveChannel[];
   favorites: LiveChannel[];
   playlist: LiveChannel[];
+  /** Channels from the user's streaming extensions (Stremio `tv` catalogs). */
+  extensions: LiveChannel[];
   shelves: { category: string; channels: LiveChannel[] }[];
 }
 export interface LiveCatalog {
@@ -1528,4 +1530,6 @@ export interface LiveStatus {
     at: string | null;
     error: string | null;
   };
+  /** Channels read from the streaming extensions' live TV catalogs. */
+  extensions: { entries: number; matched: number; at: string | null };
 }

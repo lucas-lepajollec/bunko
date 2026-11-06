@@ -188,6 +188,32 @@ const server: Server = createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/xml' });
     return void res.end('<tv></tv>');
   }
+  if (url.pathname === '/tv/manifest.json')
+    return send({
+      id: 'fixture.tv',
+      name: 'Fixture TV',
+      resources: ['catalog', { name: 'stream', types: ['tv'], idPrefixes: ['ftv:'] }],
+      types: ['tv'],
+      catalogs: [{ type: 'tv', id: 'all', name: 'All' }],
+    });
+  if (url.pathname === '/tv/catalog/tv/all.json')
+    return send({
+      metas: [
+        { id: 'ftv:f24', type: 'tv', name: 'France 24', poster: 'https://logo.example/f24.png' },
+        { id: 'ftv:only', type: 'tv', name: 'Chaîne Extension', genres: ['News'] },
+      ],
+    });
+  if (url.pathname.startsWith('/tv/stream/tv/'))
+    return send({
+      streams: [
+        {
+          name: 'Fixture TV',
+          title: 'HD',
+          url: `http://127.0.0.1:${port}/tv/live/${decodeURIComponent(url.pathname.split('/').pop()!.replace('.json', ''))}.m3u8`,
+          behaviorHints: { proxyHeaders: { request: { Referer: 'https://fixture.tv/' } } },
+        },
+      ],
+    });
   if (url.pathname === '/playlist.m3u') {
     res.writeHead(200, { 'Content-Type': 'audio/x-mpegurl' });
     return void res.end(playlist.replace('PORT', String(port)));
@@ -362,4 +388,22 @@ it('adult playlist entries follow the 18+ setting: hidden, mixed in, or alone', 
   expect((await live.liveHome('fr-FR')).onNow).toEqual([]);
   const id = (await live.liveHome('fr-FR')).playlist[0].id;
   expect((await live.liveChannel(id)).playable).toBe(true);
+});
+
+it('channels from a streaming extension join the live index and play through the relay', async () => {
+  updateSettings({ videoAddons: [`${base}/tv/manifest.json`] });
+  await live.refreshLiveNow();
+  const home = await live.liveHome('fr-FR');
+  expect(home.extensions.map((c) => c.name).sort()).toEqual(['Chaîne Extension', 'France 24']);
+  // France 24 is recognised: the index channel gets the extension's stream first.
+  const f24 = await live.liveChannel('France24.fr');
+  expect(f24.streams[0].label).toBe('Fixture TV · HD');
+  expect(unseal(f24.streams[0].url.split('/').pop()!)).toMatchObject({
+    url: `${base}/tv/live/ftv:f24.m3u8`,
+    headers: { Referer: 'https://fixture.tv/' },
+  });
+  const only = home.extensions.find((c) => c.name === 'Chaîne Extension')!;
+  expect((await live.liveChannel(only.id)).streams).toHaveLength(1);
+  expect(live.liveStatus().extensions).toMatchObject({ entries: 2, matched: 1 });
+  updateSettings({ videoAddons: [] });
 });

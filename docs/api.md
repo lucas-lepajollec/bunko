@@ -309,6 +309,7 @@ Channels come from three sources:
 
 - the public iptv-org index (channels, streams, feeds, logos, countries, blocklist), downloaded once a day into the shared `live.db` (`BUNKO_LIVE_INDEX_URL` overrides the address). Channels removed for DMCA reasons are never stored. The main feed's streams come first; other feeds are named;
 - the account's own M3U playlist (`livePlaylistUrl`, a secret), refreshed every 12 hours. Entries are matched by `tvg-id`, then by name and country. Xtream film and series entries are skipped, and `.ts` live links are played as `.m3u8`;
+- the account's streaming extensions that offer live TV (Stremio type `tv`): their `tv` catalogs needing no search text are read page by page (`skip`, at most 3,000 channels each) every 12 hours or when the extensions change, matched to the index like the playlist (`LiveHome.extensions`, `LiveStatus.extensions`), and asked for `/stream/tv/{id}.json` when a channel opens; those streams come after the playlist's and before the free ones, through the relay with their `proxyHeaders`;
 - XMLTV guides (`liveGuideUrls`, default xmltvfr.fr; plain or gzip; plus the playlist's `url-tvg`), refreshed every 6 hours and kept from one hour ago to 36 hours ahead.
 
 | Method and path          | Body / query                                          | Result                                                                                    |
