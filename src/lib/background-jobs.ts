@@ -100,8 +100,8 @@ const JOBS: Definition[] = [
   {
     id: 'catalog-linking',
     group: 'catalogs',
-    // Imported series, films and anime, and anime seasons: video kinds for now.
-    applies: video,
+    // Imported works of every kind (Kavita and Jellyfin), and anime seasons.
+    applies: () => true,
     next: catalogLinkingNext,
     run: requestCatalogLinking,
   },

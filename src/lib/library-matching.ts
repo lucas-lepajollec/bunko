@@ -6,7 +6,7 @@ import { wakeWorker } from './worker-events';
 import { coverContext } from './cover-state';
 import { indexedSeriesById } from './kavita-index';
 import { preferredSourceLanguage } from './source-preferences';
-import type { TrackedMedia } from '@/types/shared';
+import type { TrackedMedia, UnifiedMedia } from '@/types/shared';
 
 const marker = (id: number) => `library_catalog_match:${id}`;
 
@@ -91,56 +91,74 @@ export async function resolveQueuedCatalog(
         !ownsLease()
       )
         return;
-      if (
-        (
-          statement('SELECT off_catalog FROM tracked_media WHERE id=?').get(entry.id) as {
-            off_catalog: number;
-          }
-        ).off_catalog
-      )
-        return;
-      if (listTracked().some((other) => other.id !== entry.id && sameMedia(other.media, media)))
-        return;
-      // A second independent local reading identity must be reviewed instead of merged by guessing.
-      if (
-        statement('SELECT 1 FROM local_reader_chapters WHERE media_id IN (?,?) LIMIT 1').get(
-          media.id,
-          `@volume:${media.id}`,
-        )
-      )
-        return;
-      const oldId = current.media.id;
-      moveReading(oldId, media.id);
-      const canonical = { ...media, trackedId: current.id, kavitaSeriesId: series.seriesId };
-      statement('UPDATE imported_chapters SET media_json=? WHERE tracked_id=?').run(
-        JSON.stringify(canonical),
-        current.id,
-      );
-      // This is the same owned work receiving metadata: its validated pixels stay pinned.
-      const oldContext = coverContext(oldId, current.identity, current.coverChoice);
-      const newContext = coverContext(media.id, 'catalog', current.coverChoice);
-      for (const table of ['stored_covers', 'resolved_covers', 'kavita_cover_status'])
-        statement(`UPDATE ${table} SET context=? WHERE tracked_id=? AND context=?`).run(
-          newContext,
-          current.id,
-          oldContext,
-        );
-      statement(
-        'UPDATE tracked_media SET media_json=?,anilist_id=?,mangadex_id=?,title=?,type=?,kavita_series_id=?,source_match_at=NULL WHERE id=?',
-      ).run(
-        JSON.stringify(canonical),
-        media.anilistId,
-        media.mangadexId,
-        media.title,
-        media.type,
-        series.seriesId,
-        current.id,
-      );
+      adoptCatalogIdentity(current.id, current.media.id, media, series.seriesId);
     })();
     return getTracked(entry.id) ?? entry;
   } finally {
     if (!signal?.aborted && ownsLease()) finishLibraryMatch(entry.id, row.value);
   }
+}
+
+/**
+ * Give a work followed off-catalog (a Kavita series no catalog matched at import) its catalog
+ * identity: the same owned files and progress, with the catalog's metadata. Refused when the
+ * user detached it on purpose, when another entry already follows that work, or when the work
+ * already has local reader identities of its own (never merged by guessing).
+ */
+export function adoptCatalogIdentity(
+  trackedId: number,
+  fromId: string,
+  media: UnifiedMedia,
+  seriesId: number,
+): boolean {
+  return db().transaction(() => {
+    const current = getTracked(trackedId);
+    if (!current || current.media.id !== fromId || current.identity !== 'off-catalog') return false;
+    if (
+      (
+        statement('SELECT off_catalog FROM tracked_media WHERE id=?').get(trackedId) as {
+          off_catalog: number;
+        }
+      ).off_catalog
+    )
+      return false;
+    if (listTracked().some((other) => other.id !== trackedId && sameMedia(other.media, media)))
+      return false;
+    if (
+      statement('SELECT 1 FROM local_reader_chapters WHERE media_id IN (?,?) LIMIT 1').get(
+        media.id,
+        `@volume:${media.id}`,
+      )
+    )
+      return false;
+    moveReading(fromId, media.id);
+    const canonical = { ...media, trackedId, kavitaSeriesId: seriesId };
+    statement('UPDATE imported_chapters SET media_json=? WHERE tracked_id=?').run(
+      JSON.stringify(canonical),
+      trackedId,
+    );
+    // This is the same owned work receiving metadata: its validated pixels stay pinned.
+    const oldContext = coverContext(fromId, current.identity, current.coverChoice);
+    const newContext = coverContext(media.id, 'catalog', current.coverChoice);
+    for (const table of ['stored_covers', 'resolved_covers', 'kavita_cover_status'])
+      statement(`UPDATE ${table} SET context=? WHERE tracked_id=? AND context=?`).run(
+        newContext,
+        trackedId,
+        oldContext,
+      );
+    statement(
+      'UPDATE tracked_media SET media_json=?,anilist_id=?,mangadex_id=?,title=?,type=?,kavita_series_id=?,source_match_at=NULL WHERE id=?',
+    ).run(
+      JSON.stringify(canonical),
+      media.anilistId,
+      media.mangadexId,
+      media.title,
+      media.type,
+      seriesId,
+      trackedId,
+    );
+    return true;
+  })();
 }
 
 /**
@@ -158,6 +176,36 @@ export function moveReading(oldId: string, newId: string) {
     oldId,
   );
   statement('DELETE FROM reader_progress WHERE media_id=?').run(oldId);
+  statement(`INSERT INTO book_progress(media_id,file_key,part,offset,fraction,updated_at)
+    SELECT ?,file_key,part,offset,fraction,updated_at FROM book_progress WHERE media_id=?
+    ON CONFLICT(media_id,file_key) DO UPDATE SET part=excluded.part,offset=excluded.offset,
+    fraction=excluded.fraction,updated_at=excluded.updated_at WHERE excluded.updated_at>book_progress.updated_at`).run(
+    newId,
+    oldId,
+  );
+  statement('DELETE FROM book_progress WHERE media_id=?').run(oldId);
+  // "Continue" cards link to the reader with the work's id: point them at the new one.
+  const resume = statement('SELECT * FROM continue_items WHERE media_id=?').get(oldId) as
+    Record<string, unknown> | undefined;
+  if (resume) {
+    const href = String(resume.href)
+      .replaceAll(encodeURIComponent(oldId), encodeURIComponent(newId))
+      .replaceAll(oldId, newId);
+    statement(`INSERT INTO continue_items(media_id,media_json,kind,label,href,position,updated_at,hidden)
+      VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(media_id) DO UPDATE SET kind=excluded.kind,
+      label=excluded.label,href=excluded.href,position=excluded.position,updated_at=excluded.updated_at,
+      hidden=excluded.hidden WHERE excluded.updated_at>continue_items.updated_at`).run(
+      newId,
+      resume.media_json,
+      resume.kind,
+      resume.label,
+      href,
+      resume.position,
+      resume.updated_at,
+      resume.hidden,
+    );
+    statement('DELETE FROM continue_items WHERE media_id=?').run(oldId);
+  }
   if (
     !statement('SELECT 1 FROM local_reader_chapters WHERE media_id IN (?,?) LIMIT 1').get(
       newId,

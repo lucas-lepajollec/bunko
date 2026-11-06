@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { Check } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import type {
   AnimeSeason,
@@ -375,18 +376,24 @@ export function EpisodeList({
                     </span>
                   )}
                 </button>
-                <label className="absolute top-2 left-2 flex size-8 items-center justify-center rounded-full bg-black/55 backdrop-blur-sm">
-                  <input
-                    type="checkbox"
-                    checked={seen}
-                    disabled={!entry || busy || upcoming}
-                    onChange={() =>
-                      onWatched(seen ? (absolute > 1 ? absolute - 1 : null) : absolute)
-                    }
-                    aria-label={t('episodes.markWatched', { n: n(e.number) })}
-                    className="size-4 accent-[var(--accent)]"
-                  />
-                </label>
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={seen}
+                  disabled={!entry || busy || upcoming}
+                  onClick={() => onWatched(seen ? (absolute > 1 ? absolute - 1 : null) : absolute)}
+                  aria-label={t('episodes.markWatched', { n: n(e.number) })}
+                  title={t('episodes.markWatched', { n: n(e.number) })}
+                  className={cx(
+                    'absolute top-2 left-2 flex size-7 items-center justify-center rounded-full transition-[background-color,color,opacity] disabled:pointer-events-none',
+                    seen
+                      ? 'bg-fg text-bg'
+                      : 'bg-black/50 text-white/70 opacity-0 ring-1 ring-white/35 backdrop-blur-sm group-hover:opacity-100 hover:bg-black/70 hover:text-white focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
+                    upcoming && 'hidden',
+                  )}
+                >
+                  <Check size={15} strokeWidth={2.75} aria-hidden />
+                </button>
                 {seen && <span className="bg-fg absolute inset-x-0 bottom-0 h-1" aria-hidden />}
               </div>
               <span className="flex min-w-0 flex-col px-0.5">

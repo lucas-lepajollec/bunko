@@ -163,13 +163,17 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
     (r) => !kind || mediaKind(r.media) === kind,
   );
   const home = normalizeHome(composeHome(heroArtwork(pool), top, kind));
-  // Series and films have no release feed yet: the hero shows the week's trending backdrops.
-  if (kind && KINDS[kind].catalog === 'tmdb' && !home.hero.length)
-    home.hero = home.top
-      .filter((m) => m.bannerUrl)
+  // No recent release (web novels, novels, books, series and films…): the hero shows the
+  // kind's trending titles from the catalog instead of an empty stage.
+  if (kind && !home.hero.length) {
+    const tmdb = KINDS[kind].catalog === 'tmdb';
+    home.hero = [
+      ...home.top.filter((m) => m.bannerUrl),
+      ...(tmdb ? [] : home.top.filter((m) => !m.bannerUrl && m.coverUrl)),
+    ]
       .slice(0, 8)
       .map((m) => ({
-        id: `tmdb:${m.id}`,
+        id: `${tmdb ? 'tmdb' : 'top'}:${m.id}`,
         media: m,
         chapter: null,
         volume: null,
@@ -177,9 +181,11 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
         group: null,
         releasedAt: m.startDate ?? new Date().toISOString().slice(0, 10),
         hasTime: false,
-        provider: 'tmdb' as const,
+        provider: tmdb ? ('tmdb' as const) : ('anilist' as const),
         trackedId: m.trackedId ?? null,
+        ...(tmdb ? {} : { featured: true as const }),
       }));
+  }
   return {
     ...home,
     pending: releases.pending || ranking.pending,

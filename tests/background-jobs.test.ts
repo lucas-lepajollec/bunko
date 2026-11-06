@@ -24,9 +24,9 @@ it('lists only the jobs that apply, with their last run', async () => {
   updateSettings({ suwayomiUrl: 'http://suwayomi.test' });
   expect(ids()).toContain('update-check');
   expect(ids()).toContain('source-matching');
-  // Video kinds off: no anime work.
+  // Reading kinds only: Kavita works are linked to the catalog too.
   updateSettings({ universes: ['manga'] });
-  expect(ids()).not.toContain('catalog-linking');
+  expect(ids()).toContain('catalog-linking');
 
   await recorded('covers', async () => undefined);
   await expect(

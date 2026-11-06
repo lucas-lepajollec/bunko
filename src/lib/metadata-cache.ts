@@ -7,7 +7,7 @@ import { statement, dataDir, db } from './db';
 // Bump when a persisted provider/response contract changes. Older home feeds can be repaired;
 // all other unversioned/incompatible entries are cold misses, never served as current responses.
 const SCHEMA = 1;
-const MAX_ENTRIES = 1000;
+const MAX_ENTRIES = 4000;
 const MAX_BYTES = 64 * 1024 * 1024;
 const scope = globalThis as typeof globalThis & {
   __bunkoMetadataLoads?: Map<string, Promise<unknown>>;
@@ -115,8 +115,12 @@ export function saveMetadata(key: string, value: unknown, updatedAt = Date.now()
       "SELECT bytes,entries FROM cache_usage WHERE name='metadata_cache'",
     ).get() as { bytes: number; entries: number };
     if (usage.bytes <= MAX_BYTES && usage.entries <= MAX_ENTRIES) return;
+    // Catalog pages and home shelves are evicted last: browsing many sheets and searches must
+    // not push out what the catalog shows when AniList is briefly unavailable.
     const rows = statement(
-      'SELECT key,bytes FROM metadata_cache ORDER BY updated_at DESC,key DESC',
+      `SELECT key,bytes FROM metadata_cache ORDER BY
+        CASE WHEN key LIKE 'discover:%' OR key LIKE 'home:%' THEN 0 ELSE 1 END,
+        updated_at DESC,key DESC`,
     ).all() as { key: string; bytes: number }[];
     let bytes = 0;
     rows.forEach((row, i) => {

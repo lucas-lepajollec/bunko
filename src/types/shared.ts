@@ -341,6 +341,8 @@ export interface ChapterRelease {
   season?: number | null;
   /** Followed title in the library, if any. */
   trackedId: number | null;
+  /** Not a release: a catalog title shown in the hero of a kind without recent releases. */
+  featured?: true;
 }
 /** GET /api/releases?kind=&genre=&library=1&cursor= */
 export interface ReleasesPage extends LoadState {
