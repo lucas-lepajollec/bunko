@@ -19,6 +19,7 @@ import { refreshReleases } from './releases';
 import { sourceMatchQueue } from './source-match-state';
 import { activeTranslations } from './translations';
 import { catalogLinkingNext, requestCatalogLinking } from './catalog-linking';
+import { relinkMisses } from './kavita-track';
 
 const MINUTE = 60_000;
 const after = (iso: string | null, ms: number) =>
@@ -162,6 +163,7 @@ export function backgroundJobs(): BackgroundJob[] {
         failed: last?.failed ?? false,
         nextAt: j.next(),
         pending: j.pending?.() ?? null,
+        ...(j.id === 'catalog-linking' ? { unlinked: relinkMisses() } : {}),
       };
     });
 }

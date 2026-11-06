@@ -217,6 +217,16 @@ function Catalog() {
   const searchItems = (searched.data?.results ?? []).filter((m) => inUniverse(kind, m));
   const dated = sort === 'new' || Boolean(season) || Boolean(year);
 
+  const sortSelect =
+    view !== 'chapters' ? (
+      <Select
+        label={t('catalog.sort')}
+        value={sort}
+        onChange={(v) => set('sort', v)}
+        options={SORTS.map((x) => ({ value: x, label: t(`sort.${x}`) }))}
+        className="shrink-0"
+      />
+    ) : null;
   return (
     <Page>
       <PageTitle
@@ -268,9 +278,11 @@ function Catalog() {
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2 text-sm">
+          {/* View, sort and filters share one row while they fit; otherwise the filters (sort
+              first) take their own row, which scrolls sideways on phones. */}
+          <div className="flex flex-col gap-2.5 md:flex-row md:flex-wrap md:items-center md:gap-2">
             <div
-              className="flex rounded-full bg-white/[0.06] p-0.5"
+              className="flex shrink-0 self-start rounded-full bg-white/[0.06] p-0.5 text-sm md:self-auto"
               role="group"
               aria-label={t('catalog.view')}
             >
@@ -315,33 +327,26 @@ function Catalog() {
                   </button>
                 ))}
             </div>
-            <div className="ml-auto flex items-center gap-2">
-              {view !== 'chapters' && (
-                <Select
-                  label={t('catalog.sort')}
-                  value={sort}
-                  onChange={(v) => set('sort', v)}
-                  options={SORTS.map((x) => ({ value: x, label: t(`sort.${x}`) }))}
-                />
-              )}
-            </div>
+            {!tmdbKind || settings.data?.catalogs?.configured.tmdb ? (
+              <CatalogFilterBar
+                kind={kind}
+                values={filterValues}
+                releasesView={view === 'chapters'}
+                className="min-w-0 md:flex-auto"
+                leading={sortSelect}
+                onChange={(patch) => {
+                  const [first, ...rest] = Object.entries(patch);
+                  set(first[0], first[1], Object.fromEntries(rest));
+                }}
+              />
+            ) : (
+              sortSelect
+            )}
           </div>
           {tmdbKind && settings.data && !settings.data.catalogs?.configured.tmdb && (
             <p className="text-mid rounded-2xl bg-white/[0.04] p-4 text-sm leading-relaxed">
               {t('tmdb.missing')}
             </p>
-          )}
-          {/* Series and films filter through TMDB once its key is set. */}
-          {(!tmdbKind || settings.data?.catalogs?.configured.tmdb) && (
-            <CatalogFilterBar
-              kind={kind}
-              values={filterValues}
-              releasesView={view === 'chapters'}
-              onChange={(patch) => {
-                const [first, ...rest] = Object.entries(patch);
-                set(first[0], first[1], Object.fromEntries(rest));
-              }}
-            />
           )}
         </>
       )}

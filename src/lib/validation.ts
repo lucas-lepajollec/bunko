@@ -449,7 +449,7 @@ export const trackPatch = z
 export const trackBulk = z
   .object({
     ids: z.array(id).min(1).max(5000),
-    action: z.enum(['remove', 'complete', 'status', 'favorite', 'unfavorite']),
+    action: z.enum(['remove', 'complete', 'status', 'favorite', 'unfavorite', 'adult', 'notAdult']),
     status: readingStatus.optional(),
   })
   .strict()

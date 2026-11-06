@@ -153,3 +153,14 @@ input[type='search']::-webkit-search-cancel-button {
 .player-controls-shown video::cue {
   line-height: 1.35;
 }
+@keyframes stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[stage-in_600ms_ease-out\] {
+    animation: none;
+  }
+}

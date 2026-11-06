@@ -1,15 +1,15 @@
 'use client';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useState } from 'react';
-import type { TrackedMedia } from '@/types/shared';
+import type { PublicSettings, TrackedMedia } from '@/types/shared';
 import { isVideoKind, kindOfMedia } from '@/domain/kinds';
-import { send } from '@/lib/client/api';
+import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Select } from './select';
 import { toast } from './notify';
 import { Spinner, cx, errorText } from './ui';
 
-type Action = 'remove' | 'complete' | 'status' | 'favorite' | 'unfavorite';
+type Action = 'remove' | 'complete' | 'status' | 'favorite' | 'unfavorite' | 'adult' | 'notAdult';
 type Status = TrackedMedia['status'];
 const STATUSES: Status[] = ['READING', 'PLANNING', 'PAUSED', 'COMPLETED', 'DROPPED'];
 
@@ -74,6 +74,9 @@ export function SelectionBar({
       : t(key);
   };
   const allFavorite = count > 0 && selected.every((e) => e.favorite);
+  // Marking works 18+ is offered only to accounts that show 18+ content.
+  const adultOn = Boolean(useApi<PublicSettings>('/api/settings').data?.adultContent);
+  const allAdult = count > 0 && selected.every((e) => e.media.adult);
   const run = async (action: Action, status?: Status) => {
     setBusy(true);
     try {
@@ -96,6 +99,7 @@ export function SelectionBar({
   };
   const action =
     'inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-white/[0.1] px-4 text-[13px] whitespace-nowrap transition-colors hover:bg-white/[0.16] disabled:opacity-40';
+  const adultAction = allAdult ? 'notAdult' : 'adult';
   return (
     <>
       <div
@@ -128,8 +132,8 @@ export function SelectionBar({
             {t('library.selectDone')}
           </button>
         </div>
-        {/* One scrolling row on phones, wrapped on wider screens. */}
-        <div className="no-scrollbar -mx-3 flex gap-2 overflow-x-auto px-3 md:flex-wrap">
+        {/* Actions wrap onto as many lines as the screen needs (no hidden scroll on phones). */}
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             disabled={!count || busy}
@@ -141,13 +145,17 @@ export function SelectionBar({
           <Select
             label={t('bulk.status')}
             value=""
-            size="sm"
+            size="md"
             onChange={(v) => v && count && setAsking({ action: 'status', status: v as Status })}
             options={[
               { value: '', label: t('bulk.status') },
               ...STATUSES.map((s) => ({ value: s, label: statusLabel(s) })),
             ]}
-            className={cx('shrink-0', (!count || busy) && 'pointer-events-none opacity-40')}
+            className={cx(
+              // Same size and tone as the action buttons beside it.
+              'h-10 shrink-0 bg-white/[0.1] pr-3.5 pl-4 text-[13px] hover:bg-white/[0.16]',
+              (!count || busy) && 'pointer-events-none opacity-40',
+            )}
           />
           <button
             type="button"
@@ -157,6 +165,16 @@ export function SelectionBar({
           >
             {t(allFavorite ? 'bulk.unfavorite' : 'bulk.favorite')}
           </button>
+          {adultOn && (
+            <button
+              type="button"
+              disabled={!count || busy}
+              onClick={() => void run(adultAction)}
+              className={action}
+            >
+              {t(`bulk.${adultAction}`)}
+            </button>
+          )}
           <button
             type="button"
             disabled={!count || busy}

@@ -887,6 +887,14 @@ export interface BackgroundJob {
   nextAt: string | null;
   /** Work waiting or in progress (works to check, series to import…). */
   pending: { done: number; total: number } | null;
+  /** Catalog linking: works it looked up and left off-catalog, with the reason. */
+  unlinked?: {
+    mediaId: string;
+    title: string;
+    miss: 'no-candidate' | 'below-threshold' | 'ambiguous' | 'unreachable';
+    /** Closest catalog title found, with its score. */
+    best: string | null;
+  }[];
 }
 export interface LibraryActivity {
   /** Everything running now, for the header indicator and notification panel. */
@@ -1507,5 +1515,11 @@ export interface LiveStatus {
   programmes: number;
   indexAt: string | null;
   guides: { url: string; at: string | null; error: string | null }[];
-  playlist: { configured: boolean; entries: number; matched: number; at: string | null; error: string | null };
+  playlist: {
+    configured: boolean;
+    entries: number;
+    matched: number;
+    at: string | null;
+    error: string | null;
+  };
 }

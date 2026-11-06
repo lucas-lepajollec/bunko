@@ -123,7 +123,8 @@ function Library() {
   const video = isVideoKind(kind);
   const vt = (key: string, vars?: Record<string, string | number>) =>
     video && t(`${key}.video`) !== `${key}.video` ? t(`${key}.video`, vars) : t(key, vars);
-  const shownShelf: View = video ? 'ALL' : shelf;
+  // Kavita series to import belong to reading kinds; every other tab applies to all kinds.
+  const shownShelf: View = video && shelf === 'KAVITA' ? 'ALL' : shelf;
   // Newest release / air date first by default, for every kind.
   const [sort, setSort] = useState<Sort>('released');
   // Selection mode: tapping a work selects it; the bottom bar acts on the selection.
@@ -161,7 +162,9 @@ function Library() {
     0,
   );
   const ownedVolumes = entries.reduce((sum, e) => sum + (e.ownedVolumes?.length ?? 0), 0);
-  const unownedCount = entries.filter((entry) => !hasOwnedFiles(entry)).length;
+  const ofKindNow = entries.filter((e) => ofKind(e, kind));
+  const unownedCount = ofKindNow.filter((entry) => !hasOwnedFiles(entry)).length;
+  const videoNews = video ? ofKindNow.filter(episodesToWatch) : [];
   // Works per kind: shown next to the total and on each kind chip.
   const kindCounts = useMemo(() => {
     const c = new Map<Kind, number>();
@@ -243,31 +246,31 @@ function Library() {
         onChange={setShelf}
         label={t('library.statusLabel')}
         items={[
-          { id: 'ALL' as View, label: t('library.all'), count: entries.length },
-          // Owned files, chapter updates and Kavita belong to reading kinds.
-          ...(video
-            ? []
-            : [
-                { id: 'UNOWNED' as View, label: t('library.unowned'), count: unownedCount },
+          { id: 'ALL' as View, label: t('library.all'), count: ofKindNow.length },
+          { id: 'UNOWNED' as View, label: t('library.unowned'), count: unownedCount },
+          {
+            id: 'UPDATES' as View,
+            label: t('library.updates'),
+            count: (video ? videoNews.length : pendingUpdates) || undefined,
+          },
+          // Kavita series waiting to be followed: reading kinds only.
+          ...(!video && unmatched.data?.length
+            ? [
                 {
-                  id: 'UPDATES' as View,
-                  label: t('library.updates'),
-                  count: pendingUpdates || undefined,
+                  id: 'KAVITA' as View,
+                  label: t('library.inKavita'),
+                  count: unmatched.data.length,
                 },
-                ...(unmatched.data?.length
-                  ? [
-                      {
-                        id: 'KAVITA' as View,
-                        label: t('library.inKavita'),
-                        count: unmatched.data.length,
-                      },
-                    ]
-                  : []),
-              ]),
+              ]
+            : []),
         ]}
       />
       {shownShelf === 'UPDATES' ? (
-        <LibraryUpdates />
+        video ? (
+          <VideoNews entries={videoNews} />
+        ) : (
+          <LibraryUpdates kind={kind} />
+        )
       ) : shownShelf === 'KAVITA' ? (
         <KavitaUnmatched
           series={unmatched.data}
@@ -470,30 +473,29 @@ function Library() {
                     {e.title}
                   </span>
                   <ProgressBar progress={e.progress} color={e.media.color} />
-                  <span className="text-muted -mt-1 hidden truncate text-xs md:block">
-                    {e.progress?.read != null && (
-                      <>
-                        {t(
-                          e.type === 'ANIME'
-                            ? 'library.watchedN'
-                            : e.unit === 'volume'
-                              ? 'library.readNVol'
-                              : 'library.readN',
-                          { n: n(e.progress.read) },
-                        )}
-                        {e.type !== 'ANIME' && ' · '}
-                      </>
-                    )}
-                    {e.type !== 'ANIME' && <OwnedInventory entry={e} compact />}
-                    {Boolean(e.progress?.released) && (
-                      <>
-                        {' · '}
-                        {t(e.unit === 'volume' ? 'library.releasedNVol' : 'library.releasedN', {
-                          n: n(e.progress.released!),
-                        })}
-                      </>
-                    )}
-                  </span>
+                  {e.type === 'ANIME' ? (
+                    <VideoMeta entry={e} />
+                  ) : (
+                    <span className="text-muted -mt-1 hidden truncate text-xs md:block">
+                      {e.progress?.read != null && (
+                        <>
+                          {t(e.unit === 'volume' ? 'library.readNVol' : 'library.readN', {
+                            n: n(e.progress.read),
+                          })}
+                          {' · '}
+                        </>
+                      )}
+                      <OwnedInventory entry={e} compact />
+                      {Boolean(e.progress?.released) && (
+                        <>
+                          {' · '}
+                          {t(e.unit === 'volume' ? 'library.releasedNVol' : 'library.releasedN', {
+                            n: n(e.progress.released!),
+                          })}
+                        </>
+                      )}
+                    </span>
+                  )}
                 </>
               );
               return selecting ? (
@@ -540,6 +542,89 @@ function Library() {
         </>
       )}
     </Page>
+  );
+}
+
+/** A followed series or anime with aired (or owned) episodes not watched yet. */
+function episodesToWatch(e: TrackedMedia) {
+  if (e.status === 'COMPLETED' || e.status === 'DROPPED') return false;
+  if (e.media.format === 'MOVIE' || e.media.format === 'ANIMATION_FILM') return false;
+  const read = e.progress?.read ?? 0;
+  return Math.max(e.progress?.released ?? 0, e.progress?.owned ?? 0) > read;
+}
+
+/** "New" for series and anime: episodes out that are not watched yet, most behind first. */
+function VideoNews({ entries }: { entries: TrackedMedia[] }) {
+  const { t, n } = useI18n();
+  const left = (e: TrackedMedia) =>
+    Math.max(e.progress?.released ?? 0, e.progress?.owned ?? 0) - (e.progress?.read ?? 0);
+  if (!entries.length) return <Empty title={t('library.videoNewsEmpty')} />;
+  return (
+    <div>
+      {[...entries]
+        .sort((a, b) => left(b) - left(a))
+        .map((e) => (
+          <MediaLink
+            key={e.id}
+            media={e.media}
+            className="border-line flex items-center gap-3 border-b py-3 md:gap-5"
+          >
+            <Cover src={e.coverUrl} fallbacks={e.coverFallbacks} className="w-10 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold">{e.title}</span>
+              <span className="text-muted text-sm">
+                {t('library.episodesLeft', { count: n(left(e)) })}
+                {e.progress?.read ? ` · ${t('library.watchedN', { n: n(e.progress.read) })}` : ''}
+              </span>
+            </span>
+            <span aria-hidden className="text-muted">
+              ›
+            </span>
+          </MediaLink>
+        ))}
+    </div>
+  );
+}
+
+/**
+ * What a series, anime or film card says under its title: episodes watched out of the total
+ * (or the film's state), what the media server holds, and whether it is still airing.
+ */
+function VideoMeta({ entry: e }: { entry: TrackedMedia }) {
+  const { t, n } = useI18n();
+  const m = e.media;
+  const film = m.format === 'MOVIE' || m.format === 'ANIMATION_FILM';
+  const read = e.progress?.read ?? 0;
+  const total = m.episodes ?? e.progress?.released ?? null;
+  const airing = m.status === 'RELEASING' || m.status === 'Returning Series';
+  const parts: { text: string; strong?: boolean }[] = film
+    ? [
+        { text: read > 0 ? t('library.filmSeen') : t('library.filmToWatch'), strong: read > 0 },
+        ...(m.year ? [{ text: String(m.year) }] : []),
+      ]
+    : [
+        read > 0
+          ? {
+              text: total
+                ? t('library.watchedOf', { n: n(read), total: n(total) })
+                : t('library.watchedN', { n: n(read) }),
+              strong: true,
+            }
+          : { text: total ? t('library.episodesN', { n: n(total) }) : t('library.notStarted') },
+        ...(e.progress?.owned
+          ? [{ text: t('library.ownedEpisodes', { n: n(e.progress.owned) }) }]
+          : []),
+        ...(airing ? [{ text: t('library.airing') }] : []),
+      ];
+  return (
+    <span className="text-muted -mt-1 hidden truncate text-xs md:block">
+      {parts.map((p, i) => (
+        <span key={i} className={cx(p.strong && 'text-soft')}>
+          {i > 0 && ' · '}
+          {p.text}
+        </span>
+      ))}
+    </span>
   );
 }
 

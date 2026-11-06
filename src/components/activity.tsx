@@ -6,7 +6,15 @@ import { useUniverse } from '@/lib/client/universe';
 import { useNotices } from '@/lib/client/notices';
 import { useSWRConfig } from 'swr';
 import type { ActivityTask, BackgroundJob, LibraryActivity } from '@/types/shared';
-import { send, useApi, libraryKeys, releaseViewKey, progressViewKey } from '@/lib/client/api';
+import Link from 'next/link';
+import {
+  send,
+  useApi,
+  libraryKeys,
+  mediaHref,
+  releaseViewKey,
+  progressViewKey,
+} from '@/lib/client/api';
 import { Play } from 'lucide-react';
 import { toast } from './notify';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -302,9 +310,41 @@ function BackgroundJobs() {
                 )}
               </button>
             </div>
+            {job.unlinked && job.unlinked.length > 0 && <Unlinked items={job.unlinked} />}
           </Fragment>
         );
       })}
     </div>
+  );
+}
+
+/** Works the catalog linking left off-catalog: why, and a way to pick the work by hand. */
+function Unlinked({ items }: { items: NonNullable<BackgroundJob['unlinked']> }) {
+  const { t, n } = useI18n();
+  return (
+    <details className="group/unlinked -mt-1 mb-1 text-xs">
+      <summary className="text-muted hover:text-fg cursor-pointer list-none py-1 [&::-webkit-details-marker]:hidden">
+        {t('jobs.unlinked', { count: n(items.length) })}
+        <span className="ml-1 inline-block transition-transform group-open/unlinked:rotate-90">
+          ›
+        </span>
+      </summary>
+      <ul className="flex max-h-56 flex-col overflow-y-auto overscroll-contain pr-1">
+        {items.map((u) => (
+          <li key={u.mediaId}>
+            <Link
+              href={`${mediaHref(u.mediaId)}/settings?s=catalog`}
+              className="hover:bg-white/[0.05] flex flex-col rounded-lg px-2 py-1.5"
+            >
+              <span className="text-fg truncate">{u.title}</span>
+              <span className="text-muted truncate">
+                {t(`jobs.miss.${u.miss}`)}
+                {u.best && u.miss !== 'unreachable' ? ` · ${u.best}` : ''}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
