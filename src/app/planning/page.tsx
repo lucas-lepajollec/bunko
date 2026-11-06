@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import type { DiscoverKind, PlanningItem, PlanningWeek } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { useUniverse } from '@/lib/client/universe';
+import { LiveGuideView } from '@/components/live';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from '@/components/load-notice';
 import { Page } from '@/components/shell';
@@ -27,8 +28,21 @@ const shift = (iso: string, days: number) => {
 export default function PlanningPage() {
   return (
     <Suspense>
-      <Planning />
+      <PlanningSwitch />
     </Suspense>
+  );
+}
+
+/** Live TV: the planning is the TV guide. */
+function PlanningSwitch() {
+  const universe = useUniverse();
+  if (!universe.ready) return null;
+  return universe.live ? (
+    <Page>
+      <LiveGuideView />
+    </Page>
+  ) : (
+    <Planning />
   );
 }
 

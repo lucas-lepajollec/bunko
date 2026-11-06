@@ -689,6 +689,16 @@ export interface Settings {
    * the mix in "Everything". Always holds every kind (missing ones are appended).
    */
   kindOrder: Exclude<DiscoverKind, 'all'>[];
+  /** Live TV in the kinds menu (its own universe, never part of "everything"). Default true. */
+  liveEnabled: boolean;
+  /** The interface shows live TV (chosen from the kinds menu). */
+  liveMode: boolean;
+  /** Countries of the live home (index codes); empty = the browser's country. */
+  liveCountries: string[];
+  /** The user's own M3U playlist (operator, subscriptions); may hold credentials. */
+  livePlaylistUrl: string;
+  /** XMLTV guides (plain or .gz). */
+  liveGuideUrls: string[];
   /** Where outside reading progress is read from (Bunko's own reader always counts). */
   progressSource: 'suwayomi' | 'kavita';
   favoriteSourceIds: string[];
@@ -712,7 +722,8 @@ export type SecretSetting =
   | 'metronPassword'
   | 'rakutenApplicationId'
   | 'rakutenAccessKey'
-  | 'hardcoverToken';
+  | 'hardcoverToken'
+  | 'livePlaylistUrl';
 export type PublicSettings = Omit<Settings, SecretSetting> & {
   secretsConfigured: Record<SecretSetting, boolean>;
   /** Shared availability is visible to members; credential changes/probes require an admin. */
@@ -1428,4 +1439,71 @@ export interface BookProgressUpdate {
   part: number;
   offset: number;
   fraction: number;
+}
+
+/** Live TV: a channel of the public index or of the user's own playlist. */
+export interface LiveProgramme {
+  title: string;
+  subtitle: string | null;
+  description: string | null;
+  category: string | null;
+  start: string;
+  stop: string;
+  image: string | null;
+}
+export interface LiveChannel {
+  /** Index id (`TF1.fr`) or `m3u:<key>` for a playlist channel the index does not know. */
+  id: string;
+  name: string;
+  logo: string | null;
+  /** ISO country code of the index (`UK` for the United Kingdom). */
+  country: string | null;
+  categories: string[];
+  /** A stream can be played (free stream or the user's playlist). */
+  playable: boolean;
+  /** The user's playlist provides it (a subscription). */
+  fromPlaylist: boolean;
+  quality: string | null;
+  now: LiveProgramme | null;
+  next: LiveProgramme | null;
+  favorite: boolean;
+}
+export interface LiveStreamChoice {
+  label: string;
+  quality: string | null;
+  fromPlaylist: boolean;
+  /** Bunko's relay address for this stream. */
+  url: string;
+}
+export interface LiveChannelDetail extends LiveChannel {
+  website: string | null;
+  network: string | null;
+  schedule: LiveProgramme[];
+  streams: LiveStreamChoice[];
+}
+export interface LiveHome {
+  /** The channel index is being downloaded for the first time. */
+  pending: boolean;
+  countries: string[];
+  onNow: LiveChannel[];
+  favorites: LiveChannel[];
+  playlist: LiveChannel[];
+  shelves: { category: string; channels: LiveChannel[] }[];
+}
+export interface LiveCatalog {
+  pending: boolean;
+  channels: LiveChannel[];
+  total: number;
+  page: number;
+  pageSize: number;
+  countries: { code: string; name: string; flag: string | null; count: number }[];
+  categories: { id: string; count: number }[];
+}
+export interface LiveStatus {
+  channels: number;
+  playable: number;
+  programmes: number;
+  indexAt: string | null;
+  guides: { url: string; at: string | null; error: string | null }[];
+  playlist: { configured: boolean; entries: number; matched: number; at: string | null; error: string | null };
 }

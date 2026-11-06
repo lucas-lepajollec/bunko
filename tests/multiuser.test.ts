@@ -18,6 +18,8 @@ const directory = mkdtempSync(path.join(tmpdir(), 'bunko-tenants-'));
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
 process.env.BUNKO_WORKER = 'false';
+// Live TV routes must not reach the public channel index: refused at once (private address).
+process.env.BUNKO_LIVE_INDEX_URL = 'http://127.0.0.1:9/api';
 const { settleCatalogTasks } = await import('./tenant-fixture');
 const { inTenant, tenantId, tenantContext, tenantPath } = await import('@/lib/tenant-context');
 const { accountsDb } = await import('@/lib/accounts-store');

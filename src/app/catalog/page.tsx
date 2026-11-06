@@ -1,7 +1,7 @@
 'use client';
 import { KIND_IDS, KINDS as KIND_DEFS, isVideoKind } from '@/domain/kinds';
 import { Select } from '@/components/select';
-import { Suspense, useEffect } from 'react';
+import { Suspense, useCallback, useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import useSWRInfinite from 'swr/infinite';
 import Link from 'next/link';
@@ -22,6 +22,7 @@ import { Page } from '@/components/shell';
 import { PosterCard } from '@/components/media';
 import { ReleaseCard } from '@/components/releases';
 import { LoadNotice } from '@/components/load-notice';
+import { LiveCatalogView } from '@/components/live';
 import { CatalogFilterBar, type FilterValues } from '@/components/catalog-filters';
 import { Empty, ErrorNote, PageTitle, PosterSkeletons, cx, smallButton } from '@/components/ui';
 
@@ -31,8 +32,35 @@ const SORTS: DiscoverSort[] = ['trending', 'popular', 'score', 'new'];
 export default function CatalogPage() {
   return (
     <Suspense>
-      <Catalog />
+      <CatalogSwitch />
     </Suspense>
+  );
+}
+
+function CatalogSwitch() {
+  const universe = useUniverse();
+  if (!universe.ready) return null;
+  return universe.live ? <LiveCatalogPage /> : <Catalog />;
+}
+
+/** Live TV: every channel, by country and category. */
+function LiveCatalogPage() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const set = useCallback(
+    (key: string, value: string) => {
+      const next = new URLSearchParams(params.toString());
+      if (value) next.set(key, value);
+      else next.delete(key);
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    },
+    [params, router, pathname],
+  );
+  return (
+    <Page>
+      <LiveCatalogView params={params} set={set} />
+    </Page>
   );
 }
 
@@ -358,7 +386,9 @@ function Catalog() {
                     ? 'catalog.noReleases'
                     : 'catalog.noReleases.any',
                 )}
-              >{t('home.noReleasesBody')}</Empty>
+              >
+                {t('home.noReleasesBody')}
+              </Empty>
             )}
           {releases.data?.[releases.data.length - 1]?.nextCursor && !releasesMore && (
             <button

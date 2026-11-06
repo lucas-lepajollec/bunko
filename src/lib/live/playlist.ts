@@ -1,0 +1,207 @@
+import { createHash } from 'node:crypto';
+import { AppError } from '../errors';
+import { db, statement } from '../db';
+import { readCapped, safeFetch } from '../safe-fetch';
+import { getSettings } from '../settings';
+import { tenantState } from '../tenant-context';
+import { foldName, liveDb } from './store';
+
+/**
+ * The user's own M3U playlist (an operator's or a subscription's): its live channels are matched
+ * to the index by guide id (`tvg-id`) or name, so subscribed channels become playable with their
+ * guide. Video-on-demand entries of Xtream-style playlists are left out.
+ */
+export const PLAYLIST_TTL = 12 * 3600_000;
+const MAX_ENTRIES = 20_000;
+
+export interface PlaylistEntry {
+  name: string;
+  logo: string | null;
+  group: string | null;
+  tvgId: string | null;
+  url: string;
+  referrer: string | null;
+  userAgent: string | null;
+}
+
+const attr = (line: string, name: string) =>
+  new RegExp(`${name}="([^"]*)"`, 'i').exec(line)?.[1]?.trim() || null;
+const web = (value: string | null) =>
+  value && /^https?:\/\/\S+$/i.test(value) && value.length < 4000 ? value : null;
+
+export function parseM3u(text: string): { entries: PlaylistEntry[]; guide: string | null } {
+  const lines = text.split(/\r?\n/);
+  const guide = web(attr(lines[0] ?? '', 'url-tvg') ?? attr(lines[0] ?? '', 'x-tvg-url'));
+  const entries: PlaylistEntry[] = [];
+  let info: string | null = null;
+  let referrer: string | null = null;
+  let userAgent: string | null = null;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('#EXTINF')) {
+      info = line;
+      referrer = null;
+      userAgent = null;
+    } else if (/^#EXTVLCOPT:http-referr?er=/i.test(line))
+      referrer = web(line.split('=').slice(1).join('='));
+    else if (/^#EXTVLCOPT:http-user-agent=/i.test(line))
+      userAgent = line.split('=').slice(1).join('=').slice(0, 500);
+    else if (!line.startsWith('#') && info) {
+      const url = web(line);
+      // Xtream playlists also list films and series: only live channels are kept.
+      if (url && !/\/(movie|series)\//i.test(url)) {
+        const name = (
+          info.split(',').slice(1).join(',').trim() ||
+          attr(info, 'tvg-name') ||
+          ''
+        ).slice(0, 200);
+        if (name)
+          entries.push({
+            name,
+            logo: web(attr(info, 'tvg-logo')),
+            group: attr(info, 'group-title')?.slice(0, 120) ?? null,
+            tvgId: attr(info, 'tvg-id')?.slice(0, 200) ?? null,
+            url,
+            referrer,
+            userAgent,
+          });
+      }
+      info = null;
+      if (entries.length >= MAX_ENTRIES) break;
+    }
+  }
+  return { entries, guide };
+}
+
+/** "FR: TF1 HD", "TF1 FHD", "|FR| TF1" → "tf1"; a leading country tag is returned apart. */
+export function cleanName(name: string): { folded: string; country: string | null } {
+  let rest = name;
+  let country: string | null = null;
+  const tag = /^\s*[|[(]?\s*([A-Z]{2})\s*[|\]):-]\s*/i.exec(rest);
+  if (tag) {
+    country = tag[1].toUpperCase();
+    rest = rest.slice(tag[0].length);
+  }
+  rest = rest.replace(/\b(f?hd|uhd|4k|sd|hevc|h265|1080p?|720p?|backup|\+1)\b/gi, ' ');
+  return { folded: foldName(rest), country };
+}
+
+function matchEntries(entries: PlaylistEntry[]) {
+  const rows = liveDb().prepare('SELECT id, country, folded FROM live_channels').all() as {
+    id: string;
+    country: string | null;
+    folded: string;
+  }[];
+  const ids = new Map(rows.map((r) => [r.id.toLowerCase(), r.id]));
+  const names = new Map<string, string>();
+  for (const r of rows)
+    for (const n of r.folded.split(' '))
+      if (n) {
+        if (!names.has(`${n}|${r.country}`)) names.set(`${n}|${r.country}`, r.id);
+        if (!names.has(n)) names.set(n, r.id);
+      }
+  return entries.map((e) => {
+    const byId = e.tvgId ? ids.get(e.tvgId.replace(/@.*$/, '').toLowerCase()) : undefined;
+    if (byId) return byId;
+    const { folded, country } = cleanName(e.name);
+    const groupCountry = /^([A-Z]{2})\b/.exec(e.group ?? '')?.[1];
+    return (
+      (country && names.get(`${folded}|${country}`)) ||
+      (groupCountry && names.get(`${folded}|${groupCountry}`)) ||
+      names.get(`${folded}|FR`) ||
+      names.get(folded) ||
+      null
+    );
+  });
+}
+
+export const playlistKey = (url: string) =>
+  createHash('sha256').update(url).digest('base64url').slice(0, 16);
+
+const state = tenantState(() => ({
+  at: 0,
+  error: null as string | null,
+  guide: null as string | null,
+  loading: null as Promise<void> | null,
+  source: '',
+}));
+export const playlistState = () => state();
+
+/** Downloads and stores the playlist; an empty address clears it. */
+export async function refreshPlaylist() {
+  const s = state();
+  const url = getSettings().livePlaylistUrl;
+  s.source = url;
+  if (!url) {
+    statement('DELETE FROM live_playlist').run();
+    Object.assign(s, { at: Date.now(), error: null, guide: null });
+    return;
+  }
+  try {
+    const response = await safeFetch(url, { timeoutMs: 30_000 });
+    if (response.status !== 200) {
+      response.cancel();
+      throw new AppError('LIVE_PLAYLIST_UNAVAILABLE', `HTTP ${response.status}`, 502);
+    }
+    const { entries, guide } = parseM3u(
+      (await readCapped(response, 64 * 1024 * 1024)).toString('utf8'),
+    );
+    const matched = matchEntries(entries);
+    const insert = statement('INSERT OR REPLACE INTO live_playlist VALUES(?,?,?,?,?,?,?,?,?,?)');
+    db().transaction(() => {
+      statement('DELETE FROM live_playlist').run();
+      entries.forEach((e, i) =>
+        insert.run(
+          playlistKey(e.url),
+          i,
+          e.name,
+          e.logo,
+          e.group,
+          e.tvgId,
+          e.url,
+          e.referrer,
+          e.userAgent,
+          matched[i],
+        ),
+      );
+    })();
+    Object.assign(s, { at: Date.now(), error: null, guide });
+  } catch (e) {
+    // The address may hold credentials: only the error code is kept.
+    Object.assign(s, {
+      at: Date.now(),
+      error: e instanceof AppError ? e.code : 'LIVE_PLAYLIST_ERROR',
+    });
+  }
+}
+
+/** Refreshes when the address changed or the copy is old; waits only for a first download. */
+export async function ensurePlaylist() {
+  const s = state();
+  const url = getSettings().livePlaylistUrl;
+  const stale = s.source !== url || Date.now() - s.at > PLAYLIST_TTL;
+  if (!stale) return;
+  // Waits when the address just changed or nothing is stored yet; otherwise refreshes behind.
+  const empty = !(statement('SELECT 1 FROM live_playlist LIMIT 1').get() as unknown);
+  const first = Boolean(url) && ((s.at > 0 && s.source !== url) || empty);
+  s.loading ??= refreshPlaylist().finally(() => {
+    s.loading = null;
+  });
+  if (first) await s.loading;
+}
+
+export interface PlaylistRow {
+  key: string;
+  position: number;
+  name: string;
+  logo: string | null;
+  grp: string | null;
+  tvg_id: string | null;
+  url: string;
+  referrer: string | null;
+  user_agent: string | null;
+  channel_id: string | null;
+}
+export const playlistRows = () =>
+  statement('SELECT * FROM live_playlist ORDER BY position').all() as PlaylistRow[];

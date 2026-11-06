@@ -24,7 +24,7 @@ import type {
   SettingsPatch,
 } from '@/types/shared';
 import { PERMISSIONS } from '@/types/shared';
-import type { ArrOptions, JellyfinLibrary, JellyfinRole } from '@/types/shared';
+import type { ArrOptions, JellyfinLibrary, JellyfinRole, LiveStatus } from '@/types/shared';
 import { UNIVERSES } from '@/lib/client/universe';
 import { KIND_IDS, KINDS as KIND_DEFS, completeKindOrder, isVideoKind } from '@/domain/kinds';
 import { ChevronDown, ChevronUp } from 'lucide-react';
@@ -42,7 +42,7 @@ const GROUPS = [
   { id: 'personal', sections: ['account', 'media'] },
   { id: 'admin', sections: ['users'] },
   { id: 'services', sections: ['suwayomi', 'kavita', 'jellyfin', 'arr', 'translation'] },
-  { id: 'content', sections: ['catalogs', 'extensions'] },
+  { id: 'content', sections: ['catalogs', 'extensions', 'live'] },
 ] as const;
 type SectionId = (typeof GROUPS)[number]['sections'][number];
 const SECTIONS: readonly SectionId[] = GROUPS.flatMap((g) => g.sections);
@@ -268,6 +268,9 @@ export default function SettingsPage() {
             </Section>
             <Section open={open} visible={visible} id="extensions">
               <ExtensionsSummary settings={settings.data} status={status.data} />
+            </Section>
+            <Section open={open} visible={visible} id="live">
+              <LiveSettings settings={settings.data} onSaved={keep} />
             </Section>
           </>
         )}
@@ -1890,6 +1893,199 @@ function UniverseSettings() {
           className="accent-fg size-[18px] shrink-0"
         />
       </label>
+    </div>
+  );
+}
+
+/** Live TV: in the menu or not, home countries, the user's playlist and the TV guides. */
+function LiveSettings({
+  settings,
+  onSaved,
+}: {
+  settings: Settings;
+  onSaved: (s: Settings) => void;
+}) {
+  const { t, n } = useI18n();
+  const relative = useRelativeTime();
+  const status = useApi<LiveStatus>('/api/live/status');
+  const [countries, setCountries] = useState(settings.liveCountries.join(', '));
+  const [playlist, setPlaylist] = useState('');
+  const [guides, setGuides] = useState(settings.liveGuideUrls.join('\n'));
+  const [busy, setBusy] = useState<string | null>(null);
+  async function save(name: string, patch: SettingsPatch, ok = t('live.settings.saved')) {
+    setBusy(name);
+    try {
+      onSaved(await send<Settings>('/api/settings', 'PATCH', patch));
+      toast({ tone: 'ok', text: ok });
+      void status.mutate();
+    } catch (e) {
+      toast({ tone: 'bad', text: errorText(t, e) });
+    } finally {
+      setBusy(null);
+    }
+  }
+  const s = status.data;
+  return (
+    <div className="flex flex-col gap-6">
+      <p className="text-mid text-sm leading-relaxed">{t('live.settings.intro')}</p>
+      <label className="flex items-center gap-3 text-sm">
+        <input
+          type="checkbox"
+          className="size-4 accent-white"
+          checked={settings.liveEnabled}
+          disabled={busy !== null}
+          onChange={(e) => void save('enabled', { liveEnabled: e.target.checked })}
+        />
+        {t('live.settings.enabled')}
+      </label>
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-semibold">{t('live.settings.countries')}</span>
+        <span className="text-muted text-xs">{t('live.settings.countriesHint')}</span>
+        <div className="flex gap-2">
+          <input
+            className={cx(field, 'h-11 flex-1')}
+            value={countries}
+            placeholder="FR, BE, CH"
+            onChange={(e) => setCountries(e.target.value)}
+          />
+          <button
+            type="button"
+            className={smallButton}
+            disabled={busy !== null}
+            onClick={() =>
+              void save('countries', {
+                liveCountries: [
+                  ...new Set(
+                    countries
+                      .toUpperCase()
+                      .split(/[\s,;]+/)
+                      .filter((c) => /^[A-Z]{2}$/.test(c)),
+                  ),
+                ].slice(0, 20),
+              })
+            }
+          >
+            {t('common.save')}
+          </button>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-semibold">{t('live.settings.playlist')}</span>
+        <span className="text-muted text-xs">{t('live.settings.playlistHint')}</span>
+        <div className="flex flex-wrap gap-2">
+          <input
+            type="password"
+            autoComplete="off"
+            className={cx(field, 'h-11 min-w-[240px] flex-1')}
+            value={playlist}
+            placeholder={
+              settings.secretsConfigured.livePlaylistUrl
+                ? t('live.settings.playlistSet')
+                : 'https://…/playlist.m3u'
+            }
+            onChange={(e) => setPlaylist(e.target.value)}
+          />
+          <button
+            type="button"
+            className={smallButton}
+            disabled={busy !== null || !playlist.trim()}
+            onClick={() =>
+              void save('playlist', { livePlaylistUrl: playlist.trim() }).then(() =>
+                setPlaylist(''),
+              )
+            }
+          >
+            {t('common.save')}
+          </button>
+          {settings.secretsConfigured.livePlaylistUrl && (
+            <button
+              type="button"
+              className={smallButton}
+              disabled={busy !== null}
+              onClick={() => void save('playlist', { livePlaylistUrl: '' })}
+            >
+              {t('live.settings.remove')}
+            </button>
+          )}
+        </div>
+        {s?.playlist.configured && (
+          <span className="text-muted text-xs">
+            {s.playlist.error
+              ? t('live.settings.failed', { code: s.playlist.error })
+              : t('live.settings.playlistStatus', {
+                  entries: n(s.playlist.entries),
+                  matched: n(s.playlist.matched),
+                })}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-semibold">{t('live.settings.guides')}</span>
+        <span className="text-muted text-xs">{t('live.settings.guidesHint')}</span>
+        <textarea
+          className={cx(field, 'min-h-[88px] py-2.5 font-mono text-xs')}
+          value={guides}
+          onChange={(e) => setGuides(e.target.value)}
+        />
+        <button
+          type="button"
+          className={cx(smallButton, 'self-start')}
+          disabled={busy !== null}
+          onClick={() =>
+            void save('guides', {
+              liveGuideUrls: guides
+                .split(/\s+/)
+                .map((g) => g.trim())
+                .filter((g) => /^https?:\/\//i.test(g))
+                .slice(0, 10),
+            })
+          }
+        >
+          {t('common.save')}
+        </button>
+        {s?.guides.map((g) => (
+          <span key={g.url} className="text-muted truncate text-xs">
+            {g.url === 'playlist' ? t('live.settings.playlistGuide') : g.url} ·{' '}
+            {g.error
+              ? t('live.settings.failed', { code: g.error })
+              : g.at
+                ? relative(g.at)
+                : t('live.settings.never')}
+          </span>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-mid text-sm">
+          {s
+            ? t('live.settings.status', {
+                channels: n(s.channels),
+                playable: n(s.playable),
+                programmes: n(s.programmes),
+              })
+            : '…'}
+          {s?.indexAt ? ` · ${relative(s.indexAt)}` : ''}
+        </span>
+        <button
+          type="button"
+          className={smallButton}
+          disabled={busy !== null}
+          onClick={async () => {
+            setBusy('refresh');
+            try {
+              await status.mutate(await send<LiveStatus>('/api/live/refresh', 'POST', {}), {
+                revalidate: false,
+              });
+              toast({ tone: 'ok', text: t('live.settings.refreshed') });
+            } catch (e) {
+              toast({ tone: 'bad', text: errorText(t, e) });
+            } finally {
+              setBusy(null);
+            }
+          }}
+        >
+          {busy === 'refresh' ? t('common.working') : t('live.settings.refresh')}
+        </button>
+      </div>
     </div>
   );
 }
