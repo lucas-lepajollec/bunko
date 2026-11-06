@@ -217,3 +217,35 @@ it.each(['manual', 'collision', 'in-flight edit', 'lease'] as const)(
     expect(getTracked(entry.id)?.media.id).toBe(local().id);
   },
 );
+it('gives an off-catalog Kavita work its catalog identity with its book progress and resume card', async () => {
+  const { adoptCatalogIdentity } = await import('@/lib/library-matching');
+  const entry = track({ media: local(), kavitaSeriesId: 7 });
+  db()
+    .prepare('INSERT INTO book_progress VALUES(?,?,?,?,?,?)')
+    .run(local().id, 'file1', 2, 0.5, 0.4, 10);
+  db()
+    .prepare(
+      'INSERT INTO continue_items(media_id,media_json,kind,label,href,position,updated_at) VALUES(?,?,?,?,?,?,?)',
+    )
+    .run(local().id, '{}', 'read', 'vol:1', `/book/file1?media=${encodeURIComponent(local().id)}`, 0.4, 10);
+  expect(adoptCatalogIdentity(entry.id, local().id, canonical(), 7)).toBe(true);
+  expect(getTracked(entry.id)?.media.id).toBe(canonical().id);
+  expect(db().prepare('SELECT media_id,fraction FROM book_progress').all()).toEqual([
+    { media_id: canonical().id, fraction: 0.4 },
+  ]);
+  expect(db().prepare('SELECT media_id,href FROM continue_items').all()).toEqual([
+    { media_id: canonical().id, href: `/book/file1?media=${encodeURIComponent(canonical().id)}` },
+  ]);
+  db().exec('DELETE FROM book_progress; DELETE FROM continue_items;');
+});
+it('leaves a work the user detached from the catalog off-catalog', async () => {
+  const { adoptCatalogIdentity } = await import('@/lib/library-matching');
+  const entry = track({ media: local(), kavitaSeriesId: 7 });
+  db().prepare('UPDATE tracked_media SET off_catalog=1 WHERE id=?').run(entry.id);
+  expect(adoptCatalogIdentity(entry.id, local().id, canonical(), 7)).toBe(false);
+  // Another entry already follows the catalog work: never merged by guessing.
+  db().prepare('UPDATE tracked_media SET off_catalog=0 WHERE id=?').run(entry.id);
+  track({ media: canonical() });
+  expect(adoptCatalogIdentity(entry.id, local().id, canonical(), 7)).toBe(false);
+  expect(getTracked(entry.id)?.media.id).toBe(local().id);
+});

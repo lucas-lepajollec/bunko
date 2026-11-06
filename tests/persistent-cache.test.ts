@@ -343,11 +343,14 @@ it('persists metadata across module reload, returns stale immediately, refreshes
 it('bounds metadata count and byte storage by pruning oldest values', () => {
   const insert = db().prepare('INSERT INTO metadata_cache VALUES(?,?,?,?,?)');
   db().transaction(() => {
-    for (let i = 0; i < 1000; i++) insert.run(`old:${i}`, '{}', 2, i, i);
+    // A catalog page older than everything else: kept, the other kinds of entries go first.
+    insert.run('discover:page', '{"schema":1,"value":{}}', 2, -1, -1);
+    for (let i = 0; i < 3999; i++) insert.run(`old:${i}`, '{}', 2, i, i);
   })();
   metadata.saveMetadata('latest', { ok: true });
-  expect(db().prepare('SELECT COUNT(*) AS n FROM metadata_cache').get()).toEqual({ n: 1000 });
+  expect(db().prepare('SELECT COUNT(*) AS n FROM metadata_cache').get()).toEqual({ n: 4000 });
   expect(metadata.storedMetadata('old:0')).toBeNull();
+  expect(metadata.storedMetadata('discover:page')).not.toBeNull();
   expect(metadata.storedMetadata('latest')?.value).toEqual({ ok: true });
   db().exec('DELETE FROM metadata_cache');
   for (let i = 0; i < 10; i++) {

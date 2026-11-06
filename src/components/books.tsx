@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { type ReactNode, useEffect, useRef } from 'react';
 import { Download } from 'lucide-react';
 import type { BookFile } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
@@ -48,13 +49,14 @@ export function BookShelf({ mediaId, owned }: { mediaId: string; owned: boolean 
       ) : files.length === 0 ? (
         <p className="text-mid text-sm">{t('books.empty')}</p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ScrollList current={nextBook(files)?.key}>
           {files.map((f) => {
             const done = (f.progress?.fraction ?? 0) >= 0.995;
             const percent = Math.round((f.progress?.fraction ?? 0) * 100);
             return (
               <li
                 key={f.key}
+                data-key={f.key}
                 className="flex items-center gap-3 rounded-2xl bg-white/[0.04] p-3 md:gap-4 md:px-4"
               >
                 <span className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -99,8 +101,30 @@ export function BookShelf({ mediaId, owned }: { mediaId: string; owned: boolean 
               </li>
             );
           })}
-        </ul>
+        </ScrollList>
       )}
     </div>
+  );
+}
+
+/**
+ * A long list (a series with dozens of volumes) scrolls inside its own area instead of
+ * stretching the sheet, opened on the book to read next.
+ */
+function ScrollList({ current, children }: { current?: string; children: ReactNode }) {
+  const list = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    const el = list.current;
+    const item = current ? el?.querySelector<HTMLElement>(`[data-key="${current}"]`) : null;
+    if (el && item && el.scrollHeight > el.clientHeight)
+      el.scrollTop = Math.max(0, item.offsetTop - 8);
+  }, [current]);
+  return (
+    <ul
+      ref={list}
+      className="relative flex max-h-[min(540px,70vh)] flex-col gap-2 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin]"
+    >
+      {children}
+    </ul>
   );
 }

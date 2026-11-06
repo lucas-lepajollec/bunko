@@ -2,12 +2,14 @@ import { isTextKind, kavitaLibraryClassification } from './library-kinds';
 import { indexedSeries, indexedSeriesById, matchKavita, type IndexedSeries } from './kavita-index';
 import { search, deduplicate } from './search-engine';
 import { titleScore } from './matching';
-import { track, db, getTracked, listTracked, manualKavitaLink, sameMedia } from './db';
+import { track, db, getTracked, listTracked, manualKavitaLink, sameMedia, statement } from './db';
 import { AppError } from './errors';
 import { emptyMedia } from './media';
 import type { UnifiedMedia } from '@/types/shared';
 import { ensureKavitaCover } from './kavita-cover';
 import { getSettings } from './settings';
+import { metronConfigured } from './metron';
+import { setWorkerValue, workerValue } from './updates';
 
 export function kavitaMedia(seriesId: number): UnifiedMedia {
   const series = indexedSeriesById(seriesId);
@@ -36,14 +38,25 @@ export async function catalogMatch(
   series: IndexedSeries,
   signal?: AbortSignal,
   minimumScore = 0.85,
+  /** Set when a catalog could not be asked: "no match" then means "not known yet". */
+  report?: { incomplete: boolean },
 ) {
   const classified = kavitaMedia(series.seriesId);
-  if (classified.format === 'COMIC') return null;
+  // Comics are identified on Metron only (once set up); the other catalogs list no comics.
+  const comic = classified.format === 'COMIC';
+  if (comic && !metronConfigured()) return null;
   const results: UnifiedMedia[] = [];
-  for (const name of series.names.slice(0, 4))
-    results.push(...(await search(name, classified.type, signal)).results);
+  for (const name of series.names.slice(0, 4)) {
+    const response = await search(name, classified.type, signal);
+    if (report && response.providers.some((p) => p.status === 'error')) report.incomplete = true;
+    results.push(...response.results);
+  }
   const candidates = deduplicate(results)
-    .filter((m) => /^(anilist|mangadex|mangaupdates|openlibrary):/.test(m.id))
+    .filter((m) =>
+      comic
+        ? m.id.startsWith('metron:')
+        : /^(anilist|mangadex|mangaupdates|openlibrary|hardcover):/.test(m.id),
+    )
     .map((media) => ({
       media,
       score: Math.max(...[media.title, ...media.altTitles].map((n) => titleScore(n, series.names))),
@@ -161,4 +174,42 @@ export async function autoImportKavita() {
       /* Individual metadata/cover failures must not discard a successful index. Retry next sync. */
     }
   }
+}
+
+const RETRY_MS = 86400_000;
+/**
+ * Kavita series followed off-catalog (no confident match at import, or the catalogs were
+ * unreachable then) are looked up again: a few per run, each one at most once a day unless the
+ * job is run by hand. A clear match gives the work its catalog identity; a work the user
+ * detached on purpose is left alone.
+ */
+export async function relinkKavitaWorks(signal?: AbortSignal, budget = 8) {
+  const { adoptCatalogIdentity } = await import('./library-matching');
+  const detached = new Set(
+    (statement('SELECT id FROM tracked_media WHERE off_catalog=1').all() as { id: number }[]).map(
+      (r) => r.id,
+    ),
+  );
+  let linked = 0;
+  for (const t of listTracked()) {
+    if (signal?.aborted || budget <= 0) break;
+    if (!t.media.id.startsWith('kavita:') || detached.has(t.id)) continue;
+    const seriesId = t.kavitaSeriesId ?? t.media.kavitaSeriesId;
+    const series = seriesId ? indexedSeriesById(seriesId) : undefined;
+    if (!series) continue;
+    const key = `catalog_link_tried:${t.id}`;
+    const tried = workerValue(key);
+    if (tried && Date.now() - Date.parse(tried) < RETRY_MS) continue;
+    budget--;
+    const report = { incomplete: false };
+    const media = await catalogMatch(series, signal, undefined, report).catch(() => null);
+    if (media && adoptCatalogIdentity(t.id, t.media.id, media, series.seriesId)) linked++;
+    // A catalog that did not answer proves nothing: ask again on the next run.
+    else if (!report.incomplete && !signal?.aborted) setWorkerValue(key, new Date().toISOString());
+  }
+  return linked;
+}
+/** Run by hand: every off-catalog work is looked up again now. */
+export function forgetRelinkAttempts() {
+  statement("DELETE FROM worker_state WHERE key LIKE 'catalog_link_tried:%'").run();
 }

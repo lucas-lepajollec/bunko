@@ -1,9 +1,9 @@
 'use client';
-import { KIND_IDS, KINDS as KIND_DEFS, byKindOrder } from '@/domain/kinds';
+import { KIND_IDS, KINDS as KIND_DEFS, byKindOrder, type Kind } from '@/domain/kinds';
 import { MediaLink } from '@/components/media-link';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import type { ChapterRelease, HomeFeed } from '@/types/shared';
+import type { ChapterRelease, DiscoverPage, HomeFeed } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { ContinueCard, useContinue } from '@/components/reading';
 import { LiveHomeView } from '@/components/live';
@@ -11,7 +11,7 @@ import { universeAsides, useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from '@/components/load-notice';
 import { Backdrop } from '@/components/backdrop';
-import { ScrollRow, TopRow } from '@/components/media';
+import { Row, ScrollRow, TopRow } from '@/components/media';
 import { ReleaseRow, useChapterLabel } from '@/components/releases';
 import { useRelativeTime } from '@/components/time';
 import {
@@ -49,15 +49,40 @@ function Home() {
         : `/api/home?kind=${universe.active}`,
     {
       refreshInterval: (d) => (d?.pending ? 1500 : 300_000),
+      // A busy catalog (AniList limits) is temporary: try again instead of leaving an error.
+      shouldRetryOnError: true,
+      errorRetryInterval: 5000,
+      errorRetryCount: 8,
     },
   );
   // The mixed home shows every enabled kind with dated releases, in the user's priority order
   // (series and films once TMDB is set up).
-  const shelves = byKindOrder(KINDS, universe.order).filter((k) =>
+  const kinds = byKindOrder(KINDS, universe.order).filter((k) =>
     universe.active === 'all'
       ? universe.enabled.includes(k) && (!KIND_DEFS[k].requires || universe.tmdb)
       : k === universe.active,
   );
+  // Once the feed has answered, a kind without recent releases leaves its empty shelf: the mixed
+  // home names those kinds on one line at the end (they come back with their next release); one
+  // kind's own home shows its catalog instead.
+  // Releases keep arriving while the feed is pending: a shelf comes back as soon as its kind has one.
+  const settled = Boolean(feed.data);
+  const quiet = settled ? kinds.filter((k) => !feed.data?.latest?.[k]?.length) : [];
+  const shelves = kinds.filter((k) => !quiet.includes(k));
+  const single = universe.active !== 'all' ? universe.active : null;
+  const showcase =
+    single && (!KIND_DEFS[single].datedReleases || quiet.includes(single)) ? single : null;
+  const quietAll =
+    universe.active === 'all'
+      ? [
+          ...quiet,
+          // Novels and books have no dated releases at all.
+          ...byKindOrder(
+            KIND_IDS.filter((k) => !KIND_DEFS[k].datedReleases),
+            universe.order,
+          ).filter((k) => universe.enabled.includes(k)),
+        ]
+      : [];
   // Everything started in the reader or player, followed or not, for the universe on screen.
   const resume = useContinue(8).shown;
   const asides = universeAsides(universe.active, universe.enabled);
@@ -68,6 +93,7 @@ function Home() {
         items={feed.data?.hero ?? []}
         loading={feed.isLoading || Boolean(feed.data?.pending && !feed.data.hero.length)}
         error={feed.error}
+        catalogHref={universe.active === 'all' ? '/catalog' : `/catalog?kind=${universe.active}`}
       />
       <div className="relative mx-auto flex max-w-[1760px] flex-col gap-10 px-4 pb-16 md:gap-14 md:px-10">
         <LoadNotice pending={feed.isLoading || feed.data?.pending} partial={feed.data?.partial} />
@@ -110,15 +136,58 @@ function Home() {
               href={`/catalog?view=chapters&kind=${k}`}
               linkLabel={t('home.allReleases')}
             />
-            {feed.data && !feed.data.pending && (feed.data.latest?.[k]?.length ?? 0) === 0 ? (
-              <p className="text-muted font-serif text-lg italic">{t('home.noReleasesYet')}</p>
-            ) : (
-              <ReleaseRow items={feed.data?.latest?.[k]} label={t(`home.latestKind.${k}`)} />
-            )}
+            <ReleaseRow items={feed.data?.latest?.[k]} label={t(`home.latestKind.${k}`)} />
           </section>
         ))}
+        {showcase && <CatalogShelf kind={showcase} num={++n} />}
+        {quietAll.length > 0 && (
+          <section className="border-line flex flex-wrap items-center gap-x-3 gap-y-2.5 border-t pt-6">
+            <span className="text-muted mr-1 text-[11px] tracking-[0.16em] uppercase">
+              {t('home.quietKinds')}
+            </span>
+            {quietAll.map((k) => (
+              <Link
+                key={k}
+                href={`/catalog?kind=${k}`}
+                className="text-mid h-8 rounded-full bg-white/[0.06] px-3.5 text-[13px] leading-8 hover:bg-white/[0.1] hover:text-white"
+              >
+                {t(`kind.${k}`)}
+              </Link>
+            ))}
+          </section>
+        )}
       </div>
     </main>
+  );
+}
+
+/** A kind without recent releases: its most popular titles from the catalog. */
+function CatalogShelf({ kind, num }: { kind: Kind; num: number }) {
+  const { t } = useI18n();
+  const page = useApi<DiscoverPage>(`/api/discover?kind=${kind}&sort=popular`, {
+    // The catalogs answer progressively: ask again until every provider has answered.
+    refreshInterval: (d) => (!d?.pending ? 0 : d.items.length ? 30_000 : 2000),
+    shouldRetryOnError: true,
+    errorRetryInterval: 5000,
+    errorRetryCount: 8,
+  });
+  const items = page.data?.items;
+  if (page.data && !items?.length && !page.data.pending) return null;
+  return (
+    <section className="flex flex-col gap-4 md:gap-5">
+      <SectionHeading
+        num={num}
+        title={t('home.popularKind', { kind: t(`kind.${kind}`) })}
+        aside={t('home.popularKindAside')}
+        href={`/catalog?kind=${kind}&sort=popular`}
+        linkLabel={t('home.allShelf')}
+      />
+      {page.error && !items ? (
+        <ErrorNote error={page.error} />
+      ) : (
+        <Row items={items?.length ? items : undefined} label={t('home.popularKindAside')} />
+      )}
+    </section>
   );
 }
 
@@ -126,10 +195,13 @@ function Hero({
   items,
   loading,
   error,
+  catalogHref,
 }: {
   items: ChapterRelease[];
   loading: boolean;
   error: unknown;
+  /** Where a catalog highlight's "see all" leads (the kind's catalog). */
+  catalogHref: string;
 }) {
   const { t } = useI18n();
   const meta = useMediaMeta();
@@ -192,7 +264,7 @@ function Hero({
         {/* Without a wide banner the background stays plain: show the cover itself. */}
         <div className="text-soft flex flex-wrap items-center gap-3 text-[11px] tracking-[0.16em] uppercase md:text-xs">
           <span className="h-[3px] w-6 rounded-full" style={{ background: 'var(--accent)' }} />
-          {r.provider === 'tmdb'
+          {r.provider === 'tmdb' || r.featured
             ? t('home.trendingKicker', { meta: meta(m) })
             : r.unit === 'episode'
               ? t('home.newEpisodeKicker', { when: relative(r.releasedAt), meta: meta(m) })
@@ -213,12 +285,18 @@ function Hero({
           <MediaLink media={m} className={cx(primaryButton, 'flex-1 md:flex-none')}>
             {t('home.openSheet')}
           </MediaLink>
-          <Link
-            href={`/catalog?view=chapters${m.type === 'ANIME' ? '&kind=anime' : ''}`}
-            className={cx(ghostButton, 'flex-1 md:flex-none')}
-          >
-            {t('home.allReleases')}
-          </Link>
+          {r.featured ? (
+            <Link href={catalogHref} className={cx(ghostButton, 'flex-1 md:flex-none')}>
+              {t('home.allShelf')}
+            </Link>
+          ) : (
+            <Link
+              href={`/catalog?view=chapters${m.type === 'ANIME' ? '&kind=anime' : ''}`}
+              className={cx(ghostButton, 'flex-1 md:flex-none')}
+            >
+              {t('home.allReleases')}
+            </Link>
+          )}
         </div>
       </div>
       {items.length > 1 && (

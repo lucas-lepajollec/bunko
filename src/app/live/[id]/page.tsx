@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { ExternalLink, Heart } from 'lucide-react';
 import type { LiveChannelDetail, LiveStreamChoice } from '@/types/shared';
@@ -70,43 +70,47 @@ export default function LiveChannelPage() {
               )}
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="flex h-14 w-24 items-center justify-center">
-              <ChannelLogo channel={c} className="max-h-full max-w-full text-lg" />
-            </span>
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <h1 className="font-display text-[30px] leading-none font-extrabold tracking-[-0.03em] md:text-[44px]">
-                {c.name}
-              </h1>
-              <span className="text-muted text-sm">
-                {[c.country ? country(c.country) : null, ...c.categories.map(category), c.network]
-                  .filter(Boolean)
-                  .join(' · ')}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 flex-1 items-center gap-4">
+              <span className="flex h-12 w-20 shrink-0 items-center justify-center md:h-14 md:w-24">
+                <ChannelLogo channel={c} className="max-h-full max-w-full text-lg" />
               </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <h1 className="font-display text-[28px] leading-[0.95] font-extrabold tracking-[-0.03em] [overflow-wrap:anywhere] md:text-[44px]">
+                  {c.name}
+                </h1>
+                <span className="text-muted text-sm">
+                  {[c.country ? country(c.country) : null, ...c.categories.map(category), c.network]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </div>
             </div>
-            <button
-              type="button"
-              aria-pressed={c.favorite}
-              onClick={async () => {
-                await toggleFavorite(c.id, !c.favorite);
-                await mutate(key);
-                void mutate('/api/live/home');
-              }}
-              className={cx(ghostButton, 'gap-2')}
-            >
-              <Heart size={16} className={cx(c.favorite && 'fill-current')} />
-              {c.favorite ? t('live.favoriteRemove') : t('live.favoriteAdd')}
-            </button>
-            {c.website && c.playable && (
-              <a
-                href={c.website}
-                target="_blank"
-                rel="noreferrer"
-                className={cx(smallButton, 'gap-2')}
+            <div className="flex flex-wrap gap-2.5">
+              <button
+                type="button"
+                aria-pressed={c.favorite}
+                onClick={async () => {
+                  await toggleFavorite(c.id, !c.favorite);
+                  await mutate(key);
+                  void mutate('/api/live/home');
+                }}
+                className={cx(ghostButton, 'gap-2')}
               >
-                {t('live.officialSite')} <ExternalLink size={14} />
-              </a>
-            )}
+                <Heart size={16} className={cx(c.favorite && 'fill-current')} />
+                {c.favorite ? t('live.favoriteRemove') : t('live.favoriteAdd')}
+              </button>
+              {c.website && c.playable && (
+                <a
+                  href={c.website}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={cx(smallButton, 'gap-2')}
+                >
+                  {t('live.officialSite')} <ExternalLink size={14} />
+                </a>
+              )}
+            </div>
           </div>
           {c.now && (
             <section className="flex flex-col gap-3 rounded-2xl bg-white/[0.04] p-4 md:flex-row md:p-5">
@@ -144,12 +148,12 @@ export default function LiveChannelPage() {
             </section>
           )}
         </div>
-        <aside className="flex flex-col gap-3">
+        <aside className="flex min-w-0 flex-col gap-3 xl:sticky xl:top-24 xl:max-h-[calc(100dvh-8rem)] xl:self-start">
           <h2 className="font-display text-[22px] font-bold">{t('live.schedule')}</h2>
           {!upcoming.length ? (
             <p className="text-muted text-sm">{t('live.noGuide')}</p>
           ) : (
-            <ol className="flex flex-col">
+            <ScheduleList>
               {upcoming.map((p) => {
                 const on = Date.parse(p.start) <= now;
                 return (
@@ -176,7 +180,7 @@ export default function LiveChannelPage() {
                   </li>
                 );
               })}
-            </ol>
+            </ScheduleList>
           )}
           <Link href="/" className="text-muted hover:text-fg mt-2 text-[13px]">
             ← {t('live.homeTitle')}
@@ -250,7 +254,7 @@ function LivePlayer({ streams, title }: { streams: LiveStreamChoice[]; title: st
   return (
     <div className="flex flex-col gap-2.5">
       <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-black">
-        <video ref={video} controls playsInline autoPlay title={title} className="size-full" />
+        <video ref={video} controls={!failed} playsInline autoPlay title={title} className="size-full" />
         {needsTap && (
           <button
             type="button"
@@ -306,5 +310,14 @@ function LivePlayer({ streams, title }: { streams: LiveStreamChoice[]; title: st
         </div>
       )}
     </div>
+  );
+}
+
+/** The programme in its own scroll area, so the page stays short (it starts on the one on air). */
+function ScheduleList({ children }: { children: ReactNode }) {
+  return (
+    <ol className="border-line flex max-h-[420px] min-h-0 flex-col overflow-y-auto overscroll-contain border-t pr-1 [scrollbar-width:thin] xl:max-h-none xl:flex-1">
+      {children}
+    </ol>
   );
 }
