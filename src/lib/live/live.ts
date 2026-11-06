@@ -141,6 +141,12 @@ const programme = (p: ProgrammeRow): LiveProgramme => ({
   image: p.image,
 });
 
+/** A playlist entry filed as adult by its provider (group or name). */
+const ADULT =
+  /(?:^|[^a-z])(?:xxx|adult[eo]?s?|for adults|18\s*\+|\+\s*18|porn\w*|erotic\w*|érotique|hentai)(?:[^a-z]|$)/i;
+export const adultEntry = (row: Pick<PlaylistRow, 'grp' | 'name'>) =>
+  ADULT.test(row.grp ?? '') || ADULT.test(row.name);
+
 /** The adult preference: no 18+ channels when off, only them in the 18+ view. */
 const nsfwClause = () => {
   const scope = adultScope();
@@ -176,7 +182,22 @@ function context(): Context {
     ),
   );
   const playlist = new Map<string, PlaylistRow[]>();
+  // The playlist follows the same 18+ preference as the index: its adult entries (an adult
+  // group, or a channel the index flags) are hidden when off and the only ones shown in 18+ view.
+  const scope = adultScope();
+  const adultIds =
+    scope === 'on'
+      ? null
+      : new Set(
+          (
+            liveDb().prepare('SELECT id FROM live_channels WHERE nsfw=1').all() as { id: string }[]
+          ).map((r) => r.id),
+        );
   for (const r of playlistRows()) {
+    if (adultIds) {
+      const adult = adultEntry(r) || (r.channel_id !== null && adultIds.has(r.channel_id));
+      if (adult !== (scope === 'only')) continue;
+    }
     const id = r.channel_id ?? `m3u:${r.key}`;
     playlist.set(id, [...(playlist.get(id) ?? []), r]);
   }
@@ -248,6 +269,8 @@ const SHELVES = [
   'documentary',
   'music',
   'entertainment',
+  // Only there when 18+ is on (the queries leave adult channels out otherwise).
+  'xxx',
 ];
 /** Channels everyone knows first: general and news channels of the country, then by name. */
 const RANK = `CASE WHEN categories LIKE '%"general"%' THEN 0 WHEN categories LIKE '%"news"%' THEN 1 ELSE 2 END, name COLLATE NOCASE`;
