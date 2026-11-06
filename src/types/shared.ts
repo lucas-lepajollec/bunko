@@ -1511,9 +1511,18 @@ export interface LiveHome {
   /** Channels from the user's streaming extensions (Stremio `tv` catalogs). */
   extensions: LiveChannel[];
   shelves: { category: string; channels: LiveChannel[] }[];
+  /** How far the free-stream health check went (channels only show once seen playing). */
+  health?: LiveHealth;
+}
+/** Free channels of the index: listed with streams, checked, seen playing. */
+export interface LiveHealth {
+  total: number;
+  checked: number;
+  working: number;
 }
 export interface LiveCatalog {
   pending: boolean;
+  health?: LiveHealth;
   channels: LiveChannel[];
   total: number;
   page: number;

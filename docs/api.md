@@ -312,14 +312,17 @@ Channels come from three sources:
 - the account's streaming extensions that offer live TV (Stremio type `tv`): their `tv` catalogs needing no search text are read page by page (`skip`, at most 3,000 channels each) every 12 hours or when the extensions change, matched to the index like the playlist (`LiveHome.extensions`, `LiveStatus.extensions`), and asked for `/stream/tv/{id}.json` when a channel opens; those streams come after the playlist's and before the free ones, through the relay with their `proxyHeaders`;
 - XMLTV guides (`liveGuideUrls`, default xmltvfr.fr; plain or gzip; plus the playlist's `url-tvg`), refreshed every 6 hours and kept from one hour ago to 36 hours ahead.
 
-| Method and path          | Body / query                                          | Result                                                                                    |
-| ------------------------ | ----------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `GET /api/live/home`     | none (countries: `liveCountries`, else the browser's) | `LiveHome`: on now, favourites, playlist, shelves by category                             |
-| `GET /api/live/catalog`  | `country`, `category`, `q`, `all=1`, `page`           | `LiveCatalog`, 60 per page, with country and category counts                              |
-| `GET /api/live/channel`  | `id`                                                  | `LiveChannelDetail`: now/next, the next 30 hours, streams as relay links (playlist first) |
-| `PUT /api/live/favorite` | `{id, favorite}`                                      | `{ok:true}`                                                                               |
-| `GET /api/live/status`   | none                                                  | `LiveStatus`; a playlist's own guide is shown as `playlist` (it may hold credentials)     |
-| `POST /api/live/refresh` | none                                                  | refreshes index, playlist and guides now, then `LiveStatus`                               |
+| Method and path          | Body / query                                          | Result                                                                                          |
+| ------------------------ | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `GET /api/live/home`     | none (countries: `liveCountries`, else the browser's) | `LiveHome`: on now, favourites, playlist, shelves by category                                   |
+| `GET /api/live/catalog`  | `country`, `category`, `q`, `page`, `size` (≤ 60)     | `LiveCatalog`: only channels that play, 60 per page, with country and category counts, `health` |
+| `POST /api/live/report`  | `{id}`                                                | The player tried every source and none played: the channel's free streams are checked again     |
+| `GET /api/live/channel`  | `id`                                                  | `LiveChannelDetail`: now/next, the next 30 hours, streams as relay links (playlist first)       |
+| `PUT /api/live/favorite` | `{id, favorite}`                                      | `{ok:true}`                                                                                     |
+| `GET /api/live/status`   | none                                                  | `LiveStatus`; a playlist's own guide is shown as `playlist` (it may hold credentials)           |
+| `POST /api/live/refresh` | none                                                  | refreshes index, playlist and guides now, then `LiveStatus`                                     |
+
+Only channels that play are listed (home, catalog, search): every channel of the account's playlist or streaming extensions, and the free channels of the index the health check saw play from this server. The check (`live/health.ts`, `live/verify.ts`, one loop for the server, home countries first, eight at a time) plays a channel's first three streams like a player: the playlist must list media and not be finished (`#EXT-X-ENDLIST`), its newest segment must download as video, and one segment duration later the playlist must have moved on with its new newest segment served too (streams that start then stop fail there). Results are kept per stream address (`live_health`) for a day and survive index updates; failing streams are left out of a channel's sources. Channels never checked stay hidden until checked; `LiveHome.health`/`LiveCatalog.health` say how far it went.
 
 Streams always play through the video relay (sealed per account, request headers such as `Referer` or `User-Agent` preserved, private addresses refused unless allowed by `BUNKO_VIDEO_ALLOWED_HOSTS`). Channels marked adult follow the 18+ preference.
 

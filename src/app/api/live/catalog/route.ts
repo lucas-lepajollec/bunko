@@ -16,14 +16,18 @@ export const GET = route(async (r) => {
         .regex(/^[a-z]{2,20}$/)
         .optional(),
       q: z.string().max(100).optional(),
-      all: z.enum(['1']).optional(),
+      /** Small pages for the search field. */
+      size: z.coerce.number().int().min(1).max(60).optional(),
       page: z.coerce.number().int().min(1).max(500).default(1),
     })
     .parse(Object.fromEntries(new URL(r.url).searchParams));
   return json(
     await liveCatalog({
-      ...p,
-      all: p.all === '1',
+      country: p.country,
+      category: p.category,
+      q: p.q,
+      page: p.page,
+      pageSize: p.size,
       home: homeCountries(r.headers.get('accept-language')),
     }),
   );
