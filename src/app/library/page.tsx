@@ -13,7 +13,6 @@ import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useUniverse } from '@/lib/client/universe';
-import { LiveFavoritesView } from '@/components/live';
 import type {
   KavitaSeriesSummary,
   LibraryActivity,
@@ -65,21 +64,8 @@ function ofKind(e: TrackedMedia, kind: Kind) {
 export default function LibraryPage() {
   return (
     <Suspense>
-      <LibrarySwitch />
+      <Library />
     </Suspense>
-  );
-}
-
-/** Live TV: the library holds the user's channels. */
-function LibrarySwitch() {
-  const universe = useUniverse();
-  if (!universe.ready) return null;
-  return universe.live ? (
-    <Page>
-      <LiveFavoritesView />
-    </Page>
-  ) : (
-    <Library />
   );
 }
 

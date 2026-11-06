@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 import type { ChapterRelease, DiscoverPage, HomeFeed } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { ContinueCard, useContinue } from '@/components/reading';
-import { LiveHomeView } from '@/components/live';
 import { universeAsides, useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from '@/components/load-notice';
@@ -30,13 +29,6 @@ import {
 const KINDS = KIND_IDS.filter((k) => KIND_DEFS[k].datedReleases);
 
 export default function HomePage() {
-  const universe = useUniverse();
-  // Live TV is its own universe with its own home.
-  if (universe.ready && universe.live) return <LiveHomeView />;
-  return <Home />;
-}
-
-function Home() {
   const { t } = useI18n();
   // A fresh install warms its feeds in the background: poll until they have content.
   const universe = useUniverse();

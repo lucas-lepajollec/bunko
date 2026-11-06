@@ -301,31 +301,6 @@ Books, light novels and web novels are read in Bunko from their EPUB and PDF fil
 
 EPUB documents are served with scripts, inline handlers, frames, `<base>` and refresh tags removed, under `Content-Security-Policy: script-src 'none'` (images, styles and fonts only from Bunko). The reader shows them in a same-origin frame; reading settings (theme, size, font, spacing, width, pages or scroll) stay in the browser. The reader also feeds "Pick up" (`/api/continue`, href `/book/<file>?media=<id>`).
 
-## Live TV
-
-Live TV is its own universe (`liveMode`, chosen under "everything" in the kinds menu, `liveEnabled` hides it). It never appears in "everything". In live mode the home, catalog, planning (TV guide) and library (favourite channels) pages show channels.
-
-Channels come from three sources:
-
-- the public iptv-org index (channels, streams, feeds, logos, countries, blocklist), downloaded once a day into the shared `live.db` (`BUNKO_LIVE_INDEX_URL` overrides the address). Channels removed for DMCA reasons are never stored. The main feed's streams come first; other feeds are named;
-- the account's own M3U playlist (`livePlaylistUrl`, a secret), refreshed every 12 hours. Entries are matched by `tvg-id`, then by name and country. Xtream film and series entries are skipped, and `.ts` live links are played as `.m3u8`;
-- the account's streaming extensions that offer live TV (Stremio type `tv`): their `tv` catalogs needing no search text are read page by page (`skip`, at most 3,000 channels each) every 12 hours or when the extensions change, matched to the index like the playlist (`LiveHome.extensions`, `LiveStatus.extensions`), and asked for `/stream/tv/{id}.json` when a channel opens; those streams come after the playlist's and before the free ones, through the relay with their `proxyHeaders`;
-- XMLTV guides (`liveGuideUrls`, default xmltvfr.fr; plain or gzip; plus the playlist's `url-tvg`), refreshed every 6 hours and kept from one hour ago to 36 hours ahead.
-
-| Method and path          | Body / query                                          | Result                                                                                          |
-| ------------------------ | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `GET /api/live/home`     | none (countries: `liveCountries`, else the browser's) | `LiveHome`: on now, favourites, playlist, shelves by category                                   |
-| `GET /api/live/catalog`  | `country`, `category`, `q`, `page`, `size` (≤ 60)     | `LiveCatalog`: only channels that play, 60 per page, with country and category counts, `health` |
-| `POST /api/live/report`  | `{id}`                                                | The player tried every source and none played: the channel's free streams are checked again     |
-| `GET /api/live/channel`  | `id`                                                  | `LiveChannelDetail`: now/next, the next 30 hours, streams as relay links (playlist first)       |
-| `PUT /api/live/favorite` | `{id, favorite}`                                      | `{ok:true}`                                                                                     |
-| `GET /api/live/status`   | none                                                  | `LiveStatus`; a playlist's own guide is shown as `playlist` (it may hold credentials)           |
-| `POST /api/live/refresh` | none                                                  | refreshes index, playlist and guides now, then `LiveStatus`                                     |
-
-Only channels that play are listed (home, catalog, search): every channel of the account's playlist or streaming extensions, and the free channels of the index the health check saw play from this server. The check (`live/health.ts`, `live/verify.ts`, one loop for the server, home countries first, eight at a time) plays a channel's first three streams like a player: the playlist must list media and not be finished (`#EXT-X-ENDLIST`), its newest segment must download as video, and one segment duration later the playlist must have moved on with its new newest segment served too (streams that start then stop fail there). Results are kept per stream address (`live_health`) for a day and survive index updates; failing streams are left out of a channel's sources. Channels never checked stay hidden until checked; `LiveHome.health`/`LiveCatalog.health` say how far it went.
-
-Streams always play through the video relay (sealed per account, request headers such as `Referer` or `User-Agent` preserved, private addresses refused unless allowed by `BUNKO_VIDEO_ALLOWED_HOSTS`). Channels marked adult follow the 18+ preference.
-
 ## Member permissions, 18+ extensions and progress source
 
 `UserAccount.permissions` and `MyAccount.permissions` list what an account may do: `services` (Suwayomi/Kavita/TraDoc/*arr connections, library targets and media root), `extensions` (extension actions and repositories), `downloads` (enqueue, retry, Arr grab, automatic downloads), `translate` (TraDoc jobs) and `adult` (enabling 18+). Admins always have all of them; new members get all of them. `PATCH /api/users {id, permissions}` sets a member's full list (stored as restrictions in `accounts.db`); a request needing a missing permission returns 403 `PERMISSION_DENIED`. Removing `adult` also switches 18+ off for that account. Background work is never restricted.

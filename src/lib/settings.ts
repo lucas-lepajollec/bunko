@@ -21,10 +21,7 @@ import type {
   Settings,
   SettingsPatch,
 } from '@/types/shared';
-/** French guide (xmltvfr.fr): national, regional and pay channels. */
-export const DEFAULT_GUIDE = 'https://xmltvfr.fr/xmltv/xmltv.xml.gz';
 export const secretKeys: SecretSetting[] = [
-  'livePlaylistUrl',
   'suwayomiPassword',
   'kavitaApiKey',
   'sonarrApiKey',
@@ -142,11 +139,6 @@ function serverSettings(): Settings {
     adultMode: false,
     hideNsfwSources: true,
     progressSource: 'suwayomi',
-    liveEnabled: true,
-    liveMode: false,
-    liveCountries: [],
-    livePlaylistUrl: '',
-    liveGuideUrls: [DEFAULT_GUIDE],
     universe: 'all',
     universes: [],
     universesKnown: [],
@@ -244,9 +236,6 @@ export function updateSettings(patch: SettingsPatch) {
   if (patch.universes) patch = { ...patch, universesKnown: ALL_KINDS };
   // Turning 18+ off also leaves the 18+ only mode: allowing it again starts mixed.
   if (patch.adultContent === false) patch = { ...patch, adultMode: false };
-  // Choosing a kind (or everything) leaves live TV; turning it off too.
-  if (patch.universe !== undefined && patch.liveMode === undefined) patch = { ...patch, liveMode: false };
-  if (patch.liveEnabled === false) patch = { ...patch, liveMode: false };
   const shared = Object.entries(patch).filter(([key]) =>
     catalogSettingKeys.includes(key as CatalogSetting),
   );
