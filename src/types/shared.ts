@@ -1474,7 +1474,11 @@ export interface LiveChannel {
   logo: string | null;
   /** ISO country code of the index (`UK` for the United Kingdom). */
   country: string | null;
+  /** Audio/subtitle languages advertised by an extension (ISO codes). */
+  languages: string[];
   categories: string[];
+  /** Stream was curated or checked; false for an index channel not probed yet. */
+  verified: boolean;
   /** A stream can be played (free stream or the user's playlist). */
   playable: boolean;
   /** The user's playlist provides it (a subscription). */

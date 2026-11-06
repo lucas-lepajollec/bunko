@@ -3,6 +3,7 @@ import { AppError } from '../errors';
 import { db, statement } from '../db';
 import { readCapped, safeFetch } from '../safe-fetch';
 import { getSettings } from '../settings';
+import { adultScope } from '../adult';
 import { tenantState } from '../tenant-context';
 import { foldName, liveDb } from './store';
 
@@ -22,6 +23,11 @@ export interface PlaylistEntry {
   url: string;
   referrer: string | null;
   userAgent: string | null;
+  country: string | null;
+  languages: string;
+  categories: string;
+  nsfw: boolean;
+  verified: boolean;
 }
 
 const attr = (line: string, name: string) =>
@@ -65,6 +71,11 @@ export function parseM3u(text: string): { entries: PlaylistEntry[]; guide: strin
             url,
             referrer,
             userAgent,
+            country: null,
+            languages: '[]',
+            categories: '[]',
+            nsfw: false,
+            verified: true,
           });
       }
       info = null;
@@ -148,7 +159,9 @@ export async function refreshPlaylist() {
       (await readCapped(response, 64 * 1024 * 1024)).toString('utf8'),
     );
     const matched = matchEntries(entries);
-    const insert = statement('INSERT OR REPLACE INTO live_playlist VALUES(?,?,?,?,?,?,?,?,?,?)');
+    const insert = statement(
+      'INSERT OR REPLACE INTO live_playlist (key,position,name,logo,grp,tvg_id,url,referrer,user_agent,channel_id,country,languages,categories,nsfw,verified) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+    );
     db().transaction(() => {
       statement("DELETE FROM live_playlist WHERE url NOT LIKE 'addon:%'").run();
       entries.forEach((e, i) =>
@@ -163,6 +176,11 @@ export async function refreshPlaylist() {
           e.referrer,
           e.userAgent,
           matched[i],
+          e.country,
+          e.languages,
+          e.categories,
+          e.nsfw ? 1 : 0,
+          e.verified ? 1 : 0,
         ),
       );
     })();
@@ -204,6 +222,11 @@ export interface PlaylistRow {
   referrer: string | null;
   user_agent: string | null;
   channel_id: string | null;
+  country: string | null;
+  languages: string | null;
+  categories: string | null;
+  nsfw: number;
+  verified: number;
 }
 export const playlistRows = () =>
   statement('SELECT * FROM live_playlist ORDER BY position').all() as PlaylistRow[];
@@ -230,10 +253,14 @@ export const addonChannelState = () => addonState();
 
 export async function refreshAddonChannels() {
   const s = addonState();
-  const source = getSettings().videoAddons.join('|');
+  const source = getSettings().videoAddons.join('|') + '|' + adultScope();
   s.source = source;
   const { tvAddonChannels } = await import('../video-addons');
-  const channels = source ? await tvAddonChannels().catch(() => []) : [];
+  const channels = (getSettings().videoAddons.length ? await tvAddonChannels().catch(() => []) : [])
+    .filter((c) => {
+      const scope = adultScope();
+      return scope === 'only' ? c.nsfw : scope === 'on' ? true : !c.nsfw;
+    });
   const entries: PlaylistEntry[] = channels.map((c) => ({
     name: c.name,
     logo: c.logo,
@@ -242,9 +269,16 @@ export async function refreshAddonChannels() {
     url: `${ADDON_PREFIX}${c.addon}|${c.metaId}`,
     referrer: null,
     userAgent: null,
+    country: c.country,
+    languages: JSON.stringify(c.languages),
+    categories: JSON.stringify(c.categories),
+    nsfw: c.nsfw,
+    verified: c.verified,
   }));
   const matched = matchEntries(entries);
-  const insert = statement('INSERT OR REPLACE INTO live_playlist VALUES(?,?,?,?,?,?,?,?,?,?)');
+  const insert = statement(
+      'INSERT OR REPLACE INTO live_playlist (key,position,name,logo,grp,tvg_id,url,referrer,user_agent,channel_id,country,languages,categories,nsfw,verified) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+    );
   db().transaction(() => {
     statement("DELETE FROM live_playlist WHERE url LIKE 'addon:%'").run();
     entries.forEach((e, i) =>
@@ -259,6 +293,11 @@ export async function refreshAddonChannels() {
         null,
         null,
         matched[i],
+        e.country,
+        e.languages,
+        e.categories,
+        e.nsfw ? 1 : 0,
+        e.verified ? 1 : 0,
       ),
     );
   })();
@@ -268,7 +307,7 @@ export async function refreshAddonChannels() {
 /** Like the playlist: refreshed twice a day or when the extensions change. */
 export async function ensureAddonChannels() {
   const s = addonState();
-  const source = getSettings().videoAddons.join('|');
+  const source = getSettings().videoAddons.join('|') + '|' + adultScope();
   if (s.source === source && Date.now() - s.at < PLAYLIST_TTL) return;
   const first = s.source !== source || s.at === 0;
   s.loading ??= refreshAddonChannels()

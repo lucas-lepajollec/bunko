@@ -698,6 +698,10 @@ const tvMetaSchema = z
     logo: z.string().max(2000).optional().catch(undefined),
     genres: z.array(z.string()).optional().catch(undefined),
     genre: z.array(z.string()).optional().catch(undefined),
+    country: z.string().max(8).optional().catch(undefined),
+    languages: z.array(z.string().max(16)).optional().catch(undefined),
+    nsfw: z.boolean().optional().catch(undefined),
+    verified: z.boolean().optional().catch(undefined),
   })
   .passthrough();
 export interface TvAddonChannel {
@@ -707,6 +711,11 @@ export interface TvAddonChannel {
   name: string;
   logo: string | null;
   genre: string | null;
+  categories: string[];
+  country: string | null;
+  languages: string[];
+  nsfw: boolean;
+  verified: boolean;
 }
 const TV_PAGE = 100;
 const TV_MAX = 3000;
@@ -753,13 +762,19 @@ export async function tvAddonChannels(signal?: AbortSignal): Promise<TvAddonChan
           if (!meta.success || seen.has(meta.data.id)) continue;
           seen.add(meta.data.id);
           added++;
+          const genres = meta.data.genres ?? meta.data.genre ?? [];
           out.push({
             addon: id,
             addonName: m.name,
             metaId: meta.data.id,
             name: meta.data.name.trim(),
             logo: httpUrl(meta.data.logo) ?? httpUrl(meta.data.poster),
-            genre: (meta.data.genres ?? meta.data.genre)?.[0] ?? null,
+            genre: genres[0] ?? null,
+            categories: genres.filter((g): g is string => typeof g === 'string' && !!g),
+            country: meta.data.country ? meta.data.country.toUpperCase() : null,
+            languages: (meta.data.languages ?? []).filter((l): l is string => typeof l === 'string'),
+            nsfw: meta.data.nsfw === true,
+            verified: meta.data.verified !== false,
           });
         }
         // A catalog without paging answers the same page again: stop at the first page that

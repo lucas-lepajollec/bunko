@@ -19,7 +19,8 @@ export function liveDb(): Database.Database {
     CREATE TABLE IF NOT EXISTS live_channels (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, alt_names TEXT NOT NULL, country TEXT,
       categories TEXT NOT NULL, logo TEXT, website TEXT, network TEXT, nsfw INTEGER NOT NULL,
-      streams TEXT NOT NULL, playable INTEGER NOT NULL, folded TEXT NOT NULL);
+      streams TEXT NOT NULL, playable INTEGER NOT NULL, verified INTEGER NOT NULL DEFAULT 0,
+      folded TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS live_channels_country ON live_channels(country, playable);
     CREATE TABLE IF NOT EXISTS live_countries (code TEXT PRIMARY KEY, name TEXT NOT NULL, flag TEXT);
     CREATE TABLE IF NOT EXISTS live_programmes (
@@ -28,6 +29,7 @@ export function liveDb(): Database.Database {
       PRIMARY KEY(channel_id, start));
     CREATE INDEX IF NOT EXISTS live_programmes_time ON live_programmes(stop, start);
     CREATE TABLE IF NOT EXISTS live_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+  try { database.exec('ALTER TABLE live_channels ADD COLUMN verified INTEGER NOT NULL DEFAULT 0'); } catch { /* already present */ }
   connection = database;
   return database;
 }

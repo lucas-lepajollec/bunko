@@ -30,7 +30,7 @@ import {
   playlistState,
   type PlaylistRow,
 } from './playlist';
-import { foldName, liveDb } from './store';
+import { foldName, liveDb, liveMeta } from './store';
 
 /** Shared refreshes: one download at a time for the whole server. */
 const runtime = globalThis as typeof globalThis & {
@@ -130,6 +130,7 @@ interface ChannelRow {
   nsfw: number;
   streams: string;
   playable: number;
+  verified: number;
   folded: string;
 }
 interface ProgrammeRow {
@@ -206,7 +207,7 @@ function context(): Context {
         );
   for (const r of playlistRows()) {
     if (adultIds) {
-      const adult = adultEntry(r) || (r.channel_id !== null && adultIds.has(r.channel_id));
+      const adult = r.nsfw === 1 || adultEntry(r) || (r.channel_id !== null && adultIds.has(r.channel_id));
       if (adult !== (scope === 'only')) continue;
     }
     const id = r.channel_id ?? `m3u:${r.key}`;
@@ -228,7 +229,9 @@ function views(rows: ChannelRow[], ctx: Context): LiveChannel[] {
       name: r.name,
       logo: r.logo ?? own?.[0]?.logo ?? null,
       country: r.country,
+      languages: [],
       categories: JSON.parse(r.categories) as string[],
+      verified: Boolean(r.verified),
       playable: Boolean(r.playable || own?.length),
       fromPlaylist: Boolean(own?.length),
       quality: streams[0]?.q ?? null,
@@ -244,15 +247,21 @@ function playlistOnly(id: string, rows: PlaylistRow[], ctx: Context): LiveChanne
     id,
     name: rows[0].name,
     logo: rows[0].logo,
-    country: null,
-    categories: [],
-    playable: true,
+    country: rows[0].country,
+    languages: JSON.parse(rows[0].languages || '[]') as string[],
+    categories: JSON.parse(rows[0].categories || '[]') as string[],
+    verified: rows[0].verified !== 0,
+    playable: rows[0].verified !== 0,
     fromPlaylist: true,
     quality: null,
     now: null,
     next: null,
     favorite: ctx.favorites.has(id),
   };
+}
+
+function verifiedAvailable(countries: string[]): boolean {
+  return countries.length > 0 && countries.every((c) => liveMeta(`verified:${c}`) !== null);
 }
 
 const select = (where: string, order = 'name COLLATE NOCASE', limit = 60, offset = 0) =>
@@ -293,9 +302,11 @@ export async function liveHome(acceptLanguage: string | null): Promise<LiveHome>
   const db = liveDb();
   const inCountries = `AND country IN (${countries.map(() => '?').join(',')})`;
   const playlistIds = [...ctx.playlist.keys()].filter((id) => !id.startsWith('m3u:'));
+  const verified = verifiedAvailable(countries);
+  const shown = verified ? 'playable=1 AND verified=1' : 'playable=1';
   const playableWhere = playlistIds.length
-    ? `AND (playable=1 OR id IN (${playlistIds.map(() => '?').join(',')}))`
-    : 'AND playable=1';
+    ? `AND ((${shown}) OR id IN (${playlistIds.map(() => '?').join(',')}))`
+    : `AND ${shown}`;
   const local = db
     .prepare(select(`${inCountries} ${playableWhere}`, RANK, 400))
     .all(...countries, ...playlistIds) as ChannelRow[];
@@ -331,7 +342,14 @@ export async function liveHome(acceptLanguage: string | null): Promise<LiveHome>
       }
       return playlistOnly(id, rows, ctx);
     });
-  const extensions = shelf([...ctx.playlist.entries()].filter(([, rows]) => fromAddon(rows)));
+  const extensions = shelf(
+    [...ctx.playlist.entries()]
+      .filter(([, rows]) => fromAddon(rows))
+      .filter(([, rows]) => {
+        const c = rows[0];
+        return !c.country || countries.includes(c.country);
+      }),
+  );
   const playlist = [...ctx.playlist.entries()]
     .filter(([, rows]) => fromM3u(rows))
     .slice(0, 40)
@@ -345,9 +363,10 @@ export async function liveHome(acceptLanguage: string | null): Promise<LiveHome>
       }
       return playlistOnly(id, rows, ctx);
     });
+  const shelfChannels = [...all, ...extensions.filter((e) => !all.some((a) => a.id === e.id))];
   const shelves = SHELVES.map((category) => ({
     category,
-    channels: all.filter((c) => c.categories.includes(category)).slice(0, 20),
+    channels: shelfChannels.filter((c) => c.categories.includes(category)).slice(0, 20),
   })).filter((s) => s.channels.length >= 3);
   return { pending, countries, onNow, favorites, playlist, extensions, shelves };
 }
@@ -369,10 +388,13 @@ export async function liveCatalog(filters: {
   const params: unknown[] = [];
   const playlistIds = [...ctx.playlist.keys()].filter((id) => !id.startsWith('m3u:'));
   if (!filters.all) {
+    const countries = (filters.country ? [filters.country] : (filters.home ?? []))
+      .filter((c) => /^[A-Z]{2}$/.test(c));
+    const shown = verifiedAvailable(countries) ? 'playable=1 AND verified=1' : 'playable=1';
     where.push(
       playlistIds.length
-        ? `AND (playable=1 OR id IN (${playlistIds.map(() => '?').join(',')}))`
-        : 'AND playable=1',
+        ? `AND ((${shown}) OR id IN (${playlistIds.map(() => '?').join(',')}))`
+        : `AND ${shown}`,
     );
     params.push(...playlistIds);
   }
