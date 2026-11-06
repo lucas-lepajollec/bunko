@@ -287,6 +287,20 @@ The worker uploads queued files (`external_ref` = `bunko:<account>:<job>`; after
 
 The affected folder is then rescanned in Kavita and an index refresh is requested; a failed scan never undoes the file. Unreachable TraDoc or timeouts keep the job's state and retry after two minutes; a rejected key or another failure moves the job to `error` with a safe code (`TRADOC_UNAUTHORIZED`, `TRADOC_ERROR`, `FILE_UNREACHABLE`, …) until `retry`. A TraDoc `failed` job can be resumed. Bunko never deletes the TraDoc project.
 
+## Book reader
+
+Books, light novels and web novels are read in Bunko from their EPUB and PDF files in the Kavita library (the same files `Series/volumes` lists, mapped to the account's media root and re-checked with `realpath`). The work is resolved from the followed entry, a `kavita:<id>` identity, or the catalog sheet's Kavita presence. File keys are the first 16 base64url characters of the SHA-256 of the Kavita path.
+
+| Method and path                              | Body / query         | Result                                                                                                         |
+| -------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET /api/books`                             | `media`              | `BookFile[]` by volume then name, each with its saved `BookProgress` or `null`                                 |
+| `GET /api/books/manifest`                    | `media`, `file`      | `BookManifest`: EPUB reading order (with sizes to weigh progress), contents (EPUB 3 nav, else NCX), neighbours |
+| `GET /api/books/file/<media>/<file>`         | optional `download`  | the whole file, with byte ranges (`206`) for the PDF renderer; `download` makes it an attachment               |
+| `GET /api/books/file/<media>/<file>/<path…>` | none                 | one file inside the EPUB, so the book's relative links resolve; anything outside the archive answers `404`     |
+| `PUT /api/books/progress`                    | `BookProgressUpdate` | `{ok:true}`; finishing (≥ 99.5 %) a numbered volume of a followed work raises its volumes read                 |
+
+EPUB documents are served with scripts, inline handlers, frames, `<base>` and refresh tags removed, under `Content-Security-Policy: script-src 'none'` (images, styles and fonts only from Bunko). The reader shows them in a same-origin frame; reading settings (theme, size, font, spacing, width, pages or scroll) stay in the browser. The reader also feeds "Pick up" (`/api/continue`, href `/book/<file>?media=<id>`).
+
 ## Member permissions, 18+ extensions and progress source
 
 `UserAccount.permissions` and `MyAccount.permissions` list what an account may do: `services` (Suwayomi/Kavita/TraDoc/*arr connections, library targets and media root), `extensions` (extension actions and repositories), `downloads` (enqueue, retry, Arr grab, automatic downloads), `translate` (TraDoc jobs) and `adult` (enabling 18+). Admins always have all of them; new members get all of them. `PATCH /api/users {id, permissions}` sets a member's full list (stored as restrictions in `accounts.db`); a request needing a missing permission returns 403 `PERMISSION_DENIED`. Removing `adult` also switches 18+ off for that account. Background work is never restricted.

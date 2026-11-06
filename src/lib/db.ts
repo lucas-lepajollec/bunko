@@ -141,6 +141,9 @@ export function db(): Database.Database {
     CREATE TABLE IF NOT EXISTS continue_items (
       media_id TEXT PRIMARY KEY, media_json TEXT NOT NULL, kind TEXT NOT NULL, label TEXT NOT NULL,
       href TEXT NOT NULL, position REAL, updated_at INTEGER NOT NULL, hidden INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS book_progress (
+      media_id TEXT NOT NULL, file_key TEXT NOT NULL, part INTEGER NOT NULL, offset REAL NOT NULL,
+      fraction REAL NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(media_id,file_key));
     CREATE TABLE IF NOT EXISTS video_positions (
       key TEXT PRIMARY KEY, seconds REAL NOT NULL, duration REAL, updated_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS reader_chapters (

@@ -30,6 +30,7 @@ import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import { FavoriteButton } from '@/components/favorite';
 import { OwnedInventory } from '@/components/owned-inventory';
 import { Translations } from '@/components/translations';
+import { BookShelf, bookHref, nextBook, useBooks } from '@/components/books';
 import { EpisodeList } from '@/components/episodes';
 import {
   Cover,
@@ -230,8 +231,25 @@ function Title({ media }: { media: MediaDetail }) {
   const progress = { ...baseProgress, released };
   // Works counted in volumes use "tome" wording for their progress.
   const vol = (key: string) => (entry?.unit === 'volume' ? `${key}Vol` : key);
+  // Books and novels: their files in the library, read in Bunko's book reader.
+  const isText = media.type === 'NOVEL';
+  const bookId = entry?.media.id ?? media.id;
+  const books = useBooks(bookId, isText && Boolean(media.kavita));
   // Built-in reader: resume where the reader stopped, else the first unread chapter.
   const readTarget = (() => {
+    if (isText) {
+      const book = books.data ? nextBook(books.data) : null;
+      if (!book) return null;
+      const started = book.progress && book.progress.fraction < 0.995;
+      return {
+        href: bookHref(bookId, book.key),
+        label: started
+          ? t('books.resume', { percent: n(Math.round(book.progress!.fraction * 100)) })
+          : book.volume !== null
+            ? t('title.readVolume', { n: n(book.volume) })
+            : t('books.read'),
+      };
+    }
     const list = chapters.data?.chapters ?? [];
     const mediaId = encodeURIComponent(entry?.media.id ?? media.id);
     const pos = entry?.readerPosition;
@@ -753,8 +771,8 @@ function Title({ media }: { media: MediaDetail }) {
               </div>
             ) : (
               <div className="flex flex-col gap-5">
+                <BookShelf mediaId={bookId} owned={Boolean(media.kavita)} />
                 {entry && <Translations entry={entry} owned={Boolean(media.kavita)} />}
-                <Empty title={t('novel.title')}>{t('novel.body')}</Empty>
               </div>
             )}
           </section>
