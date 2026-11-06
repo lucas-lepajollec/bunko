@@ -166,7 +166,7 @@ function CatalogShelf({ kind, num }: { kind: Kind; num: number }) {
   const { t } = useI18n();
   const page = useApi<DiscoverPage>(`/api/discover?kind=${kind}&sort=popular`, {
     // The catalogs answer progressively: ask again until every provider has answered.
-    refreshInterval: (d) => (d?.pending ? 2000 : 0),
+    refreshInterval: (d) => (!d?.pending ? 0 : d.items.length ? 30_000 : 2000),
     shouldRetryOnError: true,
     errorRetryInterval: 5000,
     errorRetryCount: 8,
