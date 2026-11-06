@@ -28,9 +28,17 @@ import {
   ensurePlaylist,
   playlistRows,
   playlistState,
+  cleanName,
   type PlaylistRow,
 } from './playlist';
-import { foldName, liveDb, liveMeta } from './store';
+import { foldName, liveDb } from './store';
+import {
+  healthProgress,
+  prioritise,
+  reportFailure,
+  startHealthChecks,
+  streamHealth,
+} from './verify';
 
 /** Shared refreshes: one download at a time for the whole server. */
 const runtime = globalThis as typeof globalThis & {
@@ -103,7 +111,10 @@ export async function ensureLive(waitMs = 45_000): Promise<boolean> {
   }
   await ensurePlaylist().catch(() => undefined);
   await ensureAddonChannels().catch(() => undefined);
-  if (channelCount()) refreshGuides(guideUrls());
+  if (channelCount()) {
+    refreshGuides(guideUrls());
+    startHealthChecks();
+  }
   return !channelCount();
 }
 
@@ -207,7 +218,8 @@ function context(): Context {
         );
   for (const r of playlistRows()) {
     if (adultIds) {
-      const adult = r.nsfw === 1 || adultEntry(r) || (r.channel_id !== null && adultIds.has(r.channel_id));
+      const adult =
+        r.nsfw === 1 || adultEntry(r) || (r.channel_id !== null && adultIds.has(r.channel_id));
       if (adult !== (scope === 'only')) continue;
     }
     const id = r.channel_id ?? `m3u:${r.key}`;
@@ -232,7 +244,8 @@ function views(rows: ChannelRow[], ctx: Context): LiveChannel[] {
       languages: [],
       categories: JSON.parse(r.categories) as string[],
       verified: Boolean(r.verified),
-      playable: Boolean(r.playable || own?.length),
+      // Free streams count once the health check saw one play; the user's own sources always.
+      playable: Boolean(r.verified || own?.length),
       fromPlaylist: Boolean(own?.length),
       quality: streams[0]?.q ?? null,
       now: current ? programme(current) : null,
@@ -258,10 +271,6 @@ function playlistOnly(id: string, rows: PlaylistRow[], ctx: Context): LiveChanne
     next: null,
     favorite: ctx.favorites.has(id),
   };
-}
-
-function verifiedAvailable(countries: string[]): boolean {
-  return countries.length > 0 && countries.every((c) => liveMeta(`verified:${c}`) !== null);
 }
 
 const select = (where: string, order = 'name COLLATE NOCASE', limit = 60, offset = 0) =>
@@ -302,8 +311,8 @@ export async function liveHome(acceptLanguage: string | null): Promise<LiveHome>
   const db = liveDb();
   const inCountries = `AND country IN (${countries.map(() => '?').join(',')})`;
   const playlistIds = [...ctx.playlist.keys()].filter((id) => !id.startsWith('m3u:'));
-  const verified = verifiedAvailable(countries);
-  const shown = verified ? 'playable=1 AND verified=1' : 'playable=1';
+  prioritise(countries);
+  const shown = 'verified=1';
   const playableWhere = playlistIds.length
     ? `AND ((${shown}) OR id IN (${playlistIds.map(() => '?').join(',')}))`
     : `AND ${shown}`;
@@ -368,101 +377,183 @@ export async function liveHome(acceptLanguage: string | null): Promise<LiveHome>
     category,
     channels: shelfChannels.filter((c) => c.categories.includes(category)).slice(0, 20),
   })).filter((s) => s.channels.length >= 3);
-  return { pending, countries, onNow, favorites, playlist, extensions, shelves };
+  return {
+    pending,
+    countries,
+    onNow,
+    favorites,
+    playlist,
+    extensions,
+    shelves,
+    health: healthProgress(),
+  };
 }
 
+/**
+ * The channels that play: free channels the health check saw play, every channel the user's
+ * playlist or streaming extensions bring (the index ones and their own), by country, category
+ * and name. Channels with no working source (subscriptions not held, blocked, dead) are left out.
+ */
 export async function liveCatalog(filters: {
   /** Countries listed first when every country is shown. */
   home?: string[];
   country?: string;
   category?: string;
   q?: string;
-  all?: boolean;
   page: number;
+  pageSize?: number;
 }): Promise<LiveCatalog> {
   const pending = await ensureLive();
+  prioritise(filters.home ?? []);
   const ctx = context();
   const db = liveDb();
-  const pageSize = 60;
-  const where: string[] = [];
-  const params: unknown[] = [];
-  const playlistIds = [...ctx.playlist.keys()].filter((id) => !id.startsWith('m3u:'));
-  if (!filters.all) {
-    const countries = (filters.country ? [filters.country] : (filters.home ?? []))
-      .filter((c) => /^[A-Z]{2}$/.test(c));
-    const shown = verifiedAvailable(countries) ? 'playable=1 AND verified=1' : 'playable=1';
-    where.push(
-      playlistIds.length
-        ? `AND ((${shown}) OR id IN (${playlistIds.map(() => '?').join(',')}))`
-        : `AND ${shown}`,
-    );
-    params.push(...playlistIds);
-  }
-  const facetWhere = where.join(' ');
-  const facetParams = [...params];
-  if (filters.country) {
-    where.push('AND country=?');
-    params.push(filters.country);
-  }
-  const countryWhere = where.join(' ');
-  const countryParams = [...params];
-  if (filters.category) {
-    where.push(`AND categories LIKE ?`);
-    params.push(`%"${filters.category.replace(/[%_"]/g, '')}"%`);
-  }
-  if (filters.q) {
-    for (const word of filters.q.split(/\s+/).map(foldName).filter(Boolean).slice(0, 5)) {
-      where.push('AND folded LIKE ?');
-      params.push(`%${word}%`);
-    }
-  }
-  const sql = where.join(' ');
-  const total = (
-    db
-      .prepare(`SELECT COUNT(*) AS n FROM live_channels WHERE 1=1 ${nsfwClause()} ${sql}`)
-      .get(...params) as {
-      n: number;
-    }
-  ).n;
-  const home = (filters.home ?? []).filter((c) => /^[A-Z]{2}$/.test(c));
-  const homeFirst =
-    home.length && !filters.country
-      ? `CASE WHEN country IN (${home.map((c) => `'${c}'`).join(',')}) THEN 0 ELSE 1 END, `
-      : '';
-  const guided = `CASE WHEN EXISTS (SELECT 1 FROM live_programmes p WHERE p.channel_id=live_channels.id) THEN 0 ELSE 1 END`;
-  const rows = db
+  const pageSize = filters.pageSize ?? 60;
+  type Entry = {
+    id: string;
+    name: string;
+    country: string | null;
+    categories: string[];
+    folded: string;
+    guided: boolean;
+    rank: number;
+    own?: PlaylistRow[];
+  };
+  const ownIds = [...ctx.playlist.keys()].filter((id) => !id.startsWith('m3u:'));
+  const indexRows = db
     .prepare(
-      select(
-        sql,
-        `playable DESC, ${homeFirst}${guided}, ${RANK}`,
-        pageSize,
-        (filters.page - 1) * pageSize,
-      ),
+      `SELECT id, name, country, categories, folded FROM live_channels
+       WHERE 1=1 ${nsfwClause()} AND (verified=1${ownIds.length ? ` OR id IN (${ownIds.map(() => '?').join(',')})` : ''})`,
     )
-    .all(...params) as ChannelRow[];
-  const countries = db
-    .prepare(
-      `SELECT c.code, c.name, c.flag, COUNT(*) AS count FROM live_channels l JOIN live_countries c ON c.code=l.country
-       WHERE 1=1 ${nsfwClause()} ${facetWhere} GROUP BY c.code ORDER BY count DESC`,
-    )
-    .all(...facetParams) as LiveCatalog['countries'];
+    .all(...ownIds) as {
+    id: string;
+    name: string;
+    country: string | null;
+    categories: string;
+    folded: string;
+  }[];
+  const guided = new Set(
+    (
+      db.prepare('SELECT DISTINCT channel_id FROM live_programmes').all() as {
+        channel_id: string;
+      }[]
+    ).map((r) => r.channel_id),
+  );
+  const rankOf = (categories: string[]) =>
+    categories.includes('general') ? 0 : categories.includes('news') ? 1 : 2;
+  const entries: Entry[] = indexRows.map((r) => {
+    const categories = JSON.parse(r.categories) as string[];
+    return {
+      id: r.id,
+      name: r.name,
+      country: r.country,
+      categories,
+      folded: r.folded,
+      guided: guided.has(r.id),
+      rank: rankOf(categories),
+    };
+  });
+  // Channels only the playlist or an extension knows.
+  for (const [id, rows] of ctx.playlist) {
+    if (!id.startsWith('m3u:')) continue;
+    const first = rows[0];
+    const categories = JSON.parse(first.categories || '[]') as string[];
+    const { folded, country } = cleanName(first.name);
+    entries.push({
+      id,
+      name: first.name,
+      country: first.country ?? country ?? /^([A-Z]{2})\b/.exec(first.grp ?? '')?.[1] ?? null,
+      categories,
+      folded: folded || foldName(first.name),
+      guided: false,
+      rank: rankOf(categories),
+      own: rows,
+    });
+  }
+  const words = (filters.q ?? '').split(/\s+/).map(foldName).filter(Boolean).slice(0, 5);
+  const byText = entries.filter((e) =>
+    words.every((w) => e.folded.includes(w) || foldName(e.name).includes(w)),
+  );
+  const inCountry = filters.country ? byText.filter((e) => e.country === filters.country) : byText;
+  const shown = filters.category
+    ? inCountry.filter((e) => e.categories.includes(filters.category!))
+    : inCountry;
+  const home = new Set((filters.home ?? []).filter((c) => /^[A-Z]{2}$/.test(c)));
+  shown.sort(
+    (a, b) =>
+      Number(!(a.country && home.has(a.country))) - Number(!(b.country && home.has(b.country))) ||
+      Number(!a.own && !ctx.playlist.has(a.id)) - Number(!b.own && !ctx.playlist.has(b.id)) ||
+      Number(!a.guided) - Number(!b.guided) ||
+      a.rank - b.rank ||
+      a.name.localeCompare(b.name),
+  );
+  const page = shown.slice((filters.page - 1) * pageSize, filters.page * pageSize);
+  const indexPage = page.filter((e) => !e.own).map((e) => e.id);
+  const full = new Map(
+    (indexPage.length
+      ? (db
+          .prepare(
+            `SELECT * FROM live_channels WHERE id IN (${indexPage.map(() => '?').join(',')})`,
+          )
+          .all(...indexPage) as ChannelRow[])
+      : []
+    ).map((r) => [r.id, r]),
+  );
+  const viewed = new Map(views([...full.values()], ctx).map((c) => [c.id, c]));
+  const channels = page.flatMap((e) =>
+    e.own ? [playlistOnly(e.id, e.own, ctx)] : viewed.has(e.id) ? [viewed.get(e.id)!] : [],
+  );
+  // Facets over what the other filters leave.
+  const names = new Map(
+    (
+      db.prepare('SELECT code, name, flag FROM live_countries').all() as {
+        code: string;
+        name: string;
+        flag: string | null;
+      }[]
+    ).map((c) => [c.code, c]),
+  );
+  const countryCounts = new Map<string, number>();
+  for (const e of byText)
+    if (e.country) countryCounts.set(e.country, (countryCounts.get(e.country) ?? 0) + 1);
   const categoryCounts = new Map<string, number>();
-  for (const r of db
-    .prepare(`SELECT categories FROM live_channels WHERE 1=1 ${nsfwClause()} ${countryWhere}`)
-    .all(...countryParams) as { categories: string }[])
-    for (const c of JSON.parse(r.categories) as string[])
-      categoryCounts.set(c, (categoryCounts.get(c) ?? 0) + 1);
+  for (const e of inCountry)
+    for (const c of e.categories) categoryCounts.set(c, (categoryCounts.get(c) ?? 0) + 1);
   return {
     pending,
-    channels: views(rows, ctx),
-    total,
+    channels,
+    total: shown.length,
     page: filters.page,
     pageSize,
-    countries,
+    countries: [...countryCounts]
+      .map(([code, count]) => ({
+        code,
+        name: names.get(code)?.name ?? code,
+        flag: names.get(code)?.flag ?? null,
+        count,
+      }))
+      .sort((a, b) => b.count - a.count),
     categories: [...categoryCounts]
       .map(([id, count]) => ({ id, count }))
       .sort((a, b) => b.count - a.count),
+    health: healthProgress(),
   };
+}
+
+/**
+ * A channel's free streams as the health check left them: the ones seen playing first, the
+ * unchecked next, the ones seen failing left out (they would only stall the player).
+ */
+function freeStreams(row: ChannelRow | undefined): StoredStream[] {
+  if (!row) return [];
+  const all = JSON.parse(row.streams) as StoredStream[];
+  const health = streamHealth(all.map((s) => s.u));
+  const order = (s: StoredStream) => (health.get(s.u) === true ? 0 : health.has(s.u) ? 2 : 1);
+  return all.filter((s) => health.get(s.u) !== false).sort((a, b) => order(a) - order(b));
+}
+
+/** The player gave up on every source of a channel: its free streams are checked again. */
+export function reportLiveFailure(id: string) {
+  reportFailure(id);
 }
 
 const streamLabel = (s: StoredStream) =>
@@ -526,7 +617,7 @@ export async function liveChannel(id: string): Promise<LiveChannelDetail> {
       fromPlaylist: false,
       url: relayPath({ url: a.url, headers: a.headers }),
     })),
-    ...(row ? (JSON.parse(row.streams) as StoredStream[]) : []).map((s) => ({
+    ...freeStreams(row).map((s) => ({
       label: streamLabel(s) ?? '',
       quality: s.q ?? null,
       fromPlaylist: false,

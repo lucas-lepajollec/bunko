@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { AppError } from '../errors';
 import { readCapped, safeFetch } from '../safe-fetch';
+import { restoreHealth } from './verify';
 import { foldName, liveDb, liveMeta, setLiveMeta } from './store';
-import { getSettings } from '../settings';
 
 /**
  * The public channel index (iptv-org): every TV channel with its country and categories, the
@@ -187,12 +187,8 @@ export async function refreshChannelIndex() {
     for (const c of countries) country.run(c.code, c.name, c.flag ?? null);
   })();
   setLiveMeta('index_at', String(Date.now()));
-  // Vérifie en arrière-plan les flux des pays de la page d'accueil : une URL listée ne
-  // signifie pas qu'elle joue. Les tests ne lancent pas de réseau.
-  if (!process.env.VITEST) {
-    const countries = getSettings().liveCountries.length ? getSettings().liveCountries : ['FR'];
-    setTimeout(() => { void verifyStreams(countries); }, 1500).unref?.();
-  }
+  // Health results are per stream address: the new rows get them back.
+  restoreHealth();
   return { channels: channels.length, streams: streams.length };
 }
 
@@ -200,42 +196,3 @@ export const channelIndexAge = () => {
   const at = Number(liveMeta('index_at') ?? 0);
   return at ? Date.now() - at : Infinity;
 };
-
-
-/** Sonde les premiers flux des chaînes d'un pays et marque `verified` (0/1). */
-export async function verifyStreams(countries: string[], limit = 300): Promise<void> {
-  if (!countries.length) return;
-  const db = liveDb();
-  db.prepare(
-    `UPDATE live_channels SET verified=0 WHERE country IN (${countries.map(() => '?').join(',')})`,
-  ).run(...countries);
-  const rows = db
-    .prepare(
-      `SELECT id, streams FROM live_channels WHERE playable=1 AND country IN (${countries
-        .map(() => '?')
-        .join(',')}) LIMIT ?`,
-    )
-    .all(...countries, limit) as { id: string; streams: string }[];
-  const update = db.prepare('UPDATE live_channels SET verified=? WHERE id=?');
-  let at = 0;
-  const workers = Array.from({ length: Math.min(6, rows.length) }, async () => {
-    while (at < rows.length) {
-      const row = rows[at++];
-      let ok = false;
-      try {
-        const first = (JSON.parse(row.streams) as { u?: string; r?: string; a?: string }[])[0];
-        if (first?.u) {
-          const headers: Record<string, string> = {};
-          if (first.r) headers.Referer = first.r;
-          if (first.a) headers['User-Agent'] = first.a;
-          const response = await safeFetch(first.u, { timeoutMs: 6000, headers });
-          ok = response.status >= 200 && response.status < 400;
-          response.cancel();
-        }
-      } catch { ok = false; }
-      update.run(ok ? 1 : 0, row.id);
-    }
-  });
-  await Promise.all(workers);
-  for (const country of countries) setLiveMeta(`verified:${country}`, String(Date.now()));
-}

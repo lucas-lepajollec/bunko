@@ -139,6 +139,41 @@ http://iptv.example/movie/me/secret/9.mkv
 https://adult.example/rose.m3u8
 `;
 let requests: string[] = [];
+/** HLS fixtures: a live channel that moves on, a finished clip, a blocked one, a frozen one. */
+function hls(url: URL, res: import('node:http').ServerResponse) {
+  const playlist = (body: string) => {
+    res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
+    res.end(body);
+  };
+  const media = (sequence: number, ended = false) =>
+    playlist(
+      `#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:${sequence}\n` +
+        [0, 1, 2].map((i) => `#EXTINF:1.0,\n/hls/seg/${sequence + i}.ts`).join('\n') +
+        (ended ? '\n#EXT-X-ENDLIST' : ''),
+    );
+  if (url.pathname === '/hls/live.m3u8')
+    return playlist(
+      '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000\nlow.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=5000000\nhigh.m3u8',
+    );
+  if (url.pathname === '/hls/low.m3u8') return media(Math.floor(Date.now() / 1000));
+  if (url.pathname === '/hls/ended.m3u8') return media(1, true);
+  if (url.pathname === '/hls/frozen.m3u8') return media(7);
+  if (url.pathname.startsWith('/hls/seg/')) {
+    const body = Buffer.alloc(32 * 1024, 0);
+    for (let i = 0; i < body.length; i += 188) body[i] = 0x47;
+    res.writeHead(200, { 'Content-Type': 'video/mp2t' });
+    return void res.end(body);
+  }
+  res.writeHead(403);
+  res.end();
+}
+/** What the health check would have found: these channels play from this server. */
+const markWorking = (...ids: string[]) =>
+  liveDb()
+    .prepare(
+      `UPDATE live_channels SET verified=1, checked_at=? WHERE id IN (${ids.map(() => '?').join(',')})`,
+    )
+    .run(Date.now(), ...ids);
 let tvOffered = true;
 const server: Server = createServer((req, res) => {
   const url = new URL(req.url!, 'http://x');
@@ -217,6 +252,7 @@ const server: Server = createServer((req, res) => {
         },
       ],
     });
+  if (url.pathname.startsWith('/hls/')) return hls(url, res);
   if (url.pathname === '/playlist.m3u') {
     res.writeHead(200, { 'Content-Type': 'audio/x-mpegurl' });
     return void res.end(playlist.replace('PORT', String(port)));
@@ -241,6 +277,7 @@ beforeEach(async () => {
   });
   requests = [];
   await live.refreshLiveNow();
+  markWorking('France24.fr', 'Arte.fr', 'Adult.fr');
 });
 afterAll(() => {
   server.close();
@@ -300,20 +337,13 @@ it('home: playable channels of the country with what is on now, no 18+', async (
   expect(live.homeCountries('en-GB')).toEqual(['UK']);
   const catalog = await live.liveCatalog({ page: 1 });
   expect(catalog.channels.map((c) => c.id)).toEqual(['France24.fr', 'Arte.fr']);
-  const every = await live.liveCatalog({ page: 1, all: true });
-  expect(every.channels.map((c) => c.id)).not.toContain('Adult.fr');
-  expect(every.total).toBe(5);
-  expect(
-    (await live.liveCatalog({ page: 1, all: true, country: 'UK' })).channels.map((c) => c.id),
-  ).toEqual(['BBCNews.uk']);
-  expect(
-    (await live.liveCatalog({ page: 1, all: true, q: 'canal' })).channels.map((c) => c.id),
-  ).toEqual(['CanalPlus.fr']);
-  expect((await live.liveCatalog({ page: 1, all: true, category: 'news' })).total).toBe(2);
+  // Only what plays: TF1 (not seen playing), Canal+ (subscription) and BBC (no stream) are out.
+  expect(catalog.total).toBe(2);
+  expect((await live.liveCatalog({ page: 1, country: 'UK' })).channels).toEqual([]);
+  expect((await live.liveCatalog({ page: 1, q: 'canal' })).channels).toEqual([]);
+  expect((await live.liveCatalog({ page: 1, category: 'news' })).total).toBe(1);
   updateSettings({ adultContent: true, adultMode: true });
-  expect((await live.liveCatalog({ page: 1, all: true })).channels.map((c) => c.id)).toEqual([
-    'Adult.fr',
-  ]);
+  expect((await live.liveCatalog({ page: 1 })).channels.map((c) => c.id)).toEqual(['Adult.fr']);
 });
 
 it('channel: streams go through the relay with their headers, guide included', async () => {
@@ -342,6 +372,12 @@ it('the user’s playlist makes subscribed channels playable', async () => {
     ['m3u', true],
   ]);
   expect(home.onNow.map((c) => c.id)).toContain('CanalPlus.fr');
+  // The subscription's channels are in the catalog and its search, its own ones too.
+  expect((await live.liveCatalog({ page: 1, q: 'canal' })).channels.map((c) => c.id)).toEqual([
+    'CanalPlus.fr',
+  ]);
+  const local = (await live.liveCatalog({ page: 1, q: 'locale' })).channels;
+  expect(local.map((c) => [c.name, c.fromPlaylist])).toEqual([['Ma chaîne locale', true]]);
   const canal = await live.liveChannel('CanalPlus.fr');
   expect(canal.playable).toBe(true);
   expect(unseal(canal.streams[0].url.split('/').pop()!).url).toBe(
@@ -427,3 +463,33 @@ it('an extension that gains live TV after it was read shows its channels on the 
   expect((await live.liveHome('fr-FR')).extensions.length).toBe(2);
   updateSettings({ videoAddons: [] });
 });
+
+it('keeps only streams that really play live', { timeout: 30_000 }, async () => {
+  const { probeStream } = await import('@/lib/live/health');
+  expect(await probeStream(`${base}/hls/live.m3u8`)).toEqual({ ok: true });
+  expect(await probeStream(`${base}/hls/blocked.m3u8`)).toEqual({ ok: false, reason: 'http' });
+  expect(await probeStream(`${base}/hls/ended.m3u8`)).toEqual({ ok: false, reason: 'ended' });
+  // Starts, then never moves on: the kind that plays two seconds and stops.
+  expect(await probeStream(`${base}/hls/frozen.m3u8`)).toEqual({ ok: false, reason: 'stalled' });
+});
+it(
+  'a channel shows once one of its streams played, failing streams are dropped',
+  { timeout: 30_000 },
+  async () => {
+    const { checkChannel } = await import('@/lib/live/verify');
+    liveDb()
+      .prepare('UPDATE live_channels SET verified=0, checked_at=0, streams=? WHERE id=?')
+      .run(
+        JSON.stringify([{ u: `${base}/hls/blocked.m3u8` }, { u: `${base}/hls/live.m3u8` }]),
+        'TF1.fr',
+      );
+    expect(await checkChannel('TF1.fr')).toBe(true);
+    expect((await live.liveCatalog({ page: 1, q: 'tf1' })).channels.map((c) => c.id)).toEqual([
+      'TF1.fr',
+    ]);
+    const tf1 = await live.liveChannel('TF1.fr');
+    expect(tf1.streams.map((s) => unseal(s.url.split('/').pop()!).url)).toEqual([
+      `${base}/hls/live.m3u8`,
+    ]);
+  },
+);

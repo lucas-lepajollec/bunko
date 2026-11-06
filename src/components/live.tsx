@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Heart, Radio } from 'lucide-react';
-import type { LiveCatalog, LiveChannel, LiveHome, LiveProgramme } from '@/types/shared';
+import type { LiveCatalog, LiveChannel, LiveHealth, LiveHome, LiveProgramme } from '@/types/shared';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { ScrollRow } from './media';
@@ -13,6 +13,7 @@ import {
   PageTitle,
   SectionHeading,
   Skeleton,
+  Spinner,
   cx,
   field,
   smallButton,
@@ -204,7 +205,9 @@ export function LiveHomeView() {
   const category = useCategory();
   const country = useCountry();
   const home = useApi<LiveHome>('/api/live/home', {
-    refreshInterval: (d) => (d?.pending ? 3000 : 120_000),
+    // While the free channels are being checked the home fills up: refresh more often.
+    refreshInterval: (d) =>
+      d?.pending ? 3000 : d?.health && d.health.checked < d.health.total ? 20_000 : 120_000,
   });
   let n = 0;
   const where = home.data?.countries.map((c) => country(c)).join(', ');
@@ -224,6 +227,7 @@ export function LiveHomeView() {
         </div>
       ) : (
         <>
+          <HealthNote health={home.data.health} />
           {home.data.onNow.length > 0 && (
             <Shelf
               num={++n}
@@ -281,22 +285,26 @@ export function LiveCatalogView({
   const countryName = useCountry();
   const country = /^[A-Z]{2}$/.test(params.get('country') ?? '') ? params.get('country')! : '';
   const cat = /^[a-z]{2,20}$/.test(params.get('category') ?? '') ? params.get('category')! : '';
-  const all = params.get('all') === '1';
   const q = params.get('q') ?? '';
   const [text, setText] = useState(q);
+  // A search started elsewhere (the header field) replaces what this field holds.
+  const [seenQ, setSeenQ] = useState(q);
+  if (seenQ !== q) {
+    setSeenQ(q);
+    setText(q);
+  }
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState<LiveChannel[][]>([]);
   const query = new URLSearchParams({
     ...(country ? { country } : {}),
     ...(cat ? { category: cat } : {}),
     ...(q ? { q } : {}),
-    ...(all ? { all: '1' } : {}),
     page: String(page),
   }).toString();
   const data = useApi<LiveCatalog>(`/api/live/catalog?${query}`, {
     refreshInterval: (d) => (d?.pending ? 3000 : 0),
   });
-  const filtersKey = `${country}|${cat}|${q}|${all}`;
+  const filtersKey = `${country}|${cat}|${q}`;
   const [shownKey, setShownKey] = useState(filtersKey);
   if (shownKey !== filtersKey) {
     setShownKey(filtersKey);
@@ -357,17 +365,9 @@ export function LiveCatalogView({
           size="lg"
           className="h-11"
         />
-        <label className="text-mid flex h-11 items-center gap-2 px-2 text-sm">
-          <input
-            type="checkbox"
-            checked={!all}
-            onChange={(e) => set('all', e.target.checked ? '' : '1')}
-            className="size-4 accent-white"
-          />
-          {t('live.watchableOnly')}
-        </label>
       </div>
       {current?.pending && <p className="text-mid text-sm">{t('live.pending')}</p>}
+      <HealthNote health={current?.health} />
       {data.error && !channels.length ? (
         <ErrorNote error={data.error} />
       ) : !channels.length && !current ? (
@@ -490,4 +490,23 @@ export function LiveFavoritesView() {
 
 export async function toggleFavorite(id: string, favorite: boolean) {
   await send('/api/live/favorite', 'PUT', { id, favorite });
+}
+
+/**
+ * Free channels show only once seen playing: while the check runs, say how far it went (the
+ * catalog fills up as it goes).
+ */
+export function HealthNote({ health }: { health?: LiveHealth }) {
+  const { t, n } = useI18n();
+  if (!health || !health.total || health.checked >= health.total) return null;
+  return (
+    <p className="text-muted flex items-center gap-2 text-sm">
+      <Spinner className="size-3" />
+      {t('live.healthChecking', {
+        checked: n(health.checked),
+        total: n(health.total),
+        working: n(health.working),
+      })}
+    </p>
+  );
 }

@@ -5,7 +5,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { ExternalLink, Heart } from 'lucide-react';
 import type { LiveChannelDetail, LiveStreamChoice } from '@/types/shared';
-import { useApi } from '@/lib/client/api';
+import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import {
   ChannelLogo,
@@ -53,7 +53,7 @@ export default function LiveChannelPage() {
       <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-5">
           {c.playable && c.streams.length ? (
-            <LivePlayer key={c.id} streams={c.streams} title={c.name} />
+            <LivePlayer key={c.id} id={c.id} streams={c.streams} title={c.name} />
           ) : (
             <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 rounded-2xl bg-white/[0.04] p-6 text-center">
               <ChannelLogo channel={c} className="h-20 max-w-[240px] text-3xl" />
@@ -195,7 +195,15 @@ export default function LiveChannelPage() {
  * A live stream through Bunko's relay: hls.js where the browser has no HLS of its own (Apple
  * plays it natively). A failing source moves on to the next one by itself.
  */
-function LivePlayer({ streams, title }: { streams: LiveStreamChoice[]; title: string }) {
+function LivePlayer({
+  id,
+  streams,
+  title,
+}: {
+  id: string;
+  streams: LiveStreamChoice[];
+  title: string;
+}) {
   const { t } = useI18n();
   const video = useRef<HTMLVideoElement>(null);
   const [index, setIndex] = useState(0);
@@ -210,7 +218,11 @@ function LivePlayer({ streams, title }: { streams: LiveStreamChoice[]; title: st
     const fail = () => {
       if (destroyed) return;
       if (index + 1 < streams.length) setIndex(index + 1);
-      else setFailed(true);
+      else {
+        setFailed(true);
+        // Nothing played: the server checks this channel's free streams again.
+        void send('/api/live/report', 'POST', { id }).catch(() => undefined);
+      }
     };
     const play = () =>
       el.play().catch((e: unknown) => {
@@ -250,11 +262,18 @@ function LivePlayer({ streams, title }: { streams: LiveStreamChoice[]; title: st
       el.removeAttribute('src');
       el.load();
     };
-  }, [stream, index, streams.length]);
+  }, [stream, index, streams.length, id]);
   return (
     <div className="flex flex-col gap-2.5">
       <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-black">
-        <video ref={video} controls={!failed} playsInline autoPlay title={title} className="size-full" />
+        <video
+          ref={video}
+          controls={!failed}
+          playsInline
+          autoPlay
+          title={title}
+          className="size-full"
+        />
         {needsTap && (
           <button
             type="button"
