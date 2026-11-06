@@ -141,13 +141,10 @@ export function db(): Database.Database {
     CREATE TABLE IF NOT EXISTS continue_items (
       media_id TEXT PRIMARY KEY, media_json TEXT NOT NULL, kind TEXT NOT NULL, label TEXT NOT NULL,
       href TEXT NOT NULL, position REAL, updated_at INTEGER NOT NULL, hidden INTEGER NOT NULL DEFAULT 0);
-    CREATE TABLE IF NOT EXISTS live_favorites (channel_id TEXT PRIMARY KEY, added_at INTEGER NOT NULL);
-    CREATE TABLE IF NOT EXISTS live_playlist (
-      key TEXT PRIMARY KEY, position INTEGER NOT NULL, name TEXT NOT NULL, logo TEXT, grp TEXT,
-      tvg_id TEXT, url TEXT NOT NULL, referrer TEXT, user_agent TEXT, channel_id TEXT,
-      country TEXT, languages TEXT, categories TEXT,
-      nsfw INTEGER NOT NULL DEFAULT 0, verified INTEGER NOT NULL DEFAULT 1);
-    CREATE INDEX IF NOT EXISTS live_playlist_channel ON live_playlist(channel_id);
+    -- Live TV was removed: its per-account tables and settings go.
+    DROP TABLE IF EXISTS live_favorites;
+    DROP TABLE IF EXISTS live_playlist;
+    DELETE FROM settings WHERE key IN ('liveEnabled','liveMode','liveCountries','livePlaylistUrl','liveGuideUrls');
     CREATE TABLE IF NOT EXISTS book_progress (
       media_id TEXT NOT NULL, file_key TEXT NOT NULL, part INTEGER NOT NULL, offset REAL NOT NULL,
       fraction REAL NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(media_id,file_key));
@@ -173,15 +170,6 @@ export function db(): Database.Database {
         UPDATE cache_usage SET bytes=bytes+NEW.bytes-OLD.bytes WHERE name='${table}'; END;
       CREATE TRIGGER IF NOT EXISTS usage_${table}_DELETE AFTER DELETE ON ${table} BEGIN
         UPDATE cache_usage SET bytes=bytes-OLD.bytes,entries=entries-1 WHERE name='${table}'; END;`);
-    }
-    for (const [name, type] of [
-      ['country', 'TEXT'],
-      ['languages', 'TEXT'],
-      ['categories', 'TEXT'],
-      ['nsfw', 'INTEGER NOT NULL DEFAULT 0'],
-      ['verified', 'INTEGER NOT NULL DEFAULT 1'],
-    ] as const) {
-      try { connection.exec(`ALTER TABLE live_playlist ADD COLUMN ${name} ${type}`); } catch { /* already present */ }
     }
     migrateV8(connection);
     migrateV9(connection);

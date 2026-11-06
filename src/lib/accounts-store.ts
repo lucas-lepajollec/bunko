@@ -30,6 +30,9 @@ function syncDirectory(directory: string) {
 export function accountsDb(): Database.Database {
   if (connection?.open) return connection;
   mkdirSync(accountsDir, { recursive: true, mode: 0o700 });
+  // Live TV was removed: its shared channel index and guides go with it.
+  for (const name of ['live.db', 'live.db-wal', 'live.db-shm'])
+    rmSync(path.join(accountsDir, name), { force: true });
   const database = new Database(path.join(accountsDir, 'accounts.db'));
   database.pragma('journal_mode = WAL');
   database.pragma('busy_timeout = 5000');

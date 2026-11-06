@@ -2,9 +2,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useMediaPreview } from '@/lib/client/media-navigation';
-import { mediaHref, useApi, useProgressiveSearch } from '@/lib/client/api';
-import type { LiveCatalog } from '@/types/shared';
-import { ChannelLogo, liveHref } from './live';
+import { mediaHref, useProgressiveSearch } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { inUniverse, useUniverse, searchTypeOf } from '@/lib/client/universe';
 import { Cover, Skeleton, cx, useMediaMeta } from './ui';
@@ -48,20 +46,10 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
   // A chosen universe searches only its own kind (and asks only those providers).
   const universe = useUniverse();
   const type = searchTypeOf(universe.active);
-  // Live TV: the field searches channels (free ones that play, the playlist's, the extensions').
-  const live = universe.ready && universe.live && !scope;
-  const results = useProgressiveSearch(scope || live ? '' : q, type);
-  const channels = useApi<LiveCatalog>(
-    live && q.length >= 2 ? `/api/live/catalog?q=${encodeURIComponent(q)}&size=6` : null,
-  );
-  const items =
-    scope || live
-      ? []
-      : (results.data?.results ?? []).filter((m) => inUniverse(universe.active, m)).slice(0, 6);
-  const channelItems = live ? (channels.data?.channels ?? []) : [];
-  const rows: { href: string; key: string }[] = live
-    ? channelItems.map((c) => ({ key: c.id, href: liveHref(c.id) }))
-    : items.map((m) => ({ key: m.id, href: mediaHref(m.id) }));
+  const results = useProgressiveSearch(scope ? '' : q, type);
+  const items = scope
+    ? []
+    : (results.data?.results ?? []).filter((m) => inUniverse(universe.active, m)).slice(0, 6);
   useEffect(() => {
     if (!scope) return;
     const url = new URL(window.location.href);
@@ -72,21 +60,16 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
   const actions = [
     {
       key: 'catalog',
-      label: t(live ? 'quick.allChannels' : 'quick.allResults', { q: text.trim() }),
+      label: t('quick.allResults', { q: text.trim() }),
       href: `/catalog?q=${encodeURIComponent(text.trim())}`,
     },
-    // Searching inside reading/streaming extensions means nothing for TV channels.
-    ...(live
-      ? []
-      : [
-          {
-            key: 'sources',
-            label: t('quick.inExtensions'),
-            href: `/search?q=${encodeURIComponent(text.trim())}`,
-          },
-        ]),
+    {
+      key: 'sources',
+      label: t('quick.inExtensions'),
+      href: `/search?q=${encodeURIComponent(text.trim())}`,
+    },
   ];
-  const total = rows.length + actions.length;
+  const total = items.length + actions.length;
   const show = open && text.trim().length >= 2;
 
   useEffect(() => {
@@ -144,8 +127,8 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
       setOpen(false);
     } else if (e.key === 'Enter' && text.trim().length >= 2) {
       e.preventDefault();
-      if (active >= 0 && active < rows.length) go(rows[active].href);
-      else if (active >= rows.length) go(actions[active - rows.length].href);
+      if (active >= 0 && active < items.length) go(mediaHref(items[active].id));
+      else if (active >= items.length) go(actions[active - items.length].href);
       else go(actions[0].href);
     }
   };
@@ -166,53 +149,17 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
         <p className="text-mid px-4 pt-3 pb-1 text-sm">{t(`search.filtering.${scope}`)}</p>
       ) : (
         <span className="text-muted px-4 pt-3 pb-1 text-[11px] tracking-[0.16em] uppercase">
-          {t(live ? 'search.channels' : 'search.catalog')}
+          {t('search.catalog')}
         </span>
       )}
-      {live && (
-        <>
-          {channels.isLoading && !channels.data
-            ? Array.from({ length: 3 }, (_, i) => (
-                <Skeleton key={i} className="mx-4 my-2 h-12 rounded-lg" />
-              ))
-            : channelItems.map((c, i) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  role="option"
-                  aria-selected={active === i}
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => go(liveHref(c.id))}
-                  className={cx(
-                    'flex items-center gap-3 px-4 py-2 text-left',
-                    active === i && 'bg-white/[0.07]',
-                  )}
-                >
-                  <span className="flex h-9 w-14 shrink-0 items-center justify-center">
-                    <ChannelLogo channel={c} className="max-h-full max-w-full text-xs" />
-                  </span>
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-medium">{c.name}</span>
-                    <span className="text-muted truncate text-xs">
-                      {c.now ? `${t('live.onNow')} · ${c.now.title}` : (c.country ?? '')}
-                      {c.fromPlaylist ? ` · ${t('live.fromPlaylist')}` : ''}
-                    </span>
-                  </span>
-                </button>
-              ))}
-          {channels.data && channelItems.length === 0 && (
-            <p className="text-muted px-4 py-3 font-serif text-lg italic">{t('live.noResults')}</p>
-          )}
-        </>
-      )}
-      {!scope && !live && (
+      {!scope && (
         <LoadNotice
           pending={results.isLoading || results.refining || q !== text.trim()}
           partial={results.partial}
           className="px-4 py-2"
         />
       )}
-      {scope || live
+      {scope
         ? null
         : results.isLoading && !results.data
           ? Array.from({ length: 3 }, (_, i) => (
@@ -245,26 +192,21 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
                 </span>
               </button>
             ))}
-      {!scope &&
-        !live &&
-        results.data &&
-        !results.refining &&
-        !results.partial &&
-        items.length === 0 && (
-          <p className="text-muted px-4 py-3 font-serif text-lg italic">{t('quick.noCatalog')}</p>
-        )}
+      {!scope && results.data && !results.refining && !results.partial && items.length === 0 && (
+        <p className="text-muted px-4 py-3 font-serif text-lg italic">{t('quick.noCatalog')}</p>
+      )}
       <div className="border-line mt-2 flex flex-col border-t py-1.5">
         {actions.map((a, i) => (
           <button
             key={a.key}
             type="button"
             role="option"
-            aria-selected={active === rows.length + i}
-            onMouseEnter={() => setActive(rows.length + i)}
+            aria-selected={active === items.length + i}
+            onMouseEnter={() => setActive(items.length + i)}
             onClick={() => go(a.href)}
             className={cx(
               'flex items-center gap-3 px-4 py-2.5 text-left text-sm',
-              active === rows.length + i ? 'bg-white/[0.07] text-white' : 'text-mid',
+              active === items.length + i ? 'bg-white/[0.07] text-white' : 'text-mid',
             )}
           >
             <span aria-hidden className="w-4 text-center">
@@ -307,9 +249,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
         aria-expanded={Boolean(show)}
         aria-controls={`quick-${variant}`}
         aria-label={t('nav.search')}
-        placeholder={t(
-          scope ? `search.filter.${scope}` : live ? 'live.search' : 'search.placeholderShort',
-        )}
+        placeholder={t(scope ? `search.filter.${scope}` : 'search.placeholderShort')}
         value={text}
         onChange={(e) => {
           setText(e.target.value);
