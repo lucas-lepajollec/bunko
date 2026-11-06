@@ -39,10 +39,17 @@ export function useUniverse() {
   let active: DiscoverKind = data?.universe ?? 'all';
   if (active === 'all' && !allowAll) active = enabled[0];
   if (active !== 'all' && !enabled.includes(active)) active = allowAll ? 'all' : enabled[0];
+  // Live TV: its own universe, never part of "everything" (chosen under it in the menu).
+  const liveEnabled = data?.liveEnabled ?? true;
+  const live = liveEnabled && Boolean(data?.liveMode);
   async function set(next: DiscoverKind) {
-    if (!data || next === active) return;
-    await mutate('/api/settings', { ...data, universe: next }, { revalidate: false });
-    await send('/api/settings', 'PATCH', { universe: next });
+    if (!data || (next === active && !live)) return;
+    await mutate(
+      '/api/settings',
+      { ...data, universe: next, liveMode: false },
+      { revalidate: false },
+    );
+    await send('/api/settings', 'PATCH', { universe: next, liveMode: false });
     // Every page reloads for the new universe (only what it needs).
     await mutate((key) => typeof key === 'string' && key.startsWith('/api/'));
   }
@@ -58,7 +65,16 @@ export function useUniverse() {
     clearPersistentCache({ resume: true });
     await mutate((key) => typeof key === 'string' && key.startsWith('/api/'));
   }
+  async function setLive() {
+    if (!data || live) return;
+    await mutate('/api/settings', { ...data, liveMode: true }, { revalidate: false });
+    await send('/api/settings', 'PATCH', { liveMode: true });
+    await mutate((key) => typeof key === 'string' && key.startsWith('/api/'));
+  }
   return {
+    live,
+    liveEnabled,
+    setLive,
     active,
     enabled,
     order,

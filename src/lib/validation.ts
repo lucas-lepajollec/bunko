@@ -305,6 +305,28 @@ export const settingsPatch = z
     autoImportKavita: z.boolean().optional(),
     adultContent: z.boolean().optional(),
     adultMode: z.boolean().optional(),
+    liveEnabled: z.boolean().optional(),
+    liveMode: z.boolean().optional(),
+    liveCountries: z
+      .array(z.string().regex(/^[A-Z]{2}$/))
+      .max(20)
+      .optional(),
+    livePlaylistUrl: z
+      .string()
+      .trim()
+      .max(4000)
+      .refine((v) => !v || /^https?:\/\/[^\s]+$/i.test(v), 'Use an http(s) address')
+      .optional(),
+    liveGuideUrls: z
+      .array(
+        z
+          .string()
+          .trim()
+          .max(2000)
+          .regex(/^https?:\/\/[^\s]+$/i),
+      )
+      .max(10)
+      .optional(),
     libraryTargets: z
       .object(
         Object.fromEntries(

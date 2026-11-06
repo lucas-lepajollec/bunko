@@ -40,38 +40,45 @@ export function UniverseMenu() {
   const isVideo = (k: DiscoverKind) => isVideoKind(k);
   const reading = universe.enabled.filter((k) => !isVideo(k));
   const video = universe.enabled.filter(isVideo);
-  if (reading.length + video.length + (universe.allowAll ? 1 : 0) < 2 && !universe.adultAllowed)
+  if (
+    reading.length + video.length + (universe.allowAll ? 1 : 0) + (universe.liveEnabled ? 1 : 0) <
+      2 &&
+    !universe.adultAllowed
+  )
     return null;
-  const item = (k: DiscoverKind, tall = false) => (
-    <button
-      key={k}
-      type="button"
-      role="menuitemradio"
-      aria-checked={universe.active === k}
-      onClick={() => {
-        setOpen(false);
-        void universe.set(k);
-      }}
-      className={cx(
-        'flex flex-col gap-0.5 rounded-xl px-3 py-2.5 text-left transition-colors',
-        tall && 'w-full',
-        universe.active === k ? 'bg-white/[0.09]' : 'hover:bg-white/[0.06]',
-      )}
-    >
-      <span
+  const item = (k: DiscoverKind | 'live', tall = false) => {
+    const on = k === 'live' ? universe.live : !universe.live && universe.active === k;
+    return (
+      <button
+        key={k}
+        type="button"
+        role="menuitemradio"
+        aria-checked={on}
+        onClick={() => {
+          setOpen(false);
+          void (k === 'live' ? universe.setLive() : universe.set(k));
+        }}
         className={cx(
-          'flex items-center gap-2 text-[15px]',
-          universe.active === k ? 'font-semibold text-white' : 'text-fg',
+          'flex flex-col gap-0.5 rounded-xl px-3 py-2.5 text-left transition-colors',
+          tall && 'w-full',
+          on ? 'bg-white/[0.09]' : 'hover:bg-white/[0.06]',
         )}
       >
-        {label(t, k)}
-        {universe.active === k && (
-          <span aria-hidden className="size-1.5 rounded-full bg-[var(--accent,#9fb6ff)]" />
-        )}
-      </span>
-      <span className="text-muted text-[12px] leading-snug">{t(`universe.desc.${k}`)}</span>
-    </button>
-  );
+        <span
+          className={cx(
+            'flex items-center gap-2 text-[15px]',
+            on ? 'font-semibold text-white' : 'text-fg',
+          )}
+        >
+          {k === 'live' ? t('live.universe') : label(t, k)}
+          {on && <span aria-hidden className="size-1.5 rounded-full bg-[var(--accent,#9fb6ff)]" />}
+        </span>
+        <span className="text-muted text-[12px] leading-snug">
+          {t(k === 'live' ? 'live.universeDesc' : `universe.desc.${k}`)}
+        </span>
+      </button>
+    );
+  };
   return (
     <div ref={root} className="relative hidden md:block">
       {/* Looks like the other header links; the panel opens on click or keyboard. */}
@@ -85,7 +92,7 @@ export function UniverseMenu() {
           open ? 'text-white' : 'text-mid hover:text-white',
         )}
       >
-        {label(t, universe.active)}
+        {universe.live ? t('live.universe') : label(t, universe.active)}
         {universe.adultMode && <span className="text-warn text-[11px] font-semibold">18+</span>}
         <svg
           width="10"
@@ -115,17 +122,19 @@ export function UniverseMenu() {
         <div
           className={cx(
             'grid gap-3',
-            universe.allowAll
+            universe.allowAll || universe.liveEnabled
               ? 'grid-cols-[170px_minmax(0,1.6fr)_minmax(0,1fr)]'
               : 'grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]',
           )}
         >
-          {universe.allowAll && (
+          {(universe.allowAll || universe.liveEnabled) && (
             <div className="border-line flex flex-col gap-1 border-r pr-3">
               <span className="text-muted px-3 pt-1 pb-1.5 text-[11px] tracking-[0.16em] uppercase">
                 {t('universe.groupAll')}
               </span>
-              {item('all', true)}
+              {universe.allowAll && item('all', true)}
+              {/* Live TV sits under "everything" but is never part of it. */}
+              {universe.liveEnabled && item('live', true)}
             </div>
           )}
           <div className="flex flex-col gap-1">
@@ -196,8 +205,9 @@ export function UniverseTab() {
   const universe = useUniverse();
   const [open, setOpen] = useState(false);
   if (!universe.ready) return null;
-  const options: DiscoverKind[] = [
+  const options: (DiscoverKind | 'live')[] = [
     ...(universe.allowAll ? ['all' as const] : []),
+    ...(universe.liveEnabled ? ['live' as const] : []),
     ...universe.enabled,
   ];
   if (options.length < 2 && !universe.adultAllowed) return null;
@@ -219,7 +229,9 @@ export function UniverseTab() {
           <rect x="3" y="14" width="7" height="7" rx="1.5" />
           <rect x="14" y="14" width="7" height="7" rx="1.5" />
         </svg>
-        <span className="max-w-full truncate">{label(t, universe.active)}</span>
+        <span className="max-w-full truncate">
+          {universe.live ? t('live.universe') : label(t, universe.active)}
+        </span>
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
@@ -232,23 +244,26 @@ export function UniverseTab() {
             {t('universe.hint')}
           </Dialog.Description>
           <div className="mt-1 grid grid-cols-2 gap-2">
-            {options.map((k) => (
-              <button
-                key={k}
-                type="button"
-                aria-pressed={universe.active === k}
-                onClick={() => {
-                  setOpen(false);
-                  void universe.set(k);
-                }}
-                className={cx(
-                  'h-12 rounded-2xl px-4 text-left text-[15px]',
-                  universe.active === k ? 'bg-fg text-bg font-semibold' : 'bg-white/[0.06]',
-                )}
-              >
-                {label(t, k)}
-              </button>
-            ))}
+            {options.map((k) => {
+              const on = k === 'live' ? universe.live : !universe.live && universe.active === k;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => {
+                    setOpen(false);
+                    void (k === 'live' ? universe.setLive() : universe.set(k));
+                  }}
+                  className={cx(
+                    'h-12 rounded-2xl px-4 text-left text-[15px]',
+                    on ? 'bg-fg text-bg font-semibold' : 'bg-white/[0.06]',
+                  )}
+                >
+                  {k === 'live' ? t('live.universe') : label(t, k)}
+                </button>
+              );
+            })}
           </div>
           {universe.adultAllowed && (
             <AdultSwitch
