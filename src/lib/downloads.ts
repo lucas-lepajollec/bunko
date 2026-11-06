@@ -582,6 +582,9 @@ async function workerTickBackground() {
   // Jellyfin and anime works have their own lane: they never wait behind release checks, and
   // an unfinished import keeps going every minute while the rest of the cycle runs.
   const video = background(async () => {
+    // Without anime, the lane still links imported reading works (Kavita) to the catalog.
+    if (!animeEnabled() && ownsLease())
+      await job('catalog-linking', () => linkCatalog(signal)).catch(() => undefined);
     // Anime work (Jellyfin, season regrouping) only when anime is an enabled kind.
     while (!signal.aborted && ownsLease() && animeEnabled()) {
       await job('jellyfin', () => maybeSyncJellyfin(signal)).catch(() => undefined);

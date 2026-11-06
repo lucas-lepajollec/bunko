@@ -14,7 +14,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import { InfoBubble, toast } from '@/components/notify';
-import { MediaGrabs } from '@/components/media-grabs';
+import { GRAB_ACTIVE, GrabCard, useGrabs } from '@/components/media-grabs';
 import {
   Cover,
   Dot,
@@ -39,7 +39,7 @@ export default function DownloadsPage() {
   const settings = useApi<PublicSettings>('/api/settings');
   const engine = useSuwayomi();
   // Series & films only (no Suwayomi): the chapter downloader's tabs and notices stay out of the way.
-  const grabs = useApi<MediaGrab[]>('/api/arr/grabs');
+  const grabs = useGrabs();
   useEffect(
     () =>
       openStream(
@@ -57,12 +57,28 @@ export default function DownloadsPage() {
     [streamRun],
   );
   const batches = snapshot?.batches ?? [];
-  const readingOff =
-    engine.state === 'unconfigured' && Boolean(grabs.data?.length) && batches.length === 0;
-  const active = batches.filter((b) => b.state !== 'completed' && b.state !== 'error');
-  const failed = batches.filter(hasFailures);
-  const history = batches.filter((b) => b.state === 'completed' && !hasFailures(b));
+  const grabList = grabs.data ?? [];
+  // Reading batches and series/film downloads share the same tabs and cards, newest first.
+  type Item = { at: string; batch?: DownloadBatch; grab?: MediaGrab };
+  const bucket = (batchesIn: DownloadBatch[], grabsIn: MediaGrab[]): Item[] =>
+    [
+      ...batchesIn.map((b) => ({ at: b.updatedAt, batch: b })),
+      ...grabsIn.map((g) => ({ at: g.createdAt, grab: g })),
+    ].sort((a, b) => b.at.localeCompare(a.at));
+  const active = bucket(
+    batches.filter((b) => b.state !== 'completed' && b.state !== 'error'),
+    grabList.filter((g) => GRAB_ACTIVE.has(g.state)),
+  );
+  const failed = bucket(
+    batches.filter(hasFailures),
+    grabList.filter((g) => g.state === 'failed'),
+  );
+  const history = bucket(
+    batches.filter((b) => b.state === 'completed' && !hasFailures(b)),
+    grabList.filter((g) => g.state === 'completed' || g.state === 'gone'),
+  );
   const shown = view === 'active' ? active : view === 'failed' ? failed : history;
+  const reading = engine.state !== 'unconfigured';
   const status = snapshot?.status;
   const running = status?.state === 'STARTED';
   async function control(action: 'pause' | 'resume' | 'clear') {
@@ -74,7 +90,13 @@ export default function DownloadsPage() {
     }
   }
   return (
-    <Page className="pb-16 md:grid md:grid-cols-[minmax(0,1fr)_340px] md:gap-[72px]">
+    <Page
+      className={cx(
+        'pb-16',
+        // The engine column belongs to the chapter downloader; without it the list takes the width.
+        reading && 'md:grid md:grid-cols-[minmax(0,1fr)_340px] md:gap-[72px]',
+      )}
+    >
       <div className="flex min-w-0 flex-col gap-6">
         <PageTitle
           title={t('downloads.title')}
@@ -84,7 +106,6 @@ export default function DownloadsPage() {
               : undefined
           }
         />
-        <MediaGrabs />
         <div className="md:hidden">
           <Link
             href="/library?view=updates"
@@ -93,88 +114,93 @@ export default function DownloadsPage() {
             {t('nav.updates')} <span aria-hidden>›</span>
           </Link>
         </div>
-        {!readingOff && (
-          <>
-            <Tabs
-              value={view}
-              onChange={setView}
-              label={t('downloads.filter')}
-              items={[
-                { id: 'active', label: t('downloads.active'), count: active.length },
-                { id: 'failed', label: t('downloads.failed'), count: failed.length, tone: 'bad' },
-                { id: 'history', label: t('downloads.history') },
-              ]}
-            />
-            {engine.state && engine.state !== 'ok' ? (
-              <SuwayomiNotice />
-            ) : (
-              streamError && (
-                <div className="flex items-center gap-3">
-                  <ErrorNote error={new ApiFailure(streamError, 0)} />
-                  <button
-                    type="button"
-                    className={smallButton}
-                    onClick={() => setStreamRun((run) => run + 1)}
-                  >
-                    {t('common.retry')}
-                  </button>
-                </div>
-              )
-            )}
-            {snapshot && shown.length === 0 && (
-              <Empty title={t(`downloads.empty.${view}`)}>
-                {view === 'active' ? t('downloads.emptyBody') : null}
-              </Empty>
-            )}
-            {shown.map((b) => (
-              <BatchCard key={b.id} batch={b} />
-            ))}
-          </>
+        <Tabs
+          value={view}
+          onChange={setView}
+          label={t('downloads.filter')}
+          items={[
+            { id: 'active', label: t('downloads.active'), count: active.length },
+            { id: 'failed', label: t('downloads.failed'), count: failed.length, tone: 'bad' },
+            { id: 'history', label: t('downloads.history') },
+          ]}
+        />
+        {reading && engine.state && engine.state !== 'ok' ? (
+          <SuwayomiNotice />
+        ) : (
+          reading &&
+          streamError && (
+            <div className="flex items-center gap-3">
+              <ErrorNote error={new ApiFailure(streamError, 0)} />
+              <button
+                type="button"
+                className={smallButton}
+                onClick={() => setStreamRun((run) => run + 1)}
+              >
+                {t('common.retry')}
+              </button>
+            </div>
+          )
+        )}
+        {(snapshot || grabs.data) && shown.length === 0 && (
+          <Empty title={t(`downloads.empty.${view}`)}>
+            {view === 'active' ? t('downloads.emptyBody') : null}
+          </Empty>
+        )}
+        {shown.map((item) =>
+          item.batch ? (
+            <BatchCard key={`b:${item.batch.id}`} batch={item.batch} />
+          ) : (
+            <GrabCard key={`g:${item.grab!.id}`} grab={item.grab!} onChange={grabs.mutate} />
+          ),
         )}
       </div>
       <aside className="mt-10 flex flex-col gap-5 md:mt-[30px]">
-        <div className="flex flex-col gap-3.5 rounded-[18px] bg-white/[0.05] p-5 md:p-[22px]">
-          <span className="text-muted text-xs tracking-[0.16em] uppercase">
-            {t('downloads.engine')}
-          </span>
-          <span className="flex items-center gap-2.5 font-serif text-2xl">
-            <Dot tone={!status ? 'idle' : running ? 'ok' : 'warn'} className="size-[9px]" />
-            {!status ? '—' : running ? t('downloads.running') : t('downloads.stopped')}
-          </span>
-          <div className="flex gap-2.5">
-            <button
-              type="button"
-              disabled={!status}
-              onClick={() => control(running ? 'pause' : 'resume')}
-              className={cx(smallButton, 'h-11 flex-1 text-sm')}
-            >
-              {running ? t('downloads.pause') : t('downloads.resume')}
-            </button>
-            <button
-              type="button"
-              disabled={!status?.queue.length}
-              onClick={() => window.confirm(t('downloads.clearConfirm')) && control('clear')}
-              className="border-line-strong h-11 flex-1 rounded-full border text-sm disabled:opacity-40"
-            >
-              {t('downloads.clear')}
-            </button>
-          </div>
-        </div>
-        <div className="flex flex-col gap-1 rounded-[18px] bg-white/[0.05] p-5 text-sm md:p-[22px]">
-          <span className="text-muted mb-2.5 text-xs tracking-[0.16em] uppercase">
-            {t('downloads.destination')}
-          </span>
-          <div className="flex min-h-9 items-center justify-between gap-4">
-            <span className="text-mid">{t('downloads.format')}</span>
-            <span>CBZ + ComicInfo</span>
-          </div>
-          <div className="flex min-h-9 items-center justify-between gap-4">
-            <span className="text-mid">{t('downloads.folder')}</span>
-            <span className="truncate font-mono text-xs">
-              {settings.data?.kavitaLibraryPath ?? '—'}
-            </span>
-          </div>
-        </div>
+        {reading && (
+          <>
+            <div className="flex flex-col gap-3.5 rounded-[18px] bg-white/[0.05] p-5 md:p-[22px]">
+              <span className="text-muted text-xs tracking-[0.16em] uppercase">
+                {t('downloads.engine')}
+              </span>
+              <span className="flex items-center gap-2.5 font-serif text-2xl">
+                <Dot tone={!status ? 'idle' : running ? 'ok' : 'warn'} className="size-[9px]" />
+                {!status ? '—' : running ? t('downloads.running') : t('downloads.stopped')}
+              </span>
+              <div className="flex gap-2.5">
+                <button
+                  type="button"
+                  disabled={!status}
+                  onClick={() => control(running ? 'pause' : 'resume')}
+                  className={cx(smallButton, 'h-11 flex-1 text-sm')}
+                >
+                  {running ? t('downloads.pause') : t('downloads.resume')}
+                </button>
+                <button
+                  type="button"
+                  disabled={!status?.queue.length}
+                  onClick={() => window.confirm(t('downloads.clearConfirm')) && control('clear')}
+                  className="border-line-strong h-11 flex-1 rounded-full border text-sm disabled:opacity-40"
+                >
+                  {t('downloads.clear')}
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1 rounded-[18px] bg-white/[0.05] p-5 text-sm md:p-[22px]">
+              <span className="text-muted mb-2.5 text-xs tracking-[0.16em] uppercase">
+                {t('downloads.destination')}
+              </span>
+              <div className="flex min-h-9 items-center justify-between gap-4">
+                <span className="text-mid">{t('downloads.format')}</span>
+                <span>CBZ + ComicInfo</span>
+              </div>
+              <div className="flex min-h-9 items-center justify-between gap-4">
+                <span className="text-mid">{t('downloads.folder')}</span>
+                <span className="truncate font-mono text-xs">
+                  {settings.data?.kavitaLibraryPath ?? '—'}
+                </span>
+              </div>
+            </div>
+          </>
+        )}
         <nav className="flex flex-col md:hidden" aria-label={t('downloads.more')}>
           <Link
             href="/sources"

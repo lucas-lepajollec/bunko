@@ -97,10 +97,12 @@ function Planning() {
         pending={(!plan.data && plan.isLoading) || plan.data?.pending}
         partial={plan.data?.partial}
       />
-      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+      {/* Kinds and week controls share a line while they fit; otherwise the controls move to
+          their own line (no overlap) and the kinds scroll sideways. */}
+      <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
         <div
           className={cx(
-            'no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:px-0',
+            'no-scrollbar -mx-4 flex max-w-[calc(100%+2rem)] min-w-0 gap-2 overflow-x-auto px-4 md:mx-0 md:max-w-full md:px-0',
             universe.active !== 'all' && 'hidden',
           )}
           role="group"
@@ -119,7 +121,7 @@ function Planning() {
             ),
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2 md:ml-auto">
+        <div className="flex flex-wrap items-center gap-2 md:ml-auto md:shrink-0 md:flex-nowrap">
           <button
             type="button"
             aria-pressed={mine}

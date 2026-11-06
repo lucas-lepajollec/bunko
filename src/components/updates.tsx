@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import useSWRInfinite from 'swr/infinite';
 import type {
+  DiscoverKind,
   ChapterRelease,
   ChaptersResponse,
   PublicSettings,
@@ -11,6 +12,7 @@ import type {
   UpdatesFeed,
 } from '@/types/shared';
 import { api, send, useApi } from '@/lib/client/api';
+import { kindOfMedia } from '@/domain/kinds';
 import { useI18n } from '@/i18n/I18nProvider';
 import { MediaLink } from './media-link';
 import { LoadNotice } from './load-notice';
@@ -28,7 +30,7 @@ export function chapterSpan(chapters: number[], fmt: (n: number) => string) {
 }
 
 /** Publication history and the current inventory answer two different questions. */
-export function LibraryUpdates() {
+export function LibraryUpdates({ kind = 'all' }: { kind?: DiscoverKind } = {}) {
   const { t, n } = useI18n();
   const [view, setView] = useState<'recent' | 'missing'>('recent');
   const feed = useApi<UpdatesFeed>('/api/updates', {
@@ -37,8 +39,10 @@ export function LibraryUpdates() {
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const settings = useApi<PublicSettings>('/api/settings');
   const relative = useRelativeTime();
+  // The library's kind filter applies here too.
+  const ofKind = (e: TrackedMedia) => kind === 'all' || kindOfMedia(e.media) === kind;
   const missing = (library.data ?? [])
-    .filter((e) => e.newChapters > 0)
+    .filter((e) => e.newChapters > 0 && ofKind(e))
     .toSorted((a, b) => b.newChapters - a.newChapters);
   return (
     <div className="flex flex-col gap-5">
@@ -101,7 +105,7 @@ export function LibraryUpdates() {
         </button>
       </div>
       {view === 'recent' ? (
-        <RecentReleases entries={library.data ?? []} />
+        <RecentReleases entries={library.data ?? []} kind={kind} />
       ) : (
         <>
           <p className="text-muted text-sm">{t('updates.missingHint')}</p>
@@ -151,7 +155,7 @@ export function LibraryUpdates() {
   );
 }
 
-function RecentReleases({ entries }: { entries: TrackedMedia[] }) {
+function RecentReleases({ entries, kind }: { entries: TrackedMedia[]; kind: DiscoverKind }) {
   const { t } = useI18n();
   const label = useChapterLabel();
   const byId = useMemo(() => new Map(entries.map((entry) => [entry.id, entry])), [entries]);
@@ -160,6 +164,7 @@ function RecentReleases({ entries }: { entries: TrackedMedia[] }) {
     (_, previous: ReleasesPage | null) => {
       if (previous && !previous.nextCursor) return null;
       const query = new URLSearchParams({ library: '1' });
+      if (kind !== 'all') query.set('kind', kind);
       if (previous?.nextCursor) query.set('cursor', previous.nextCursor);
       return `/api/releases?${query}`;
     },

@@ -2,6 +2,7 @@ import type { z } from 'zod';
 import { db, getTracked, statement, untrack } from './db';
 import type { trackBulk } from './validation';
 import { wakeWorker } from './worker-events';
+import { setAdultOverride } from './adult';
 
 /**
  * One action on many library works (the library's selection mode). Ids that are not in this
@@ -15,6 +16,14 @@ export function bulkTracked(input: z.infer<typeof trackBulk>): { changed: number
     // One work at a time: untrack also dismisses its Kavita series and deletes its stored cover,
     // so an import does not bring it back.
     for (const id of ids) untrack(id);
+    return { changed: ids.length };
+  }
+  if (input.action === 'adult' || input.action === 'notAdult') {
+    // The same per-work 18+ choice as the work's sheet, copied to every alias of the work.
+    for (const id of ids) {
+      const entry = getTracked(id);
+      if (entry) setAdultOverride(entry.media, entry.media.id, input.action === 'adult');
+    }
     return { changed: ids.length };
   }
   const now = new Date().toISOString();

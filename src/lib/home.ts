@@ -92,9 +92,7 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
   const video = isVideoKind(kind);
   // Reading releases are not video: those homes never start their ingestion.
   if (!video) void refreshReleases().catch(() => {});
-  const key = kind
-    ? `home:top:${kind}:${adultKey()}`
-    : `home:top:${adultKey()}${mixScope()}`;
+  const key = kind ? `home:top:${kind}:${adultKey()}` : `home:top:${adultKey()}${mixScope()}`;
   const stored = storedMetadata<HomeFeed['top'] | HomeFeed>(key)?.value;
   const top = Array.isArray(stored) ? stored : normalizeHome(stored).top;
   void cached<HomeFeed['top']>(
@@ -163,17 +161,14 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
     (r) => !kind || mediaKind(r.media) === kind,
   );
   const home = normalizeHome(composeHome(heroArtwork(pool), top, kind));
-  // No recent release (web novels, novels, books, series and films…): the hero shows the
-  // kind's trending titles from the catalog instead of an empty stage.
-  if (kind && !home.hero.length) {
-    const tmdb = KINDS[kind].catalog === 'tmdb';
-    home.hero = [
-      ...home.top.filter((m) => m.bannerUrl),
-      ...(tmdb ? [] : home.top.filter((m) => !m.bannerUrl && m.coverUrl)),
-    ]
-      .slice(0, 8)
-      .map((m) => ({
-        id: `${tmdb ? 'tmdb' : 'top'}:${m.id}`,
+  // Fewer than eight recent releases with artwork: releases stay first and the kind's (or the
+  // mix's) trending titles fill the rest, so the hero never shows one lonely title.
+  if (home.hero.length < 8) {
+    const shown = new Set(home.hero.map((r) => r.media.id));
+    const fill = (m: (typeof home.top)[number]) => {
+      const tmdb = m.id.startsWith('tmdb:');
+      return {
+        id: `top:${m.id}`,
         media: m,
         chapter: null,
         volume: null,
@@ -183,8 +178,17 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
         hasTime: false,
         provider: tmdb ? ('tmdb' as const) : ('anilist' as const),
         trackedId: m.trackedId ?? null,
-        ...(tmdb ? {} : { featured: true as const }),
-      }));
+        featured: true as const,
+      };
+    };
+    const candidates = home.top.filter((m) => !shown.has(m.id) && (m.bannerUrl || m.coverUrl));
+    home.hero = [
+      ...home.hero,
+      // Wide artwork first: it fills the stage best.
+      ...[...candidates.filter((m) => m.bannerUrl), ...candidates.filter((m) => !m.bannerUrl)]
+        .slice(0, 8 - home.hero.length)
+        .map(fill),
+    ];
   }
   return {
     ...home,

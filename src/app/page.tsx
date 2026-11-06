@@ -191,6 +191,39 @@ function CatalogShelf({ kind, num }: { kind: Kind; num: number }) {
   );
 }
 
+function BookStage({ src, shelf }: { src: string; shelf: boolean }) {
+  return (
+    <div
+      aria-hidden
+      className={cx(
+        'pointer-events-none absolute hidden items-center justify-center md:flex',
+        // Shelf layout (no title has wide artwork): the book has the right half to itself.
+        shelf
+          ? 'top-[110px] right-[max(3rem,calc((100%-1760px)/2+3rem))] h-[440px] w-[min(40vw,520px)] [--book:clamp(180px,17vw,250px)]'
+          : 'top-[84px] right-[max(4rem,calc((100%-1760px)/2+4rem))] h-[260px] w-[360px] [--book:150px]',
+      )}
+    >
+      {/* A glow of the cover's own colours behind it. */}
+      <div
+        className="absolute inset-[-30%] rounded-full opacity-60 blur-3xl"
+        style={{ background: 'radial-gradient(closest-side, var(--accent), transparent)' }}
+      />
+      <div className="animate-[stage-in_600ms_ease-out] [perspective:1400px]">
+        <div className="relative w-(--book) [transform:rotateY(-22deg)_rotateX(4deg)] [transform-style:preserve-3d]">
+          <Cover
+            src={src}
+            alt=""
+            className="relative w-full rounded-l-[3px] rounded-r-md shadow-[24px_30px_60px_-12px_rgba(0,0,0,0.85)]"
+          />
+          {/* Spine shading and the page edges on the right. */}
+          <span className="absolute inset-y-0 left-0 w-3 rounded-l-[3px] bg-[linear-gradient(90deg,rgba(0,0,0,0.45),rgba(255,255,255,0.12)_45%,transparent)]" />
+          <span className="absolute top-[3px] -right-[9px] bottom-[3px] w-[10px] origin-left [transform:rotateY(80deg)] rounded-r-sm bg-[repeating-linear-gradient(90deg,#e9e3d6_0px,#e9e3d6_1px,#cfc7b6_2px)]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Hero({
   items,
   loading,
@@ -215,6 +248,9 @@ function Hero({
     return () => clearInterval(id);
   }, [items.length, paused]);
   const r = items[index % Math.max(items.length, 1)];
+  // No title has wide artwork (books, novels): the covers line up under the text and the book
+  // stands alone on the right, instead of sitting on top of the cover strip.
+  const shelf = items.length > 0 && !items.some((i) => i.media.bannerUrl);
   if (!r)
     return (
       <section className="relative h-[480px] md:h-[640px]">
@@ -249,17 +285,14 @@ function Hero({
     >
       <Backdrop
         image={m.bannerUrl}
+        fallback={m.coverUrl}
         mobileImage={m.coverUrl}
         color={m.color}
         className="h-[calc(100%+140px)] md:h-[calc(100%+200px)]"
       />
-      {!m.bannerUrl && (
-        <Cover
-          src={m.coverUrl}
-          alt=""
-          className="absolute top-[120px] right-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] hidden w-[180px] md:block"
-        />
-      )}
+      {/* Books, novels and web novels have no wide artwork: the cover itself takes the stage, as
+          a book standing in the light of its own colours, above the other titles. */}
+      {!m.bannerUrl && m.coverUrl && <BookStage key={m.id} src={m.coverUrl} shelf={shelf} />}
       <div className="absolute inset-x-4 bottom-8 flex flex-col gap-3 md:inset-x-auto md:top-[150px] md:bottom-auto md:left-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] md:w-[680px] md:gap-[18px]">
         {/* Without a wide banner the background stays plain: show the cover itself. */}
         <div className="text-soft flex flex-wrap items-center gap-3 text-[11px] tracking-[0.16em] uppercase md:text-xs">
@@ -300,7 +333,14 @@ function Hero({
         </div>
       </div>
       {items.length > 1 && (
-        <div className="absolute right-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] bottom-[140px] hidden items-center gap-3 md:flex">
+        <div
+          className={cx(
+            'absolute hidden items-center gap-3 md:flex',
+            shelf
+              ? 'bottom-[56px] left-[max(2.5rem,calc((100%-1760px)/2+2.5rem))]'
+              : 'right-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] bottom-[140px]',
+          )}
+        >
           {items.map((item, i) => {
             // The selected cover is the largest; neighbours shrink and fade with distance.
             const current = index % items.length;

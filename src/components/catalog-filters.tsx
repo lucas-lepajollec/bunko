@@ -1,6 +1,6 @@
 'use client';
 import * as Dialog from '@radix-ui/react-dialog';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import type { CatalogFilters, DiscoverKind, Season } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -35,7 +35,12 @@ export function CatalogFilterBar({
   values,
   releasesView,
   onChange,
+  leading,
+  className,
 }: {
+  /** Controls shown first in the same row (the catalog's sort). */
+  leading?: ReactNode;
+  className?: string;
   kind: DiscoverKind;
   values: FilterValues;
   /** Latest chapters view: only the genre applies there. */
@@ -51,12 +56,13 @@ export function CatalogFilterBar({
   const count = activeFilterCount(values);
   const control = 'shrink-0';
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className={cx('flex flex-col gap-2.5', className)}>
       <div
         role="group"
         aria-label={t('catalog.filters')}
         className="no-scrollbar -mx-4 flex items-center gap-2 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:overflow-visible md:px-0"
       >
+        {leading}
         <Select
           label={t('catalog.genres')}
           value={values.genre}

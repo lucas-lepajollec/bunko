@@ -227,7 +227,15 @@ it('gives an off-catalog Kavita work its catalog identity with its book progress
     .prepare(
       'INSERT INTO continue_items(media_id,media_json,kind,label,href,position,updated_at) VALUES(?,?,?,?,?,?,?)',
     )
-    .run(local().id, '{}', 'read', 'vol:1', `/book/file1?media=${encodeURIComponent(local().id)}`, 0.4, 10);
+    .run(
+      local().id,
+      '{}',
+      'read',
+      'vol:1',
+      `/book/file1?media=${encodeURIComponent(local().id)}`,
+      0.4,
+      10,
+    );
   expect(adoptCatalogIdentity(entry.id, local().id, canonical(), 7)).toBe(true);
   expect(getTracked(entry.id)?.media.id).toBe(canonical().id);
   expect(db().prepare('SELECT media_id,fraction FROM book_progress').all()).toEqual([
