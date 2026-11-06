@@ -34,7 +34,8 @@ export const GET = route(async (r) => {
     .object({ refresh: z.literal('progress').optional() })
     .parse(Object.fromEntries(new URL(r.url).searchParams));
   if (refresh) await refreshProgressOnDemand();
-  return json(visibleTracked(listTracked()));
+  const { withVideoOwnership } = await import('@/lib/video-ownership');
+  return json(withVideoOwnership(visibleTracked(listTracked())));
 });
 export const POST = route(async (r) => {
   const input = await body(r, trackBody);

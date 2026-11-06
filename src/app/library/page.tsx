@@ -164,7 +164,11 @@ function Library() {
   const ownedVolumes = entries.reduce((sum, e) => sum + (e.ownedVolumes?.length ?? 0), 0);
   const ofKindNow = entries.filter((e) => ofKind(e, kind));
   const unownedCount = ofKindNow.filter((entry) => !hasOwnedFiles(entry)).length;
-  const videoNews = video ? ofKindNow.filter(episodesToWatch) : [];
+  // Series, anime and films with something new, for a video kind or the "everything" view.
+  const videoNews =
+    video || kind === 'all'
+      ? ofKindNow.filter((e) => e.type === 'ANIME' && episodesToWatch(e))
+      : [];
   // Works per kind: shown next to the total and on each kind chip.
   const kindCounts = useMemo(() => {
     const c = new Map<Kind, number>();
@@ -251,7 +255,7 @@ function Library() {
           {
             id: 'UPDATES' as View,
             label: t('library.updates'),
-            count: (video ? videoNews.length : pendingUpdates) || undefined,
+            count: (video ? 0 : pendingUpdates) + videoNews.length || undefined,
           },
           // Kavita series waiting to be followed: reading kinds only.
           ...(!video && unmatched.data?.length
@@ -269,7 +273,18 @@ function Library() {
         video ? (
           <VideoNews entries={videoNews} />
         ) : (
-          <LibraryUpdates kind={kind} />
+          <div className="flex flex-col gap-10">
+            <LibraryUpdates kind={kind} />
+            {/* Everything: the reading feed above, series and anime grouped by kind below. */}
+            {kind === 'all' && videoNews.length > 0 && (
+              <section className="flex flex-col gap-3">
+                <h2 className="font-display text-[22px] font-bold tracking-[-0.02em]">
+                  {t('library.videoNews')}
+                </h2>
+                <VideoNews entries={videoNews} />
+              </section>
+            )}
+          </div>
         )
       ) : shownShelf === 'KAVITA' ? (
         <KavitaUnmatched
@@ -545,43 +560,82 @@ function Library() {
   );
 }
 
-/** A followed series or anime with aired (or owned) episodes not watched yet. */
-function episodesToWatch(e: TrackedMedia) {
-  if (e.status === 'COMPLETED' || e.status === 'DROPPED') return false;
-  if (e.media.format === 'MOVIE' || e.media.format === 'ANIMATION_FILM') return false;
+/** Episodes a series or anime work has aired, all seasons (null when unknown). */
+const airedOf = (e: TrackedMedia) => e.airedEpisodes ?? e.progress?.released ?? null;
+const isFilm = (e: TrackedMedia) =>
+  e.media.format === 'MOVIE' || e.media.format === 'ANIMATION_FILM';
+/**
+ * What is new for a series or anime: episodes (often a whole new season) aired but not in
+ * Jellyfin yet, else episodes out that are not watched.
+ */
+function videoNew(e: TrackedMedia): { missing: number; unwatched: number } {
+  if (isFilm(e) || e.status === 'DROPPED') return { missing: 0, unwatched: 0 };
+  const aired = airedOf(e) ?? 0;
+  const owned = e.jellyfinOwned ?? 0;
   const read = e.progress?.read ?? 0;
-  return Math.max(e.progress?.released ?? 0, e.progress?.owned ?? 0) > read;
+  return {
+    missing: owned > 0 ? Math.max(0, aired - owned) : 0,
+    unwatched:
+      e.status === 'COMPLETED' ? 0 : Math.max(0, Math.max(owned, owned ? 0 : aired) - read),
+  };
+}
+function episodesToWatch(e: TrackedMedia) {
+  const v = videoNew(e);
+  return v.missing > 0 || v.unwatched > 0;
 }
 
-/** "New" for series and anime: episodes out that are not watched yet, most behind first. */
+/** "New" for series and anime, one group per kind: missing seasons first, then unwatched. */
 function VideoNews({ entries }: { entries: TrackedMedia[] }) {
   const { t, n } = useI18n();
-  const left = (e: TrackedMedia) =>
-    Math.max(e.progress?.released ?? 0, e.progress?.owned ?? 0) - (e.progress?.read ?? 0);
   if (!entries.length) return <Empty title={t('library.videoNewsEmpty')} />;
+  const groups = new Map<string, TrackedMedia[]>();
+  for (const e of entries) {
+    const k = kindOfMedia(e.media);
+    groups.set(k, [...(groups.get(k) ?? []), e]);
+  }
+  const weight = (e: TrackedMedia) => {
+    const v = videoNew(e);
+    return v.missing * 1000 + v.unwatched;
+  };
   return (
-    <div>
-      {[...entries]
-        .sort((a, b) => left(b) - left(a))
-        .map((e) => (
-          <MediaLink
-            key={e.id}
-            media={e.media}
-            className="border-line flex items-center gap-3 border-b py-3 md:gap-5"
-          >
-            <Cover src={e.coverUrl} fallbacks={e.coverFallbacks} className="w-10 shrink-0" />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-semibold">{e.title}</span>
-              <span className="text-muted text-sm">
-                {t('library.episodesLeft', { count: n(left(e)) })}
-                {e.progress?.read ? ` · ${t('library.watchedN', { n: n(e.progress.read) })}` : ''}
-              </span>
-            </span>
-            <span aria-hidden className="text-muted">
-              ›
-            </span>
-          </MediaLink>
-        ))}
+    <div className="flex flex-col gap-6">
+      {[...groups].map(([k, list]) => (
+        <section key={k} className="flex flex-col">
+          {groups.size > 1 && (
+            <h3 className="text-muted mb-1 text-xs tracking-[0.16em] uppercase">
+              {t(`kind.${k}`)} · {n(list.length)}
+            </h3>
+          )}
+          {[...list]
+            .sort((a, b) => weight(b) - weight(a))
+            .map((e) => {
+              const v = videoNew(e);
+              return (
+                <MediaLink
+                  key={e.id}
+                  media={e.media}
+                  className="border-line flex items-center gap-3 border-b py-3 md:gap-5"
+                >
+                  <Cover src={e.coverUrl} fallbacks={e.coverFallbacks} className="w-10 shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">{e.title}</span>
+                    <span className="text-muted text-sm">
+                      {[
+                        v.missing > 0 && t('library.episodesMissing', { count: n(v.missing) }),
+                        v.unwatched > 0 && t('library.episodesLeft', { count: n(v.unwatched) }),
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  </span>
+                  <span aria-hidden className="text-muted">
+                    ›
+                  </span>
+                </MediaLink>
+              );
+            })}
+        </section>
+      ))}
     </div>
   );
 }
@@ -593,9 +647,9 @@ function VideoNews({ entries }: { entries: TrackedMedia[] }) {
 function VideoMeta({ entry: e }: { entry: TrackedMedia }) {
   const { t, n } = useI18n();
   const m = e.media;
-  const film = m.format === 'MOVIE' || m.format === 'ANIMATION_FILM';
+  const film = isFilm(e);
   const read = e.progress?.read ?? 0;
-  const total = m.episodes ?? e.progress?.released ?? null;
+  const total = airedOf(e) ?? m.episodes ?? null;
   const airing = m.status === 'RELEASING' || m.status === 'Returning Series';
   const parts: { text: string; strong?: boolean }[] = film
     ? [
@@ -611,8 +665,8 @@ function VideoMeta({ entry: e }: { entry: TrackedMedia }) {
               strong: true,
             }
           : { text: total ? t('library.episodesN', { n: n(total) }) : t('library.notStarted') },
-        ...(e.progress?.owned
-          ? [{ text: t('library.ownedEpisodes', { n: n(e.progress.owned) }) }]
+        ...(e.jellyfinOwned
+          ? [{ text: t('library.ownedEpisodes', { n: n(e.jellyfinOwned) }) }]
           : []),
         ...(airing ? [{ text: t('library.airing') }] : []),
       ];

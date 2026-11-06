@@ -940,6 +940,8 @@ function snapshotTracked(id?: number) {
           stock?.chapters.length ??
           new Set([...(imported.get(id) ?? []), ...(kavita?.numbers ?? [])]).size,
         ownedVolumes: stock?.volumes ?? kavita?.volumes ?? [],
+        // A Kavita series holds this work (a book or novel can be one file with no chapters).
+        inKavita: Boolean(kavita),
         chapterRead,
         volumeRead: volumeMode
           ? read

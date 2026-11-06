@@ -81,3 +81,27 @@ it('reports why a work stays off-catalog', async () => {
   expect(await catalogMatch(s, undefined, 0.85, report, true)).toBeNull();
   expect(report.miss).toBe('below-threshold');
 });
+it('looks again at works the first version marked with a bare date, and links them', async () => {
+  const { track, getTracked } = await import('@/lib/db');
+  const { relinkKavitaWorks } = await import('@/lib/kavita-track');
+  const { setWorkerValue } = await import('@/lib/updates');
+  series(10, 'Apologie de Socrate', 'BOOK');
+  const entry = track({
+    media: { ...emptyMedia('kavita:10', 'Apologie de Socrate', 'NOVEL'), kavitaSeriesId: 10 },
+    kavitaSeriesId: 10,
+  });
+  setWorkerValue(`catalog_link_tried:${entry.id}`, new Date().toISOString());
+  answer([
+    book('openlibrary:OL5W', 'Apologie de Socrate'),
+    book('openlibrary:OL6W', 'Apologie de Socrate'),
+  ]);
+  expect(await relinkKavitaWorks()).toBe(1);
+  expect(getTracked(entry.id)?.media.id).toBe('openlibrary:OL5W');
+});
+it('counts a book in Kavita and a work in Jellyfin as owned', async () => {
+  const { hasOwnedFiles } = await import('@/lib/client/reading');
+  const base = { ownedChapterCount: 0, ownedVolumes: [], progress: { owned: 0 } } as never;
+  expect(hasOwnedFiles(base)).toBe(false);
+  expect(hasOwnedFiles({ ...(base as object), inKavita: true } as never)).toBe(true);
+  expect(hasOwnedFiles({ ...(base as object), jellyfinOwned: 24 } as never)).toBe(true);
+});

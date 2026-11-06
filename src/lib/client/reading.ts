@@ -25,4 +25,7 @@ export function resumeHref(entry: TrackedMedia) {
 export const hasOwnedFiles = (entry: TrackedMedia) =>
   (entry.ownedChapterCount ?? 0) > 0 ||
   (entry.ownedVolumes?.length ?? 0) > 0 ||
-  (entry.progress?.owned ?? 0) > 0;
+  (entry.progress?.owned ?? 0) > 0 ||
+  // A book or novel in Kavita (one file, no chapter numbers), a work in Jellyfin.
+  Boolean(entry.inKavita) ||
+  (entry.jellyfinOwned ?? 0) > 0;
