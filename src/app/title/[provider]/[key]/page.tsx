@@ -33,6 +33,7 @@ import { RatingButton } from '@/components/rating';
 import { workIdOf } from '@/components/matches';
 import { WorkMarks } from '@/components/work-marks';
 import { libraryMark } from '@/domain/library-mark';
+import { seenUpTo, workProgress } from '@/domain/progress';
 import { useViewState } from '@/lib/client/view-state';
 import { OwnedInventory } from '@/components/owned-inventory';
 import { Translations } from '@/components/translations';
@@ -241,7 +242,18 @@ function Title({ media }: { media: MediaDetail }) {
   };
   const released =
     entry?.unit === 'volume' ? (entry.progress?.released ?? media.volumes) : chapterReleased;
-  const progress = { ...baseProgress, released };
+  // What is seen follows the status: a finished work shows everything out (when it was
+  // finished) as read, whatever position was recorded.
+  const progress = {
+    ...baseProgress,
+    released,
+    read: entry ? seenUpTo(entry, baseProgress.read, released) : baseProgress.read,
+  };
+  const chapterSeen = entry
+    ? seenUpTo(entry, entry.chapterRead, entry.unit === 'volume' ? null : chapterReleased)
+    : null;
+  const volumeSeen =
+    entry && entry.unit === 'volume' ? seenUpTo(entry, entry.volumeRead, released) : null;
   // Works counted in volumes use "tome" wording for their progress.
   const vol = (key: string) => (entry?.unit === 'volume' ? `${key}Vol` : key);
   // Books and novels: their files in the library, read in Bunko's book reader.
@@ -285,9 +297,7 @@ function Title({ media }: { media: MediaDetail }) {
         };
     }
     const firstUnread = [...list]
-      .filter(
-        (c) => c.number !== null && (entry?.chapterRead == null || c.number > entry.chapterRead),
-      )
+      .filter((c) => c.number !== null && (chapterSeen == null || c.number > chapterSeen))
       .sort((a, b) => (a.number ?? 0) - (b.number ?? 0))[0];
     const v = firstUnread && preferredVariant(firstUnread, priority, choice[firstUnread.key]);
     if (firstUnread?.number != null && owned.has(firstUnread.number))
@@ -333,7 +343,14 @@ function Title({ media }: { media: MediaDetail }) {
           x.id === id
             ? {
                 ...x,
-                status: x.status === 'PLANNING' && watched ? 'READING' : x.status,
+                // Same rule as the server: unmarking part of a finished work means watching it
+                // again (the library re-read confirms an automatic "finished").
+                status:
+                  x.status === 'COMPLETED' && watched !== null && watched < workProgress(x).seen
+                    ? 'READING'
+                    : x.status === 'PLANNING' && watched
+                      ? 'READING'
+                      : x.status,
                 progress: { ...x.progress, read: watched },
               }
             : x,
@@ -776,8 +793,8 @@ function Title({ media }: { media: MediaDetail }) {
                     byVolume={byVolume}
                     chapters={chapters.data.chapters}
                     priority={priority}
-                    read={entry?.chapterRead ?? null}
-                    volumeRead={entry?.volumeRead ?? null}
+                    read={chapterSeen || (entry?.chapterRead ?? null)}
+                    volumeRead={volumeSeen ?? entry?.volumeRead ?? null}
                     selected={selected}
                     setSelected={setSelected}
                     choice={choice}

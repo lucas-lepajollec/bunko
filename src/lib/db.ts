@@ -207,6 +207,7 @@ export function db(): Database.Database {
     migrateV24(connection);
     migrateV25(connection);
     migrateV26(connection);
+    migrateV27(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -1475,6 +1476,25 @@ export function migrateV26(database: Database.Database) {
       'UPDATE tracked_media SET completed_through=NULL WHERE completed_through IS NOT NULL',
     );
     database.pragma('user_version=26');
+  })();
+}
+/**
+ * The user's rankings: automatic (rated works, best first, equal scores in the user's order) or
+ * hand-made (the user's works in the user's order). One automatic ranking per kind exists
+ * implicitly; its row (name NULL) only keeps the order of equal scores once the user sets it.
+ */
+export function migrateV27(database: Database.Database) {
+  database.transaction(() => {
+    database.exec(`CREATE TABLE IF NOT EXISTS rankings (
+        id INTEGER PRIMARY KEY, name TEXT, kind TEXT, mode TEXT NOT NULL CHECK(mode IN ('auto','manual')),
+        size INTEGER CHECK(size IS NULL OR size BETWEEN 1 AND 1000), created_at TEXT NOT NULL);
+      CREATE UNIQUE INDEX IF NOT EXISTS rankings_builtin ON rankings(kind) WHERE name IS NULL;
+      CREATE TABLE IF NOT EXISTS ranking_items (
+        ranking_id INTEGER NOT NULL REFERENCES rankings(id) ON DELETE CASCADE,
+        tracked_id INTEGER NOT NULL REFERENCES tracked_media(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL, PRIMARY KEY(ranking_id, tracked_id));`);
+    if (Number(database.pragma('user_version', { simple: true })) < 27)
+      database.pragma('user_version=27');
   })();
 }
 /** Parts of a catalog sheet that a followed work never stores. */

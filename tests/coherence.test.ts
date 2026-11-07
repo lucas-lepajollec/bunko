@@ -263,3 +263,69 @@ it('stores a followed work without its sheet (recommendations, relations, episod
     ),
   ).not.toHaveProperty('relations');
 });
+
+it('ranks the same way everywhere: ties in the user order, hand-made orders flagged', async () => {
+  const { rankingWorks } = await import('@/domain/rankings');
+  const work = (id: number, rating: number | null, title = `W${id}`) =>
+    ({ id, rating, title, media: { type: 'ANIME', format: null } }) as unknown as TrackedMedia;
+  const list = [work(1, 8), work(2, 9), work(3, 8), work(4, null)];
+  // Automatic: best first; the two 8s follow the user's order (3 before 1), unrated left out.
+  const auto = rankingWorks({ kind: null, mode: 'auto', order: [3, 1], size: null }, list);
+  expect(auto.map((w) => w.entry.id)).toEqual([2, 3, 1]);
+  expect(auto.map((w) => [w.tiedAbove, w.tiedBelow])).toEqual([
+    [false, false],
+    [false, true],
+    [true, false],
+  ]);
+  // Hand-made: the user's order; an 8 placed above a 9 is flagged.
+  const manual = rankingWorks({ kind: null, mode: 'manual', order: [1, 2, 4], size: null }, list);
+  expect(manual.map((w) => w.entry.id)).toEqual([1, 2, 4]);
+  expect(manual[0].conflict?.id).toBe(2);
+  expect(manual[1].conflict).toBe(null);
+  expect(rankingWorks({ kind: null, mode: 'auto', order: [], size: 1 }, list)).toHaveLength(1);
+
+  const rankingsRoute = await import('@/app/api/rankings/route');
+  const created = await rankingsRoute.POST(
+    request(
+      'POST',
+      { name: 'Top isekai', kind: 'anime', mode: 'manual', size: 10 },
+      '/api/rankings',
+    ),
+  );
+  const { id } = (await created.json()) as { id: number };
+  const film = track({
+    media: { ...emptyMedia('tmdbmovie:950', 'Ranked film', 'ANIME'), format: 'MOVIE' },
+    status: 'COMPLETED',
+  });
+  const saved = await rankingsRoute.PATCH(
+    request('PATCH', { id, order: [film.id, 999_999] }, '/api/rankings'),
+  );
+  // Only works of this library are kept.
+  expect(
+    ((await saved.json()) as { id: number; order: number[] }[]).find((r) => r.id === id)?.order,
+  ).toEqual([film.id]);
+  // A kind's built-in ranking keeps the order of equal scores once set.
+  const builtin = await rankingsRoute.PATCH(
+    request('PATCH', { builtin: 'anime', order: [film.id] }, '/api/rankings'),
+  );
+  expect(
+    ((await builtin.json()) as { builtin: boolean; kind: string }[]).some(
+      (r) => r.builtin && r.kind === 'anime',
+    ),
+  ).toBe(true);
+});
+
+it('keeps the status in step with the episodes marked seen', async () => {
+  const show = track({
+    media: {
+      ...emptyMedia('tmdbtv:960', 'Ended show', 'ANIME'),
+      format: 'SERIES',
+      status: 'Ended',
+    },
+    status: 'COMPLETED',
+  });
+  db().prepare('UPDATE tracked_media SET completed_through=12 WHERE id=?').run(show.id);
+  // Unmarking an episode of a finished work: watching it again.
+  await trackedRoute.PATCH(request('PATCH', { id: show.id, read: 5 }));
+  expect(getTracked(show.id)!.status).toBe('READING');
+});

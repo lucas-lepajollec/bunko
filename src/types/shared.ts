@@ -101,6 +101,19 @@ export interface YamtrackImportState {
   skipped: Record<string, number>;
   finishedAt: string | null;
 }
+/** GET /api/rankings — a ranking of the user's works (see `src/domain/rankings.ts`). */
+export interface Ranking {
+  id: number;
+  /** Null for a kind's built-in automatic ranking (named after its kind). */
+  name: string | null;
+  kind: Exclude<DiscoverKind, 'all'> | null;
+  mode: 'auto' | 'manual';
+  /** Top N, or every work. */
+  size: number | null;
+  /** Library work ids: the whole order (hand-made) or the order of equal scores (automatic). */
+  order: number[];
+  builtin: boolean;
+}
 /** Episodes from one point of a work to another, by season (seasons as people number them). */
 export interface EpisodeRange {
   from: { season: number; episode: number };

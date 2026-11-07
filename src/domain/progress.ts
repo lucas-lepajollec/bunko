@@ -45,3 +45,17 @@ export function workProgress(e: TrackedMedia): WorkProgress {
       Boolean(e.readerPosition),
   };
 }
+
+/**
+ * Where the user is, in a given length (episodes aired, chapters or volumes out): what marks
+ * episodes and chapters as seen on a work's page. Finished covers the length it had then.
+ */
+export function seenUpTo(
+  e: Pick<TrackedMedia, 'status' | 'completedThrough'>,
+  position: number | null | undefined,
+  length: number | null,
+): number {
+  const raw = Math.max(0, position ?? 0);
+  const seen = e.status === 'COMPLETED' ? Math.max(raw, e.completedThrough ?? length ?? raw) : raw;
+  return length ? Math.min(seen, length) : seen;
+}
