@@ -143,6 +143,7 @@ function serverSettings(): Settings {
     universes: [],
     universesKnown: [],
     showAllUniverse: true,
+    librarySort: 'released',
     kindOrder: [...KIND_IDS],
     favoriteSourceIds: [],
     extensionRepos: [],

@@ -1,3 +1,4 @@
+import { jellyfinSeason, seasonStart } from '@/domain/seasons';
 import { z } from 'zod';
 import type {
   AnimeSeason,
@@ -18,7 +19,6 @@ import {
   knownFranchise,
   loadedAnime,
   prefetchNodes,
-  seasonOffset,
   workVideo,
 } from './anime-franchise';
 import { anilistFromProviders, ensureAnimeIds, idsOfAnilist, tvdbSeasons } from './anime-ids';
@@ -469,15 +469,21 @@ export function jellyfinPresence(
  * after every earlier season (the work's episode counts, else what Jellyfin holds).
  */
 export function watchedInWork(presence: JellyfinPresence, seasons?: AnimeSeason[]) {
-  const watched = presence.bySeason.filter((s) => s.played.length);
-  const last = watched[watched.length - 1];
+  // The work's seasons known: each Jellyfin season maps to the season (or part) it holds.
+  if (seasons?.length) {
+    let watched = 0;
+    for (const s of seasons) {
+      const jf = jellyfinSeason(s, presence);
+      if (jf?.played.length) watched = seasonStart(seasons, s.number) + Math.max(...jf.played);
+    }
+    return watched;
+  }
+  const played = presence.bySeason.filter((s) => s.played.length);
+  const last = played[played.length - 1];
   if (!last) return 0;
-  const offset =
-    seasons && seasons.length >= last.season
-      ? seasonOffset(seasons, last.season)
-      : presence.bySeason
-          .filter((s) => s.season < last.season)
-          .reduce((n, s) => n + Math.max(0, ...s.owned), 0);
+  const offset = presence.bySeason
+    .filter((s) => s.season < last.season)
+    .reduce((n, s) => n + Math.max(0, ...s.owned), 0);
   return offset + Math.max(...last.played);
 }
 export function jellyfinSeriesList(query = ''): JellyfinSeriesSummary[] {
@@ -550,8 +556,27 @@ export function jellyfinMedia(seriesId: string): MediaDetail {
   };
 }
 
+/** Episodes of a work aired so far (every season and part; films and joined works apart). */
+export function workAired(seasons: AnimeSeason[]) {
+  return seasons
+    .filter((s) => !s.label)
+    .reduce(
+      (sum, s) =>
+        sum +
+        (s.status === 'NOT_YET_RELEASED'
+          ? 0
+          : s.nextEpisode
+            ? s.nextEpisode.number - 1
+            : (s.aired ?? s.episodes ?? s.list.length)),
+      0,
+    );
+}
 /** Watched in Jellyfin moves the episode count forward (never back). */
 const progressState = tenantState(() => ({ key: '' }));
+/** Apply the watched counts again on the next pass (the works' seasons just became known). */
+export function resetJellyfinProgress() {
+  progressState().key = '';
+}
 function applyJellyfinProgress() {
   // Nothing new in Jellyfin's index nor in the library: the watched counts are already applied.
   const key = `${jellyfinIndex().stamp}:${writeVersion('linkage')}`;
@@ -560,11 +585,16 @@ function applyJellyfinProgress() {
   const update = statement(
     "UPDATE tracked_media SET last_read=MAX(COALESCE(last_read,0),?),progress_checked=1,status=CASE WHEN status='PLANNING' THEN 'READING' ELSE status END WHERE id=? AND COALESCE(last_read,0)<?",
   );
+  // A count past everything aired (an older season mapping, absolute episode numbers) is
+  // brought back to the work's length: watched never exceeds what exists.
+  const cap = statement('UPDATE tracked_media SET last_read=? WHERE id=? AND last_read>?');
   for (const t of listTracked().filter((t) => t.type === 'ANIME')) {
+    const seasons = t.anilistId ? knownFranchise(t.anilistId)?.seasons : undefined;
+    const aired = seasons ? workAired(seasons) : null;
+    if (aired && (t.progress.read ?? 0) > aired) cap.run(aired, t.id, aired);
     const presence = jellyfinPresence(t.media, t.jellyfinLink);
     if (!presence) continue;
-    const seasons = t.anilistId ? knownFranchise(t.anilistId)?.seasons : undefined;
-    const watched = watchedInWork(presence, seasons);
+    const watched = Math.min(watchedInWork(presence, seasons), aired ?? Infinity);
     if (watched > 0) update.run(watched, t.id, watched);
   }
 }

@@ -185,7 +185,7 @@ export async function franchise(anilistId: number, signal?: AbortSignal): Promis
   // Joined by hand to another work: that work is the franchise.
   const joined = linkedRoot(anilistId);
   if (joined && joined !== anilistId) return franchise(joined, signal);
-  return cached(`anime-franchise:v2:${anilistId}`, DAY / 2, async () => {
+  return cached(`anime-franchise:v3:${anilistId}`, DAY / 2, async () => {
     // The offline id map already knows the show's other seasons: load them all at once.
     const known = idsOfAnilist(anilistId);
     await prefetchNodes(
@@ -223,7 +223,16 @@ export async function franchise(anilistId: number, signal?: AbortSignal): Promis
       await prefetchNodes(members, signal);
       for (const id of members) seen.set(id, await node(id, signal));
     }
-    const ordered = [...seen.values()].sort((a, b) => start(a) - start(b) || a.id - b.id);
+    // A season or part not aired yet (announced, nothing out) is no part of the work so far:
+    // it joins the sheet with its first episode (the work cache lasts 12 h).
+    const ordered = [...seen.values()]
+      .filter(
+        (m) =>
+          m.id === first.id ||
+          m.status !== 'NOT_YET_RELEASED' ||
+          (m.nextAiringEpisode?.episode ?? 1) > 1,
+      )
+      .sort((a, b) => start(a) - start(b) || a.id - b.id);
     const joinedIds = new Set(members);
     let display = 0;
     let before = 0;
@@ -305,7 +314,7 @@ export function naturalEpisode(anilistId: number, episode: number) {
 }
 /** A work already resolved for this AniList id, without any network call. */
 export function knownFranchise(anilistId: number): Franchise | null {
-  return storedMetadata<Franchise>(`anime-franchise:v2:${anilistId}`)?.value ?? null;
+  return storedMetadata<Franchise>(`anime-franchise:v3:${anilistId}`)?.value ?? null;
 }
 /** Episodes before a season (absolute numbering across the work). */
 export function seasonOffset(seasons: AnimeSeason[], number: number) {
@@ -334,7 +343,40 @@ export function linkedRoot(anilistId: number): number | null {
   const row = statement('SELECT root FROM work_links WHERE member=?').get(
     `anilist:${anilistId}`,
   ) as { root: string } | undefined;
-  return row ? Number(row.root.slice('anilist:'.length)) : null;
+  // A part of a non-AniList work (a film saga on TMDB) has no AniList root.
+  return row?.root.startsWith('anilist:') ? Number(row.root.slice('anilist:'.length)) : null;
+}
+/**
+ * Works joined by hand across catalogs (a TMDB film saga, films into a series): any catalog
+ * id joins any other. Two AniList anime keep the deeper link above (seasons merged into one
+ * sheet); the rest are listed as parts of the work.
+ */
+export function workParts(root: string): string[] {
+  return (
+    statement('SELECT member FROM work_links WHERE root=? ORDER BY created_at').all(root) as {
+      member: string;
+    }[]
+  ).map((r) => r.member);
+}
+/** Every hand-made link, member → root (for lists that show a work's parts under it). */
+export function workPartOf(): Map<string, string> {
+  return new Map(
+    (
+      statement('SELECT member, root FROM work_links').all() as { member: string; root: string }[]
+    ).map((r) => [r.member, r.root]),
+  );
+}
+export function setPartLink(root: string, member: string, joined: boolean) {
+  if (root === member) throw new AppError('VALIDATION_ERROR', 'A work cannot contain itself', 400);
+  if (joined) {
+    // No chains: the member's own parts move to the new root.
+    statement('UPDATE work_links SET root=? WHERE root=?').run(root, member);
+    statement('INSERT OR REPLACE INTO work_links(member,root,created_at) VALUES(?,?,?)').run(
+      member,
+      root,
+      new Date().toISOString(),
+    );
+  } else statement('DELETE FROM work_links WHERE member=? AND root=?').run(member, root);
 }
 /** Join `member` into `root` (or undo it); works are recomputed from AniList afterwards. */
 export function setWorkLink(root: number, member: number, joined: boolean) {

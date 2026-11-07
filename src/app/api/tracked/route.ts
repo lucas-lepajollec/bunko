@@ -22,6 +22,7 @@ import { trackBody, trackPatch } from '@/lib/validation';
 import { refreshProgressOnDemand } from '@/lib/progress-refresh';
 import { indexedSeriesById, matchKavita } from '@/lib/kavita-index';
 import { AppError } from '@/lib/errors';
+import { KINDS } from '@/domain/kinds';
 import { kavitaMedia } from '@/lib/kavita-track';
 import { suwayomiDetail } from '@/lib/catalog';
 import { storedMedia, trackedCoverOptions, syncTrackedCover } from '@/lib/tracked-covers';
@@ -30,13 +31,42 @@ import { declareVolumes, parseVolumeDeclaration, stockContext } from '@/lib/owne
 import { getSettings } from '@/lib/settings';
 import { replaceSources } from '@/lib/tracked-sources';
 import { withVideoOwnership } from '@/lib/video-ownership';
+import { workPartOf } from '@/lib/anime-franchise';
+import { workLength } from '@/domain/progress';
 export const GET = route(async (r) => {
   const { refresh } = z
     .object({ refresh: z.literal('progress').optional() })
     .parse(Object.fromEntries(new URL(r.url).searchParams));
   if (refresh) await refreshProgressOnDemand();
-  return json(withVideoOwnership(visibleTracked(listTracked())));
+  const entries = withVideoOwnership(visibleTracked(listTracked())).map(rememberFinished);
+  // A work joined by hand into another followed work is listed under it, not apart.
+  const links = workPartOf();
+  const followed = new Set(
+    entries.flatMap((e) => [e.media.id, ...(e.anilistId ? [`anilist:${e.anilistId}`] : [])]),
+  );
+  return json(
+    entries.map((e) => {
+      const root =
+        links.get(e.media.id) ?? (e.anilistId ? links.get(`anilist:${e.anilistId}`) : undefined);
+      return root && followed.has(root) ? { ...e, partOf: root } : e;
+    }),
+  );
 });
+/**
+ * A finished work keeps what "finished" covered: its length the first time it is listed as
+ * finished with a known length (the status change trigger clears it). Later releases are new.
+ */
+function rememberFinished(e: TrackedMedia): TrackedMedia {
+  if (e.status !== 'COMPLETED' || e.completedThrough != null) return e;
+  const total = workLength(e);
+  if (total === null) return e;
+  db()
+    .prepare(
+      'UPDATE tracked_media SET completed_through=? WHERE id=? AND completed_through IS NULL',
+    )
+    .run(total, e.id);
+  return { ...e, completedThrough: total };
+}
 export const POST = route(async (r) => {
   const input = await body(r, trackBody);
   if (input.autoDownload) requirePermission('downloads');
@@ -57,11 +87,26 @@ export const PATCH = route(async (r) => {
   const input = await body(r, trackPatch);
   if (input.autoDownload) requirePermission('downloads');
   requireFollowed(input.id);
-  // Personal marks (like, score) change nothing else: no identity or source work.
+  // Personal marks (like, score, kind) change nothing else: no identity or source work.
+  const marks = ['favorite', 'rating', 'kindOverride'] as const;
   if (
-    (input.favorite !== undefined || input.rating !== undefined) &&
-    Object.keys(input).every((key) => key === 'id' || key === 'favorite' || key === 'rating')
+    marks.some((key) => input[key] !== undefined) &&
+    Object.keys(input).every((key) => key === 'id' || (marks as readonly string[]).includes(key))
   ) {
+    if (input.kindOverride !== undefined) {
+      const current = getTracked(input.id)!;
+      // A kind of the same family only: an anime may be counted as a film or a series, a
+      // manga as a manhwa, never a book as a series.
+      if (input.kindOverride && KINDS[input.kindOverride].mediaType !== current.type)
+        throw new AppError('VALIDATION_ERROR', 'This kind does not fit this work', 400);
+      db()
+        .prepare(
+          input.kindOverride
+            ? "UPDATE tracked_media SET media_json=json_set(media_json,'$.kindOverride',?) WHERE id=?"
+            : "UPDATE tracked_media SET media_json=json_remove(media_json,'$.kindOverride') WHERE id=?",
+        )
+        .run(...(input.kindOverride ? [input.kindOverride, input.id] : [input.id]));
+    }
     if (input.favorite !== undefined)
       db()
         .prepare('UPDATE tracked_media SET favorite=? WHERE id=?')

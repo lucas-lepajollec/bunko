@@ -1,4 +1,5 @@
 import type { LibraryMark, TrackedMedia } from '@/types/shared';
+import { workProgress } from './progress';
 
 /**
  * What the user holds and has done with a work, as the small marks on its cards show it.
@@ -12,26 +13,19 @@ export const ownsFiles = (entry: TrackedMedia) =>
   Boolean(entry.inKavita) ||
   (entry.jellyfinOwned ?? 0) > 0;
 
-const isFilm = (entry: TrackedMedia) =>
-  entry.media.format === 'MOVIE' || entry.media.format === 'ANIMATION_FILM';
-
-/** `done`: finished (or the film seen); `partial`: started, even a single chapter or episode. */
+/** `done`: everything out is seen; `partial`: started, even a single chapter or episode. */
 export function seenState(entry: TrackedMedia): LibraryMark['seen'] {
-  const read = entry.progress?.read ?? 0;
-  if (entry.status === 'COMPLETED' || (isFilm(entry) && read >= 1)) return 'done';
-  return read > 0 || entry.readerPosition ? 'partial' : null;
+  const p = workProgress(entry);
+  if (!p.started) return null;
+  // Finished with nothing new since, or seen up to the last release.
+  if (p.left === 0 || (p.total === null && entry.status === 'COMPLETED')) return 'done';
+  return 'partial';
 }
 
 /** Share of the work read or watched (0–1), when its length is known. */
 export function progressShare(entry: TrackedMedia): number | null {
-  const read = entry.progress?.read ?? 0;
-  const total =
-    entry.type === 'ANIME'
-      ? (entry.airedEpisodes ?? entry.media.episodes)
-      : entry.unit === 'volume'
-        ? (entry.progress?.released ?? entry.media.volumes)
-        : (entry.progress?.released ?? entry.media.chapters);
-  return total && total > 0 ? Math.min(1, read / total) : null;
+  const p = workProgress(entry);
+  return p.total ? Math.min(1, p.seen / p.total) : null;
 }
 
 export function libraryMark(entry: TrackedMedia): LibraryMark {

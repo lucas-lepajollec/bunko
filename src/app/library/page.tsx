@@ -13,12 +13,18 @@ import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useUniverse } from '@/lib/client/universe';
-import type { KavitaSeriesSummary, LibraryActivity, TrackedMedia } from '@/types/shared';
+import type {
+  KavitaSeriesSummary,
+  LibraryActivity,
+  PublicSettings,
+  TrackedMedia,
+} from '@/types/shared';
 import { KavitaUnmatched } from '@/components/kavita';
 import { SelectionBar, SelectionMark } from '@/components/library-selection';
 import { LibraryNews, hasNews } from '@/components/updates';
 import { WorkMarks } from '@/components/work-marks';
 import { libraryMark, seenState } from '@/domain/library-mark';
+import { workProgress } from '@/domain/progress';
 import { useViewState } from '@/lib/client/view-state';
 import { api, useApi } from '@/lib/client/api';
 import { send } from '@/lib/client/api';
@@ -106,11 +112,12 @@ function passes(e: TrackedMedia, filter: Filter) {
   }
 }
 
-const caughtUp = (e: TrackedMedia) =>
-  e.status === 'READING' &&
-  e.newChapters === 0 &&
-  (e.progress?.unread ?? 0) === 0 &&
-  e.progress?.read !== null;
+/** Following it and nothing out is left to see (any kind: episodes, chapters, volumes). */
+const caughtUp = (e: TrackedMedia) => {
+  if (e.status !== 'READING') return false;
+  const p = workProgress(e);
+  return p.started && p.left === 0;
+};
 const shelfOf = (e: TrackedMedia): Shelf => (caughtUp(e) ? 'CAUGHT_UP' : e.status);
 const ALL_KINDS: Kind[] = ['all', ...KIND_IDS];
 /** One classification for the whole app: the kind registry (user's override first). */
@@ -168,7 +175,19 @@ function Library() {
   // Kavita series to import belong to reading kinds; every other tab applies to all kinds.
   const shownShelf: View = video && shelf === 'kavita' ? 'all' : shelf;
   // Newest release / air date first by default, for every kind.
-  const [sort, setSort] = useViewState<Sort>('sort', 'released', SORTS);
+  // The last sort picked becomes the default (kept with the account, on every device).
+  const settings = useApi<PublicSettings>('/api/settings');
+  const savedSort = SORTS.includes(settings.data?.librarySort as Sort)
+    ? (settings.data!.librarySort as Sort)
+    : 'released';
+  const [sort, setSortParam] = useViewState<Sort>('sort', savedSort, SORTS);
+  const setSort = (next: Sort) => {
+    setSortParam(next);
+    if (next !== savedSort && settings.data) {
+      void settings.mutate({ ...settings.data, librarySort: next }, { revalidate: false });
+      void send('/api/settings', 'PATCH', { librarySort: next }).catch(() => undefined);
+    }
+  };
   // Selection mode: tapping a work selects it; the bottom bar acts on the selection.
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<Set<number>>(new Set());
@@ -184,7 +203,8 @@ function Library() {
   };
   // Never hide titles silently: say how many the 18+ setting keeps out of view.
   const activity = useApi<LibraryActivity>('/api/library/activity');
-  const entries = useMemo(() => library.data ?? [], [library.data]);
+  // Parts joined by hand into another work show on that work's sheet, not as cards of their own.
+  const entries = useMemo(() => (library.data ?? []).filter((e) => !e.partOf), [library.data]);
   const counts = useMemo(() => {
     const c: Record<Shelf, number> = {
       READING: 0,
@@ -194,9 +214,10 @@ function Library() {
       COMPLETED: 0,
       DROPPED: 0,
     };
-    for (const e of entries) c[shelfOf(e)]++;
+    // Counted on the kind on screen, like the grid the filter applies to.
+    for (const e of entries) if (ofKind(e, kind)) c[shelfOf(e)]++;
     return c;
-  }, [entries]);
+  }, [entries, kind]);
   const ownedChapters = entries.reduce(
     (sum, e) => sum + (e.ownedChapterCount ?? (e.unit !== 'volume' ? (e.progress?.owned ?? 0) : 0)),
     0,
@@ -547,10 +568,10 @@ function Library() {
                     <VideoMeta entry={e} />
                   ) : (
                     <span className="text-muted -mt-1 hidden truncate text-xs md:block">
-                      {e.progress?.read != null && (
+                      {(e.progress?.read != null || e.status === 'COMPLETED') && (
                         <>
                           {t(e.unit === 'volume' ? 'library.readNVol' : 'library.readN', {
-                            n: n(e.progress.read),
+                            n: n(workProgress(e).seen),
                           })}
                           {' · '}
                         </>
@@ -615,8 +636,6 @@ function Library() {
   );
 }
 
-/** Episodes a series or anime work has aired, all seasons (null when unknown). */
-const airedOf = (e: TrackedMedia) => e.airedEpisodes ?? e.progress?.released ?? null;
 const isFilm = (e: TrackedMedia) =>
   e.media.format === 'MOVIE' || e.media.format === 'ANIMATION_FILM';
 
@@ -628,8 +647,9 @@ function VideoMeta({ entry: e }: { entry: TrackedMedia }) {
   const { t, n } = useI18n();
   const m = e.media;
   const film = isFilm(e);
-  const read = e.progress?.read ?? 0;
-  const total = airedOf(e) ?? m.episodes ?? null;
+  // The whole work's aired episodes (every season) and what is seen of them: one reading
+  // for cards, statuses and the "New" view.
+  const { total, seen: read } = workProgress(e);
   const airing = m.status === 'RELEASING' || m.status === 'Returning Series';
   const parts: { text: string; strong?: boolean }[] = film
     ? [

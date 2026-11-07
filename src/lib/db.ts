@@ -202,6 +202,8 @@ export function db(): Database.Database {
     migrateV19(connection);
     migrateV20(connection);
     migrateV21(connection);
+    migrateV22(connection);
+    migrateV23(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -989,6 +991,7 @@ function snapshotTracked(id?: number) {
         autoDownload: Boolean(r.auto_download),
         favorite: Boolean(r.favorite),
         rating: typeof r.rating === 'number' ? r.rating : null,
+        completedThrough: typeof r.completed_through === 'number' ? r.completed_through : null,
         createdAt: String(r.created_at),
         media,
         sources,
@@ -1437,6 +1440,33 @@ export function migrateV21(database: Database.Database) {
       "DELETE FROM metadata_cache WHERE key LIKE 'detail:anilist:%' OR key LIKE 'anime-franchise:%'",
     );
     database.pragma('user_version=21');
+  })();
+}
+/**
+ * What "finished" covered: the work's length when it was finished (episodes aired, chapters or
+ * volumes out). Later releases are new to see. Filled on the next list with the length known
+ * then, cleared whenever the status changes (a trigger, whatever path changed it).
+ */
+export function migrateV23(database: Database.Database) {
+  database.transaction(() => {
+    const columns = database.pragma('table_info(tracked_media)') as { name: string }[];
+    if (!columns.some((c) => c.name === 'completed_through'))
+      database.exec('ALTER TABLE tracked_media ADD COLUMN completed_through INTEGER');
+    database.exec(`CREATE TRIGGER IF NOT EXISTS completed_through_reset
+      AFTER UPDATE OF status ON tracked_media WHEN NEW.status IS NOT OLD.status
+      BEGIN UPDATE tracked_media SET completed_through=NULL WHERE id=NEW.id; END;`);
+    if (Number(database.pragma('user_version', { simple: true })) < 23)
+      database.pragma('user_version=23');
+  })();
+}
+/** Anime sheets rebuilt once more: seasons not aired yet leave them, Jellyfin seasons map to parts. */
+export function migrateV22(database: Database.Database) {
+  database.transaction(() => {
+    if (Number(database.pragma('user_version', { simple: true })) >= 22) return;
+    database.exec(
+      "DELETE FROM metadata_cache WHERE key LIKE 'detail:anilist:%' OR key LIKE 'anime-franchise:%'",
+    );
+    database.pragma('user_version=22');
   })();
 }
 /** The user's own score of a work, out of 10 in half points; additive. */

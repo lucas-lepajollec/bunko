@@ -318,13 +318,9 @@ function apply({ media, entries }: Resolved) {
         !created && status === 'PLANNING' && tracked.status !== 'PLANNING'
           ? tracked.status
           : status;
-      // Rated but no episode or chapter recorded: at least started.
-      const read =
-        merged.progress > 0
-          ? merged.progress
-          : rating !== null && finalStatus !== 'COMPLETED'
-            ? 1
-            : 0;
+      // No position is invented: "in progress" without episodes counted stays at its status
+      // (started, position unknown) rather than a made-up first episode.
+      const read = merged.progress;
       statement(
         `UPDATE tracked_media SET status=?, rating=COALESCE(?,rating),
           last_read=CASE WHEN ?>COALESCE(last_read,0) THEN ? ELSE last_read END,

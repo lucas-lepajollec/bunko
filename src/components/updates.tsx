@@ -2,11 +2,13 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { isVideoKind } from '@/domain/kinds';
+import { isFilm, workProgress } from '@/domain/progress';
 import useSWRInfinite from 'swr/infinite';
 import type {
   DiscoverKind,
   ChapterRelease,
   ChaptersResponse,
+  EpisodeRange,
   PublicSettings,
   ReleasesPage,
   TrackedMedia,
@@ -21,7 +23,6 @@ import { InfoBubble, toast } from './notify';
 import { isMissing, preferredVariant } from './chapters';
 import { Select } from './select';
 import { useViewState } from '@/lib/client/view-state';
-import { useChapterLabel } from './releases';
 import {
   Cover,
   Empty,
@@ -41,48 +42,117 @@ export function chapterSpan(chapters: number[], fmt: (n: number) => string) {
 }
 
 /** Episodes a series or anime work has aired, all seasons (null when unknown). */
-const airedOf = (e: TrackedMedia) => e.airedEpisodes ?? e.progress?.released ?? null;
-const isFilm = (e: TrackedMedia) =>
-  e.media.format === 'MOVIE' || e.media.format === 'ANIMATION_FILM';
+
 /**
- * What is new for a series or anime: episodes (often a whole new season) aired but not in
- * Jellyfin yet, else episodes out that are not watched.
+ * What is new in the library, the same way for every kind (episodes, chapters, volumes):
+ * - watchlist: in the library and not started;
+ * - continue: started and something out is not seen yet (grows as new episodes or chapters
+ *   come out: three left, a fourth airs, four left);
+ * - incomplete: owned but not whole (a season, a volume, chapters missing).
  */
-export function videoNew(e: TrackedMedia): { missing: number; unwatched: number } {
-  if (e.type !== 'ANIME' || isFilm(e) || e.status === 'DROPPED')
-    return { missing: 0, unwatched: 0 };
-  const aired = airedOf(e) ?? 0;
-  const owned = e.jellyfinOwned ?? 0;
-  const read = e.progress?.read ?? 0;
-  return {
-    missing: owned > 0 ? Math.max(0, aired - owned) : 0,
-    unwatched:
-      e.status === 'COMPLETED' ? 0 : Math.max(0, Math.max(owned, owned ? 0 : aired) - read),
+export type NewsSection = 'watchlist' | 'continue' | 'incomplete';
+export interface WorkNews {
+  /** Where the work stands for seeing it (null: nothing to see). */
+  section: 'watchlist' | 'continue' | null;
+  /** What to see: episodes by season, the film, chapters/volumes, or just a count. */
+  watch:
+    | { kind: 'episodes'; range: EpisodeRange; total: number }
+    | { kind: 'film' }
+    | { kind: 'chapters'; from: number; to: number }
+    | { kind: 'count'; count: number }
+    | { kind: 'unknown'; count: number | null }
+    | { kind: 'start' }
+    | null;
+  /** Owned but not whole: episode ranges the media server lacks, or chapters/volumes missing. */
+  incomplete:
+    | { kind: 'episodes'; ranges: EpisodeRange[]; total: number }
+    | { kind: 'chapters'; count: number }
+    | null;
+  /** How much is waiting, to sort by. */
+  size: number;
+}
+export function newsOf(e: TrackedMedia): WorkNews | null {
+  if (e.status === 'DROPPED') return null;
+  const p = workProgress(e);
+  const section: WorkNews['section'] = !p.started
+    ? 'watchlist'
+    : (p.left ?? 0) > 0
+      ? 'continue'
+      : null;
+  let watch: WorkNews['watch'] = null;
+  let incomplete: WorkNews['incomplete'] = null;
+  // Following it without a known position (imported "in progress"): no range is made up.
+  const unknown = section === 'continue' && p.seen === 0;
+  if (unknown) watch = { kind: 'unknown', count: p.left };
+  else if (e.type === 'ANIME') {
+    if (section)
+      watch = isFilm(e)
+        ? { kind: 'film' }
+        : e.news?.watch
+          ? { kind: 'episodes', range: e.news.watch, total: e.news.total }
+          : section === 'continue'
+            ? { kind: 'count', count: p.left ?? 0 }
+            : { kind: 'start' };
+  } else if (section)
+    watch = p.total ? { kind: 'chapters', from: p.seen + 1, to: p.total } : { kind: 'start' };
+  if (e.type === 'ANIME') {
+    if (!isFilm(e) && e.news?.fetch.length)
+      incomplete = { kind: 'episodes', ranges: e.news.fetch, total: e.news.total };
+  } else {
+    // Owned in part: chapters seen on the sources and not in the library, else the gap to
+    // what is out.
+    const owned = e.progress?.owned ?? 0;
+    const missing =
+      owned > 0 ? Math.max(e.newChapters, p.total && owned < p.total ? p.total - owned : 0) : 0;
+    if (missing > 0) incomplete = { kind: 'chapters', count: missing };
+  }
+  if (!watch && !incomplete) return null;
+  const waiting = watch?.kind === 'episodes' ? watch.range.count : (p.left ?? 0);
+  const lacking =
+    incomplete?.kind === 'episodes'
+      ? incomplete.ranges.reduce((n, r) => n + r.count, 0)
+      : (incomplete?.count ?? 0);
+  return { section, watch, incomplete, size: waiting + lacking };
+}
+export const hasNews = (e: TrackedMedia) => newsOf(e) !== null;
+
+/** "Toute la série", "Saison 2", "S2 · Ép. 5–8", "S2 Ép. 5 → S3 Ép. 4"… */
+function useRangeLabel() {
+  const { t, n } = useI18n();
+  return (r: EpisodeRange, total: number) => {
+    const many = (r.seasons ?? 2) > 1;
+    if (r.count >= total) return t('news.whole');
+    if (r.wholeSeasons)
+      return r.from.season === r.to.season
+        ? t('news.season', { n: n(r.from.season) })
+        : t('news.seasons', { from: n(r.from.season), to: n(r.to.season) });
+    if (r.from.season === r.to.season) {
+      if (r.from.episode === r.to.episode)
+        return many
+          ? t('news.seasonEp', { s: n(r.from.season), n: n(r.from.episode) })
+          : t('episodes.short', { n: n(r.from.episode) });
+      return many
+        ? t('news.seasonEps', { s: n(r.from.season), a: n(r.from.episode), b: n(r.to.episode) })
+        : t('news.eps', { a: n(r.from.episode), b: n(r.to.episode) });
+    }
+    return t('news.across', {
+      s1: n(r.from.season),
+      e1: n(r.from.episode),
+      s2: n(r.to.season),
+      e2: n(r.to.episode),
+    });
   };
 }
-/** Something to fetch (chapters on sources, a season not in Jellyfin) or episodes to watch. */
-export function hasNews(e: TrackedMedia) {
-  if (e.type === 'ANIME') {
-    const v = videoNew(e);
-    return v.missing > 0 || v.unwatched > 0;
-  }
-  return e.newChapters > 0;
-}
 
-type NewsFilter = 'all' | 'fetch' | 'unseen';
 type NewsSort = 'recent' | 'count' | 'title';
-const NEWS_FILTERS: NewsFilter[] = ['all', 'fetch', 'unseen'];
 const NEWS_SORTS: NewsSort[] = ['recent', 'count', 'title'];
 /** Release pages loaded for the cards (50 each, last 30 days): enough for a whole library. */
 const MAX_RELEASE_PAGES = 8;
 
 interface NewsCard {
   entry: TrackedMedia;
+  news: WorkNews;
   latest: ChapterRelease | null;
-  /** Chapters (or volumes) on sources and not owned; episodes or seasons not in Jellyfin. */
-  fetch: number;
-  /** Owned and not read yet; aired and not watched. */
-  unseen: number;
 }
 
 /**
@@ -91,14 +161,12 @@ interface NewsCard {
  */
 export function LibraryNews({ kind, entries }: { kind: DiscoverKind; entries: TrackedMedia[] }) {
   const { t, n } = useI18n();
-  const label = useChapterLabel();
   const relative = useRelativeTime();
   const feed = useApi<UpdatesFeed>('/api/updates', {
     refreshInterval: (data) => (data?.checking ? 1500 : 60_000),
   });
   const settings = useApi<PublicSettings>('/api/settings');
   const library = useApi<TrackedMedia[]>('/api/tracked');
-  const [filter, setFilter] = useViewState<NewsFilter>('news', 'all', NEWS_FILTERS);
   const [sort, setSort] = useViewState<NewsSort>('newsSort', 'recent', NEWS_SORTS);
   const pages = useSWRInfinite<ReleasesPage>(
     (index, previous: ReleasesPage | null) => {
@@ -137,39 +205,65 @@ export function LibraryNews({ kind, entries }: { kind: DiscoverKind; entries: Tr
         if (r.trackedId !== null && !latest.has(r.trackedId)) latest.set(r.trackedId, r);
     const list: NewsCard[] = [];
     for (const entry of entries) {
-      const release = latest.get(entry.id) ?? null;
-      if (!release && !hasNews(entry)) continue;
-      const video = entry.type === 'ANIME' ? videoNew(entry) : null;
-      list.push({
-        entry,
-        latest: release,
-        fetch: video ? video.missing : entry.newChapters,
-        unseen: video ? video.unwatched : (entry.progress?.unread ?? 0),
-      });
+      const news = newsOf(entry);
+      if (news) list.push({ entry, news, latest: latest.get(entry.id) ?? null });
     }
     return list;
   }, [loaded, entries]);
-  const shown = cards
-    .filter((c) => filter === 'all' || (filter === 'fetch' ? c.fetch > 0 : c.unseen > 0))
-    .sort((a, b) =>
-      sort === 'title'
-        ? a.entry.title.localeCompare(b.entry.title)
-        : sort === 'count'
-          ? b.fetch + b.unseen - (a.fetch + a.unseen) || a.entry.title.localeCompare(b.entry.title)
-          : // Newest release first; works known only by a count follow, largest first.
-            (b.latest?.releasedAt ?? '').localeCompare(a.latest?.releasedAt ?? '') ||
-            b.fetch + b.unseen - (a.fetch + a.unseen),
-    );
+  const order = (a: NewsCard, b: NewsCard) =>
+    sort === 'title'
+      ? a.entry.title.localeCompare(b.entry.title)
+      : sort === 'count'
+        ? b.news.size - a.news.size || a.entry.title.localeCompare(b.entry.title)
+        : // Newest release first, then what was followed or watched last.
+          (b.latest?.releasedAt ?? '').localeCompare(a.latest?.releasedAt ?? '') ||
+          (b.entry.lastReadAt ?? b.entry.createdAt).localeCompare(
+            a.entry.lastReadAt ?? a.entry.createdAt,
+          );
+  const sections: { id: NewsSection; cards: NewsCard[] }[] = [
+    { id: 'continue', cards: cards.filter((c) => c.news.section === 'continue').sort(order) },
+    { id: 'watchlist', cards: cards.filter((c) => c.news.section === 'watchlist').sort(order) },
+    { id: 'incomplete', cards: cards.filter((c) => c.news.incomplete).sort(order) },
+  ];
   const video = isVideoKind(kind);
-  const word = (key: string, vars: Record<string, string | number>, entry: TrackedMedia) =>
-    t(entry.type === 'ANIME' ? `${key}.video` : entry.unit === 'volume' ? `${key}.vol` : key, vars);
-  const badge = (c: NewsCard) => {
-    const e = c.entry;
-    if (e.type === 'ANIME' && c.unseen > 0 && !isFilm(e))
-      return t('episodes.short', { n: n((e.progress?.read ?? 0) + 1) });
-    if (c.latest) return label(c.latest);
-    return `+${n(c.fetch || c.unseen)}`;
-  };
+  const rangeLabel = useRangeLabel();
+  const watchLabel = (w: NonNullable<WorkNews['watch']>, e: TrackedMedia) =>
+    w.kind === 'film'
+      ? t('news.film')
+      : w.kind === 'start'
+        ? t('news.notStarted')
+        : w.kind === 'unknown'
+          ? w.count
+            ? t(e.type === 'ANIME' ? 'news.inProgressEps' : 'news.inProgressCh', {
+                count: n(w.count),
+              })
+            : t('news.inProgress')
+          : w.kind === 'count'
+            ? t('news.leftCount', { count: n(w.count) })
+            : w.kind === 'episodes'
+              ? rangeLabel(w.range, w.total)
+              : w.from === 1
+                ? t(e.unit === 'volume' ? 'news.allVolumes' : 'news.allChapters', {
+                    count: n(w.to),
+                  })
+                : w.from === w.to
+                  ? t(e.unit === 'volume' ? 'news.volume' : 'news.chapter', { n: n(w.from) })
+                  : t(e.unit === 'volume' ? 'news.volumes' : 'news.chapters', {
+                      a: n(w.from),
+                      b: n(w.to),
+                    });
+  const incompleteLabel = (f: NonNullable<WorkNews['incomplete']>, e: TrackedMedia) =>
+    f.kind === 'chapters'
+      ? t(e.unit === 'volume' ? 'news.missingVolumes' : 'news.missingChapters', {
+          count: n(f.count),
+        })
+      : f.ranges.length > 1
+        ? t('news.andMore', {
+            label: rangeLabel(f.ranges[0], f.total),
+            count: n(f.ranges.length - 1),
+          })
+        : rangeLabel(f.ranges[0], f.total);
+  const empty = sections.every((x) => !x.cards.length);
   return (
     <div className="flex flex-col gap-5">
       <div className="text-muted flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
@@ -213,15 +307,6 @@ export function LibraryNews({ kind, entries }: { kind: DiscoverKind; entries: Tr
         </button>
         <div className="ml-auto flex items-center gap-2 text-sm">
           <Select
-            label={t('library.filterLabel')}
-            value={filter}
-            onChange={(v) => setFilter(v as NewsFilter)}
-            options={NEWS_FILTERS.map((x) => ({
-              value: x,
-              label: t(video && x !== 'all' ? `news.filter.${x}.video` : `news.filter.${x}`),
-            }))}
-          />
-          <Select
             label={t('catalog.sort')}
             value={sort}
             onChange={(v) => setSort(v as NewsSort)}
@@ -235,52 +320,74 @@ export function LibraryNews({ kind, entries }: { kind: DiscoverKind; entries: Tr
         partial={Boolean(pages.error || loaded?.some((p) => p.partial))}
       />
       {pages.error && !loaded && <ErrorNote error={pages.error} />}
-      {loaded && !shown.length && !pending && (
-        <Empty title={t(video ? 'library.videoNewsEmpty' : 'updates.empty')}>
-          {!video && t('updates.emptyBody')}
-        </Empty>
+      {loaded && empty && !pending && (
+        <Empty title={t(video ? 'library.videoNewsEmpty' : 'updates.empty')} />
       )}
-      <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] md:gap-y-9 xl:grid-cols-7">
-        {!loaded && !pages.error && <PosterSkeletons count={14} />}
-        {shown.map((c) => {
-          const e = c.entry;
-          const parts = [
-            c.latest && relative(c.latest.releasedAt),
-            c.fetch > 0 && word('news.toFetch', { count: n(c.fetch) }, e),
-            c.unseen > 0 && word('news.toSee', { count: n(c.unseen) }, e),
-          ].filter(Boolean);
-          return (
-            <div key={e.id} className="flex min-w-0 flex-col gap-2">
-              <MediaLink media={e.media} className="group flex min-w-0 flex-col gap-2">
-                <span className="relative block">
-                  <Cover
-                    src={e.coverUrl ?? e.media.coverUrl}
-                    fallbacks={e.coverFallbacks}
-                    alt={e.title}
-                    className="transition-transform duration-300 group-hover:-translate-y-1"
-                  />
-                  <span className="bg-fg text-bg absolute bottom-2 left-2 flex h-6 max-w-[calc(100%-1rem)] items-center truncate rounded-full px-2.5 text-xs font-bold">
-                    {badge(c)}
-                  </span>
+      {!loaded && !pages.error && (
+        <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] md:gap-y-9 xl:grid-cols-7">
+          <PosterSkeletons count={14} />
+        </div>
+      )}
+      {sections
+        .filter((x) => x.cards.length)
+        .map((x) => (
+          <section key={x.id} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-0.5">
+              <h2 className="font-display text-[22px] font-bold tracking-[-0.02em]">
+                {t(`news.section.${x.id}${video ? '.video' : ''}`)}{' '}
+                <span className="text-muted font-serif text-lg font-normal italic">
+                  {n(x.cards.length)}
                 </span>
-                <span className="line-clamp-2 text-xs leading-snug font-medium md:text-sm">
-                  {e.title}
-                </span>
-                <span className="text-muted -mt-1 truncate text-xs">{parts.join(' · ')}</span>
-              </MediaLink>
-              {e.type !== 'ANIME' && c.fetch > 0 && (
-                <DownloadMissing
-                  tracked={e}
-                  onDone={() => {
-                    void library.mutate();
-                    void feed.mutate();
-                  }}
-                />
-              )}
+              </h2>
+              <p className="text-muted text-sm">{t(`news.sectionHint.${x.id}`)}</p>
             </div>
-          );
-        })}
-      </div>
+            <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] md:gap-y-9 xl:grid-cols-7">
+              {x.cards.map((c) => {
+                const e = c.entry;
+                const label =
+                  x.id === 'incomplete'
+                    ? incompleteLabel(c.news.incomplete!, e)
+                    : c.news.watch
+                      ? watchLabel(c.news.watch, e)
+                      : '';
+                return (
+                  <div key={e.id} className="flex min-w-0 flex-col gap-2">
+                    <MediaLink media={e.media} className="group flex min-w-0 flex-col gap-2">
+                      <span className="relative block">
+                        <Cover
+                          src={e.coverUrl ?? e.media.coverUrl}
+                          fallbacks={e.coverFallbacks}
+                          alt={e.title}
+                          className="transition-transform duration-300 group-hover:-translate-y-1"
+                        />
+                        <span className="bg-fg text-bg absolute bottom-2 left-2 flex h-6 max-w-[calc(100%-1rem)] items-center truncate rounded-full px-2.5 text-xs font-bold">
+                          {label}
+                        </span>
+                      </span>
+                      <span className="line-clamp-2 text-xs leading-snug font-medium md:text-sm">
+                        {e.title}
+                      </span>
+                      {c.latest && (
+                        <span className="text-muted -mt-1 truncate text-xs">
+                          {t('news.lastRelease', { when: relative(c.latest.releasedAt) })}
+                        </span>
+                      )}
+                    </MediaLink>
+                    {x.id === 'incomplete' && e.type !== 'ANIME' && e.newChapters > 0 && (
+                      <DownloadMissing
+                        tracked={e}
+                        onDone={() => {
+                          void library.mutate();
+                          void feed.mutate();
+                        }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ))}
     </div>
   );
 }

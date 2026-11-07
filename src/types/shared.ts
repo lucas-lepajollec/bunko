@@ -101,6 +101,16 @@ export interface YamtrackImportState {
   skipped: Record<string, number>;
   finishedAt: string | null;
 }
+/** Episodes from one point of a work to another, by season (seasons as people number them). */
+export interface EpisodeRange {
+  from: { season: number; episode: number };
+  to: { season: number; episode: number };
+  count: number;
+  /** Starts at a season's first episode and ends at a season's last aired one. */
+  wholeSeasons?: boolean;
+  /** Seasons the work has aired (1: no season number in labels). */
+  seasons?: number;
+}
 /** Marks on a work's cards: owned files, seen/read (even partly), the user's score. */
 export interface LibraryMark {
   status: ReadingStatus;
@@ -729,6 +739,8 @@ export interface Settings {
   universesKnown: Exclude<DiscoverKind, 'all'>[];
   /** Offer "Everything" in the switcher (default true). */
   showAllUniverse: boolean;
+  /** The library's sort when none is chosen on the page: the last one the user picked. */
+  librarySort: string;
   /**
    * Priority of the kinds, first to last: the order of the switcher, of the home shelves and of
    * the mix in "Everything". Always holds every kind (missing ones are appended).
@@ -822,8 +834,17 @@ export interface TrackedMedia {
   jellyfinOwned?: number;
   /** Episodes of the work aired so far, when the catalog knows (airing anime and series). */
   airedEpisodes?: number | null;
+  /**
+   * What is new for a series or anime (aired, every season known): left to watch from where the
+   * user is, and aired episodes the media server lacks (only for works it holds).
+   */
+  news?: { total: number; watch: EpisodeRange | null; fetch: EpisodeRange[] } | null;
+  /** Joined by hand into another followed work (its catalog id): listed under that work. */
+  partOf?: string;
   /** Personal like, independent of reading status and owning/downloading the work. */
   favorite?: boolean;
+  /** The work's length when it was finished: what "finished" covers (later releases are new). */
+  completedThrough?: number | null;
   /** The user's own score out of 10 (one decimal, 1–10), `null` when not rated. */
   rating?: number | null;
   anilistId: number | null;
