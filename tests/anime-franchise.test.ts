@@ -18,6 +18,14 @@ const nodes: Record<number, unknown> = {
   3: node(3, 'Fixture Show Movie', 'MOVIE', 2023, 1, [['PREQUEL', 2, 'TV']]),
   // A follow-up series AniList keeps apart (no SEQUEL edge), like Steins;Gate 0.
   9: node(9, 'Fixture Show Zero', 'TV', 2024, 8, []),
+  // Slime's shape: season 1, an OVA, then season 2 in two cours (only the OVA links them).
+  40: node(40, 'Slimy', 'TV', 2018, 24, [['SEQUEL', 41, 'OVA']]),
+  41: node(41, 'Slimy OVA', 'OVA', 2019, 5, [
+    ['PREQUEL', 40, 'TV'],
+    ['SEQUEL', 42, 'TV'],
+  ]),
+  42: node(42, 'Slimy 2nd Season', 'TV', 2021, 12, [['SEQUEL', 43, 'TV']]),
+  43: node(43, 'Slimy 2nd Season (Cour 2)', 'TV', 2021, 12, [['PREQUEL', 42, 'TV']]),
   // The Apothecary Diaries shape: three seasons, the third in two parts (AniList entries).
   20: {
     ...node(20, 'Diaries', 'TV', 2023, 24, [['SEQUEL', 21, 'TV']]),
@@ -199,4 +207,24 @@ it('keeps a season to its own episodes and numbers a "Part 2" as its season', as
   expect(works.naturalEpisode(23, 1)).toEqual({ season: 3, episode: 13 });
   expect(works.partNumber(['Attack on Titan Season 3 Part 2'])).toBe(2);
   expect(works.partNumber(['Kingdom 2nd Season'])).toBe(null);
+});
+
+it("takes a show's seasons from TVDB when the sequel goes through an OVA, cours as parts", async () => {
+  const { seedAnimeIds, compact } = await import('@/lib/anime-ids');
+  seedAnimeIds(
+    compact([
+      { anilist_id: 40, type: 'TV', tvdb_id: 700, season: { tvdb: 1 } },
+      { anilist_id: 41, type: 'OVA', tvdb_id: 700, season: { tvdb: 0 } },
+      { anilist_id: 42, type: 'TV', tvdb_id: 700, season: { tvdb: 2 } },
+      { anilist_id: 43, type: 'TV', tvdb_id: 700, season: { tvdb: 2 } },
+    ]),
+  );
+  const work = await works.franchise(40);
+  expect(
+    work.seasons.map((s) => [s.anilistId, s.display, s.part ?? null, s.partOffset ?? 0]),
+  ).toEqual([
+    [40, 1, null, 0],
+    [42, 2, null, 0],
+    [43, 2, 2, 12],
+  ]);
 });

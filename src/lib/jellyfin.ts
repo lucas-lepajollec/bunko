@@ -573,9 +573,10 @@ export function workAired(seasons: AnimeSeason[]) {
 }
 /** Watched in Jellyfin moves the episode count forward (never back). */
 const progressState = tenantState(() => ({ key: '' }));
-/** Apply the watched counts again on the next pass (the works' seasons just became known). */
+/** Apply the watched counts again now (the works' seasons just became known). */
 export function resetJellyfinProgress() {
   progressState().key = '';
+  if (jellyfinConfigured()) applyJellyfinProgress();
 }
 function applyJellyfinProgress() {
   // Nothing new in Jellyfin's index nor in the library: the watched counts are already applied.

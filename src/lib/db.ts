@@ -204,6 +204,7 @@ export function db(): Database.Database {
     migrateV21(connection);
     migrateV22(connection);
     migrateV23(connection);
+    migrateV24(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -1440,6 +1441,16 @@ export function migrateV21(database: Database.Database) {
       "DELETE FROM metadata_cache WHERE key LIKE 'detail:anilist:%' OR key LIKE 'anime-franchise:%'",
     );
     database.pragma('user_version=21');
+  })();
+}
+/** Anime works rebuilt once: a show's seasons now also come from TVDB (sequels through an OVA). */
+export function migrateV24(database: Database.Database) {
+  database.transaction(() => {
+    if (Number(database.pragma('user_version', { simple: true })) >= 24) return;
+    database.exec(
+      "DELETE FROM metadata_cache WHERE key LIKE 'detail:anilist:%' OR key LIKE 'anime-franchise:%' OR key LIKE 'anime-season-of:%'",
+    );
+    database.pragma('user_version=24');
   })();
 }
 /**
