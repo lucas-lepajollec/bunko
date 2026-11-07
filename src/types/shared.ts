@@ -73,6 +73,15 @@ export interface UnifiedMedia {
   adult?: boolean;
   /** The user's own 18+ decision for this work (`null` = follow the automatic classification). */
   adultOverride?: boolean | null;
+  /** What the user holds and has done with this work (library works only). */
+  mine?: LibraryMark | null;
+}
+/** Marks on a work's cards: owned files, seen/read (even partly), the user's score. */
+export interface LibraryMark {
+  status: ReadingStatus;
+  owned: boolean;
+  seen: 'partial' | 'done' | null;
+  rating: number | null;
 }
 export interface KavitaPresence {
   seriesId: number;
@@ -781,6 +790,8 @@ export interface TrackedMedia {
   airedEpisodes?: number | null;
   /** Personal like, independent of reading status and owning/downloading the work. */
   favorite?: boolean;
+  /** The user's own score out of 10 (half points), `null` when not rated. */
+  rating?: number | null;
   anilistId: number | null;
   mangadexId: string | null;
   title: string;

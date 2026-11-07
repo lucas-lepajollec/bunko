@@ -13,15 +13,13 @@ import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useUniverse } from '@/lib/client/universe';
-import type {
-  KavitaSeriesSummary,
-  LibraryActivity,
-  TrackedMedia,
-  UpdatesFeed,
-} from '@/types/shared';
+import type { KavitaSeriesSummary, LibraryActivity, TrackedMedia } from '@/types/shared';
 import { KavitaUnmatched } from '@/components/kavita';
 import { SelectionBar, SelectionMark } from '@/components/library-selection';
-import { LibraryUpdates } from '@/components/updates';
+import { LibraryNews, hasNews } from '@/components/updates';
+import { WorkMarks } from '@/components/work-marks';
+import { libraryMark, seenState } from '@/domain/library-mark';
+import { useViewState } from '@/lib/client/view-state';
 import { api, useApi } from '@/lib/client/api';
 import { send } from '@/lib/client/api';
 import { hasOwnedFiles } from '@/lib/client/reading';
@@ -45,10 +43,68 @@ import {
 } from '@/components/ui';
 
 type Shelf = 'READING' | 'CAUGHT_UP' | 'PLANNING' | 'PAUSED' | 'COMPLETED' | 'DROPPED';
-type View = 'ALL' | 'KAVITA' | 'UPDATES' | 'UNOWNED';
+type View = 'all' | 'owned' | 'updates' | 'kavita';
 type Kind = 'all' | RegistryKind;
 type Sort =
-  'news' | 'recent' | 'title' | 'added' | 'released' | 'score' | 'popular' | 'unread' | 'unlinked';
+  | 'news'
+  | 'recent'
+  | 'title'
+  | 'added'
+  | 'released'
+  | 'rating'
+  | 'score'
+  | 'popular'
+  | 'unread'
+  | 'unlinked';
+/** One filter at a time: a status, or what the user holds, has seen or has rated. */
+type Filter =
+  '' | Shelf | 'seen' | 'unseen' | 'unowned' | 'rated' | 'unrated' | 'adult' | 'notAdult';
+const SHELVES: Shelf[] = ['READING', 'CAUGHT_UP', 'PLANNING', 'PAUSED', 'COMPLETED', 'DROPPED'];
+const VIEWS: View[] = ['all', 'owned', 'updates', 'kavita'];
+const SORTS: Sort[] = [
+  'news',
+  'recent',
+  'unread',
+  'released',
+  'rating',
+  'score',
+  'popular',
+  'title',
+  'added',
+  'unlinked',
+];
+const FILTERS: Filter[] = [
+  ...SHELVES,
+  'seen',
+  'unseen',
+  'unowned',
+  'rated',
+  'unrated',
+  'adult',
+  'notAdult',
+];
+function passes(e: TrackedMedia, filter: Filter) {
+  switch (filter) {
+    case '':
+      return true;
+    case 'seen':
+      return seenState(e) !== null;
+    case 'unseen':
+      return seenState(e) === null;
+    case 'unowned':
+      return !hasOwnedFiles(e);
+    case 'rated':
+      return e.rating != null;
+    case 'unrated':
+      return e.rating == null;
+    case 'adult':
+      return Boolean(e.media.adult);
+    case 'notAdult':
+      return !e.media.adult;
+    default:
+      return shelfOf(e) === filter;
+  }
+}
 
 const caughtUp = (e: TrackedMedia) =>
   e.status === 'READING' &&
@@ -89,30 +145,30 @@ function Library() {
       });
     return () => controller.abort();
   }, [mutateList]);
-  // Links to library updates (old Updates page, home) open that tab: /library?view=updates.
+  // Tab, kind, filter and sort live in the address: back from a work finds them unchanged.
+  // Old links (/library?view=updates, ?view=unowned) still open the matching view.
   const params = useSearchParams();
-  const [shelf, setShelf] = useState<View>(
-    params.get('view') === 'updates'
-      ? 'UPDATES'
-      : params.get('view') === 'unowned'
-        ? 'UNOWNED'
-        : 'ALL',
+  const legacyUnowned = params.get('view') === 'unowned';
+  const [shelf, setShelf] = useViewState<View>('view', 'all', VIEWS);
+  const [status, setStatus] = useViewState<Filter>(
+    'filter',
+    legacyUnowned ? 'unowned' : '',
+    FILTERS,
   );
-  // Reading statuses live in a dropdown next to the sort instead of a row of tabs.
-  const [status, setStatus] = useState<Shelf | ''>('');
   const unmatched = useApi<KavitaSeriesSummary[]>('/api/kavita/series?unmatched=1');
   // The library keeps every kind one tap away, but opens on the current universe.
   const universe = useUniverse();
-  const [chosenKind, setKind] = useState<Kind | null>(null);
-  const kind: Kind = chosenKind ?? universe.active;
+  const [chosenKind, setChosenKind] = useViewState<Kind | ''>('kind', '', ['', ...ALL_KINDS]);
+  const kind: Kind = chosenKind || universe.active;
+  const setKind = (k: Kind) => setChosenKind(k === universe.active ? '' : k);
   // Anime speaks of episodes and watching; every label follows the kind on screen.
   const video = isVideoKind(kind);
   const vt = (key: string, vars?: Record<string, string | number>) =>
     video && t(`${key}.video`) !== `${key}.video` ? t(`${key}.video`, vars) : t(key, vars);
   // Kavita series to import belong to reading kinds; every other tab applies to all kinds.
-  const shownShelf: View = video && shelf === 'KAVITA' ? 'ALL' : shelf;
+  const shownShelf: View = video && shelf === 'kavita' ? 'all' : shelf;
   // Newest release / air date first by default, for every kind.
-  const [sort, setSort] = useState<Sort>('released');
+  const [sort, setSort] = useViewState<Sort>('sort', 'released', SORTS);
   // Selection mode: tapping a work selects it; the bottom bar acts on the selection.
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<Set<number>>(new Set());
@@ -126,10 +182,8 @@ function Library() {
     setSelecting(false);
     setPicked(new Set());
   };
-  const updates = useApi<UpdatesFeed>('/api/updates');
   // Never hide titles silently: say how many the 18+ setting keeps out of view.
   const activity = useApi<LibraryActivity>('/api/library/activity');
-  const pendingUpdates = (updates.data?.entries ?? []).filter((e) => e.state === 'pending').length;
   const entries = useMemo(() => library.data ?? [], [library.data]);
   const counts = useMemo(() => {
     const c: Record<Shelf, number> = {
@@ -149,12 +203,12 @@ function Library() {
   );
   const ownedVolumes = entries.reduce((sum, e) => sum + (e.ownedVolumes?.length ?? 0), 0);
   const ofKindNow = entries.filter((e) => ofKind(e, kind));
-  const unownedCount = ofKindNow.filter((entry) => !hasOwnedFiles(entry)).length;
+  const ownedCount = ofKindNow.filter((entry) => hasOwnedFiles(entry)).length;
+  // Filters that would show nothing stay out of the menu (18+ only when such works are shown).
+  const hasAdult = entries.some((e) => e.media.adult);
   // Series, anime and films with something new, for a video kind or the "everything" view.
-  const videoNews =
-    video || kind === 'all'
-      ? ofKindNow.filter((e) => e.type === 'ANIME' && episodesToWatch(e))
-      : [];
+  // Works with something to fetch or watch: the count on the "New" tab.
+  const newsCount = ofKindNow.filter(hasNews).length;
   // Works per kind: shown next to the total and on each kind chip.
   const kindCounts = useMemo(() => {
     const c = new Map<Kind, number>();
@@ -165,8 +219,8 @@ function Library() {
   // The header search filters this page (`?q=`, written by the search field).
   const filterText = (params.get('q') ?? '').trim();
   const filtered = entries
-    .filter((entry) => shownShelf !== 'UNOWNED' || !hasOwnedFiles(entry))
-    .filter((e) => !status || shelfOf(e) === status)
+    .filter((entry) => shownShelf !== 'owned' || hasOwnedFiles(entry))
+    .filter((e) => passes(e, status))
     .filter((e) => matchesFilter(e, filterText))
     .filter((e) => ofKind(e, kind));
   const withoutSources = filtered.filter(
@@ -183,6 +237,13 @@ function Library() {
         (b.media.startDate ?? String(b.media.year ?? '')).localeCompare(
           a.media.startDate ?? String(a.media.year ?? ''),
         ) || a.title.localeCompare(b.title)
+      );
+    // The user's own score; unrated works last, then the public score breaks ties.
+    if (sort === 'rating')
+      return (
+        (b.rating ?? -1) - (a.rating ?? -1) ||
+        (b.media.score ?? -1) - (a.media.score ?? -1) ||
+        a.title.localeCompare(b.title)
       );
     if (sort === 'score') return (b.media.score ?? -1) - (a.media.score ?? -1);
     if (sort === 'popular') return (b.media.popularity ?? -1) - (a.media.popularity ?? -1);
@@ -217,10 +278,10 @@ function Library() {
         pending={
           refreshing ||
           (!library.data && library.isLoading) ||
-          (shownShelf === 'KAVITA' && unmatched.isLoading)
+          (shownShelf === 'kavita' && unmatched.isLoading)
         }
         partial={Boolean(
-          refreshFailed || library.error || (shownShelf === 'KAVITA' && unmatched.error),
+          refreshFailed || library.error || (shownShelf === 'kavita' && unmatched.error),
         )}
       />
       {(activity.data?.hiddenAdult ?? 0) > 0 && (
@@ -236,18 +297,18 @@ function Library() {
         onChange={setShelf}
         label={t('library.statusLabel')}
         items={[
-          { id: 'ALL' as View, label: t('library.all'), count: ofKindNow.length },
-          { id: 'UNOWNED' as View, label: t('library.unowned'), count: unownedCount },
+          { id: 'all' as View, label: t('library.all'), count: ofKindNow.length },
+          { id: 'owned' as View, label: t('library.ownedTab'), count: ownedCount },
           {
-            id: 'UPDATES' as View,
+            id: 'updates' as View,
             label: t('library.updates'),
-            count: (video ? 0 : pendingUpdates) + videoNews.length || undefined,
+            count: newsCount || undefined,
           },
           // Kavita series waiting to be followed: reading kinds only.
           ...(!video && unmatched.data?.length
             ? [
                 {
-                  id: 'KAVITA' as View,
+                  id: 'kavita' as View,
                   label: t('library.inKavita'),
                   count: unmatched.data.length,
                 },
@@ -255,64 +316,44 @@ function Library() {
             : []),
         ]}
       />
-      {shownShelf === 'UPDATES' ? (
-        video ? (
-          <VideoNews entries={videoNews} />
-        ) : (
-          <div className="flex flex-col gap-10">
-            <LibraryUpdates kind={kind} />
-            {/* Everything: the reading feed above, series and anime grouped by kind below. */}
-            {kind === 'all' && videoNews.length > 0 && (
-              <section className="flex flex-col gap-3">
-                <h2 className="font-display text-[22px] font-bold tracking-[-0.02em]">
-                  {t('library.videoNews')}
-                </h2>
-                <VideoNews entries={videoNews} />
-              </section>
-            )}
-          </div>
-        )
-      ) : shownShelf === 'KAVITA' ? (
+      {shownShelf !== 'kavita' && (
+        <div
+          className="no-scrollbar -mx-4 -mb-2 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0"
+          role="group"
+          aria-label={t('catalog.kind')}
+        >
+          {(['all', ...byKindOrder(KIND_IDS, universe.order)] as Kind[]).map((k) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={kind === k}
+              onClick={() => setKind(k)}
+              className={cx(
+                'h-[34px] shrink-0 rounded-full px-3.5',
+                kind === k ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
+              )}
+            >
+              {t(`kind.${k}`)}
+              {k !== 'all' && (kindCounts.get(k) ?? 0) > 0 && (
+                <span className="text-muted ml-1.5 font-serif italic">{n(kindCounts.get(k)!)}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {shownShelf === 'updates' ? (
+        <LibraryNews kind={kind} entries={ofKindNow} />
+      ) : shownShelf === 'kavita' ? (
         <KavitaUnmatched
           series={unmatched.data}
           onTracked={() => Promise.all([unmatched.mutate(), library.mutate()])}
         />
       ) : (
         <>
-          {shownShelf === 'UNOWNED' && (
-            <p className="text-muted text-sm">
-              {t('library.unownedHint')}{' '}
-              <Link href="/catalog" className="underline hover:text-white">
-                {t('library.browse')}
-              </Link>
-            </p>
+          {shownShelf === 'owned' && (
+            <p className="text-muted text-sm">{vt('library.ownedHint')}</p>
           )}
           <div className="flex flex-col gap-3 text-sm">
-            <div
-              className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0"
-              role="group"
-              aria-label={t('catalog.kind')}
-            >
-              {(['all', ...byKindOrder(KIND_IDS, universe.order)] as Kind[]).map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  aria-pressed={kind === k}
-                  onClick={() => setKind(k)}
-                  className={cx(
-                    'h-[34px] shrink-0 rounded-full px-3.5',
-                    kind === k ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
-                  )}
-                >
-                  {t(`kind.${k}`)}
-                  {k !== 'all' && (kindCounts.get(k) ?? 0) > 0 && (
-                    <span className="text-muted ml-1.5 font-serif italic">
-                      {n(kindCounts.get(k)!)}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
             <div className="flex flex-wrap items-center gap-2">
               {sort === 'unlinked' && withoutSources.length > 0 && (
                 <button
@@ -376,21 +417,36 @@ function Library() {
                   </button>
                 )}
                 <Select
-                  label={t('library.statusLabel')}
+                  label={t('library.filterLabel')}
                   value={status}
-                  onChange={(v) => setStatus(v as Shelf | '')}
+                  onChange={(v) => setStatus(v as Filter)}
                   options={[
                     { value: '', label: t('library.allStatuses') },
-                    ...(
-                      [
-                        'READING',
-                        'CAUGHT_UP',
-                        'PLANNING',
-                        'PAUSED',
-                        'COMPLETED',
-                        'DROPPED',
-                      ] as Shelf[]
-                    ).map((x) => ({ value: x, label: `${vt(`shelf.${x}`)} · ${n(counts[x])}` })),
+                    ...SHELVES.map((x) => ({
+                      value: x,
+                      label: `${vt(`shelf.${x}`)} · ${n(counts[x])}`,
+                      group: t('library.filter.status'),
+                    })),
+                    ...(['seen', 'unseen'] as const).map((x) => ({
+                      value: x,
+                      label: vt(`library.filter.${x}`),
+                      group: vt('library.filter.progress'),
+                    })),
+                    ...(shownShelf === 'owned' ? [] : (['unowned'] as const)).map((x) => ({
+                      value: x,
+                      label: t(`library.filter.${x}`),
+                      group: t('library.filter.owning'),
+                    })),
+                    ...(['rated', 'unrated'] as const).map((x) => ({
+                      value: x,
+                      label: t(`library.filter.${x}`),
+                      group: t('library.filter.rating'),
+                    })),
+                    ...(hasAdult ? (['adult', 'notAdult'] as const) : []).map((x) => ({
+                      value: x,
+                      label: t(`library.filter.${x}`),
+                      group: t('library.filter.content'),
+                    })),
                   ]}
                 />
                 <div className="text-muted flex items-center gap-2">
@@ -405,6 +461,7 @@ function Library() {
                         'recent',
                         'unread',
                         'released',
+                        'rating',
                         'score',
                         'popular',
                         'title',
@@ -464,6 +521,11 @@ function Library() {
                         <span className="truncate">{t(`library.match.${e.sourceMatch}`)}</span>
                       </span>
                     )}
+                    <WorkMarks
+                      mark={libraryMark(e)}
+                      video={e.type === 'ANIME'}
+                      raised={e.type === 'MANGA' && e.sourceMatch !== 'linked'}
+                    />
                     {e.newChapters > 0 && (
                       <span className="bg-fg text-bg absolute top-2 right-2 flex h-6 items-center rounded-full px-2 text-xs font-bold">
                         +{n(e.newChapters)}
@@ -550,81 +612,6 @@ function Library() {
 const airedOf = (e: TrackedMedia) => e.airedEpisodes ?? e.progress?.released ?? null;
 const isFilm = (e: TrackedMedia) =>
   e.media.format === 'MOVIE' || e.media.format === 'ANIMATION_FILM';
-/**
- * What is new for a series or anime: episodes (often a whole new season) aired but not in
- * Jellyfin yet, else episodes out that are not watched.
- */
-function videoNew(e: TrackedMedia): { missing: number; unwatched: number } {
-  if (isFilm(e) || e.status === 'DROPPED') return { missing: 0, unwatched: 0 };
-  const aired = airedOf(e) ?? 0;
-  const owned = e.jellyfinOwned ?? 0;
-  const read = e.progress?.read ?? 0;
-  return {
-    missing: owned > 0 ? Math.max(0, aired - owned) : 0,
-    unwatched:
-      e.status === 'COMPLETED' ? 0 : Math.max(0, Math.max(owned, owned ? 0 : aired) - read),
-  };
-}
-function episodesToWatch(e: TrackedMedia) {
-  const v = videoNew(e);
-  return v.missing > 0 || v.unwatched > 0;
-}
-
-/** "New" for series and anime, one group per kind: missing seasons first, then unwatched. */
-function VideoNews({ entries }: { entries: TrackedMedia[] }) {
-  const { t, n } = useI18n();
-  if (!entries.length) return <Empty title={t('library.videoNewsEmpty')} />;
-  const groups = new Map<string, TrackedMedia[]>();
-  for (const e of entries) {
-    const k = kindOfMedia(e.media);
-    groups.set(k, [...(groups.get(k) ?? []), e]);
-  }
-  const weight = (e: TrackedMedia) => {
-    const v = videoNew(e);
-    return v.missing * 1000 + v.unwatched;
-  };
-  return (
-    <div className="flex flex-col gap-6">
-      {[...groups].map(([k, list]) => (
-        <section key={k} className="flex flex-col">
-          {groups.size > 1 && (
-            <h3 className="text-muted mb-1 text-xs tracking-[0.16em] uppercase">
-              {t(`kind.${k}`)} · {n(list.length)}
-            </h3>
-          )}
-          {[...list]
-            .sort((a, b) => weight(b) - weight(a))
-            .map((e) => {
-              const v = videoNew(e);
-              return (
-                <MediaLink
-                  key={e.id}
-                  media={e.media}
-                  className="border-line flex items-center gap-3 border-b py-3 md:gap-5"
-                >
-                  <Cover src={e.coverUrl} fallbacks={e.coverFallbacks} className="w-10 shrink-0" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">{e.title}</span>
-                    <span className="text-muted text-sm">
-                      {[
-                        v.missing > 0 && t('library.episodesMissing', { count: n(v.missing) }),
-                        v.unwatched > 0 && t('library.episodesLeft', { count: n(v.unwatched) }),
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </span>
-                  </span>
-                  <span aria-hidden className="text-muted">
-                    ›
-                  </span>
-                </MediaLink>
-              );
-            })}
-        </section>
-      ))}
-    </div>
-  );
-}
 
 /**
  * What a series, anime or film card says under its title: episodes watched out of the total

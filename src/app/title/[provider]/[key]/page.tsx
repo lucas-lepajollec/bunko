@@ -28,6 +28,8 @@ import { InfoBubble, Notice, toast } from '@/components/notify';
 import { MatchesSummary, type Lane } from '@/components/matches';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import { FavoriteButton } from '@/components/favorite';
+import { RatingSelect } from '@/components/rating';
+import { useViewState } from '@/lib/client/view-state';
 import { OwnedInventory } from '@/components/owned-inventory';
 import { Translations } from '@/components/translations';
 import { BookShelf, bookHref, nextBook, useBooks } from '@/components/books';
@@ -112,7 +114,7 @@ function Title({ media }: { media: MediaDetail }) {
     refreshInterval: batchesInterval,
   });
   const entry = trackedFor(library.data, media);
-  const [tab, setTab] = useState<'chapters' | 'info'>('chapters');
+  const [tab, setTab] = useViewState<'chapters' | 'info'>('tab', 'chapters', ['chapters', 'info']);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [choice, setChoice] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
@@ -557,6 +559,12 @@ function Title({ media }: { media: MediaDetail }) {
                   label: t(video ? `watchStatus.${x}` : `status.${x}`),
                 })),
               ]}
+              size="lg"
+              className="h-12 justify-center gap-3 bg-white/[0.14] px-5 sm:justify-between"
+            />
+            <RatingSelect
+              media={media}
+              entry={entry}
               size="lg"
               className="h-12 justify-center gap-3 bg-white/[0.14] px-5 sm:justify-between"
             />

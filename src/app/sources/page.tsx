@@ -3,6 +3,7 @@ import { ManagedImage } from '@/components/managed-image';
 import Link from 'next/link';
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useViewState } from '@/lib/client/view-state';
 import { KIND_IDS, KINDS, isVideoKind } from '@/domain/kinds';
 import { useUniverse } from '@/lib/client/universe';
 import { VideoExtensions } from '@/components/video-extensions';
@@ -108,7 +109,12 @@ function StreamingAddons() {
 
 function ReadingSources() {
   const { t } = useI18n();
-  const [view, setView] = useState<View>('sources');
+  const [view, setView] = useViewState<View>('tab', 'sources', [
+    'sources',
+    'updates',
+    'catalog',
+    'repos',
+  ]);
   const sources = useApi<SourceInfo[]>('/api/sources');
   const prefs = useApi<SourcePreferences>('/api/sources/preferences');
   const extensions = useApi<Extension[]>('/api/extensions');

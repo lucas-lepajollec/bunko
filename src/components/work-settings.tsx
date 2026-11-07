@@ -1,12 +1,16 @@
 'use client';
 import { useState, type ReactNode } from 'react';
 import { useSWRConfig } from 'swr';
-import type { ChapterSelection, MediaDetail, TrackedMedia } from '@/types/shared';
+import type { ChapterSelection, MediaDetail, ReadingStatus, TrackedMedia } from '@/types/shared';
 import { send } from '@/lib/client/api';
 import { clearPersistentCache } from '@/lib/client/cache';
 import { useI18n } from '@/i18n/I18nProvider';
 import { DisplayTitle } from './matches';
 import { InfoBubble, toast } from './notify';
+import { RatingSelect } from './rating';
+import { Select } from './select';
+
+const STATUSES: ReadingStatus[] = ['PLANNING', 'READING', 'PAUSED', 'COMPLETED', 'DROPPED'];
 import { Segmented, cx, errorText, smallButton } from './ui';
 
 /** Small labelled group of the settings page. */
@@ -96,8 +100,32 @@ export function GeneralTab({
   // Kavita files explicitly named as volumes ("Vol. 3", "Tome 3") without a chapter number.
   const detectedVolumes = entry.ownedAsVolumes ? 0 : (entry.ownedVolumes?.length ?? 0);
   const ownsFiles = (entry.ownedChapterCount ?? 0) > 0 || Boolean(entry.ownedAsVolumes);
+  const video = media.type === 'ANIME';
   return (
     <div className="flex flex-col gap-8">
+      <Group title={t('settings.work.tracking')}>
+        <Row title={t('title.readingStatus')}>
+          <Select
+            label={t('title.readingStatus')}
+            value={entry.status}
+            onChange={(status) => void run(() => patch({ status }))}
+            options={STATUSES.map((x) => ({
+              value: x,
+              label: t(video ? `watchStatus.${x}` : `status.${x}`),
+            }))}
+          />
+        </Row>
+        <Row title={t('marks.rating')} hint={t('settings.work.ratingHint')}>
+          <RatingSelect media={media} entry={entry} />
+        </Row>
+        <Row title={t('favorites.title')}>
+          <Switch
+            label={t('favorites.title')}
+            checked={Boolean(entry.favorite)}
+            onChange={(favorite) => void run(() => patch({ favorite }))}
+          />
+        </Row>
+      </Group>
       {isComic && (
         <Group title={t('settings.work.collection')}>
           <div className="flex flex-col gap-2 rounded-2xl bg-white/[0.04] p-3 text-sm">

@@ -6,6 +6,7 @@ import { universeAsides, useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { ContinueCard, useContinue } from '@/components/reading';
 import { PosterCard } from '@/components/media';
+import { libraryMark } from '@/domain/library-mark';
 import { FavoriteButton } from '@/components/favorite';
 import { Page } from '@/components/shell';
 import {
@@ -81,7 +82,7 @@ export default function ProfilePage() {
         <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] md:gap-y-9 xl:grid-cols-8">
           {favorites.map((entry) => (
             <article key={entry.id} className="relative min-w-0">
-              <PosterCard media={entry.media} badge={<></>} />
+              <PosterCard media={{ ...entry.media, mine: libraryMark(entry) }} badge={<></>} />
               <FavoriteButton
                 media={entry.media}
                 entry={entry}

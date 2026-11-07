@@ -40,6 +40,8 @@ import { createHash } from 'node:crypto';
 import { getSettings } from './settings';
 import { AppError } from './errors';
 import { db, listTracked, trackedForMedia, sameMedia } from './db';
+import { libraryMark } from '@/domain/library-mark';
+import { withVideoOwnership } from './video-ownership';
 import {
   cached,
   storedMetadata,
@@ -107,6 +109,7 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
           (/^metron:\d+$/.test(m.id) ? metronCoverUrl(Number(m.id.slice(7))) : null),
         trackedId: own?.id ?? null,
         kavitaSeriesId: t?.kavitaSeriesId ?? null,
+        mine: own ? libraryMark(own.type === 'ANIME' ? withVideoOwnership([own])[0] : own) : null,
       },
       t?.kavitaSeriesId,
       resolve,

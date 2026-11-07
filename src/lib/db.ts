@@ -200,6 +200,7 @@ export function db(): Database.Database {
     migrateV17(connection);
     migrateV18(connection);
     migrateV19(connection);
+    migrateV20(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -986,6 +987,7 @@ function snapshotTracked(id?: number) {
         kavitaSeriesId: r.kavita_series_id as number | null,
         autoDownload: Boolean(r.auto_download),
         favorite: Boolean(r.favorite),
+        rating: typeof r.rating === 'number' ? r.rating : null,
         createdAt: String(r.created_at),
         media,
         sources,
@@ -1421,6 +1423,18 @@ export function migrateV19(database: Database.Database) {
       CREATE INDEX IF NOT EXISTS work_links_root ON work_links(root);`);
     if (Number(database.pragma('user_version', { simple: true })) < 19)
       database.pragma('user_version=19');
+  })();
+}
+/** The user's own score of a work, out of 10 in half points; additive. */
+export function migrateV20(database: Database.Database) {
+  database.transaction(() => {
+    const columns = database.pragma('table_info(tracked_media)') as { name: string }[];
+    if (!columns.some((c) => c.name === 'rating'))
+      database.exec(
+        'ALTER TABLE tracked_media ADD COLUMN rating REAL CHECK(rating IS NULL OR (rating>=0.5 AND rating<=10))',
+      );
+    if (Number(database.pragma('user_version', { simple: true })) < 20)
+      database.pragma('user_version=20');
   })();
 }
 /** Jellyfin index (one row per series) and a per-work manual link; additive and idempotent. */
