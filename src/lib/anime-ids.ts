@@ -115,6 +115,8 @@ export function seedAnimeIds(list: AnimeIds[]) {
 export async function ensureAnimeIds(): Promise<boolean> {
   if (runtime.__bunkoAnimeIds && Date.now() - runtime.__bunkoAnimeIds.loadedAt < MAX_AGE_MS)
     return true;
+  // Tests use local fixtures only (`seedAnimeIds`): never the network.
+  if (process.env.VITEST) return Boolean(runtime.__bunkoAnimeIds);
   runtime.__bunkoAnimeIdsLoad ??= (async () => {
     const target = file();
     try {
