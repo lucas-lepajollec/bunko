@@ -45,9 +45,8 @@ function Planning() {
   const week = /^\d{4}-\d{2}-\d{2}$/.test(weekParam) ? weekParam : today;
   const setWeek = (next: string) => setWeekParam(next);
   const universe = useUniverse();
-  const [chosenKind, setKind] = useViewState<DiscoverKind>('kind', 'all', ['all', ...KIND_IDS]);
-  // A chosen universe fixes the kind; "everything" keeps the kind pills.
-  const kind = universe.active !== 'all' ? universe.active : chosenKind;
+  // The kind pills open on the current universe; another kind chosen here stays in the address.
+  const [kind, setKind] = useViewState<DiscoverKind>('kind', universe.active, ['all', ...KIND_IDS]);
   const [mineParam, setMineParam] = useViewState<'0' | '1'>('mine', '0', ['0', '1']);
   const mine = mineParam === '1';
   const setMine = (next: (m: boolean) => boolean) => setMineParam(next(mine) ? '1' : '0');
@@ -95,7 +94,6 @@ function Planning() {
         <div
           className={cx(
             'no-scrollbar -mx-4 flex max-w-[calc(100%+2rem)] min-w-0 gap-2 overflow-x-auto px-4 md:mx-0 md:max-w-full md:px-0',
-            universe.active !== 'all' && 'hidden',
           )}
           role="group"
           aria-label={t('catalog.kind')}

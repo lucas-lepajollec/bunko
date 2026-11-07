@@ -42,13 +42,9 @@ function Catalog() {
   const router = useRouter();
   const pathname = usePathname();
   const universe = useUniverse();
-  // A chosen universe fixes the kind; "everything" keeps the per-page kind menu.
+  // The kind menu opens on the current universe; another kind chosen here stays in the address.
   const kind = (
-    universe.active !== 'all'
-      ? universe.active
-      : KINDS.includes(params.get('kind') as DiscoverKind)
-        ? params.get('kind')
-        : 'all'
+    KINDS.includes(params.get('kind') as DiscoverKind) ? params.get('kind') : universe.active
   ) as DiscoverKind;
   const sort = (
     SORTS.includes(params.get('sort') as DiscoverSort) ? params.get('sort') : 'trending'
@@ -80,7 +76,7 @@ function Catalog() {
   const set = (key: string, value: string, extra?: Record<string, string>) => {
     const next = new URLSearchParams(params);
     for (const [k, v] of Object.entries({ [key]: value, ...extra })) {
-      if (v && !(k === 'kind' && v === 'all') && !(k === 'sort' && v === 'trending'))
+      if (v && !(k === 'kind' && v === universe.active) && !(k === 'sort' && v === 'trending'))
         next.set(k, v);
       else next.delete(k);
     }
@@ -215,7 +211,6 @@ function Catalog() {
       <div
         className={cx(
           'no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0',
-          universe.active !== 'all' && 'hidden',
         )}
         role="group"
         aria-label={t('catalog.kind')}
@@ -363,7 +358,9 @@ function Catalog() {
                     ? 'catalog.noReleases'
                     : 'catalog.noReleases.any',
                 )}
-              >{t('home.noReleasesBody')}</Empty>
+              >
+                {t('home.noReleasesBody')}
+              </Empty>
             )}
           {releases.data?.[releases.data.length - 1]?.nextCursor && !releasesMore && (
             <button
