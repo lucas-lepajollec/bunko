@@ -1,6 +1,6 @@
 import type { AnimeSeason, EpisodeRange, TrackedMedia } from '@/types/shared';
 import { jellyfinConfigured, matchJellyfin, resetJellyfinProgress, workAired } from './jellyfin';
-import { knownFranchise } from './anime-franchise';
+import { knownSeasons } from './anime-franchise';
 import { inTenant, tenantId, tenantState } from './tenant-context';
 
 /**
@@ -52,7 +52,7 @@ function airedOfWork(anilistId: number): number | null {
   const cache = airedCache();
   const hit = cache.get(anilistId);
   if (hit && Date.now() - hit.at < 10 * 60_000) return hit.aired;
-  const seasons = knownFranchise(anilistId)?.seasons;
+  const seasons = knownSeasons(anilistId);
   // Unknown work (new, or its cache rebuilt): its seasons load in the background; no guess
   // from the first season meanwhile.
   if (!seasons) {
@@ -177,7 +177,7 @@ export function withVideoOwnership(entries: TrackedMedia[]): TrackedMedia[] {
           ? null
           : videoNews(
               e,
-              knownFranchise(e.media.anilistId)?.seasons,
+              knownSeasons(e.media.anilistId) ?? undefined,
               // Only works the media server holds at all: one missing nothing is no news.
               match ? match.series.seasons : null,
             ),

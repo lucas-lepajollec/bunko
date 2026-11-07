@@ -1728,6 +1728,12 @@ const en: Dictionary = {
   'news.inProgress': 'In progress',
   'news.inProgressEps': 'In progress · {count} ep.',
   'news.inProgressCh': 'In progress · {count} ch.',
+  'tops.title': 'Rankings',
+  'tops.aside': 'by your ratings',
+  'tops.empty': 'No ranking yet',
+  'tops.emptyBody': 'Rate works (the star on their page): each kind gets its ranking.',
+  'tops.all': 'See all {count}',
+  'tops.less': 'Top 10 only',
 };
 
 const fr: Dictionary = {
@@ -3444,6 +3450,12 @@ const fr: Dictionary = {
   'news.inProgress': 'En cours',
   'news.inProgressEps': 'En cours · {count} ép.',
   'news.inProgressCh': 'En cours · {count} ch.',
+  'tops.title': 'Classements',
+  'tops.aside': 'selon tes notes',
+  'tops.empty': 'Pas encore de classement',
+  'tops.emptyBody': 'Note des œuvres (l’étoile sur leur fiche) : chaque type a son classement.',
+  'tops.all': 'Voir les {count}',
+  'tops.less': 'Top 10 seulement',
 };
 
 const es: Dictionary = {
@@ -5153,6 +5165,12 @@ const es: Dictionary = {
   'news.inProgress': 'En curso',
   'news.inProgressEps': 'En curso · {count} ep.',
   'news.inProgressCh': 'En curso · {count} cap.',
+  'tops.title': 'Clasificaciones',
+  'tops.aside': 'según tus notas',
+  'tops.empty': 'Aún no hay clasificación',
+  'tops.emptyBody': 'Puntúa obras (la estrella en su ficha): cada tipo tendrá su clasificación.',
+  'tops.all': 'Ver las {count}',
+  'tops.less': 'Solo el top 10',
 };
 
 const de: Dictionary = {
@@ -6869,6 +6887,12 @@ const de: Dictionary = {
   'news.inProgress': 'Läuft',
   'news.inProgressEps': 'Läuft · {count} Folgen',
   'news.inProgressCh': 'Läuft · {count} Kap.',
+  'tops.title': 'Ranglisten',
+  'tops.aside': 'nach deinen Bewertungen',
+  'tops.empty': 'Noch keine Rangliste',
+  'tops.emptyBody': 'Bewerte Werke (der Stern auf ihrer Seite): jede Art bekommt ihre Rangliste.',
+  'tops.all': 'Alle {count} anzeigen',
+  'tops.less': 'Nur Top 10',
 };
 
 const it: Dictionary = {
@@ -8575,6 +8599,12 @@ const it: Dictionary = {
   'news.inProgress': 'In corso',
   'news.inProgressEps': 'In corso · {count} ep.',
   'news.inProgressCh': 'In corso · {count} cap.',
+  'tops.title': 'Classifiche',
+  'tops.aside': 'secondo i tuoi voti',
+  'tops.empty': 'Nessuna classifica',
+  'tops.emptyBody': 'Vota le opere (la stella nella scheda): ogni tipo avrà la sua classifica.',
+  'tops.all': 'Vedi tutte le {count}',
+  'tops.less': 'Solo la top 10',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

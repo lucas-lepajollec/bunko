@@ -383,23 +383,36 @@ export function EpisodeList({
                     </span>
                   )}
                 </button>
+                {/* A large target in the corner that never lets a tap through to "play" below
+                    (a disabled button would): the round mark inside stays small. */}
                 <button
                   type="button"
                   role="checkbox"
                   aria-checked={seen}
-                  disabled={!entry || busy || upcoming}
-                  onClick={() => onWatched(seen ? (absolute > 1 ? absolute - 1 : null) : absolute)}
+                  aria-disabled={!entry || busy || upcoming}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (!entry || busy || upcoming) return;
+                    onWatched(seen ? (absolute > 1 ? absolute - 1 : null) : absolute);
+                  }}
                   aria-label={t('episodes.markWatched', { n: n(e.number) })}
                   title={t('episodes.markWatched', { n: n(e.number) })}
                   className={cx(
-                    'absolute top-2 left-2 flex size-7 items-center justify-center rounded-full transition-[background-color,color,opacity] disabled:pointer-events-none',
-                    seen
-                      ? 'bg-fg text-bg'
-                      : 'bg-black/50 text-white/70 opacity-0 ring-1 ring-white/35 backdrop-blur-sm group-hover:opacity-100 hover:bg-black/70 hover:text-white focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
+                    'group/mark absolute top-0 left-0 z-10 flex size-14 items-start justify-start p-2',
                     upcoming && 'hidden',
                   )}
                 >
-                  <Check size={15} strokeWidth={2.75} aria-hidden />
+                  <span
+                    className={cx(
+                      'flex size-8 items-center justify-center rounded-full transition-[background-color,color,opacity]',
+                      seen
+                        ? 'bg-fg text-bg'
+                        : 'bg-black/55 text-white/75 opacity-0 ring-1 ring-white/35 backdrop-blur-sm group-hover:opacity-100 group-hover/mark:bg-black/75 group-hover/mark:text-white group-focus-visible/mark:opacity-100 [@media(hover:none)]:opacity-100',
+                    )}
+                  >
+                    <Check size={16} strokeWidth={2.75} aria-hidden />
+                  </span>
                 </button>
                 {seen && <span className="bg-fg absolute inset-x-0 bottom-0 h-1" aria-hidden />}
               </div>

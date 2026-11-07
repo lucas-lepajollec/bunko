@@ -52,7 +52,7 @@ export function storedMetadata<T>(key: string): { value: T; at: number; attempte
     if (!decoded) return null;
     hit = { payload: row.payload, value: decoded.value };
     const size = Buffer.byteLength(row.payload);
-    if (parsed.size >= 64 || state.parsedBytes + size > 16 * 1024 * 1024) {
+    if (parsed.size >= 512 || state.parsedBytes + size > 32 * 1024 * 1024) {
       parsed.clear();
       state.parsedBytes = 0;
     }

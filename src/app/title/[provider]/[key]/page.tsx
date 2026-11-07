@@ -138,7 +138,6 @@ function Title({ media }: { media: MediaDetail }) {
     media.format === 'ANIMATION_FILM' ||
     media.video?.ids?.kind === 'movie';
   const seasonParam = Number(useSearchParams().get('season')) || undefined;
-  const [watchBusy, setWatchBusy] = useState(false);
   const fromDetail: ChapterSelection[] = media.sources.map((s) => ({
     suwayomiMangaId: s.suwayomiMangaId,
     sourceId: s.sourceId,
@@ -305,27 +304,49 @@ function Title({ media }: { media: MediaDetail }) {
   })();
 
   async function setStatus(value: ReadingStatus | 'NONE') {
+    // A followed work shows its new status at once; the library is read again afterwards.
+    if (entry && value !== 'NONE')
+      void library.mutate(
+        (list) => list?.map((x) => (x.id === entry.id ? { ...x, status: value } : x)),
+        { revalidate: false },
+      );
     try {
       if (value === 'NONE') {
         if (entry) await send('/api/tracked', 'DELETE', { id: entry.id });
       } else if (entry) await send('/api/tracked', 'PATCH', { id: entry.id, status: value });
       else await send('/api/tracked', 'POST', { media, status: value, sources });
-      await library.mutate();
     } catch (e) {
       toast({ tone: 'bad', text: errorText(t, e) });
     }
+    void library.mutate();
   }
-  async function setWatched(watched: number | null) {
+  // Marks show at once; the saves go out one after another in the order of the taps, and the
+  // library is read again once they are all done.
+  const watchQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const watchPending = useRef(0);
+  function setWatched(watched: number | null) {
     if (!entry) return;
-    setWatchBusy(true);
-    try {
-      await send('/api/tracked', 'PATCH', { id: entry.id, read: watched });
-      await library.mutate();
-    } catch (e) {
-      toast({ tone: 'bad', text: errorText(t, e) });
-    } finally {
-      setWatchBusy(false);
-    }
+    const id = entry.id;
+    void library.mutate(
+      (list) =>
+        list?.map((x) =>
+          x.id === id
+            ? {
+                ...x,
+                status: x.status === 'PLANNING' && watched ? 'READING' : x.status,
+                progress: { ...x.progress, read: watched },
+              }
+            : x,
+        ),
+      { revalidate: false },
+    );
+    watchPending.current++;
+    watchQueue.current = watchQueue.current
+      .then(() => send('/api/tracked', 'PATCH', { id, read: watched }))
+      .catch((e) => toast({ tone: 'bad', text: errorText(t, e) }))
+      .finally(() => {
+        if (--watchPending.current === 0) void library.mutate();
+      });
   }
   const missingKeys = new Set(
     missingForUnit(chapters.data?.chapters ?? [], owned, ownedVolumes, false).map((c) => c.key),
@@ -671,7 +692,7 @@ function Title({ media }: { media: MediaDetail }) {
                   video={seasonParam ? { ...video, focus: seasonParam } : video}
                   jellyfin={media.jellyfin}
                   entry={entry}
-                  busy={watchBusy}
+                  busy={false}
                   onWatched={(w) => void setWatched(w)}
                 />
               </>

@@ -224,3 +224,42 @@ it('reads progress the same way for every kind: finished covers what was out the
   await trackedRoute.PATCH(request('PATCH', { id: work.id, status: 'READING' }));
   expect(getTracked(work.id)!.completedThrough).toBe(null);
 });
+
+it('stores a followed work without its sheet (recommendations, relations, episodes)', () => {
+  const heavy = {
+    ...emptyMedia('tmdbmovie:901', 'Heavy sheet', 'ANIME'),
+    format: 'MOVIE' as const,
+    recommendations: [{ id: 'x' }],
+    relations: [{ relation: 'SEQUEL' }],
+    video: { seasons: [] },
+    tags: ['a'],
+  } as never;
+  const t = track({ media: heavy, status: 'PLANNING' });
+  const stored = JSON.parse(
+    (
+      db().prepare('SELECT media_json FROM tracked_media WHERE id=?').get(t.id) as {
+        media_json: string;
+      }
+    ).media_json,
+  );
+  expect(Object.keys(stored)).not.toEqual(
+    expect.arrayContaining(['recommendations', 'relations', 'video', 'tags']),
+  );
+  for (const key of ['recommendations', 'relations', 'video', 'tags'])
+    expect(stored).not.toHaveProperty(key);
+  // Any later write of the work is trimmed too.
+  db()
+    .prepare(
+      "UPDATE tracked_media SET media_json=json_set(media_json,'$.relations',json('[1]')) WHERE id=?",
+    )
+    .run(t.id);
+  expect(
+    JSON.parse(
+      (
+        db().prepare('SELECT media_json FROM tracked_media WHERE id=?').get(t.id) as {
+          media_json: string;
+        }
+      ).media_json,
+    ),
+  ).not.toHaveProperty('relations');
+});

@@ -14,13 +14,7 @@ import { db, listTracked, statement, track, untrack, writeVersion } from './db';
 import { AppError } from './errors';
 import { endpoint } from './http';
 import { emptyMedia, normalizeTitle } from './media';
-import {
-  franchise,
-  knownFranchise,
-  loadedAnime,
-  prefetchNodes,
-  workVideo,
-} from './anime-franchise';
+import { franchise, knownSeasons, loadedAnime, prefetchNodes, workVideo } from './anime-franchise';
 import { anilistFromProviders, ensureAnimeIds, idsOfAnilist, tvdbSeasons } from './anime-ids';
 import { getSettings, updateSettings } from './settings';
 import { tenantSignal } from './tenant-lifecycle';
@@ -420,7 +414,7 @@ export function matchJellyfin(media: UnifiedMedia, link?: JellyfinLink | null) {
     ? inRoles(index.byAniList.get(String(media.anilistId)))
     : undefined;
   if (!byProvider && media.anilistId && index.byAniList.size)
-    for (const season of knownFranchise(media.anilistId)?.seasons ?? []) {
+    for (const season of knownSeasons(media.anilistId) ?? []) {
       byProvider = season.anilistId
         ? inRoles(index.byAniList.get(String(season.anilistId)))
         : undefined;
@@ -590,7 +584,7 @@ function applyJellyfinProgress() {
   // brought back to the work's length: watched never exceeds what exists.
   const cap = statement('UPDATE tracked_media SET last_read=? WHERE id=? AND last_read>?');
   for (const t of listTracked().filter((t) => t.type === 'ANIME')) {
-    const seasons = t.anilistId ? knownFranchise(t.anilistId)?.seasons : undefined;
+    const seasons = t.anilistId ? (knownSeasons(t.anilistId) ?? undefined) : undefined;
     const aired = seasons ? workAired(seasons) : null;
     if (aired && (t.progress.read ?? 0) > aired) cap.run(aired, t.id, aired);
     const presence = jellyfinPresence(t.media, t.jellyfinLink);

@@ -1,5 +1,6 @@
 import type { AnimeSeason, UnifiedMedia, VideoDetail } from '@/types/shared';
 import { AppError } from './errors';
+import { tenantState } from './tenant-context';
 import { requestJson } from './http';
 import { aniFields, fromAniList, type AniMedia } from './media';
 import { cached, saveMetadata, storedMetadata } from './metadata-cache';
@@ -336,10 +337,40 @@ export function workVideo(seasons: AnimeSeason[], focus: number, studios: string
  */
 export function naturalEpisode(anilistId: number, episode: number) {
   const ref = seasonRef(anilistId);
-  const work = ref?.root.anilistId ? knownFranchise(ref.root.anilistId) : null;
-  const season = work?.seasons.find((s) => s.anilistId === anilistId);
+  const seasons = ref?.root.anilistId ? knownSeasons(ref.root.anilistId) : null;
+  const season = seasons?.find((s) => s.anilistId === anilistId);
   if (!season?.display) return null;
   return { season: season.display, episode: (season.partOffset ?? 0) + episode };
+}
+/**
+ * A work's seasons without their episodes' titles and stills, kept in memory while the stored
+ * work is unchanged (checked by its timestamp, a few bytes): lists and counts read hundreds of
+ * works per request, and decoding every work's full payload each time cost seconds.
+ */
+const seasonSummaries = tenantState(
+  () => new Map<number, { at: number; seasons: AnimeSeason[] }>(),
+);
+const NO_DETAILS = { title: null, thumbnail: null } as const;
+export function knownSeasons(anilistId: number): AnimeSeason[] | null {
+  const row = statement('SELECT updated_at FROM metadata_cache WHERE key=?').get(
+    `anime-franchise:v5:${anilistId}`,
+  ) as { updated_at: number } | undefined;
+  const cache = seasonSummaries();
+  if (!row) {
+    cache.delete(anilistId);
+    return null;
+  }
+  const hit = cache.get(anilistId);
+  if (hit?.at === row.updated_at) return hit.seasons;
+  const work = knownFranchise(anilistId);
+  if (!work) return null;
+  const seasons = work.seasons.map((s) => ({
+    ...s,
+    list: s.list.map((e) => ({ number: e.number, ...NO_DETAILS })),
+  }));
+  if (cache.size > 5000) cache.clear();
+  cache.set(anilistId, { at: row.updated_at, seasons });
+  return seasons;
 }
 /** A work already resolved for this AniList id, without any network call. */
 export function knownFranchise(anilistId: number): Franchise | null {
