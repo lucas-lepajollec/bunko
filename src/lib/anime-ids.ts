@@ -32,6 +32,8 @@ interface Index {
   byTmdb: Map<number, AnimeIds[]>;
   byImdb: Map<string, AnimeIds[]>;
   byAnidb: Map<number, AnimeIds>;
+  byMal: Map<number, AnimeIds>;
+  byTmdbMovie: Map<number, AnimeIds>;
 }
 const runtime = globalThis as typeof globalThis & {
   __bunkoAnimeIds?: { index: Index; loadedAt: number } | null;
@@ -84,6 +86,8 @@ function build(list: AnimeIds[]): Index {
     byTmdb: new Map(),
     byImdb: new Map(),
     byAnidb: new Map(),
+    byMal: new Map(),
+    byTmdbMovie: new Map(),
   };
   const push = <K>(map: Map<K, AnimeIds[]>, key: K | null, value: AnimeIds) => {
     if (key === null || key === undefined) return;
@@ -97,6 +101,8 @@ function build(list: AnimeIds[]): Index {
     push(index.byTmdb, e.tmdb, e);
     push(index.byImdb, e.imdb, e);
     if (e.anidb !== null) index.byAnidb.set(e.anidb, e);
+    if (e.mal !== null) index.byMal.set(e.mal, e);
+    if (e.tmdbMovie) index.byTmdbMovie.set(e.tmdbMovie, e);
   }
   return index;
 }
@@ -154,6 +160,14 @@ export function animeIdsReady() {
 
 export function idsOfAnilist(anilistId: number): AnimeIds | null {
   return index()?.byAnilist.get(anilistId) ?? null;
+}
+/** AniList entry of a MyAnimeList anime id (imports from MAL-based trackers). */
+export function anilistOfMal(mal: number): number | null {
+  return index()?.byMal.get(mal)?.anilist ?? null;
+}
+/** AniList entry of an anime film known by its TMDB movie id. */
+export function anilistOfTmdbMovie(tmdb: number): number | null {
+  return index()?.byTmdbMovie.get(tmdb)?.anilist ?? null;
 }
 /** TV entries of one TVDB show, by TVDB season (the seasons Jellyfin shows). */
 export function tvdbSeasons(tvdb: number): AnimeIds[] {

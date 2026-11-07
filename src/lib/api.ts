@@ -63,7 +63,7 @@ export function route(handler: (r: Request) => Promise<Response> | Response, pro
     }
   };
 }
-export async function body<T>(r: Request, schema: ZodType<T>): Promise<T> {
+export async function body<T>(r: Request, schema: ZodType<T>, maxBytes = 1024 * 1024): Promise<T> {
   if (!r.headers.get('content-type')?.includes('application/json'))
     throw new AppError('CONTENT_TYPE', 'Use application/json', 415);
   const reader = r.body?.getReader();
@@ -75,7 +75,12 @@ export async function body<T>(r: Request, schema: ZodType<T>): Promise<T> {
       const part = await reader.read();
       if (part.done) break;
       size += part.value.byteLength;
-      if (size > 1024 * 1024) throw new AppError('PAYLOAD_TOO_LARGE', 'Body exceeds 1 MiB', 413);
+      if (size > maxBytes)
+        throw new AppError(
+          'PAYLOAD_TOO_LARGE',
+          `Body exceeds ${Math.round(maxBytes / 1048576)} MiB`,
+          413,
+        );
       chunks.push(part.value);
     }
   } finally {

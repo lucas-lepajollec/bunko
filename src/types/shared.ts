@@ -76,6 +76,27 @@ export interface UnifiedMedia {
   /** What the user holds and has done with this work (library works only). */
   mine?: LibraryMark | null;
 }
+/** GET/POST /api/import/yamtrack — a Yamtrack CSV import running in the background. */
+export interface YamtrackImportState {
+  running: boolean;
+  /** Entries handled so far, out of `total`. */
+  done: number;
+  total: number;
+  /** Works added to the library, and works already there that got their status/score. */
+  added: number;
+  updated: number;
+  /** Entries no catalog work was found for (first 300), with the reason. */
+  unmatched: {
+    title: string;
+    type: string;
+    source: string;
+    reason: 'unsupported' | 'notFound' | 'tmdb' | 'unavailable';
+  }[];
+  unmatchedCount: number;
+  /** Rows of Yamtrack types Bunko does not hold (games, music…), by type. */
+  skipped: Record<string, number>;
+  finishedAt: string | null;
+}
 /** Marks on a work's cards: owned files, seen/read (even partly), the user's score. */
 export interface LibraryMark {
   status: ReadingStatus;
