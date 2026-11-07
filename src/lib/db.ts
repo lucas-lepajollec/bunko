@@ -206,6 +206,7 @@ export function db(): Database.Database {
     migrateV23(connection);
     migrateV24(connection);
     migrateV25(connection);
+    migrateV26(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -829,6 +830,8 @@ function snapshotTracked(id?: number) {
     const entries = rows.map((r): TrackedMedia => {
       const id = Number(r.id);
       const rawMedia = JSON.parse(String(r.media_json)) as UnifiedMedia;
+      for (const key of SHEET_ONLY_KEYS)
+        delete (rawMedia as unknown as Record<string, unknown>)[key];
       rawMedia.title ??= String(r.title);
       rawMedia.altTitles ??= [];
       const sources = JSON.parse(String(r.sources_json)) as TrackedMedia['sources'];
@@ -1444,6 +1447,51 @@ export function migrateV21(database: Database.Database) {
     database.pragma('user_version=21');
   })();
 }
+/**
+ * What "finished" covered was first recorded while some works still had one season (before the
+ * TVDB seasons): recorded again once, from the complete works.
+ */
+export function migrateV26(database: Database.Database) {
+  database.transaction(() => {
+    // A followed work stores what lists and cards use: never a sheet's recommendations,
+    // relations, episodes or tags (they made the library list weigh megabytes). Whatever path
+    // writes a work, the trigger trims it.
+    const heavy = SHEET_ONLY_KEYS.map((k) => `'$.${k}'`).join(',');
+    const present = SHEET_ONLY_KEYS.map(
+      (k) => `json_type(NEW.media_json,'$.${k}') IS NOT NULL`,
+    ).join(' OR ');
+    database.exec(`CREATE TRIGGER IF NOT EXISTS tracked_media_trim_insert
+      AFTER INSERT ON tracked_media WHEN ${present}
+      BEGIN UPDATE tracked_media SET media_json=json_remove(media_json,${heavy}) WHERE id=NEW.id; END;
+      CREATE TRIGGER IF NOT EXISTS tracked_media_trim_update
+      AFTER UPDATE OF media_json ON tracked_media WHEN ${present}
+      BEGIN UPDATE tracked_media SET media_json=json_remove(media_json,${heavy}) WHERE id=NEW.id; END;`);
+    if (Number(database.pragma('user_version', { simple: true })) >= 26) return;
+    database.exec(`UPDATE tracked_media SET media_json=json_remove(media_json,${heavy})
+      WHERE ${present.replaceAll('NEW.', '')}`);
+    // What "finished" covered was first recorded while some works still had one season
+    // (before the TVDB seasons): recorded again from the complete works.
+    database.exec(
+      'UPDATE tracked_media SET completed_through=NULL WHERE completed_through IS NOT NULL',
+    );
+    database.pragma('user_version=26');
+  })();
+}
+/** Parts of a catalog sheet that a followed work never stores. */
+const SHEET_ONLY_KEYS = [
+  'recommendations',
+  'relations',
+  'video',
+  'tags',
+  'credits',
+  'jellyfin',
+  'pending',
+  'partial',
+  'workOf',
+  'mine',
+  'staff',
+  'externalLinks',
+] as const;
 /** Anime works rebuilt once more: some were built before the offline id map was loaded. */
 export function migrateV25(database: Database.Database) {
   database.transaction(() => {

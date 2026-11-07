@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import type { AuthState, TrackedMedia } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { universeAsides, useUniverse } from '@/lib/client/universe';
@@ -8,6 +9,7 @@ import { ContinueCard, useContinue } from '@/components/reading';
 import { PosterCard } from '@/components/media';
 import { libraryMark } from '@/domain/library-mark';
 import { FavoriteButton } from '@/components/favorite';
+import { Tops } from '@/components/tops';
 import { Page } from '@/components/shell';
 import {
   Empty,
@@ -38,6 +40,9 @@ export default function ProfilePage() {
       <PageTitle title={t('profile.title')} aside={auth.data?.username} />
       <div className="flex flex-wrap items-center gap-3 text-sm text-mid">
         <span>{t('profile.followed', { count: n(entries.length) })}</span>
+        <Link href="#tops" className={smallButton}>
+          {t('tops.title')}
+        </Link>
         <Link href="#favorites" className={smallButton}>
           {t('favorites.title')} · {n(favorites.length)}
         </Link>
@@ -61,6 +66,9 @@ export default function ProfilePage() {
           ))}
         </div>
       </section>
+      <Suspense>
+        <Tops entries={entries} />
+      </Suspense>
       <section id="favorites" className="scroll-mt-28 flex flex-col gap-5">
         <SectionHeading
           title={t('favorites.title')}
