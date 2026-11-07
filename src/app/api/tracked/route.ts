@@ -57,13 +57,17 @@ export const PATCH = route(async (r) => {
   const input = await body(r, trackPatch);
   if (input.autoDownload) requirePermission('downloads');
   requireFollowed(input.id);
+  // Personal marks (like, score) change nothing else: no identity or source work.
   if (
-    input.favorite !== undefined &&
-    Object.keys(input).every((key) => key === 'id' || key === 'favorite')
+    (input.favorite !== undefined || input.rating !== undefined) &&
+    Object.keys(input).every((key) => key === 'id' || key === 'favorite' || key === 'rating')
   ) {
-    db()
-      .prepare('UPDATE tracked_media SET favorite=? WHERE id=?')
-      .run(Number(input.favorite), input.id);
+    if (input.favorite !== undefined)
+      db()
+        .prepare('UPDATE tracked_media SET favorite=? WHERE id=?')
+        .run(Number(input.favorite), input.id);
+    if (input.rating !== undefined)
+      db().prepare('UPDATE tracked_media SET rating=? WHERE id=?').run(input.rating, input.id);
     return json(getTracked(input.id));
   }
   let current = getTracked(input.id);

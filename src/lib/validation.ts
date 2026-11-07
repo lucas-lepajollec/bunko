@@ -384,6 +384,7 @@ export const trackPatch = z
   .object({
     id,
     favorite: z.boolean().optional(),
+    rating: z.number().min(0.5).max(10).multipleOf(0.5).nullable().optional(),
     kavitaCoverSync: z.boolean().optional(),
     media: media.optional(),
     unit: z.enum(['chapter', 'volume']).optional(),

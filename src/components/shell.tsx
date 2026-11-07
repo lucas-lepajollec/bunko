@@ -3,7 +3,7 @@ import { UniverseMenu, UniverseTab } from './universe-switch';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Suspense, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { SWRConfig, useSWRConfig } from 'swr';
 import type { AuthState, DownloadBatch, Extension } from '@/types/shared';
 import { PRODUCT_NAME } from '@/lib/client/brand';
@@ -14,6 +14,7 @@ import { cx, errorText, field, primaryButton, Skeleton } from './ui';
 import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
 import { ActivityCenter } from './activity';
 import { Toaster } from './notify';
+import { ScrollMemory } from './scroll-memory';
 import { Select } from './select';
 import {
   ChevronRight,
@@ -82,6 +83,9 @@ function AuthGate({ children }: { children: ReactNode }) {
     <>
       <Header />
       <Shortcuts />
+      <Suspense>
+        <ScrollMemory />
+      </Suspense>
       <div className="pb-24 md:pb-0">{children}</div>
       <TabBar />
       <Toaster />

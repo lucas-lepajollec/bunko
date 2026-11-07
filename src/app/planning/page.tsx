@@ -3,6 +3,7 @@ import { KIND_IDS, KINDS as KINDS_DEF } from '@/domain/kinds';
 import { MediaLink } from '@/components/media-link';
 import { Suspense, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useViewState } from '@/lib/client/view-state';
 import type { DiscoverKind, PlanningItem, PlanningWeek } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { useUniverse } from '@/lib/client/universe';
@@ -39,12 +40,17 @@ function Planning() {
   // The header search filters the week (`?q=`, written by the search field).
   const filterText = fold((useSearchParams().get('q') ?? '').trim());
   const today = isoDay(new Date());
-  const [week, setWeek] = useState(today);
+  // Week, kind and "mine" live in the address: back from a work returns to the same view.
+  const [weekParam, setWeekParam] = useViewState('week', today);
+  const week = /^\d{4}-\d{2}-\d{2}$/.test(weekParam) ? weekParam : today;
+  const setWeek = (next: string) => setWeekParam(next);
   const universe = useUniverse();
-  const [chosenKind, setKind] = useState<DiscoverKind>('all');
+  const [chosenKind, setKind] = useViewState<DiscoverKind>('kind', 'all', ['all', ...KIND_IDS]);
   // A chosen universe fixes the kind; "everything" keeps the kind pills.
   const kind = universe.active !== 'all' ? universe.active : chosenKind;
-  const [mine, setMine] = useState(false);
+  const [mineParam, setMineParam] = useViewState<'0' | '1'>('mine', '0', ['0', '1']);
+  const mine = mineParam === '1';
+  const setMine = (next: (m: boolean) => boolean) => setMineParam(next(mine) ? '1' : '0');
   const query = new URLSearchParams({ week });
   if (kind !== 'all') query.set('kind', kind);
   if (mine) query.set('library', '1');

@@ -5,6 +5,7 @@ import type { UnifiedMedia } from '@/types/shared';
 import { useI18n } from '@/i18n/I18nProvider';
 import { formatStartDate } from '@/lib/client/season';
 import { Cover, PosterSkeletons, cx, useMediaMeta } from './ui';
+import { WorkMarks } from './work-marks';
 
 export function PosterCard({
   media,
@@ -57,6 +58,7 @@ export function PosterCard({
               </span>
             )
           ))}
+        <WorkMarks mark={media.mine} video={media.type === 'ANIME'} />
       </span>
       <span className="line-clamp-2 text-[13px] leading-snug font-medium">{media.title}</span>
       <span className="text-muted -mt-1.5 truncate text-xs">{subtitle ?? meta(media)}</span>

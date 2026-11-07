@@ -1,7 +1,8 @@
 'use client';
 import { MediaLink } from '@/components/media-link';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useViewState } from '@/lib/client/view-state';
 import type {
   DownloadBatch,
   DownloadStatus,
@@ -31,11 +32,19 @@ import {
 type View = 'active' | 'failed' | 'history';
 
 export default function DownloadsPage() {
+  return (
+    <Suspense>
+      <Downloads />
+    </Suspense>
+  );
+}
+
+function Downloads() {
   const { t } = useI18n();
   const [snapshot, setSnapshot] = useState<DownloadsSnapshot | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [streamRun, setStreamRun] = useState(0);
-  const [view, setView] = useState<View>('active');
+  const [view, setView] = useViewState<View>('view', 'active', ['active', 'failed', 'history']);
   const settings = useApi<PublicSettings>('/api/settings');
   const engine = useSuwayomi();
   // Series & films only (no Suwayomi): the chapter downloader's tabs and notices stay out of the way.
