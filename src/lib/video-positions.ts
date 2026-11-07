@@ -8,8 +8,7 @@ const KEEP = 500;
 
 export function videoPosition(key: string): number | null {
   const row = db().prepare('SELECT seconds FROM video_positions WHERE key=?').get(key) as
-    | { seconds: number }
-    | undefined;
+    { seconds: number } | undefined;
   return row?.seconds ?? null;
 }
 

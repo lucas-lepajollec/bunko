@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { VideoAddon, VideoStream, VideoStreams, VideoSubtitle } from '@/types/shared';
-import { ensureAnimeIds, idsOfAnilist } from './anime-ids';
+import { ensureAnimeIds, idsOfAnilist, tmdbEntries } from './anime-ids';
+import { naturalEpisode } from './anime-franchise';
 import { AppError } from './errors';
 import { cached } from './metadata-cache';
 import { addonId, getSettings, updateSettings } from './settings';
@@ -196,6 +197,22 @@ export async function removeVideoAddon(id: string, signal?: AbortSignal) {
 /** Ids an addon may know for one episode, in the order addons usually prefer. */
 export function episodeIds(anilistId: number, episode: number) {
   const ids = idsOfAnilist(anilistId);
+  const natural = naturalEpisode(anilistId, episode);
+  // TMDB files some shows as one long season (every AniList season under season 1): there,
+  // the season people use is the one sources understand (verified with TMDB-keyed addons).
+  const shared =
+    ids?.tmdb && ids.type !== 'MOVIE' && ids.tmdbSeason !== null
+      ? tmdbEntries(ids.tmdb).some(
+          (e) =>
+            e.anilist !== anilistId &&
+            e.type !== 'MOVIE' &&
+            e.tmdbSeason === ids.tmdbSeason &&
+            (e.tvdbSeason ?? 1) >= 1,
+        )
+      : false;
+  const tmdbAt = shared
+    ? (natural ?? { season: ids?.tvdbSeason ?? ids?.tmdbSeason ?? 1, episode })
+    : { season: ids?.tmdbSeason, episode };
   const out: { id: string; prefix: string; types: string[] }[] = [];
   if (ids?.kitsu)
     out.push({ id: `kitsu:${ids.kitsu}:${episode}`, prefix: 'kitsu', types: ['anime', 'series'] });
@@ -207,14 +224,19 @@ export function episodeIds(anilistId: number, episode: number) {
       ids.type === 'MOVIE'
         ? { id: `tmdb:${ids.tmdb}`, prefix: 'tmdb', types: ['movie'] }
         : {
-            id: `tmdb:${ids.tmdb}:${ids.tmdbSeason}:${episode}`,
+            id: `tmdb:${ids.tmdb}:${tmdbAt.season}:${tmdbAt.episode}`,
             prefix: 'tmdb',
             types: ['series'],
           },
     );
   if (ids?.imdb)
     out.push({
-      id: ids.type === 'MOVIE' ? ids.imdb : `${ids.imdb}:${ids.tvdbSeason ?? 1}:${episode}`,
+      id:
+        ids.type === 'MOVIE'
+          ? ids.imdb
+          : natural
+            ? `${ids.imdb}:${natural.season}:${natural.episode}`
+            : `${ids.imdb}:${ids.tvdbSeason ?? 1}:${episode}`,
       prefix: 'tt',
       types: ids.type === 'MOVIE' ? ['movie'] : ['series'],
     });

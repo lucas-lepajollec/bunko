@@ -281,6 +281,37 @@ it('asks TMDB-based addons by TMDB id and plays their local links through the re
   expect(ids(7, 1)).toEqual(['tmdb:901', 'anilist:7:1']);
   // No TMDB season known: no guess.
   expect(ids(8, 1)).toEqual(['anilist:8:1']);
+  // TMDB files every season as season 1 (The Apothecary Diaries): sources understand the
+  // season people use, here the TVDB one.
+  seedAnimeIds(
+    compact([
+      { anilist_id: 30, type: 'TV', themoviedb_id: 950, season: { tvdb: 1, tmdb: 1 } },
+      { anilist_id: 31, type: 'TV', themoviedb_id: 950, season: { tvdb: 2, tmdb: 1 } },
+      {
+        anilist_id: 32,
+        type: 'TV',
+        themoviedb_id: 950,
+        season: { tvdb: 3, tmdb: 1 },
+        imdb_id: 'tt9',
+      },
+    ]),
+  );
+  expect(ids(32, 5)).toEqual(['tmdb:950:3:5', 'tt9:3:5', 'anilist:32:5']);
+  expect(ids(30, 5)).toEqual(['tmdb:950:1:5', 'anilist:30:5']);
+  seedAnimeIds(
+    compact([
+      { anilist_id: 5, type: 'TV', kitsu_id: 77, imdb_id: ['tt5'] },
+      {
+        anilist_id: 6,
+        type: 'TV',
+        themoviedb_id: 900,
+        season: { tvdb: 1, tmdb: 2 },
+        imdb_id: 'tt6',
+      },
+      { anilist_id: 7, type: 'MOVIE', themoviedb_id: 901 },
+      { anilist_id: 8, type: 'TV', themoviedb_id: 902 },
+    ]),
+  );
 
   updateSettings({ videoAddons: [`${base}/local/manifest.json`] });
   calls.length = 0;
