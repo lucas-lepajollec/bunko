@@ -601,3 +601,19 @@ the worker from starting it. Removing an active batch cancels only its remaining
 retains completed imports; stale worker snapshots cannot restart the cancelled batch.
 Nonterminal lots saved before a restart resume through the same worker without recreating
 the queue. Pause remains an explicit durable setting; enqueue does not silently resume it.
+
+## Yamtrack import
+
+`POST /api/import/yamtrack` starts a background import for the signed-in account and answers `202`
+with `YamtrackImportState`; `GET` returns the same state (poll while `running`). The CSV export is
+parsed in the browser by `src/domain/yamtrack.ts` (columns by name; item fields take the first
+column of a repeated name, tracking fields the last, so the tracking `status` wins over the airing
+`status`; season rows fold into their show, episode rows are dropped). The body carries only
+`entries` (`anime`, `manga`, `tv`, `movie`, `book`; at most 20,000, 16 MiB) and `skipped` counts
+of other Yamtrack types (games, music, podcasts, board games…). Resolution: MyAnimeList anime
+through the offline id map grouped into the show's first season (scores averaged, episodes summed),
+MyAnimeList manga through AniList batches (format and country decide manga/manhwa/manhua/novel),
+MangaUpdates directly, TMDB series/films (anime ones become their AniList work), TVDB/IMDb through
+TMDB `/find`, Open Library editions through their work, Hardcover and Google Books; other ids fall
+back to an exact AniList title match. A rated work without a further status is `COMPLETED`; progress
+never goes backwards; an existing work keeps a further status than `PLANNING`. Nothing is downloaded.
