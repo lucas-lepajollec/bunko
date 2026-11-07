@@ -4,7 +4,7 @@ import { requestJson } from './http';
 import { aniFields, fromAniList, type AniMedia } from './media';
 import { cached, saveMetadata, storedMetadata } from './metadata-cache';
 import { statement } from './db';
-import { idsOfAnilist, tvdbSeasons } from './anime-ids';
+import { ensureAnimeIds, idsOfAnilist, tvdbSeasons } from './anime-ids';
 
 /** AniList formats that make the seasons of one show (films, OVAs and specials stay apart). */
 const SEASON_FORMATS = new Set(['TV', 'TV_SHORT', 'ONA']);
@@ -185,8 +185,11 @@ export async function franchise(anilistId: number, signal?: AbortSignal): Promis
   // Joined by hand to another work: that work is the franchise.
   const joined = linkedRoot(anilistId);
   if (joined && joined !== anilistId) return franchise(joined, signal);
-  return cached(`anime-franchise:v4:${anilistId}`, DAY / 2, async () => {
+  return cached(`anime-franchise:v5:${anilistId}`, DAY / 2, async () => {
     // The offline id map already knows the show's other seasons: load them all at once.
+    // The offline map must be loaded first: without it a show's other seasons are unknown and
+    // a one-season work would be cached for hours.
+    await ensureAnimeIds();
     const known = idsOfAnilist(anilistId);
     await prefetchNodes(
       [anilistId, ...(known?.tvdb ? tvdbSeasons(known.tvdb).map((e) => e.anilist) : [])],
@@ -340,7 +343,7 @@ export function naturalEpisode(anilistId: number, episode: number) {
 }
 /** A work already resolved for this AniList id, without any network call. */
 export function knownFranchise(anilistId: number): Franchise | null {
-  return storedMetadata<Franchise>(`anime-franchise:v4:${anilistId}`)?.value ?? null;
+  return storedMetadata<Franchise>(`anime-franchise:v5:${anilistId}`)?.value ?? null;
 }
 /** Episodes before a season (absolute numbering across the work). */
 export function seasonOffset(seasons: AnimeSeason[], number: number) {
