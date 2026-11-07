@@ -52,6 +52,23 @@ export const GET = route(async (r) => {
     }),
   );
 });
+/** Statuses of a work that has stopped coming out (no new episodes or chapters expected). */
+const ENDED = new Set(['FINISHED', 'Ended', 'Canceled', 'CANCELLED', 'Complete', 'Discontinued']);
+function statusAfterProgress(
+  current: TrackedMedia,
+  read: number | null,
+  asked: TrackedMedia['status'] | undefined,
+): TrackedMedia['status'] {
+  if (asked) return asked;
+  const length = workLength(withVideoOwnership([current])[0]);
+  const covered = current.completedThrough ?? length;
+  if (current.status === 'COMPLETED')
+    return read !== null && covered !== null && read < covered ? 'READING' : 'COMPLETED';
+  if (read === null) return current.status;
+  if (length !== null && read >= length && ENDED.has(current.media.status ?? ''))
+    return 'COMPLETED';
+  return current.status === 'PLANNING' ? 'READING' : current.status;
+}
 /**
  * A finished work keeps what "finished" covered: its length the first time it is listed as
  * finished with a known length (the status change trigger clears it). Later releases are new.
@@ -303,12 +320,16 @@ export const PATCH = route(async (r) => {
         db()
           .prepare('UPDATE tracked_media SET jellyfin_link=? WHERE id=?')
           .run(input.jellyfinLink === null ? null : JSON.stringify(input.jellyfinLink), input.id);
-      if (input.read !== undefined)
+      if (input.read !== undefined) {
+        // The status follows what is marked seen: unmarking part of a finished work means it is
+        // being watched again; everything out seen on a work that has ended means finished.
+        const status = statusAfterProgress(current, input.read, input.status);
         db()
           .prepare(
-            "UPDATE tracked_media SET last_read=?,last_read_at=?,progress_checked=1,status=CASE WHEN status='PLANNING' AND ? IS NOT NULL THEN 'READING' ELSE status END WHERE id=?",
+            'UPDATE tracked_media SET last_read=?,last_read_at=?,progress_checked=1,status=? WHERE id=?',
           )
-          .run(input.read, new Date().toISOString(), input.read, input.id);
+          .run(input.read, new Date().toISOString(), status, input.id);
+      }
       if (input.favorite !== undefined)
         db()
           .prepare('UPDATE tracked_media SET favorite=? WHERE id=?')

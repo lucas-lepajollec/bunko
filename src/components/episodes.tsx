@@ -11,6 +11,7 @@ import type {
 } from '@/types/shared';
 import { mediaHref } from '@/lib/client/api';
 import { jellyfinSeason } from '@/domain/seasons';
+import { workProgress } from '@/domain/progress';
 import { useI18n } from '@/i18n/I18nProvider';
 import { cx } from './ui';
 import { Player, type PlayerEpisode } from './player';
@@ -75,7 +76,8 @@ export function EpisodeList({
       .slice(0, i)
       .reduce((sum, x) => sum + Math.max(x.episodes ?? 0, x.aired ?? 0, x.list.length), 0),
   );
-  const read = entry?.progress?.read ?? 0;
+  // Seen follows the status: a finished work's episodes (aired when it was finished) are seen.
+  const read = entry ? workProgress(entry).seen : 0;
   const film = filmProp ?? video.ids?.kind === 'movie';
   const resume = Math.max(
     0,
