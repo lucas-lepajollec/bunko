@@ -105,7 +105,7 @@ async function node(id: number, signal?: AbortSignal): Promise<AniNode> {
 }
 
 /** Episode titles/stills, aired count and next airing of one season. */
-export function seasonFacts(m: AniNode, number: number): AnimeSeason {
+export function seasonFacts(m: AniNode, number: number, before = 0): AnimeSeason {
   const next = m.nextAiringEpisode;
   const total = m.episodes ?? null;
   const aired = next ? Math.max(0, next.episode - 1) : m.status === 'FINISHED' ? total : null;
@@ -119,7 +119,22 @@ export function seasonFacts(m: AniNode, number: number): AnimeSeason {
       thumbnail: e.thumbnail ?? null,
     });
   }
-  const count = Math.min(2000, Math.max(total ?? 0, aired ?? 0, ...byNumber.keys()));
+  // Streaming services number some later seasons from the first one (Crunchyroll's "Episode
+  // 25" for a second season of 24): such numbering is the season's only when it starts right
+  // after the episodes of the seasons before it (AniList sometimes files a later season's
+  // episodes under the first one: those are dropped, not shown as this season's).
+  const numbers = [...byNumber.keys()].sort((a, b) => a - b);
+  if (total && numbers.length && numbers[numbers.length - 1] > total) {
+    const continued = before > 0 && numbers[0] === before + 1;
+    const moved = new Map(byNumber);
+    byNumber.clear();
+    if (continued)
+      for (const [k, v] of moved) byNumber.set(k - before, { ...v, number: k - before });
+    else for (const [k, v] of moved) if (k <= total) byNumber.set(k, v);
+  }
+  const known = Math.max(total ?? 0, aired ?? 0);
+  if (known) for (const k of [...byNumber.keys()]) if (k > known) byNumber.delete(k);
+  const count = Math.min(2000, known || Math.max(0, ...byNumber.keys()));
   const media = fromAniList(m);
   return {
     number,
@@ -139,6 +154,20 @@ export function seasonFacts(m: AniNode, number: number): AnimeSeason {
     ),
   };
 }
+/**
+ * A "Part 2" / "2nd cour" entry continues the season before it: AniList keeps it apart, the
+ * people watching (and the streaming sources) call it the same season.
+ */
+export function partNumber(titles: (string | null | undefined)[]): number | null {
+  for (const title of titles) {
+    const m =
+      /\bpart\s*(\d{1,2})\b/i.exec(title ?? '') ??
+      /\b(\d{1,2})(?:st|nd|rd|th)\s+cour\b/i.exec(title ?? '') ??
+      /第(\d{1,2})クール/.exec(title ?? '');
+    if (m && Number(m[1]) >= 2) return Number(m[1]);
+  }
+  return null;
+}
 const start = (m: AniNode) => {
   const d = m.startDate;
   return (d?.year ?? 9999) * 10_000 + (d?.month ?? 12) * 100 + (d?.day ?? 31);
@@ -156,7 +185,7 @@ export async function franchise(anilistId: number, signal?: AbortSignal): Promis
   // Joined by hand to another work: that work is the franchise.
   const joined = linkedRoot(anilistId);
   if (joined && joined !== anilistId) return franchise(joined, signal);
-  return cached(`anime-franchise:${anilistId}`, DAY / 2, async () => {
+  return cached(`anime-franchise:v2:${anilistId}`, DAY / 2, async () => {
     // The offline id map already knows the show's other seasons: load them all at once.
     const known = idsOfAnilist(anilistId);
     await prefetchNodes(
@@ -196,12 +225,29 @@ export async function franchise(anilistId: number, signal?: AbortSignal): Promis
     }
     const ordered = [...seen.values()].sort((a, b) => start(a) - start(b) || a.id - b.id);
     const joinedIds = new Set(members);
+    let display = 0;
+    let before = 0;
+    let previous: AnimeSeason | null = null;
     const seasons = ordered.map((m, i) => {
-      const facts = seasonFacts(m, i + 1);
+      const facts = seasonFacts(m, i + 1, before);
+      before += Math.max(facts.episodes ?? 0, facts.aired ?? 0, facts.list.length);
       // Films and joined works are named, not numbered.
-      return joinedIds.has(m.id) || !SEASON_FORMATS.has(m.format ?? '')
-        ? { ...facts, label: facts.title }
-        : facts;
+      if (joinedIds.has(m.id) || !SEASON_FORMATS.has(m.format ?? ''))
+        return { ...facts, label: facts.title };
+      const part = previous ? partNumber([m.title.romaji, m.title.english, m.title.native]) : null;
+      const season: AnimeSeason = part
+        ? {
+            ...facts,
+            display,
+            part,
+            // Episodes of the earlier parts of the same season come first.
+            partOffset:
+              (previous!.partOffset ?? 0) +
+              Math.max(previous!.episodes ?? 0, previous!.aired ?? 0, previous!.list.length),
+          }
+        : { ...facts, display: ++display };
+      previous = season;
+      return season;
     });
     const work: Franchise = {
       root: fromAniList(ordered[0]),
@@ -245,9 +291,21 @@ export function workVideo(seasons: AnimeSeason[], focus: number, studios: string
     }),
   };
 }
+/**
+ * The season and episode as people (and streaming sources) number them: the work's season
+ * (a "Part 2" keeps its season's number), episodes counted from that season's start. Null
+ * until the work was resolved once.
+ */
+export function naturalEpisode(anilistId: number, episode: number) {
+  const ref = seasonRef(anilistId);
+  const work = ref?.root.anilistId ? knownFranchise(ref.root.anilistId) : null;
+  const season = work?.seasons.find((s) => s.anilistId === anilistId);
+  if (!season?.display) return null;
+  return { season: season.display, episode: (season.partOffset ?? 0) + episode };
+}
 /** A work already resolved for this AniList id, without any network call. */
 export function knownFranchise(anilistId: number): Franchise | null {
-  return storedMetadata<Franchise>(`anime-franchise:${anilistId}`)?.value ?? null;
+  return storedMetadata<Franchise>(`anime-franchise:v2:${anilistId}`)?.value ?? null;
 }
 /** Episodes before a season (absolute numbering across the work). */
 export function seasonOffset(seasons: AnimeSeason[], number: number) {

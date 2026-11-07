@@ -117,7 +117,10 @@ export function EpisodeList({
       label: film
         ? t('episodes.film')
         : seasons.length > 1
-          ? t('episodes.seasonShort', { s: n(s.number), n: n(at.episode) })
+          ? t('episodes.seasonShort', {
+              s: n(s.display ?? s.number),
+              n: n((s.partOffset ?? 0) + at.episode),
+            })
           : t('episodes.short', { n: n(at.episode) }),
       seasonAnilistId: s.anilistId ?? anilistId,
       imdb:
@@ -197,7 +200,10 @@ export function EpisodeList({
               : 'text-mid bg-white/[0.06] hover:text-white',
           )}
         >
-          {x.label ?? t('episodes.seasonN', { n: n(x.number) })}
+          {x.label ??
+            (x.part
+              ? t('episodes.seasonPart', { n: n(x.display ?? x.number), part: n(x.part) })
+              : t('episodes.seasonN', { n: n(x.display ?? x.number) }))}
         </button>
       ))}
     </div>

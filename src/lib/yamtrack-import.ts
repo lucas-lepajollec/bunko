@@ -9,6 +9,7 @@ import {
 } from './anime-ids';
 import { aniFields, fromAniList, type AniMedia } from './media';
 import { aniListBlockedFor } from './anilist-limit';
+import { linkedRoot, seasonRef } from './anime-franchise';
 import { requestJson } from './http';
 import { db, statement, track } from './db';
 import { tenantState } from './tenant-context';
@@ -64,6 +65,15 @@ export function startYamtrackImport(entries: YamtrackEntry[], skipped: Record<st
 }
 
 type Ref = string;
+/**
+ * The work an AniList anime season belongs to, as following it from its sheet would give: a
+ * work joined by hand to another (Steins;Gate 0 into Steins;Gate) is that other work, a later
+ * season is its show's first season.
+ */
+function workOf(anilistId: number): number {
+  const joined = linkedRoot(anilistId) ?? anilistId;
+  return seasonRef(joined)?.root.anilistId ?? firstSeason(joined);
+}
 interface Resolved {
   media: UnifiedMedia;
   entries: YamtrackEntry[];
@@ -92,14 +102,14 @@ async function runImport(entries: YamtrackEntry[]) {
     const numeric = Number.isInteger(n) && n > 0;
     if (e.type === 'anime' && e.source === 'mal' && numeric) {
       const anilist = anilistOfMal(n);
-      if (anilist) refs.set(e, `anilist:${firstSeason(anilist)}`);
+      if (anilist) refs.set(e, `anilist:${workOf(anilist)}`);
       else malLookups.ANIME.push(e);
     } else if (e.type === 'manga' && e.source === 'mal' && numeric) malLookups.MANGA.push(e);
     else if (e.type === 'manga' && e.source === 'mangaupdates' && /^\d{1,20}$/.test(e.id))
       refs.set(e, `mangaupdates:${e.id}`);
     else if (e.type === 'tv' && numeric && (e.source === 'tmdb' || e.source === 'tvdb')) {
       const anime = anilistFromProviders(e.source === 'tmdb' ? { Tmdb: e.id } : { Tvdb: e.id });
-      if (anime) refs.set(e, `anilist:${anime}`);
+      if (anime) refs.set(e, `anilist:${workOf(anime)}`);
       else if (e.source === 'tmdb') refs.set(e, `tmdbtv:${e.id}`);
       else refs.set(e, `tvdb:${e.id}`);
     } else if (e.type === 'movie' && e.source === 'tmdb' && numeric) {
@@ -141,7 +151,7 @@ async function runImport(entries: YamtrackEntry[]) {
           continue;
         }
         aniMedia.set(m.id, m);
-        refs.set(e, `anilist:${type === 'ANIME' ? firstSeason(m.id) : m.id}`);
+        refs.set(e, `anilist:${type === 'ANIME' ? workOf(m.id) : m.id}`);
       }
       progress();
     }
@@ -162,7 +172,7 @@ async function runImport(entries: YamtrackEntry[]) {
         continue;
       }
       aniMedia.set(hit.id, hit);
-      refs.set(e, `anilist:${type === 'ANIME' ? firstSeason(hit.id) : hit.id}`);
+      refs.set(e, `anilist:${type === 'ANIME' ? workOf(hit.id) : hit.id}`);
     } catch {
       unmatched(e, 'unavailable');
     }

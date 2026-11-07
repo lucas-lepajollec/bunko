@@ -201,6 +201,7 @@ export function db(): Database.Database {
     migrateV18(connection);
     migrateV19(connection);
     migrateV20(connection);
+    migrateV21(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -1423,6 +1424,19 @@ export function migrateV19(database: Database.Database) {
       CREATE INDEX IF NOT EXISTS work_links_root ON work_links(root);`);
     if (Number(database.pragma('user_version', { simple: true })) < 19)
       database.pragma('user_version=19');
+  })();
+}
+/**
+ * Anime sheets are rebuilt once: seasons now keep to their own episodes and a "Part 2" keeps
+ * its season's number. Cached sheets and works (metadata only) are dropped, nothing else.
+ */
+export function migrateV21(database: Database.Database) {
+  database.transaction(() => {
+    if (Number(database.pragma('user_version', { simple: true })) >= 21) return;
+    database.exec(
+      "DELETE FROM metadata_cache WHERE key LIKE 'detail:anilist:%' OR key LIKE 'anime-franchise:%'",
+    );
+    database.pragma('user_version=21');
   })();
 }
 /** The user's own score of a work, out of 10 in half points; additive. */

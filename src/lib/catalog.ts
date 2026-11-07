@@ -1,4 +1,4 @@
-import { seasonRef } from './anime-franchise';
+import { naturalEpisode, seasonRef } from './anime-franchise';
 import { KINDS, KIND_IDS, byKindOrder, mixByKind, type Kind } from '@/domain/kinds';
 import { rememberMediaPreview, mediaPreview } from './media-preview';
 import { deduplicate } from './search-engine';
@@ -876,10 +876,13 @@ export async function animeAiring(
     })
     .map((r) => {
       const ref = seasonRef(r.media.id);
+      // "Part 2" episodes read as their season's (S3 · Ep. 14), as everywhere else.
+      const natural = ref ? naturalEpisode(r.media.id, r.episode) : null;
+      const season = natural?.season ?? ref?.season ?? null;
       return {
         media: ref ? ref.root : fromAniList(r.media),
-        season: ref && ref.season > 1 ? ref.season : null,
-        episode: r.episode,
+        season: season && season > 1 ? season : null,
+        episode: natural?.episode ?? r.episode,
         airingAt: new Date(r.airingAt * 1000).toISOString(),
       };
     })

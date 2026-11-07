@@ -1687,6 +1687,7 @@ const en: Dictionary = {
   'import.yamtrack.reason.unavailable': 'catalog unreachable, try again',
   'import.yamtrack.resolving': 'Looking up works… {done} / {total}',
   'import.yamtrack.running': 'Adding to the library… {done} / {total}',
+  'episodes.seasonPart': 'Season {n} · Part {part}',
 };
 
 const fr: Dictionary = {
@@ -3362,6 +3363,7 @@ const fr: Dictionary = {
   'import.yamtrack.reason.unavailable': 'catalogue injoignable, réessaie',
   'import.yamtrack.resolving': 'Recherche des œuvres… {done} / {total}',
   'import.yamtrack.running': 'Ajout à la bibliothèque… {done} / {total}',
+  'episodes.seasonPart': 'Saison {n} · Partie {part}',
 };
 
 const es: Dictionary = {
@@ -5030,6 +5032,7 @@ const es: Dictionary = {
   'import.yamtrack.reason.unavailable': 'catálogo inaccesible, inténtalo de nuevo',
   'import.yamtrack.resolving': 'Buscando las obras… {done} / {total}',
   'import.yamtrack.running': 'Añadiendo a la biblioteca… {done} / {total}',
+  'episodes.seasonPart': 'Temporada {n} · Parte {part}',
 };
 
 const de: Dictionary = {
@@ -6705,6 +6708,7 @@ const de: Dictionary = {
   'import.yamtrack.reason.unavailable': 'Katalog nicht erreichbar, erneut versuchen',
   'import.yamtrack.resolving': 'Werke werden gesucht… {done} / {total}',
   'import.yamtrack.running': 'Zur Bibliothek hinzufügen… {done} / {total}',
+  'episodes.seasonPart': 'Staffel {n} · Teil {part}',
 };
 
 const it: Dictionary = {
@@ -8370,6 +8374,7 @@ const it: Dictionary = {
   'import.yamtrack.reason.unavailable': 'catalogo non raggiungibile, riprova',
   'import.yamtrack.resolving': 'Ricerca delle opere… {done} / {total}',
   'import.yamtrack.running': 'Aggiunta alla libreria… {done} / {total}',
+  'episodes.seasonPart': 'Stagione {n} · Parte {part}',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

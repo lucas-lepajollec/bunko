@@ -18,6 +18,31 @@ const nodes: Record<number, unknown> = {
   3: node(3, 'Fixture Show Movie', 'MOVIE', 2023, 1, [['PREQUEL', 2, 'TV']]),
   // A follow-up series AniList keeps apart (no SEQUEL edge), like Steins;Gate 0.
   9: node(9, 'Fixture Show Zero', 'TV', 2024, 8, []),
+  // The Apothecary Diaries shape: three seasons, the third in two parts (AniList entries).
+  20: {
+    ...node(20, 'Diaries', 'TV', 2023, 24, [['SEQUEL', 21, 'TV']]),
+    // AniList files the second season's episodes under the first one too.
+    streamingEpisodes: Array.from({ length: 24 }, (_, i) => ({
+      title: `Episode ${25 + i} - Title ${25 + i}`,
+      thumbnail: null,
+    })),
+  },
+  21: {
+    ...node(21, 'Diaries Season 2', 'TV', 2025, 24, [
+      ['PREQUEL', 20, 'TV'],
+      ['SEQUEL', 22, 'TV'],
+    ]),
+    // Crunchyroll numbers the second season from the first one (25–48).
+    streamingEpisodes: Array.from({ length: 24 }, (_, i) => ({
+      title: `Episode ${25 + i} - Title ${25 + i}`,
+      thumbnail: null,
+    })),
+  },
+  22: node(22, 'Diaries Season 3', 'TV', 2026, 12, [
+    ['PREQUEL', 21, 'TV'],
+    ['SEQUEL', 23, 'TV'],
+  ]),
+  23: node(23, 'Kusuriya no Hitorigoto 3rd Season Part 2', 'TV', 2027, 12, [['PREQUEL', 22, 'TV']]),
 };
 function node(
   id: number,
@@ -148,4 +173,30 @@ it('joins a separate series into a work by hand, as a named part', async () => {
   expect(getTracked(zero.id)).toMatchObject({ anilistId: 1, progress: { read: 24 } });
   works.setWorkLink(1, 9, false);
   expect((await works.franchise(1)).seasons).toHaveLength(2);
+});
+
+it('keeps a season to its own episodes and numbers a "Part 2" as its season', async () => {
+  const work = await works.franchise(20);
+  expect(
+    work.seasons.map((s) => [
+      s.number,
+      s.display,
+      s.part ?? null,
+      s.partOffset ?? 0,
+      s.list.length,
+    ]),
+  ).toEqual([
+    [1, 1, null, 0, 24],
+    [2, 2, null, 0, 24],
+    [3, 3, null, 0, 12],
+    [4, 3, 2, 12, 12],
+  ]);
+  // Continued numbering from the streaming service is brought back to the season's own.
+  expect(work.seasons[1].list[0]).toMatchObject({ number: 1, title: 'Title 25' });
+  // …and never lent to the first season.
+  expect(work.seasons[0].list[0]).toMatchObject({ number: 1, title: null });
+  expect(works.naturalEpisode(22, 5)).toEqual({ season: 3, episode: 5 });
+  expect(works.naturalEpisode(23, 1)).toEqual({ season: 3, episode: 13 });
+  expect(works.partNumber(['Attack on Titan Season 3 Part 2'])).toBe(2);
+  expect(works.partNumber(['Kingdom 2nd Season'])).toBe(null);
 });

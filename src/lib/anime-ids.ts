@@ -161,6 +161,10 @@ export function animeIdsReady() {
 export function idsOfAnilist(anilistId: number): AnimeIds | null {
   return index()?.byAnilist.get(anilistId) ?? null;
 }
+/** AniList entries that share a TMDB show (TMDB often files several AniList seasons as one). */
+export function tmdbEntries(tmdb: number): AnimeIds[] {
+  return index()?.byTmdb.get(tmdb) ?? [];
+}
 /** AniList entry of a MyAnimeList anime id (imports from MAL-based trackers). */
 export function anilistOfMal(mal: number): number | null {
   return index()?.byMal.get(mal)?.anilist ?? null;

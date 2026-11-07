@@ -239,6 +239,13 @@ export interface AnimeSeason {
   label?: string;
   /** TMDB season number of a series season (video extensions look episodes up with it). */
   tmdbSeason?: number;
+  /**
+   * The season as people number it: a "Part 2" entry keeps the number of the season it
+   * continues (`part` 2, its episodes after `partOffset` episodes of the earlier parts).
+   */
+  display?: number;
+  part?: number;
+  partOffset?: number;
   anilistId: number | null;
   title: string;
   year: number | null;

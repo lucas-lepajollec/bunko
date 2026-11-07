@@ -156,8 +156,7 @@ export function includeProviderAdults() {
   return adultScope() !== 'off' || [...adultState().overrides.values()].some((v) => !v.adult);
 }
 /** Cache scope of provider answers that depend on the 18+ choice. */
-export const adultKey = () =>
-  adultScope() === 'only' ? 'only' : String(includeProviderAdults());
+export const adultKey = () => (adultScope() === 'only' ? 'only' : String(includeProviderAdults()));
 /** Keep a response's effective flag out of durable automatic metadata. */
 export function automaticMedia<T extends UnifiedMedia>(media: T): T {
   const { adultOverride, ...raw } = media;
