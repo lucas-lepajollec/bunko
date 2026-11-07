@@ -190,9 +190,14 @@ export function anilistFromProviders(ids: Record<string, string>): number | null
   const first = (list: AnimeIds[] | undefined) => {
     const tv = (list ?? []).filter((e) => e.type !== 'MOVIE');
     if (!tv.length) return null;
+    // Season 0 holds specials and OVAs: the show is its first real season, TV before ONA/OVA.
+    const season = (e: AnimeIds) => e.tvdbSeason ?? e.tmdbSeason ?? 1;
+    const kind = (e: AnimeIds) => (e.type === 'TV' || e.type === null ? 0 : 1);
     return [...tv].sort(
       (a, b) =>
-        (a.tvdbSeason ?? a.tmdbSeason ?? 1) - (b.tvdbSeason ?? b.tmdbSeason ?? 1) ||
+        Number(season(a) < 1) - Number(season(b) < 1) ||
+        season(a) - season(b) ||
+        kind(a) - kind(b) ||
         a.anilist - b.anilist,
     )[0].anilist;
   };

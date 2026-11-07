@@ -79,6 +79,10 @@ export interface UnifiedMedia {
 /** GET/POST /api/import/yamtrack — a Yamtrack CSV import running in the background. */
 export interface YamtrackImportState {
   running: boolean;
+  /** Looking the works up in the catalogs, then following them. */
+  phase: 'resolving' | 'saving';
+  /** Entries whose catalog work is known (or known to be missing) so far. */
+  found: number;
   /** Entries handled so far, out of `total`. */
   done: number;
   total: number;
