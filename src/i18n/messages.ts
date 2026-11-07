@@ -1674,7 +1674,6 @@ const en: Dictionary = {
   'import.yamtrack.rated': '{count} rated',
   'import.yamtrack.skipped': '{count} entries ignored ({types})',
   'import.yamtrack.start': 'Import {count} works',
-  'import.yamtrack.running': 'Importing… {done} / {total}',
   'import.yamtrack.done': 'Import finished: {added} added, {updated} updated.',
   'import.yamtrack.unmatched': '{count} not found — see the list',
   'import.yamtrack.type.anime': 'Anime',
@@ -1686,6 +1685,8 @@ const en: Dictionary = {
   'import.yamtrack.reason.notFound': 'not in the catalog',
   'import.yamtrack.reason.tmdb': 'TMDB not configured or unreachable',
   'import.yamtrack.reason.unavailable': 'catalog unreachable, try again',
+  'import.yamtrack.resolving': 'Looking up works… {done} / {total}',
+  'import.yamtrack.running': 'Adding to the library… {done} / {total}',
 };
 
 const fr: Dictionary = {
@@ -3348,7 +3349,6 @@ const fr: Dictionary = {
   'import.yamtrack.rated': '{count} notées',
   'import.yamtrack.skipped': '{count} entrées ignorées ({types})',
   'import.yamtrack.start': 'Importer {count} œuvres',
-  'import.yamtrack.running': 'Import en cours… {done} / {total}',
   'import.yamtrack.done': 'Import terminé : {added} ajoutées, {updated} mises à jour.',
   'import.yamtrack.unmatched': '{count} introuvables — voir la liste',
   'import.yamtrack.type.anime': 'Animes',
@@ -3360,6 +3360,8 @@ const fr: Dictionary = {
   'import.yamtrack.reason.notFound': 'absente du catalogue',
   'import.yamtrack.reason.tmdb': 'TMDB non configuré ou injoignable',
   'import.yamtrack.reason.unavailable': 'catalogue injoignable, réessaie',
+  'import.yamtrack.resolving': 'Recherche des œuvres… {done} / {total}',
+  'import.yamtrack.running': 'Ajout à la bibliothèque… {done} / {total}',
 };
 
 const es: Dictionary = {
@@ -5015,7 +5017,6 @@ const es: Dictionary = {
   'import.yamtrack.rated': '{count} puntuadas',
   'import.yamtrack.skipped': '{count} entradas ignoradas ({types})',
   'import.yamtrack.start': 'Importar {count} obras',
-  'import.yamtrack.running': 'Importando… {done} / {total}',
   'import.yamtrack.done': 'Importación terminada: {added} añadidas, {updated} actualizadas.',
   'import.yamtrack.unmatched': '{count} no encontradas — ver la lista',
   'import.yamtrack.type.anime': 'Animes',
@@ -5027,6 +5028,8 @@ const es: Dictionary = {
   'import.yamtrack.reason.notFound': 'no está en el catálogo',
   'import.yamtrack.reason.tmdb': 'TMDB no configurado o inaccesible',
   'import.yamtrack.reason.unavailable': 'catálogo inaccesible, inténtalo de nuevo',
+  'import.yamtrack.resolving': 'Buscando las obras… {done} / {total}',
+  'import.yamtrack.running': 'Añadiendo a la biblioteca… {done} / {total}',
 };
 
 const de: Dictionary = {
@@ -6689,7 +6692,6 @@ const de: Dictionary = {
   'import.yamtrack.rated': '{count} bewertet',
   'import.yamtrack.skipped': '{count} Einträge ignoriert ({types})',
   'import.yamtrack.start': '{count} Werke importieren',
-  'import.yamtrack.running': 'Import läuft… {done} / {total}',
   'import.yamtrack.done': 'Import abgeschlossen: {added} hinzugefügt, {updated} aktualisiert.',
   'import.yamtrack.unmatched': '{count} nicht gefunden — Liste anzeigen',
   'import.yamtrack.type.anime': 'Anime',
@@ -6701,6 +6703,8 @@ const de: Dictionary = {
   'import.yamtrack.reason.notFound': 'nicht im Katalog',
   'import.yamtrack.reason.tmdb': 'TMDB nicht eingerichtet oder nicht erreichbar',
   'import.yamtrack.reason.unavailable': 'Katalog nicht erreichbar, erneut versuchen',
+  'import.yamtrack.resolving': 'Werke werden gesucht… {done} / {total}',
+  'import.yamtrack.running': 'Zur Bibliothek hinzufügen… {done} / {total}',
 };
 
 const it: Dictionary = {
@@ -8353,7 +8357,6 @@ const it: Dictionary = {
   'import.yamtrack.rated': '{count} votate',
   'import.yamtrack.skipped': '{count} voci ignorate ({types})',
   'import.yamtrack.start': 'Importa {count} opere',
-  'import.yamtrack.running': 'Importazione… {done} / {total}',
   'import.yamtrack.done': 'Importazione completata: {added} aggiunte, {updated} aggiornate.',
   'import.yamtrack.unmatched': '{count} non trovate — vedi l’elenco',
   'import.yamtrack.type.anime': 'Anime',
@@ -8365,6 +8368,8 @@ const it: Dictionary = {
   'import.yamtrack.reason.notFound': 'non nel catalogo',
   'import.yamtrack.reason.tmdb': 'TMDB non configurato o non raggiungibile',
   'import.yamtrack.reason.unavailable': 'catalogo non raggiungibile, riprova',
+  'import.yamtrack.resolving': 'Ricerca delle opere… {done} / {total}',
+  'import.yamtrack.running': 'Aggiunta alla libreria… {done} / {total}',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

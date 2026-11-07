@@ -243,6 +243,24 @@ export function isUnwantedUpdatesType(type: string | undefined) {
     type ?? '',
   );
 }
+/**
+ * MangaUpdates' status is free text written by its editors (several lines of markdown per
+ * edition at times); a work keeps one short state, as the other catalogs give it.
+ */
+export function updatesStatus(raw: string | null | undefined): string | null {
+  const text = raw?.replace(/[*_#]/g, '').trim();
+  if (!text) return null;
+  const states: [RegExp, string][] = [
+    [/ongoing/i, 'Ongoing'],
+    [/hiatus/i, 'Hiatus'],
+    [/cancel|discontinu|dropped/i, 'Discontinued'],
+    [/complete/i, 'Complete'],
+  ];
+  const first = text.split(/\n/)[0].trim();
+  if (text.includes('\n') || first.length > 100)
+    for (const [pattern, state] of states) if (pattern.test(text)) return state;
+  return first.slice(0, 100) || null;
+}
 export function fromMangaUpdates(m: UpdatesRecord): UnifiedMedia {
   const [kind, origin] = updatesFormat[(m.type ?? '').toLowerCase()] ?? ['comic', null];
   return {
@@ -254,7 +272,7 @@ export function fromMangaUpdates(m: UpdatesRecord): UnifiedMedia {
     altTitles: m.associated?.map((t) => t.title) ?? [],
     genres: m.genres?.map((g) => g.genre) ?? [],
     authors: [...new Set((m.authors ?? []).map((a) => a.name))],
-    status: m.status ?? null,
+    status: updatesStatus(m.status),
     score: m.bayesian_rating ? Math.round(m.bayesian_rating * 10) : null,
     webUrl: m.url,
     providers: ['mangaupdates'],

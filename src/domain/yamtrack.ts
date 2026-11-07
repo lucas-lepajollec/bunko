@@ -110,11 +110,15 @@ export function parseYamtrack(text: string): YamtrackParse {
     status: last('status'),
     score: last('score'),
     progress: last('progress'),
+    season: first('season_number'),
+    episode: first('episode_number'),
   };
   if (col.id < 0 || col.type < 0 || col.source < 0 || col.status < 0)
     throw new Error('NOT_YAMTRACK');
   const works = new Map<string, YamtrackEntry>();
   const seasons = new Map<string, { scores: number[]; progress: number }>();
+  /** Episodes watched one by one (Yamtrack's episode rows), per show. */
+  const episodes = new Map<string, Set<string>>();
   const skipped: Record<string, number> = {};
   for (const r of rows.slice(1)) {
     if (r.length < header.length / 2) continue;
@@ -132,6 +136,13 @@ export function parseYamtrack(text: string): YamtrackParse {
       if (value !== null) s.scores.push(value);
       s.progress += Number(r[col.progress]) || 0;
       seasons.set(show, s);
+      continue;
+    }
+    if (type === 'episode') {
+      const show = `tv|${source}|${id}`;
+      const seen = episodes.get(show) ?? new Set<string>();
+      seen.add(`${r[col.season] ?? ''}x${r[col.episode] ?? ''}`);
+      episodes.set(show, seen);
       continue;
     }
     if (CHILDREN.has(type)) continue;
@@ -161,6 +172,10 @@ export function parseYamtrack(text: string): YamtrackParse {
           }
         : entry,
     );
+  }
+  for (const [key, seen] of episodes) {
+    const show = works.get(key);
+    if (show) show.progress = Math.max(show.progress, seen.size);
   }
   for (const [key, s] of seasons) {
     const show = works.get(key);

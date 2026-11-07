@@ -10,7 +10,16 @@ const { seedAnimeIds, compact } = await import('@/lib/anime-ids');
 // Steins;Gate (TV, then its sequel season on the same TVDB show) and a film.
 seedAnimeIds(
   compact([
-    { anilist_id: 9253, mal_id: 9253, type: 'TV', tvdb_id: 244061, season: { tvdb: 1 } },
+    {
+      anilist_id: 9253,
+      mal_id: 9253,
+      type: 'TV',
+      tvdb_id: 244061,
+      themoviedb_id: 42509,
+      season: { tvdb: 1, tmdb: 1 },
+    },
+    // A special filed as season 0 of the same TMDB show.
+    { anilist_id: 20907, type: 'ONA', themoviedb_id: 42509, season: { tvdb: 0, tmdb: 0 } },
     { anilist_id: 30484, mal_id: 30484, type: 'TV', tvdb_id: 244061, season: { tvdb: 2 } },
     { anilist_id: 199, mal_id: 199, type: 'MOVIE', themoviedb_id: { movie: 129 } },
   ]),
@@ -20,6 +29,7 @@ enterFixtureTenant();
 const { db, listTracked, closeTenant } = await import('@/lib/db');
 const { parseYamtrack, parseCsv } = await import('@/domain/yamtrack');
 const { startYamtrackImport, yamtrackImportState } = await import('@/lib/yamtrack-import');
+const { anilistFromProviders } = await import('@/lib/anime-ids');
 
 afterAll(() => {
   closeTenant(2);
@@ -142,6 +152,25 @@ const csv = [
   }),
   row({
     row_type: 'media',
+    media_id: '209867',
+    source: 'tmdb',
+    media_type: 'tv',
+    title: 'Frieren',
+    track: 'In progress',
+  }),
+  ...['1', '2', '2'].map((episode) =>
+    row({
+      row_type: 'media',
+      media_id: '209867',
+      source: 'tmdb',
+      media_type: 'episode',
+      title: 'Frieren',
+      season_number: '1',
+      episode_number: episode,
+    }),
+  ),
+  row({
+    row_type: 'media',
     media_id: '7346',
     source: 'igdb',
     media_type: 'game',
@@ -183,6 +212,8 @@ it('reads a Yamtrack export: tracking status over airing status, seasons folded,
   // A show without its own score takes the mean of its seasons; episodes add up.
   expect(by('1396', 'tv')).toMatchObject({ score: 8.5, progress: 20, status: 'COMPLETED' });
   expect(entries.some((e) => e.type === ('season' as never))).toBe(false);
+  // Watched one episode at a time: distinct episodes are the progress.
+  expect(by('209867')).toMatchObject({ status: 'READING', progress: 2 });
   expect(() => parseYamtrack('a,b\n1,2')).toThrow('NOT_YAMTRACK');
 });
 
@@ -247,6 +278,7 @@ it('imports works with their score, groups anime seasons, keeps manhwa apart and
   // Breaking Bad needs TMDB (not configured here); the MangaBaka id finds no exact title.
   expect(state.unmatched.map((u) => [u.title, u.reason]).sort()).toEqual([
     ['Breaking Bad', 'tmdb'],
+    ['Frieren', 'tmdb'],
     ['Nowhere Manga', 'notFound'],
   ]);
   const library = listTracked();
@@ -260,4 +292,20 @@ it('imports works with their score, groups anime seasons, keeps manhwa apart and
   expect(work('Solo Leveling').media.origin).toBe('KR');
   expect(work('Planned "Quoted", work')).toMatchObject({ status: 'PLANNING', rating: null });
   expect(library.every((t) => !t.autoDownload)).toBe(true);
+});
+
+it('keeps one short state from a multi-line MangaUpdates status', async () => {
+  const { updatesStatus } = await import('@/lib/media');
+  expect(
+    updatesStatus(
+      '**Original Webtoon:**  \n62 Chapters (Complete) \n\n**English Translation:**  \n117 Chapters (Complete)',
+    ),
+  ).toBe('Complete');
+  expect(updatesStatus('12 Volumes (Ongoing)')).toBe('12 Volumes (Ongoing)');
+  expect(updatesStatus('S1: done\nS2: on hiatus')).toBe('Hiatus');
+  expect(updatesStatus('  ')).toBe(null);
+});
+
+it('takes a TMDB show to its first real season, never a special filed as season 0', () => {
+  expect(anilistFromProviders({ Tmdb: '42509' })).toBe(9253);
 });

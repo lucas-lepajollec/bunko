@@ -11,8 +11,7 @@ import { aniFields, fromAniList, type AniMedia } from './media';
 import { aniListBlockedFor } from './anilist-limit';
 import { requestJson } from './http';
 import { db, statement, track } from './db';
-import { measured } from './job-stats';
-import { tenantId, tenantState } from './tenant-context';
+import { tenantState } from './tenant-context';
 import { wakeWorker } from './worker-events';
 import { media as mediaSchema } from './validation';
 
@@ -34,6 +33,8 @@ const state = tenantState<YamtrackImportState>(() => idle());
 function idle(): YamtrackImportState {
   return {
     running: false,
+    phase: 'resolving',
+    found: 0,
     done: 0,
     total: 0,
     added: 0,
@@ -50,8 +51,9 @@ export function startYamtrackImport(entries: YamtrackEntry[], skipped: Record<st
   const current = state();
   if (current.running) return current;
   Object.assign(current, idle(), { running: true, total: entries.length, skipped });
-  const tenant = tenantId();
-  void measured('yamtrack-import', tenant, () => runImport(entries))
+  // Started by the user, who waits for it: AniList requests go at the pace of a page, not the
+  // slow pace kept for unattended background jobs (about one a minute under AniList's limit).
+  void runImport(entries)
     .catch(() => {})
     .finally(() => {
       current.running = false;
@@ -81,6 +83,8 @@ async function runImport(entries: YamtrackEntry[]) {
   await ensureAnimeIds();
   // 1. A catalog reference per entry, offline where possible.
   const refs = new Map<YamtrackEntry, Ref>();
+  /** Entries whose work is known (or known to be missing), for the progress shown. */
+  const progress = () => (s.found = Math.min(s.total, refs.size + s.unmatchedCount));
   const malLookups: Record<'ANIME' | 'MANGA', YamtrackEntry[]> = { ANIME: [], MANGA: [] };
   const searches: YamtrackEntry[] = [];
   for (const e of entries) {
@@ -112,6 +116,7 @@ async function runImport(entries: YamtrackEntry[]) {
     else if (e.type === 'anime' || e.type === 'manga') searches.push(e);
     else unmatched(e, 'unsupported');
   }
+  progress();
   // 2. MyAnimeList ids AniList knows (50 per request).
   const aniMedia = new Map<number, AniMedia>();
   for (const type of ['ANIME', 'MANGA'] as const) {
@@ -138,6 +143,7 @@ async function runImport(entries: YamtrackEntry[]) {
         aniMedia.set(m.id, m);
         refs.set(e, `anilist:${type === 'ANIME' ? firstSeason(m.id) : m.id}`);
       }
+      progress();
     }
   }
   // 3. Exact title match for ids Bunko cannot read (one AniList search each).
@@ -160,6 +166,7 @@ async function runImport(entries: YamtrackEntry[]) {
     } catch {
       unmatched(e, 'unavailable');
     }
+    progress();
   }
   // 4. The works themselves: AniList by batches, the rest one by one.
   const groups = new Map<Ref, YamtrackEntry[]>();
@@ -177,13 +184,14 @@ async function runImport(entries: YamtrackEntry[]) {
       for (const id of chunk) failed.add(id);
     }
   }
+  s.phase = 'saving';
   for (const [ref, list] of groups) {
     let media: UnifiedMedia | null = null;
     try {
       if (ref.startsWith('anilist:')) {
         const m = aniMedia.get(Number(ref.slice(8)));
         media = m ? fromAniList(m) : null;
-      } else media = await otherWork(ref);
+      } else media = await withRetries(() => otherWork(ref));
     } catch {
       media = null;
     }
@@ -206,6 +214,19 @@ async function runImport(entries: YamtrackEntry[]) {
   }
 }
 
+/** A catalog that refuses a burst (rate limit, busy upstream) gets a few calm retries. */
+async function withRetries<T>(run: () => Promise<T>, attempts = 4): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await run();
+    } catch (e) {
+      const code = (e as { code?: string }).code ?? '';
+      const transient = /^(RATE_LIMITED|UPSTREAM_|METADATA_UNAVAILABLE)/.test(code);
+      if (!transient || attempt >= attempts) throw e;
+      await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+    }
+  }
+}
 /** Series, films and books outside AniList, through the catalog's own sheets. */
 async function otherWork(ref: Ref): Promise<UnifiedMedia | null> {
   const { mediaDetail } = await import('./catalog');
@@ -273,7 +294,7 @@ function apply({ media, entries }: Resolved) {
   if (rating !== null && status === 'PLANNING') status = 'COMPLETED';
   const startedAt = new Date().toISOString();
   // Only the fields a followed work stores (a catalog sheet also carries relations, cast…).
-  const parsed = mediaSchema.safeParse(media);
+  const parsed = mediaSchema.safeParse({ ...media, status: media.status?.slice(0, 100) ?? null });
   if (!parsed.success) throw new Error('Unusable catalog work');
   const count = () =>
     (statement('SELECT COUNT(*) AS n FROM tracked_media').get() as { n: number }).n;

@@ -114,12 +114,17 @@ export function YamtrackImport() {
             <>
               <span className="flex items-center gap-2">
                 <Spinner />
-                {t('import.yamtrack.running', { done: n(state.done), total: n(state.total) })}
+                {state.phase === 'resolving'
+                  ? t('import.yamtrack.resolving', { done: n(state.found), total: n(state.total) })
+                  : t('import.yamtrack.running', { done: n(state.done), total: n(state.total) })}
               </span>
               <span className="h-1.5 overflow-hidden rounded-full bg-white/10">
                 <span
                   className="bg-fg block h-full rounded-full transition-[width]"
-                  style={{ width: `${state.total ? (state.done / state.total) * 100 : 0}%` }}
+                  style={{
+                    // Looking up is the first half of the bar, following works the second.
+                    width: `${state.total ? ((state.phase === 'resolving' ? state.found : state.total + state.done) / (2 * state.total)) * 100 : 0}%`,
+                  }}
                 />
               </span>
             </>
