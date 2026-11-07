@@ -51,7 +51,7 @@ export function route(handler: (r: Request) => Promise<Response> | Response, pro
               '',
             async () => {
               if (new URL(r.url).pathname.replace(/\/$/, '') === '/api/users') requireAdmin();
-              return await handler(r);
+              return compressed(r, await handler(r));
             },
           ),
         );
@@ -62,6 +62,31 @@ export function route(handler: (r: Request) => Promise<Response> | Response, pro
       done();
     }
   };
+}
+/** JSON past this size is sent compressed (the library list of a large account is megabytes). */
+const COMPRESS_FROM = 16 * 1024;
+/**
+ * Compress a large JSON answer when the browser accepts it: the standalone server does not do it
+ * for route handlers. Gzip at a fast level: about a tenth of the bytes for little CPU.
+ */
+async function compressed(r: Request, response: Response): Promise<Response> {
+  const type = response.headers.get('content-type') ?? '';
+  if (
+    !type.includes('application/json') ||
+    response.headers.has('content-encoding') ||
+    !/\bgzip\b/.test(r.headers.get('accept-encoding') ?? '')
+  )
+    return response;
+  const raw = Buffer.from(await response.arrayBuffer());
+  const headers = new Headers(response.headers);
+  headers.set('Vary', 'Accept-Encoding');
+  if (raw.byteLength < COMPRESS_FROM)
+    return new Response(raw, { status: response.status, headers });
+  const { gzipSync, constants } = await import('node:zlib');
+  const zipped = gzipSync(raw, { level: constants.Z_BEST_SPEED + 3 });
+  headers.set('Content-Encoding', 'gzip');
+  headers.set('Content-Length', String(zipped.byteLength));
+  return new Response(zipped, { status: response.status, headers });
 }
 export async function body<T>(r: Request, schema: ZodType<T>, maxBytes = 1024 * 1024): Promise<T> {
   if (!r.headers.get('content-type')?.includes('application/json'))
