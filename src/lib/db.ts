@@ -206,6 +206,7 @@ export function db(): Database.Database {
     migrateV23(connection);
     migrateV24(connection);
     migrateV25(connection);
+    migrateV26(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -1442,6 +1443,19 @@ export function migrateV21(database: Database.Database) {
       "DELETE FROM metadata_cache WHERE key LIKE 'detail:anilist:%' OR key LIKE 'anime-franchise:%'",
     );
     database.pragma('user_version=21');
+  })();
+}
+/**
+ * What "finished" covered was first recorded while some works still had one season (before the
+ * TVDB seasons): recorded again once, from the complete works.
+ */
+export function migrateV26(database: Database.Database) {
+  database.transaction(() => {
+    if (Number(database.pragma('user_version', { simple: true })) >= 26) return;
+    database.exec(
+      'UPDATE tracked_media SET completed_through=NULL WHERE completed_through IS NOT NULL',
+    );
+    database.pragma('user_version=26');
   })();
 }
 /** Anime works rebuilt once more: some were built before the offline id map was loaded. */
