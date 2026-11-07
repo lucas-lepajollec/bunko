@@ -185,7 +185,7 @@ export async function franchise(anilistId: number, signal?: AbortSignal): Promis
   // Joined by hand to another work: that work is the franchise.
   const joined = linkedRoot(anilistId);
   if (joined && joined !== anilistId) return franchise(joined, signal);
-  return cached(`anime-franchise:v3:${anilistId}`, DAY / 2, async () => {
+  return cached(`anime-franchise:v4:${anilistId}`, DAY / 2, async () => {
     // The offline id map already knows the show's other seasons: load them all at once.
     const known = idsOfAnilist(anilistId);
     await prefetchNodes(
@@ -217,6 +217,21 @@ export async function franchise(anilistId: number, signal?: AbortSignal): Promis
         }
       }
     }
+    // The show's other seasons as TVDB (and media servers) file them: AniList's sequel chain
+    // breaks where a sequel goes through an OVA or a film (a season 2 after an OVA).
+    if (SEASON_FORMATS.has(first.format ?? '') && known?.tvdb) {
+      const siblings = tvdbSeasons(known.tvdb)
+        .filter((e) => (e.type === 'TV' || e.type === 'ONA') && !seen.has(e.anilist))
+        .map((e) => e.anilist)
+        .slice(0, Math.max(0, MAX_SEASONS - seen.size));
+      if (siblings.length) {
+        await prefetchNodes(siblings, signal);
+        for (const id of siblings) {
+          const n = await node(id, signal).catch(() => null);
+          if (n && SEASON_FORMATS.has(n.format ?? '')) seen.set(n.id, n);
+        }
+      }
+    }
     // Works the user joined to this one (another series, films), in airing order with the rest.
     const members = linkedMembers(anilistId).filter((id) => !seen.has(id));
     if (members.length) {
@@ -243,7 +258,18 @@ export async function franchise(anilistId: number, signal?: AbortSignal): Promis
       // Films and joined works are named, not numbered.
       if (joinedIds.has(m.id) || !SEASON_FORMATS.has(m.format ?? ''))
         return { ...facts, label: facts.title };
-      const part = previous ? partNumber([m.title.romaji, m.title.english, m.title.native]) : null;
+      const tvdbSeason = idsOfAnilist(m.id)?.tvdbSeason ?? null;
+      // A part: titled so ("Part 2", "2nd cour"), or filed under the same TVDB season as the
+      // season before it (TVDB keeps both cours of a season together).
+      const sameSeason =
+        previous !== null &&
+        tvdbSeason !== null &&
+        tvdbSeason >= 1 &&
+        idsOfAnilist(previous.anilistId!)?.tvdbSeason === tvdbSeason;
+      const titled = previous
+        ? partNumber([m.title.romaji, m.title.english, m.title.native])
+        : null;
+      const part = titled ?? (sameSeason ? (previous!.part ?? 1) + 1 : null);
       const season: AnimeSeason = part
         ? {
             ...facts,
@@ -314,7 +340,7 @@ export function naturalEpisode(anilistId: number, episode: number) {
 }
 /** A work already resolved for this AniList id, without any network call. */
 export function knownFranchise(anilistId: number): Franchise | null {
-  return storedMetadata<Franchise>(`anime-franchise:v3:${anilistId}`)?.value ?? null;
+  return storedMetadata<Franchise>(`anime-franchise:v4:${anilistId}`)?.value ?? null;
 }
 /** Episodes before a season (absolute numbering across the work). */
 export function seasonOffset(seasons: AnimeSeason[], number: number) {
