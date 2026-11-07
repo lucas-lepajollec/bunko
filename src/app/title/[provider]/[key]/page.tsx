@@ -15,6 +15,7 @@ import type {
   MediaDetail,
   ReadingStatus,
   TrackedMedia,
+  UnifiedMedia,
 } from '@/types/shared';
 import { batchesInterval, libraryKeys, mediaHref, send, useApi } from '@/lib/client/api';
 import { useSourceScan } from '@/lib/client/use-source-scan';
@@ -29,6 +30,7 @@ import { MatchesSummary, type Lane } from '@/components/matches';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import { FavoriteButton } from '@/components/favorite';
 import { RatingButton } from '@/components/rating';
+import { workIdOf } from '@/components/matches';
 import { WorkMarks } from '@/components/work-marks';
 import { libraryMark } from '@/domain/library-mark';
 import { useViewState } from '@/lib/client/view-state';
@@ -116,6 +118,14 @@ function Title({ media }: { media: MediaDetail }) {
     refreshInterval: batchesInterval,
   });
   const entry = trackedFor(library.data, media);
+  // Works joined by hand into this one (films of a saga, a sequel kept apart): listed here.
+  // Anime joined as seasons already show in the episodes.
+  const workId = workIdOf(media);
+  const parts = useApi<UnifiedMedia[]>(
+    workId ? `/api/works/links?root=${encodeURIComponent(workId)}` : null,
+  );
+  const seasonIds = new Set((media.video?.seasons ?? []).map((s) => s.anilistId));
+  const joinedParts = (parts.data ?? []).filter((m) => !m.anilistId || !seasonIds.has(m.anilistId));
   const [tab, setTab] = useViewState<'chapters' | 'info'>('tab', 'chapters', ['chapters', 'info']);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [choice, setChoice] = useState<Record<string, number>>({});
@@ -792,9 +802,19 @@ function Title({ media }: { media: MediaDetail }) {
             </Notice>
           </section>
         )}
+      {joinedParts.length > 0 && (
+        <section className="relative mx-auto flex max-w-[1760px] flex-col gap-5 px-4 pb-12 md:px-10">
+          <SectionHeading num={2} title={t('works.title')} />
+          <ScrollRow label={t('works.title')}>
+            {joinedParts.map((m) => (
+              <PosterCard key={m.id} media={m} className="w-28 shrink-0 md:w-[164px]" />
+            ))}
+          </ScrollRow>
+        </section>
+      )}
       {media.relations.length > 0 && (
         <section className="relative mx-auto flex max-w-[1760px] flex-col gap-5 px-4 pb-12 md:px-10">
-          <SectionHeading num={2} title={t('title.universe')} />
+          <SectionHeading num={joinedParts.length ? 3 : 2} title={t('title.universe')} />
           <ScrollRow label={t('title.universe')}>
             {media.relations.map((r) => (
               <MediaLink
@@ -828,7 +848,7 @@ function Title({ media }: { media: MediaDetail }) {
       {media.recommendations.length > 0 && (
         <section className="relative mx-auto flex max-w-[1760px] flex-col gap-5 px-4 pb-20 md:px-10">
           <SectionHeading
-            num={media.relations.length ? 3 : 2}
+            num={2 + Number(joinedParts.length > 0) + Number(media.relations.length > 0)}
             title={t('title.recommendations')}
             aside={t('title.recommendationsAside')}
           />

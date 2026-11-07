@@ -10,6 +10,7 @@ import type {
   VideoDetail,
 } from '@/types/shared';
 import { mediaHref } from '@/lib/client/api';
+import { jellyfinSeason } from '@/domain/seasons';
 import { useI18n } from '@/i18n/I18nProvider';
 import { cx } from './ui';
 import { Player, type PlayerEpisode } from './player';
@@ -86,7 +87,7 @@ export function EpisodeList({
     (video.focus && video.focus > 1 && video.focus <= seasons.length ? video.focus - 1 : resume);
   const season = seasons[index] ?? seasons[0];
   const offset = offsets[index] ?? 0;
-  const inJf = jellyfin?.bySeason.find((x) => x.season === season.number);
+  const inJf = jellyfinSeason(season, jellyfin);
   const played = new Set(inJf?.played ?? []);
   const owned = new Set(inJf?.owned ?? []);
   const watchedHere = Math.min(Math.max(0, read - offset), season.list.length);
@@ -111,7 +112,7 @@ export function EpisodeList({
   })();
   const episodeFor = (at: { season: number; episode: number }): PlayerEpisode => {
     const s = seasons[at.season];
-    const jf = jellyfin?.bySeason.find((x) => x.season === s.number);
+    const jf = jellyfinSeason(s, jellyfin);
     return {
       title,
       label: film

@@ -274,7 +274,7 @@ export function CatalogTab({
         {off ? t('match.attachCatalog') : t('match.changeWork')}
       </span>
       <CatalogPicker initial={entry.title} onPick={onPick} kind={kindOf(media)} />
-      {media.type === 'ANIME' && media.anilistId && <WorkParts root={media.anilistId} />}
+      {workIdOf(media) && <WorkParts root={workIdOf(media)!} kind={kindOf(media)} />}
     </div>
   );
 }
@@ -283,20 +283,26 @@ export function CatalogTab({
  * Join other anime into this work by hand (a sequel series AniList keeps apart, films): they
  * become parts of this sheet, the library merges them and lists stop showing them apart.
  */
-function WorkParts({ root }: { root: number }) {
+/** The catalog id a work can be joined by (AniList anime, TMDB series and films). */
+export function workIdOf(media: Pick<UnifiedMedia, 'id' | 'anilistId'>): string | null {
+  if (media.anilistId) return `anilist:${media.anilistId}`;
+  return /^(tmdbtv|tmdbmovie|mangadex|mangaupdates|openlibrary|hardcover|metron):[\w-]{1,100}$/.test(
+    media.id,
+  )
+    ? media.id
+    : null;
+}
+function WorkParts({ root, kind }: { root: string; kind: ReturnType<typeof kindOf> }) {
   const { t } = useI18n();
-  const parts = useApi<UnifiedMedia[]>(`/api/works/links?root=anilist:${root}`);
+  const parts = useApi<UnifiedMedia[]>(`/api/works/links?root=${encodeURIComponent(root)}`);
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const change = async (member: UnifiedMedia, joined: boolean) => {
-    if (!member.anilistId) return;
+    const id = workIdOf(member);
+    if (!id || id === root) return;
     setBusy(true);
     try {
-      await send('/api/works/links', 'POST', {
-        root: `anilist:${root}`,
-        member: `anilist:${member.anilistId}`,
-        joined,
-      });
+      await send('/api/works/links', 'POST', { root, member: id, joined });
       await Promise.all([parts.mutate(), mutate(libraryKeys)]);
       toast({ tone: 'ok', text: joined ? t('works.joined') : t('works.separated') });
     } catch (err) {
@@ -328,13 +334,7 @@ function WorkParts({ root }: { root: number }) {
           </button>
         </div>
       ))}
-      <CatalogPicker
-        initial=""
-        kind="anime"
-        onPick={(m) => {
-          if (m.anilistId && m.anilistId !== root) void change(m, true);
-        }}
-      />
+      <CatalogPicker initial="" kind={kind} onPick={(m) => void change(m, true)} />
     </div>
   );
 }

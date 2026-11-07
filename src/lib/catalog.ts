@@ -102,6 +102,8 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
         title: t?.title ?? m.title,
         format: t?.media.format ?? m.format,
         type: t?.media.type ?? m.type,
+        // The user's kind for a followed work follows it everywhere (cards, sheet, menus).
+        ...(t?.media.kindOverride ? { kindOverride: t.media.kindOverride } : {}),
         adult: Boolean(m.adult || t?.media.adult),
         // Repair already cached/tracked Metron series without waiting for their metadata TTL.
         coverUrl:
@@ -696,6 +698,7 @@ function enrichDetail(detail: MediaDetail): MediaDetail {
     title: tracked.title,
     adult: tracked.adult,
     adultOverride: tracked.adultOverride,
+    kindOverride: tracked.kindOverride,
     coverUrl: tracked.coverUrl,
     trackedId: tracked.trackedId,
     kavitaSeriesId: tracked.kavitaSeriesId,

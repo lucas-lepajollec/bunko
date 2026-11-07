@@ -341,6 +341,10 @@ export const settingsPatch = z
     universe: z.enum(['all', ...KIND_IDS]).optional(),
     universes: z.array(z.enum(KIND_IDS)).max(KIND_IDS.length).optional(),
     showAllUniverse: z.boolean().optional(),
+    librarySort: z
+      .string()
+      .regex(/^[a-z]{1,20}$/)
+      .optional(),
     kindOrder: z.array(z.enum(KIND_IDS)).max(KIND_IDS.length).optional(),
     favoriteSourceIds: z.array(sourceId).max(100).optional(),
     extensionRepos: z.array(httpUrl).max(20).optional(),
@@ -384,6 +388,8 @@ export const trackPatch = z
   .object({
     id,
     favorite: z.boolean().optional(),
+    /** The user's kind for this work (`null` = the catalog's); same family as the work. */
+    kindOverride: z.enum(KIND_IDS).nullable().optional(),
     rating: z
       .number()
       .min(1)

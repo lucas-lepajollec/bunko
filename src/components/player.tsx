@@ -278,8 +278,10 @@ export function Player({
         />
       )}
       {(picking || !source) && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="border-line flex max-h-[85vh] w-full max-w-xl flex-col gap-3 overflow-hidden rounded-3xl border bg-[#141210] p-5">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 p-2 backdrop-blur-sm sm:p-4">
+          {/* Never taller than the player (an inline player on a phone is short): the list
+              scrolls inside the panel, the header stays. */}
+          <div className="border-line flex max-h-full min-h-0 w-full max-w-xl flex-col gap-2 overflow-hidden rounded-2xl border bg-[#141210] p-3 sm:gap-3 sm:rounded-3xl sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 flex-col">
                 <span className="font-display truncate text-xl font-bold">{episode.title}</span>
@@ -297,7 +299,7 @@ export function Player({
             {list.length > 0 && (
               <p className="text-muted -mt-1 px-1 text-xs">{t('player.versionsEstimated')}</p>
             )}
-            <ul className="flex flex-col gap-1.5 overflow-y-auto">
+            <ul className="-mx-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain px-1">
               {episode.jellyfinItemId && (
                 <SourceRow
                   title="Jellyfin"
@@ -399,8 +401,8 @@ function SourceRow({
           active ? 'bg-white/[0.1]' : 'hover:bg-white/[0.06]',
         )}
       >
-        <span className="flex items-center gap-2 text-[15px] font-medium">
-          {title}
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] font-medium">
+          <span className="min-w-0 break-words">{title}</span>
           {badges
             ?.filter((b): b is string => Boolean(b))
             .map((b) => (

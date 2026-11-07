@@ -8,6 +8,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { DisplayTitle } from './matches';
 import { InfoBubble, toast } from './notify';
 import { RatingButton } from './rating';
+import { KINDS, KIND_IDS, kindOfMedia } from '@/domain/kinds';
 import { Select } from './select';
 
 const STATUSES: ReadingStatus[] = ['PLANNING', 'READING', 'PAUSED', 'COMPLETED', 'DROPPED'];
@@ -185,6 +186,25 @@ export function GeneralTab({
         </Group>
       )}
       <Group title={t('settings.work.content')}>
+        <Row title={t('settings.work.kind')} hint={t('settings.work.kindHint')}>
+          <Select
+            label={t('settings.work.kind')}
+            value={entry.media.kindOverride ?? ''}
+            onChange={(kind) => void run(() => patch({ kindOverride: kind || null }))}
+            options={[
+              {
+                value: '',
+                label: t('settings.work.kindAuto', {
+                  kind: t(`kind.${kindOfMedia({ ...entry.media, kindOverride: undefined })}`),
+                }),
+              },
+              ...KIND_IDS.filter((k) => KINDS[k].mediaType === entry.type).map((k) => ({
+                value: k,
+                label: t(`kind.${k}`),
+              })),
+            ]}
+          />
+        </Row>
         <AdultSetting media={media} />
       </Group>
       <DisplayTitle entry={entry} onTitle={(displayTitle) => run(() => patch({ displayTitle }))} />
