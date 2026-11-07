@@ -1625,7 +1625,8 @@ const en: Dictionary = {
   'marks.seen.done': 'Watched',
   'marks.rating': 'My rating',
   'marks.rate': 'Rate',
-  'marks.unrate': 'No rating',
+  'marks.unrate': 'Remove rating',
+  'marks.ratingIs': 'My rating: {n}',
   'library.ownedTab': 'Owned',
   'library.ownedHint':
     'Works whose files you have: downloaded chapters and volumes, books in Kavita.',
@@ -1662,7 +1663,7 @@ const en: Dictionary = {
   'news.toSee.vol': '{count} vol. to read',
   'news.toSee.video': '{count} ep. to watch',
   'settings.work.tracking': 'My tracking',
-  'settings.work.ratingHint': 'Out of 10, in half points. Shown on the work’s cards.',
+  'settings.work.ratingHint': 'Out of 10, to one decimal (8.3). Shown on the work’s cards.',
 };
 
 const fr: Dictionary = {
@@ -3276,7 +3277,8 @@ const fr: Dictionary = {
   'marks.seen.done': 'Vu',
   'marks.rating': 'Ma note',
   'marks.rate': 'Noter',
-  'marks.unrate': 'Pas de note',
+  'marks.unrate': 'Retirer la note',
+  'marks.ratingIs': 'Ma note : {n}',
   'library.ownedTab': 'Possédé',
   'library.ownedHint':
     'Les œuvres dont tu as les fichiers : chapitres et tomes téléchargés, livres dans Kavita.',
@@ -3313,7 +3315,7 @@ const fr: Dictionary = {
   'news.toSee.vol': '{count} tomes à lire',
   'news.toSee.video': '{count} ép. à voir',
   'settings.work.tracking': 'Mon suivi',
-  'settings.work.ratingHint': 'Sur 10, au demi-point. Affichée sur les cartes de l’œuvre.',
+  'settings.work.ratingHint': 'Sur 10, au dixième près (8,3). Affichée sur les cartes de l’œuvre.',
 };
 
 const es: Dictionary = {
@@ -4919,7 +4921,8 @@ const es: Dictionary = {
   'marks.seen.done': 'Visto',
   'marks.rating': 'Mi nota',
   'marks.rate': 'Puntuar',
-  'marks.unrate': 'Sin nota',
+  'marks.unrate': 'Quitar la nota',
+  'marks.ratingIs': 'Mi nota: {n}',
   'library.ownedTab': 'En propiedad',
   'library.ownedHint':
     'Las obras cuyos archivos tienes: capítulos y tomos descargados, libros en Kavita.',
@@ -4956,7 +4959,8 @@ const es: Dictionary = {
   'news.toSee.vol': '{count} tomos por leer',
   'news.toSee.video': '{count} ep. por ver',
   'settings.work.tracking': 'Mi seguimiento',
-  'settings.work.ratingHint': 'Sobre 10, en medios puntos. Se muestra en las tarjetas de la obra.',
+  'settings.work.ratingHint':
+    'Sobre 10, con un decimal (8,3). Se muestra en las tarjetas de la obra.',
 };
 
 const de: Dictionary = {
@@ -6569,7 +6573,8 @@ const de: Dictionary = {
   'marks.seen.done': 'Gesehen',
   'marks.rating': 'Meine Bewertung',
   'marks.rate': 'Bewerten',
-  'marks.unrate': 'Keine Bewertung',
+  'marks.unrate': 'Bewertung entfernen',
+  'marks.ratingIs': 'Meine Bewertung: {n}',
   'library.ownedTab': 'Im Besitz',
   'library.ownedHint':
     'Werke, deren Dateien du hast: geladene Kapitel und Bände, Bücher in Kavita.',
@@ -6606,7 +6611,8 @@ const de: Dictionary = {
   'news.toSee.vol': '{count} Bände zu lesen',
   'news.toSee.video': '{count} Folgen anzusehen',
   'settings.work.tracking': 'Mein Fortschritt',
-  'settings.work.ratingHint': 'Von 10, in halben Punkten. Auf den Karten des Werks angezeigt.',
+  'settings.work.ratingHint':
+    'Von 10, mit einer Nachkommastelle (8,3). Auf den Karten des Werks angezeigt.',
 };
 
 const it: Dictionary = {
@@ -8211,7 +8217,8 @@ const it: Dictionary = {
   'marks.seen.done': 'Visto',
   'marks.rating': 'Il mio voto',
   'marks.rate': 'Vota',
-  'marks.unrate': 'Nessun voto',
+  'marks.unrate': 'Rimuovi il voto',
+  'marks.ratingIs': 'Il mio voto: {n}',
   'library.ownedTab': 'Posseduti',
   'library.ownedHint': 'Le opere di cui hai i file: capitoli e volumi scaricati, libri in Kavita.',
   'library.ownedHint.video': 'Le opere presenti sul tuo server multimediale (Jellyfin).',
@@ -8247,7 +8254,7 @@ const it: Dictionary = {
   'news.toSee.vol': '{count} volumi da leggere',
   'news.toSee.video': '{count} ep. da vedere',
   'settings.work.tracking': 'Il mio monitoraggio',
-  'settings.work.ratingHint': 'Su 10, a mezzi punti. Mostrato sulle schede dell’opera.',
+  'settings.work.ratingHint': 'Su 10, con un decimale (8,3). Mostrato sulle schede dell’opera.',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

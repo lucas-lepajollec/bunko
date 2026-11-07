@@ -16,13 +16,13 @@ export function PosterCard({
 }: {
   priority?: boolean;
   media: UnifiedMedia;
+  /** Replaces the top right corner (e.g. a like button over the card). */
   badge?: ReactNode;
   className?: string;
   /** Replaces the format · year line (e.g. a release date). */
   subtitle?: string | null;
 }) {
   const meta = useMediaMeta();
-  const { t } = useI18n();
   return (
     <MediaLink media={media} className={cx('group flex min-w-0 flex-col gap-2.5', className)}>
       <span className="@container relative block">
@@ -31,34 +31,14 @@ export function PosterCard({
           priority={priority}
           className="transition-transform duration-300 group-hover:-translate-y-1"
         />
-        {badge ??
-          (media.kavita ? (
-            <span className="bg-bg/85 absolute top-2 right-2 flex h-6 max-w-[calc(100%-1rem)] items-center gap-1 truncate rounded-full px-2 text-[11px] font-semibold">
-              {t('kavita.badge', { n: media.kavita.chapters })}
-            </span>
-          ) : (
-            media.trackedId !== null && (
-              // Narrow posters (phones) keep only the check mark, like the release cards.
-              <span
-                title={t('common.inLibrary')}
-                className="bg-bg/85 absolute top-2 right-2 flex h-6 min-w-6 items-center justify-center gap-1 rounded-full px-1.5 text-[11px] font-semibold @[180px]:px-2"
-              >
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  aria-hidden
-                >
-                  <path d="m5 12 5 5 9-10" />
-                </svg>
-                <span className="sr-only @[180px]:not-sr-only">{t('common.inLibrary')}</span>
-              </span>
-            )
-          ))}
-        <WorkMarks mark={media.mine} video={media.type === 'ANIME'} />
+        {badge}
+        <WorkMarks
+          mark={media.mine}
+          inLibrary={media.trackedId !== null}
+          owned={Boolean(media.kavita)}
+          video={media.type === 'ANIME'}
+          progressCorner={!badge}
+        />
       </span>
       <span className="line-clamp-2 text-[13px] leading-snug font-medium">{media.title}</span>
       <span className="text-muted -mt-1.5 truncate text-xs">{subtitle ?? meta(media)}</span>

@@ -24,7 +24,7 @@ follow an unowned title as `PLANNING` with `autoDownload:false` before liking it
 keeps the title followed. Likes appear inside `/profile#favorites`, using the existing private
 tracked/auth APIs. The former `/favorites` route redirects there; navigation only exposes the profile.
 
-`TrackedMedia.rating` is the user's own score, `0.5`–`10` in half points, or `null` (schema v20,
+`TrackedMedia.rating` is the user's own score, `1`–`10` to one decimal (8.3), or `null` (schema v20,
 column `tracked_media.rating`). `PATCH /api/tracked` accepts `rating:number|null`; like `favorite`,
 a rating-only edit does no upstream work. The UI adds an untracked work as `COMPLETED` before rating
 it. Every catalog list enriched by `withTracking` carries `UnifiedMedia.mine` (`LibraryMark`:
