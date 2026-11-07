@@ -20,8 +20,9 @@ export function useViewState<T extends string>(
       const url = new URL(window.location.href);
       if (next === fallback) url.searchParams.delete(key);
       else url.searchParams.set(key, next);
-      // Next.js keeps its router state and `useSearchParams` in step with the native call.
-      window.history.replaceState(window.history.state, '', url);
+      // Next.js syncs its router (and `useSearchParams`) with a native call whose state is null;
+      // passing its own state back marks the call as internal and the page would not update.
+      window.history.replaceState(null, '', url);
     },
     [key, fallback],
   );
