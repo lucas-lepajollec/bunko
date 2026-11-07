@@ -308,4 +308,12 @@ it('keeps one short state from a multi-line MangaUpdates status', async () => {
 
 it('takes a TMDB show to its first real season, never a special filed as season 0', () => {
   expect(anilistFromProviders({ Tmdb: '42509' })).toBe(9253);
+  // Only films and specials under that id (a film series filed as a show): no AniList work.
+  seedAnimeIds(
+    compact([
+      { anilist_id: 14807, type: 'MOVIE', themoviedb_id: 97825, season: { tvdb: 0, tmdb: 0 } },
+      { anilist_id: 20697, type: 'SPECIAL', themoviedb_id: 97825, season: { tvdb: 0, tmdb: 0 } },
+    ]),
+  );
+  expect(anilistFromProviders({ Tmdb: '97825' })).toBe(null);
 });

@@ -192,9 +192,13 @@ export function anilistFromProviders(ids: Record<string, string>): number | null
   const i = index();
   if (!i) return null;
   const first = (list: AnimeIds[] | undefined) => {
-    const tv = (list ?? []).filter((e) => e.type !== 'MOVIE');
+    // Season 0 holds specials and OVAs: never the show itself. A provider id whose only anime
+    // entries are films and specials (a film series filed as a show) is no AniList work.
+    const tv = (list ?? []).filter(
+      (e) => e.type !== 'MOVIE' && (e.tvdbSeason ?? e.tmdbSeason ?? 1) >= 1,
+    );
     if (!tv.length) return null;
-    // Season 0 holds specials and OVAs: the show is its first real season, TV before ONA/OVA.
+    // The show is its first real season, TV before ONA/OVA.
     const season = (e: AnimeIds) => e.tvdbSeason ?? e.tmdbSeason ?? 1;
     const kind = (e: AnimeIds) => (e.type === 'TV' || e.type === null ? 0 : 1);
     return [...tv].sort(
