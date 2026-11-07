@@ -28,7 +28,9 @@ import { InfoBubble, Notice, toast } from '@/components/notify';
 import { MatchesSummary, type Lane } from '@/components/matches';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import { FavoriteButton } from '@/components/favorite';
-import { RatingSelect } from '@/components/rating';
+import { RatingButton } from '@/components/rating';
+import { WorkMarks } from '@/components/work-marks';
+import { libraryMark } from '@/domain/library-mark';
 import { useViewState } from '@/lib/client/view-state';
 import { OwnedInventory } from '@/components/owned-inventory';
 import { Translations } from '@/components/translations';
@@ -315,12 +317,6 @@ function Title({ media }: { media: MediaDetail }) {
       setWatchBusy(false);
     }
   }
-  const nextEpisode = video
-    ? (() => {
-        const n = (entry?.progress?.read ?? 0) + 1;
-        return n <= (video.aired ?? video.list.length) ? n : null;
-      })()
-    : null;
   const missingKeys = new Set(
     missingForUnit(chapters.data?.chapters ?? [], owned, ownedVolumes, false).map((c) => c.key),
   );
@@ -461,25 +457,39 @@ function Title({ media }: { media: MediaDetail }) {
       <div className="relative mx-auto grid max-w-[1760px] gap-6 px-4 pt-[110px] pb-16 md:grid-cols-[280px_minmax(0,1fr)] md:gap-12 md:px-10 md:pt-[150px] lg:grid-cols-[300px_minmax(0,1fr)] xl:gap-16">
         {/* Left: cover, then everything about the work. */}
         <aside className="hidden flex-col gap-7 self-start md:flex">
-          <Cover
-            src={entry?.coverUrl ?? media.coverUrl}
-            fallbacks={entry?.coverFallbacks}
-            priority
-            alt={media.title}
-            className="mx-auto w-full max-w-[300px]"
-          />
+          <span className="relative mx-auto block w-full max-w-[300px]">
+            <Cover
+              src={entry?.coverUrl ?? media.coverUrl}
+              fallbacks={entry?.coverFallbacks}
+              priority
+              alt={media.title}
+            />
+            <WorkMarks
+              mark={entry ? libraryMark(entry) : null}
+              inLibrary={Boolean(entry)}
+              owned={Boolean(media.kavita)}
+              video={media.type === 'ANIME'}
+              size="md"
+            />
+          </span>
           {details}
         </aside>
 
         {/* Right: title, actions, chapters. */}
         <div className="flex min-w-0 flex-col gap-5">
           <div className="flex items-end gap-4 md:block">
-            <Cover
-              src={entry?.coverUrl ?? media.coverUrl}
-              fallbacks={entry?.coverFallbacks}
-              alt=""
-              className="w-24 shrink-0 md:hidden"
-            />
+            <span className="relative block w-24 shrink-0 md:hidden">
+              <Cover
+                src={entry?.coverUrl ?? media.coverUrl}
+                fallbacks={entry?.coverFallbacks}
+                alt=""
+              />
+              <WorkMarks
+                mark={entry ? libraryMark(entry) : null}
+                owned={Boolean(media.kavita)}
+                video={media.type === 'ANIME'}
+              />
+            </span>
             <div className="flex min-w-0 flex-col gap-2 md:gap-4">
               <Kicker media={media} />
               <h1 className="font-display text-[34px] leading-[0.92] font-extrabold tracking-[-0.05em] [overflow-wrap:anywhere] md:text-[56px] xl:text-[80px]">
@@ -488,7 +498,10 @@ function Title({ media }: { media: MediaDetail }) {
             </div>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <FavoriteButton media={media} entry={entry} className="self-start sm:self-auto" />
+            <div className="flex gap-2 self-start sm:self-auto">
+              <FavoriteButton media={media} entry={entry} />
+              <RatingButton media={media} entry={entry} />
+            </div>
             {isComic && (
               <button
                 type="button"
@@ -528,26 +541,6 @@ function Title({ media }: { media: MediaDetail }) {
               </a>
             )}
             {video && <MediaDownload media={media} />}
-            {video && entry && (
-              <button
-                type="button"
-                disabled={watchBusy || (!filmSheet && nextEpisode === null)}
-                onClick={() =>
-                  filmSheet
-                    ? setWatched((entry.progress?.read ?? 0) >= 1 ? null : 1)
-                    : setWatched(nextEpisode)
-                }
-                className={primaryButton}
-              >
-                {filmSheet
-                  ? (entry.progress?.read ?? 0) >= 1
-                    ? t('episodes.filmWatched')
-                    : t('episodes.markFilm')
-                  : nextEpisode !== null
-                    ? t('episodes.markNext', { n: n(nextEpisode) })
-                    : t('episodes.upToDate')}
-              </button>
-            )}
             <Select
               label={t('title.readingStatus')}
               value={entry?.status ?? 'NONE'}
@@ -559,12 +552,6 @@ function Title({ media }: { media: MediaDetail }) {
                   label: t(video ? `watchStatus.${x}` : `status.${x}`),
                 })),
               ]}
-              size="lg"
-              className="h-12 justify-center gap-3 bg-white/[0.14] px-5 sm:justify-between"
-            />
-            <RatingSelect
-              media={media}
-              entry={entry}
               size="lg"
               className="h-12 justify-center gap-3 bg-white/[0.14] px-5 sm:justify-between"
             />
@@ -815,7 +802,15 @@ function Title({ media }: { media: MediaDetail }) {
                 media={r.media}
                 className="flex w-[300px] shrink-0 items-center gap-4 rounded-2xl bg-white/[0.04] p-3 hover:bg-white/[0.07]"
               >
-                <Cover src={r.media.coverUrl} className="w-[64px] shrink-0" />
+                <span className="relative block w-[64px] shrink-0">
+                  <Cover src={r.media.coverUrl} />
+                  <WorkMarks
+                    mark={r.media.mine}
+                    owned={Boolean(r.media.kavita)}
+                    video={r.media.type === 'ANIME'}
+                    progressCorner={false}
+                  />
+                </span>
                 <span className="flex min-w-0 flex-col gap-1">
                   <span className="line-clamp-2 font-semibold">{r.media.title}</span>
                   <span className="text-muted font-serif text-[17px] italic">

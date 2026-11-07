@@ -1,6 +1,7 @@
 'use client';
 import { MediaLink } from '@/components/media-link';
 import type { ChapterRelease } from '@/types/shared';
+import { WorkMarks } from './work-marks';
 import { useI18n } from '@/i18n/I18nProvider';
 import { KINDS } from '@/domain/kinds';
 import { useUniverse } from '@/lib/client/universe';
@@ -37,7 +38,6 @@ export function ReleaseCard({
   release: ChapterRelease;
   className?: string;
 }) {
-  const { t } = useI18n();
   const label = useChapterLabel();
   const relative = useRelativeTime();
   const universe = useUniverse();
@@ -61,25 +61,12 @@ export function ReleaseCard({
             {label(release)}
           </span>
         )}
-        {release.trackedId !== null && (
-          <span
-            title={t('common.inLibrary')}
-            className="bg-bg/85 absolute top-2 right-2 flex size-6 items-center justify-center rounded-full"
-          >
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3"
-              aria-hidden
-            >
-              <path d="m5 12 5 5 9-10" />
-            </svg>
-            <span className="sr-only">{t('common.inLibrary')}</span>
-          </span>
-        )}
+        <WorkMarks
+          mark={release.media.mine}
+          inLibrary={release.trackedId !== null}
+          owned={Boolean(release.media.kavita)}
+          video={release.media.type === 'ANIME'}
+        />
       </span>
       <span className="line-clamp-2 text-[13px] leading-snug font-medium">
         {release.media.title}

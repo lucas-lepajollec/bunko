@@ -108,25 +108,30 @@ it('persists likes through authenticated PATCH without upstream or download side
     vi.unstubAllGlobals();
   }
 });
-it('scores a work out of 10 in half points without side effects and marks its cards', async () => {
+it('scores a work out of 10 to one decimal without side effects and marks its cards', async () => {
   const entry = track({ media: canonical(), status: 'READING', autoDownload: false });
   const noNetwork = vi.fn(() => {
     throw new Error('Unexpected upstream');
   });
   vi.stubGlobal('fetch', noNetwork);
   try {
-    for (const rating of [0, 10.5, 7.3])
+    for (const rating of [0, 0.5, 10.5, 7.35])
       expect((await trackedRoute.PATCH(request('PATCH', { id: entry.id, rating }))).status).toBe(
         400,
       );
-    expect(
-      (await trackedRoute.PATCH(request('PATCH', { id: entry.id, rating: 8.5 }))).status,
-    ).toBe(200);
-    expect(getTracked(entry.id)).toMatchObject({ rating: 8.5, status: 'READING' });
+    expect((await trackedRoute.PATCH(request('PATCH', { id: entry.id, rating: 8.3 }))).status).toBe(
+      200,
+    );
+    expect(getTracked(entry.id)).toMatchObject({ rating: 8.3, status: 'READING' });
     db().prepare('UPDATE tracked_media SET last_read=3 WHERE id=?').run(entry.id);
     const { withTracking } = await import('@/lib/catalog');
     const [card] = withTracking([canonical()]);
-    expect(card.mine).toEqual({ status: 'READING', owned: false, seen: 'partial', rating: 8.5 });
+    expect(card.mine).toMatchObject({
+      status: 'READING',
+      owned: false,
+      seen: 'partial',
+      rating: 8.3,
+    });
     expect(withTracking([{ ...canonical(), id: 'anilist:999', anilistId: 999 }])[0].mine).toBe(
       null,
     );

@@ -81,6 +81,8 @@ export interface LibraryMark {
   status: ReadingStatus;
   owned: boolean;
   seen: 'partial' | 'done' | null;
+  /** Share read or watched (0–1) when the work's length is known. */
+  progress: number | null;
   rating: number | null;
 }
 export interface KavitaPresence {
@@ -790,7 +792,7 @@ export interface TrackedMedia {
   airedEpisodes?: number | null;
   /** Personal like, independent of reading status and owning/downloading the work. */
   favorite?: boolean;
-  /** The user's own score out of 10 (half points), `null` when not rated. */
+  /** The user's own score out of 10 (one decimal, 1–10), `null` when not rated. */
   rating?: number | null;
   anilistId: number | null;
   mangadexId: string | null;

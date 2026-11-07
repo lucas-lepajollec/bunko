@@ -527,7 +527,14 @@ function Library() {
                       raised={e.type === 'MANGA' && e.sourceMatch !== 'linked'}
                     />
                     {e.newChapters > 0 && (
-                      <span className="bg-fg text-bg absolute top-2 right-2 flex h-6 items-center rounded-full px-2 text-xs font-bold">
+                      <span
+                        className={cx(
+                          'bg-fg text-bg absolute left-1.5 flex h-[22px] items-center rounded-full px-2 text-[11px] font-bold md:h-6 md:text-xs',
+                          e.type === 'MANGA' && e.sourceMatch !== 'linked'
+                            ? 'bottom-10'
+                            : 'bottom-1.5',
+                        )}
+                      >
                         +{n(e.newChapters)}
                       </span>
                     )}

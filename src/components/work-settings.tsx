@@ -7,7 +7,7 @@ import { clearPersistentCache } from '@/lib/client/cache';
 import { useI18n } from '@/i18n/I18nProvider';
 import { DisplayTitle } from './matches';
 import { InfoBubble, toast } from './notify';
-import { RatingSelect } from './rating';
+import { RatingButton } from './rating';
 import { Select } from './select';
 
 const STATUSES: ReadingStatus[] = ['PLANNING', 'READING', 'PAUSED', 'COMPLETED', 'DROPPED'];
@@ -116,7 +116,7 @@ export function GeneralTab({
           />
         </Row>
         <Row title={t('marks.rating')} hint={t('settings.work.ratingHint')}>
-          <RatingSelect media={media} entry={entry} />
+          <RatingButton media={media} entry={entry} />
         </Row>
         <Row title={t('favorites.title')}>
           <Switch
