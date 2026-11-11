@@ -1,3 +1,4 @@
+import { cadence } from './presence';
 import { jellyfinSeason, seasonStart } from '@/domain/seasons';
 import { z } from 'zod';
 import type {
@@ -290,7 +291,7 @@ export async function maybeSyncJellyfin(signal?: AbortSignal) {
   if (!jellyfinConfigured()) return;
   const row = statement("SELECT value FROM worker_state WHERE key='jellyfin_synced_at'").get() as
     { value: string } | undefined;
-  if (row && Date.now() - Date.parse(row.value) < SYNC_EVERY_MS) {
+  if (row && Date.now() - Date.parse(row.value) < cadence(SYNC_EVERY_MS, 60 * 60_000)) {
     const last = statement(
       "SELECT value FROM worker_state WHERE key='jellyfin_import_at'",
     ).get() as { value: string } | undefined;

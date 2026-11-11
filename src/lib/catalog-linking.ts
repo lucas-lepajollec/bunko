@@ -4,6 +4,7 @@
  * TMDB id; Kavita manga, novels, books and comics, matched by title), and anime followed from
  * a later season, regrouped into their whole work. One job, shown as "Catalog linking".
  */
+import { cadence } from './presence';
 import { normalizeAnimeWorks } from './anime-works';
 import { jellyfinConfigured, upgradeOffCatalogWorks } from './jellyfin';
 import { setWorkerValue, workerValue } from './updates';
@@ -17,7 +18,7 @@ export async function linkCatalog(signal?: AbortSignal) {
   await normalizeAnimeWorks(signal);
   // Identification calls the catalogs: at most every 15 minutes, or when asked.
   const last = workerValue('catalog_link_at');
-  if (last && Date.now() - Date.parse(last) < EVERY_MS) return;
+  if (last && Date.now() - Date.parse(last) < cadence(EVERY_MS, 60 * 60_000)) return;
   setWorkerValue('catalog_link_at', new Date().toISOString());
   if (jellyfinConfigured()) await upgradeOffCatalogWorks(signal).catch(() => undefined);
   await relinkKavitaWorks(signal).catch(() => undefined);

@@ -1,3 +1,4 @@
+import { cadence } from './presence';
 import path from 'node:path';
 import { chapterVolume } from './chapter-volume';
 import { chapterNumber } from './suwayomi';
@@ -379,7 +380,8 @@ export function requestKavitaSync() {
 export function kavitaSyncRequested() {
   return (
     (stateValue('kavita_sync_requested') === '1' ||
-      Date.now() - Date.parse(stateValue('kavita_synced_at') ?? '') >= 15 * 60_000 ||
+      Date.now() - Date.parse(stateValue('kavita_synced_at') ?? '') >=
+        cadence(15 * 60_000, 60 * 60_000) ||
       (!stateValue('kavita_synced_at') && !!getSettings().kavitaApiKey)) &&
     Date.now() >= Number(stateValue('kavita_retry_at') ?? 0)
   );
