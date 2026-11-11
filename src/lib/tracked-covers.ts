@@ -1,7 +1,8 @@
 import { storedCoverFileExists } from './stored-covers';
 import { storedCover, storeCover, readStoredCover } from './stored-covers';
 import type { CoverOption, TrackedMedia, UnifiedMedia } from '@/types/shared';
-import { statement, getTracked, listTracked } from './db';
+import { statement, getTracked, listTracked, writeVersion } from './db';
+import { tenantState } from './tenant-context';
 import { matchKavita } from './kavita-index';
 import { requestJson } from './http';
 import { AppError, errorCode } from './errors';
@@ -216,7 +217,19 @@ export async function syncTrackedCover(
     }
   }, signal);
 }
+/** Last backfill pass: the library version it saw and when (see `syncTrackedCovers`). */
+const backfillState = tenantState(() => ({ stamp: -1, at: 0 }));
+const BACKFILL_EVERY_MS = 5 * 60_000;
+
 export async function syncTrackedCovers(parentSignal?: AbortSignal, backfillOnly = false) {
+  // The worker asks on every tick: the backfill only looks again when the library changed, or
+  // every few minutes for the retries that are due (their waits are minutes to a day anyway).
+  if (backfillOnly) {
+    const stamp = writeVersion('content');
+    const last = backfillState();
+    if (last.stamp === stamp && Date.now() - last.at < BACKFILL_EVERY_MS) return;
+    Object.assign(last, { stamp, at: Date.now() });
+  }
   const signal = AbortSignal.any([
     ...(parentSignal ? [parentSignal] : []),
     AbortSignal.timeout(60_000),

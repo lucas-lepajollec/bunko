@@ -1,3 +1,4 @@
+import { notePresence } from './presence';
 import { trackRequest } from './job-stats';
 import { ZodError, type ZodType } from 'zod';
 import { userContext } from './user-context';
@@ -44,6 +45,7 @@ export function route(handler: (r: Request) => Promise<Response> | Response, pro
       startWorker();
       return await userContext.run(user?.id ? user : undefined, async () => {
         if (!protect) return await tenantContext.exit(() => handler(r));
+        notePresence(user!.id);
         return await inTenant(user!.id, () =>
           withSourceLanguage(
             sourceLanguage(new URL(r.url).searchParams.get('uiLanguage') ?? '') ??

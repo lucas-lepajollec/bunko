@@ -1,3 +1,4 @@
+import { anyoneInUse } from './presence';
 import { accountsDir } from './tenant-context';
 import { dataDir } from './db';
 import { env } from './env';
@@ -23,7 +24,9 @@ export function onWorkerWake(listener: () => void) {
 }
 export function workerIdleMs() {
   const value = Number(env('WORKER_IDLE_MS') ?? 30_000);
-  return Number.isFinite(value) ? Math.max(1000, Math.min(300_000, value)) : 30_000;
+  const base = Number.isFinite(value) ? Math.max(1000, Math.min(300_000, value)) : 30_000;
+  // Nobody using Bunko: the worker looks every 2 minutes instead (wakes still run it at once).
+  return anyoneInUse() ? base : Math.max(base, 120_000);
 }
 export function waitForWorker(ms: number, signal?: AbortSignal) {
   return new Promise<void>((resolve) => {

@@ -1,3 +1,4 @@
+import { cadence } from './presence';
 import { sourceServerKey } from './source-server';
 import { recentSourceChapter } from './source-chapters';
 import { visibleTracked } from './adult';
@@ -153,7 +154,8 @@ export function updateCheckDue() {
   return (
     Boolean(workerValue('check_requested') && workerValue('check_requested') !== '0') ||
     !last ||
-    Date.now() - Date.parse(last) >= getSettings().updateIntervalMinutes * 60_000
+    Date.now() - Date.parse(last) >=
+      cadence(getSettings().updateIntervalMinutes * 60_000, 60 * 60_000)
   );
 }
 export async function runUpdateCheck(

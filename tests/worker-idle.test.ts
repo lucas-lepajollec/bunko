@@ -5,6 +5,11 @@ import path from 'node:path';
 const directory = mkdtempSync(path.join(tmpdir(), 'bunko-idle-'));
 process.env.BUNKO_DATA_DIR = directory;
 vi.mock('@/lib/tracked-sources', () => ({ drainSourceMatches: async () => {} }));
+// Catalog linking calls the catalogs (here, fixtures that time out): not what this test measures.
+vi.mock('@/lib/catalog-linking', async (original) => ({
+  ...(await original<object>()),
+  linkCatalog: async () => {},
+}));
 vi.mock('@/lib/tracked-covers', () => ({ syncTrackedCovers: vi.fn(async () => {}) }));
 vi.mock('@/lib/kavita', () => ({
   importChapter: vi.fn(async () => {}),
@@ -29,6 +34,7 @@ const { syncTrackedCovers } = await import('@/lib/tracked-covers');
 const { importChapter } = await import('@/lib/kavita');
 const { emptyMedia } = await import('@/lib/media');
 const { wakeWorker, workerIdleMs } = await import('@/lib/worker-events');
+const { notePresence } = await import('@/lib/presence');
 afterEach(() => {
   process.env.BUNKO_WORKER = 'false';
   vi.useRealTimers();
@@ -41,6 +47,9 @@ it('sleeps 30 seconds when idle, wakes immediately on enqueue/request/identity e
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-10-16T10:00:00Z'));
   process.env.BUNKO_WORKER = 'true';
+  // Nobody using Bunko: light upkeep every 2 minutes; someone using it: every 30 seconds.
+  expect(workerIdleMs()).toBe(120_000);
+  notePresence(1);
   expect(workerIdleMs()).toBe(30_000);
   const { updateSettings } = await import('@/lib/settings');
   updateSettings({ suwayomiUrl: 'http://fixture.test' });

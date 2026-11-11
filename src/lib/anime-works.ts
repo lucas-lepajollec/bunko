@@ -1,8 +1,10 @@
-import { listTracked, statement, untrack } from './db';
+import { listTracked, statement, untrack, writeVersion } from './db';
+import { tenantState } from './tenant-context';
 import type { UnifiedMedia } from '@/types/shared';
 import {
   franchise,
   knownFranchise,
+  knownSeasons,
   linkedRoot,
   loadedAnime,
   prefetchNodes,
@@ -16,9 +18,8 @@ export function followedSeasons(): Map<number, { trackedId: number; season: numb
   const out = new Map<number, { trackedId: number; season: number }>();
   for (const t of listTracked()) {
     if (t.type !== 'ANIME' || !t.anilistId) continue;
-    const work = knownFranchise(t.anilistId);
     out.set(t.anilistId, { trackedId: t.id, season: 1 });
-    for (const s of work?.seasons ?? [])
+    for (const s of knownSeasons(t.anilistId) ?? [])
       if (s.anilistId) out.set(s.anilistId, { trackedId: t.id, season: s.number });
   }
   return out;
@@ -30,16 +31,26 @@ export function followedSeasons(): Map<number, { trackedId: number; season: numb
  * work merges into it. A few AniList lookups per pass; cached works cost nothing.
  */
 export async function normalizeAnimeWorks(signal?: AbortSignal, budget = 4) {
+  // Nothing changed in the library since a pass that found every work resolved: nothing to do
+  // (this runs on every worker tick; a full pass over hundreds of works is not free).
+  const stamp = `${writeVersion('identities')}:${writeVersion('content')}`;
+  const pass = normalizeState();
+  if (pass.stamp === stamp && pass.complete) return;
+  let complete = true;
   for (const t of listTracked()) {
     if (signal?.aborted) return;
     if (t.type !== 'ANIME' || !t.anilistId) continue;
-    let work = knownFranchise(t.anilistId);
+    // Cheap check first: the work's first season is this entry (the usual case).
+    const seasons = knownSeasons(t.anilistId);
+    if (seasons && seasons[0]?.anilistId === t.anilistId) continue;
+    let work = seasons ? knownFranchise(t.anilistId) : null;
     if (!work) {
-      if (budget-- <= 0) return;
+      complete = false;
+      if (budget-- <= 0) break;
       try {
         work = await franchise(t.anilistId, signal);
       } catch {
-        return; // AniList busy: next pass.
+        break; // AniList busy: next pass.
       }
     }
     const root = work.root;
@@ -70,7 +81,10 @@ export async function normalizeAnimeWorks(signal?: AbortSignal, budget = 4) {
     // The work under its own id too (airing lookups use the followed id).
     await franchise(root.anilistId, signal).catch(() => undefined);
   }
+  // Recorded after the pass: its own merges changed the library, the next pass checks once more.
+  if (!signal?.aborted) Object.assign(pass, { stamp, complete });
 }
+const normalizeState = tenantState(() => ({ stamp: '', complete: false }));
 
 /**
  * Lists show anime works, not their seasons: a later TV season becomes its first season (the
