@@ -18,7 +18,11 @@ import {
   savedBitrate,
 } from '@/lib/client/device-profile';
 import { useI18n } from '@/i18n/I18nProvider';
+import { LADDER, LEVELS, needsFloat } from '@/lib/client/enhance/levels';
+import type { EnhanceState } from '@/lib/client/enhance/playback';
+import Link from 'next/link';
 import { Spinner, cx } from './ui';
+import { EnhanceLayer, type EnhanceChoice } from './video-enhance';
 
 /** ISO 639 codes Jellyfin uses for each interface language. */
 const LANGUAGE_CODES: Record<string, string[]> = {
@@ -470,6 +474,11 @@ function Screen({
   const [menu, setMenu] = useState(false);
   const [idle, setIdle] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Picture enhancement (in this browser, on its GPU): follows the settings unless the menu
+  // picks something else for this playback.
+  const [enhanceChoice, setEnhanceChoice] = useState<EnhanceChoice>('settings');
+  const [enhance, setEnhance] = useState<(EnhanceState & { auto: boolean }) | null>(null);
+  const picture = episode.seasonAnilistId != null ? 'drawn' : 'filmed';
   const finished = useRef(false);
   // Extension streams: start where it stopped last time (Jellyfin keeps its own place).
   const posKey = source.kind === 'stream' ? positionKey(episode) : null;
@@ -922,6 +931,8 @@ function Screen({
       else if (key === 'arrowdown') el.volume = Math.max(0, el.volume - 0.1);
       else if (key === 'm') el.muted = !el.muted;
       else if (key === 'f') fullscreen();
+      else if (key === 'e')
+        setEnhanceChoice((c) => (c === 'off' ? 'settings' : enhance?.level ? 'off' : 'settings'));
       else if (key === 'escape' && !document.fullscreenElement) close();
       else return;
       wake();
@@ -1022,6 +1033,13 @@ function Screen({
           />
         ))}
       </video>
+      <EnhanceLayer
+        video={video}
+        frame={frame}
+        picture={picture}
+        choice={enhanceChoice}
+        onState={setEnhance}
+      />
 
       {(buffering || (source.kind === 'jellyfin' && !p)) && !error && !failure && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -1264,9 +1282,20 @@ function Screen({
                       />
                     )}
                   </>
-                ) : (
-                  <span className="text-muted">{t('player.noOptions')}</span>
-                )}
+                ) : null}
+                <Choice
+                  label={t('enhance.title')}
+                  value={enhanceChoice}
+                  options={[
+                    { value: 'settings', label: t('enhance.followSettings') },
+                    { value: 'off', label: t('enhance.off') },
+                    ...[...LADDER[picture], ...LEVELS.filter((l) => !LADDER[picture].includes(l))]
+                      .filter((l) => !needsFloat(l) || enhance?.caps?.floatTargets !== false)
+                      .map((l) => ({ value: l, label: t(`enhance.level.${l}`) })),
+                  ]}
+                  onChange={(v) => setEnhanceChoice(v as EnhanceChoice)}
+                />
+                <EnhanceStatus state={enhance} />
                 {decoded && (
                   <span className="text-muted px-1 text-xs tabular-nums">
                     {t('player.decoded', { width: decoded.width, height: decoded.height })}
@@ -1287,6 +1316,44 @@ function Screen({
         </div>
       </div>
     </div>
+  );
+}
+
+/** What the picture enhancement does now, in one line under its choice. */
+function EnhanceStatus({ state }: { state: (EnhanceState & { auto: boolean }) | null }) {
+  const { t } = useI18n();
+  if (!state) return null;
+  const level = state.level ? t(`enhance.level.${state.level}`) : null;
+  const text =
+    state.status === 'on' && level
+      ? state.ms !== null
+        ? t('enhance.running', {
+            level,
+            ms: state.ms.toFixed(1),
+            budget: state.frameMs.toFixed(0),
+          })
+        : level
+      : state.status === 'preparing'
+        ? t('enhance.preparing')
+        : state.status === 'paused'
+          ? t('enhance.paused')
+          : state.status === 'blocked'
+            ? t('enhance.blocked')
+            : state.status === 'unsupported'
+              ? t('enhance.unsupported')
+              : state.status === 'failed'
+                ? t('enhance.failed')
+                : t('enhance.inactive');
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 px-1 text-xs">
+      <span className={cx('tabular-nums', state.slow ? 'text-warn' : 'text-muted')}>
+        {text}
+        {state.slow ? ` · ${state.auto ? t('enhance.lowered') : t('enhance.slow')}` : ''}
+      </span>
+      <Link href="/settings#playback" className="text-mid underline-offset-2 hover:underline">
+        {t('enhance.settingsLink')}
+      </Link>
+    </span>
   );
 }
 

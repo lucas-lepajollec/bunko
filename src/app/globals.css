@@ -153,6 +153,24 @@ input[type='search']::-webkit-search-cancel-button {
 .player-controls-shown video::cue {
   line-height: 1.35;
 }
+/* Subtitles drawn by the page over the enhanced picture, like the browser's own. */
+.enhance-cues {
+  font-size: clamp(16px, 3.6vh, 40px);
+  line-height: 1.35;
+  color: #fff;
+  text-shadow:
+    0 0 4px #000,
+    0 0 2px #000,
+    0 1px 2px #000;
+  transition: transform 0.3s;
+}
+.enhance-cues > div {
+  white-space: pre-line;
+  max-width: 100%;
+}
+.player-controls-shown .enhance-cues {
+  transform: translateY(-96px);
+}
 @keyframes stage-in {
   from {
     opacity: 0;
