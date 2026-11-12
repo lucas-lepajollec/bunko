@@ -32,6 +32,7 @@ import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LanguageSelect, Page } from '@/components/shell';
 import { YamtrackImport } from '@/components/yamtrack-import';
+import { EnhanceSettings } from '@/components/enhance-settings';
 import { useRelativeTime } from '@/components/time';
 import { Dot, ErrorNote, Skeleton, cx, errorText, field, smallButton } from '@/components/ui';
 
@@ -40,7 +41,7 @@ import { Dot, ErrorNote, Skeleton, cx, errorText, field, smallButton } from '@/c
  * external service with its connection and its options together, then catalogs and streaming.
  */
 const GROUPS = [
-  { id: 'personal', sections: ['account', 'media', 'import'] },
+  { id: 'personal', sections: ['account', 'media', 'playback', 'import'] },
   { id: 'admin', sections: ['users'] },
   { id: 'services', sections: ['suwayomi', 'kavita', 'jellyfin', 'arr', 'translation'] },
   { id: 'content', sections: ['catalogs', 'extensions'] },
@@ -166,6 +167,9 @@ export default function SettingsPage() {
         </Section>
         <Section open={open} visible={visible} id="media">
           <UniverseSettings />
+        </Section>
+        <Section open={open} visible={visible} id="playback">
+          <EnhanceSettings />
         </Section>
         <Section open={open} visible={visible} id="import">
           <YamtrackImport />

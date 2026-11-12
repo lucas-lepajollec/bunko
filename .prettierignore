@@ -4,3 +4,4 @@ package-lock.json
 data
 media
 coverage
+src/lib/client/enhance/shaders/a4k-*.ts

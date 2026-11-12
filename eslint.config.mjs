@@ -4,5 +4,12 @@ import ts from 'eslint-config-next/typescript';
 export default defineConfig([
   ...next,
   ...ts,
-  globalIgnores(['.next/**', 'data/**', 'coverage/**', 'next-env.d.ts', '.project-local/**']),
+  globalIgnores([
+    '.next/**',
+    'data/**',
+    'coverage/**',
+    'next-env.d.ts',
+    '.project-local/**',
+    'src/lib/client/enhance/shaders/a4k-*.ts',
+  ]),
 ]);

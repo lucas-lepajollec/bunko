@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Picture enhancement in the player, computed by the viewer's browser on its GPU (no server
+  load): Anime4K (S, M, VL; sharp, soft or denoise style) for anime, AMD FSR 1 for series and
+  films, light sharpening everywhere. The automatic mode picks what the device keeps up with for
+  each video, steps down when frames come late and learns from playback; the player's menu (or
+  `E`) changes it for one video. Settings › Playback: mode, levels, a device test with the cost of
+  each level and what "Auto" picks on this screen, and a before/after comparison on a test
+  picture or a local image or video. Subtitles stay visible over the enhanced picture.
 - "Pick up where you left off" lists everything started in Bunko's reader or player, followed or
   not, any kind (home and profile follow the universe on screen and the content preference),
   with where it stopped (chapter or episode, % inside it). Resuming reopens the chapter, or the

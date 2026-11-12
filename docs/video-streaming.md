@@ -155,6 +155,42 @@ Keep the existing hardening of the compose file (`read_only`, `cap_drop: [ALL]`,
 `no-new-privileges`, no Docker socket, only the Bunko port published). A Proxmox or router
 firewall rule giving the Bunko host the same egress list achieves the same.
 
+## Picture enhancement
+
+The player can improve the picture in the viewer's browser, on its GPU (WebGL 2): the server sends
+the same video and does no extra work; the shaders are static chunks loaded once, on first use.
+Settings › Playback holds the mode (automatic, manual, off), the anime style, a device test and a
+before/after comparison (on a test picture drawn by the browser, or an image or video of the
+device, read locally). Choices and measurements are stored in the browser (`bunko.enhance`), per
+device.
+
+| Level              | What it runs                                                                                           | For                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------ | ----------------------- |
+| Sharpen            | AMD RCAS at the video's size                                                                           | any picture, any device |
+| FSR 1              | AMD EASU to the screen's size, then RCAS                                                               | series and films        |
+| Anime4K S / M / VL | bloc97's Anime4K restore (A, B or C style) + ×2 upscale, a second ×2 for small videos on large screens | anime                   |
+
+The shaders run as mpv passes (`src/lib/client/enhance/`): `hooks.ts` reads mpv's directives,
+`plan.ts` decides which passes run for a video and screen size (Anime4K skips its upscale when the
+screen is not larger) and shares textures between passes never alive together, `renderer.ts`
+draws, `playback.ts` follows the video (one draw per decoded frame) and measures. The automatic
+mode picks, per video, the richest level whose measured cost fits 45 % of the frame time (Anime4K
+for anime, FSR for series and films); without measurements it starts cautiously (Anime4K S or FSR
+on a computer, sharpening on a phone), tries the next level when far within budget, steps down
+when frames come late, and keeps to sharpening on battery if asked. What a playback measures
+refines the next choice. Shortcut: `E` in the player.
+
+Bunko draws the subtitles itself while the enhanced picture covers the video (the track is set to
+`hidden` and its cues rendered above the canvas). The plain video shows whenever enhancement
+cannot run: while preparing, in picture-in-picture, in the iPhone's native full screen, without
+WebGL 2, or for a stream from another site that does not allow reading its pixels (CORS; the same
+stream through Bunko's relay works). Anime4K needs half-float render targets; without them only
+sharpening and FSR are offered. Drawing through a canvas replaces the driver's own video upscaling
+(RTX Video Super Resolution and the like): turn the enhancement off to keep it.
+
+Anime4K (MIT, bloc97) files are kept verbatim in `src/lib/client/enhance/shaders/`
+(`scripts/enhance-shaders.mjs` regenerates them); FSR 1 (MIT, AMD) is ported in `fsr.ts`.
+
 ## Measurements
 
 The server log has one line per episode lookup and one per playback (numbers and categories only,
