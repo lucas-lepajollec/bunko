@@ -102,6 +102,15 @@ export default function TitlePage() {
   return (
     <Title
       key={id}
+      onRefresh={async () => {
+        try {
+          await send('/api/media/refresh', 'POST', { id });
+          await detail.mutate();
+        } catch (e) {
+          toast({ tone: 'bad', text: errorText(t, e) });
+          throw e;
+        }
+      }}
       media={{
         ...detail.data,
         // Only the server's own "still enriching" flag: a background revalidation is not news.
@@ -112,7 +121,14 @@ export default function TitlePage() {
   );
 }
 
-function Title({ media }: { media: MediaDetail }) {
+function Title({
+  media,
+  onRefresh,
+}: {
+  media: MediaDetail;
+  /** Load the sheet's facts again (episodes just aired). */
+  onRefresh: () => Promise<void>;
+}) {
   const { t, n, language } = useI18n();
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const batches = useApi<DownloadBatch[]>('/api/downloads/batches', {
@@ -711,6 +727,8 @@ function Title({ media }: { media: MediaDetail }) {
                   entry={entry}
                   busy={false}
                   onWatched={(w) => void setWatched(w)}
+                  onRefresh={filmSheet ? undefined : onRefresh}
+                  refreshing={media.pending}
                 />
               </>
             ) : isComic ? (

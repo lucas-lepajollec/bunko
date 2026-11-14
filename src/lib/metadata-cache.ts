@@ -142,6 +142,8 @@ export async function cached<T>(
     /** A cold interactive request returns this snapshot while its coalesced load continues. */
     initial?: () => T;
     accept?: (value: T) => boolean;
+    /** Stale before `ttl` (an episode announced in the stored value has aired since). */
+    expired?: (value: T, at: number) => boolean;
     onError?: (error: unknown) => void;
   } = {},
 ): Promise<T> {
@@ -178,7 +180,10 @@ export async function cached<T>(
     return pending;
   };
   if (hit) {
-    if (Date.now() - hit.at >= ttl && Date.now() - hit.attempted >= Math.min(ttl, 30_000)) {
+    if (
+      (Date.now() - hit.at >= ttl || options.expired?.(hit.value, hit.at)) &&
+      Date.now() - hit.attempted >= Math.min(ttl, 30_000)
+    ) {
       if (options.waitForRefresh) return structuredClone(await refresh());
       void refresh().catch(() => {
         /* The persisted value remains available. */

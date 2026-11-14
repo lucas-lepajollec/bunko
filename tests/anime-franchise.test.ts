@@ -228,3 +228,56 @@ it("takes a show's seasons from TVDB when the sequel goes through an OVA, cours 
     [43, 2, 2, 12],
   ]);
 });
+
+it('rebuilds a work once an episode it announced has aired, and lists it meanwhile', async () => {
+  const hour = 3600_000;
+  // An airing second season: episode 6 announced for an hour ago, stored the day before.
+  const airing = (next: number, at: number) => ({
+    ...node(2, 'Fixture Show Season 2', 'TV', 2022, 0, [['PREQUEL', 1, 'TV']]),
+    status: 'RELEASING',
+    episodes: null,
+    nextAiringEpisode: { episode: next, airingAt: Math.floor(at / 1000) },
+  });
+  const saved = nodes[2];
+  try {
+    nodes[2] = airing(6, Date.now() - hour);
+    await works.franchise(1);
+    db().prepare('UPDATE metadata_cache SET updated_at=?,attempted_at=?').run(
+      Date.now() - 2 * hour,
+      Date.now() - 2 * hour,
+    );
+    const stale = works.knownFranchise(1)!;
+    expect(stale.seasons[1]).toMatchObject({ aired: 5, list: { length: 5 } });
+    // Shown at once: the aired episode joins the list, the next date is unknown until reloaded.
+    const shown = works.rollAiring(works.workVideo(stale.seasons, 1, []));
+    expect(shown.seasons![1]).toMatchObject({ aired: 6, nextEpisode: null, list: { length: 6 } });
+    expect(shown).toMatchObject({ aired: 18, nextEpisode: null, list: { length: 18 } });
+    // A sheet rebuilt now waits for AniList's answer, even though the work is not 12 h old.
+    nodes[2] = airing(7, Date.now() + 6 * 24 * hour);
+    requests.length = 0;
+    const fresh = await works.franchise(1, undefined, { fresh: true });
+    expect(requests.flat()).toContain(2);
+    expect(fresh.seasons[1]).toMatchObject({ aired: 6, nextEpisode: { number: 7 } });
+    // Reloaded after airing: not outdated again (no request on the next sheet).
+    requests.length = 0;
+    await works.franchise(1, undefined, { fresh: true });
+    expect(requests).toEqual([]);
+  } finally {
+    nodes[2] = saved;
+  }
+});
+
+it('still refreshes a work when one of its linked seasons is no longer served', async () => {
+  const saved = nodes[2];
+  try {
+    // A sequel AniList lists in the relations but no longer answers for.
+    nodes[2] = node(2, 'Fixture Show Season 2', 'TV', 2022, 10, [
+      ['PREQUEL', 1, 'TV'],
+      ['SEQUEL', 99, 'TV'],
+    ]);
+    const work = await works.franchise(1);
+    expect(work.seasons.map((s) => s.anilistId)).toEqual([1, 2]);
+  } finally {
+    nodes[2] = saved;
+  }
+});
