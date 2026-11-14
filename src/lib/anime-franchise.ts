@@ -11,6 +11,22 @@ import { ensureAnimeIds, idsOfAnilist, tvdbSeasons } from './anime-ids';
 const SEASON_FORMATS = new Set(['TV', 'TV_SHORT', 'ONA']);
 const MAX_SEASONS = 12;
 const DAY = 24 * 3600_000;
+/** AniList moves `nextAiringEpisode` on once an episode airs; asked again a little after. */
+const AIRING_GRACE = 5 * 60_000;
+
+/**
+ * Stored before an announced episode aired, and that episode has aired since: the stored facts
+ * (aired count, episode list, next episode) are behind, whatever their age.
+ */
+export function airedSince(airingAt: number | string | null | undefined, at: number) {
+  if (airingAt === null || airingAt === undefined) return false;
+  const due =
+    (typeof airingAt === 'number' ? airingAt * 1000 : Date.parse(airingAt)) + AIRING_GRACE;
+  return Number.isFinite(due) && at < due && Date.now() >= due;
+}
+const nodeBehind = (m: AniNode, at: number) => airedSince(m.nextAiringEpisode?.airingAt, at);
+const workBehind = (work: Franchise, at: number) =>
+  work.seasons.some((s) => airedSince(s.nextEpisode?.airingAt, at));
 
 interface AniNode extends AniMedia {
   duration?: number | null;
@@ -44,7 +60,7 @@ const inflight = ((
 export async function prefetchNodes(ids: number[], signal?: AbortSignal) {
   const wanted = [...new Set(ids)].filter((id) => {
     const hit = storedMetadata<AniNode>(`anime-node:${id}`);
-    return !hit || Date.now() - hit.at >= DAY;
+    return !hit || Date.now() - hit.at >= DAY || nodeBehind(hit.value, hit.at);
   });
   // Ids another request is already loading are awaited, not requested twice.
   const waiting = wanted.filter((id) => inflight.has(id)).map((id) => inflight.get(id)!);
@@ -85,24 +101,29 @@ async function loadNodes(missing: number[], signal?: AbortSignal) {
   }
 }
 async function node(id: number, signal?: AbortSignal): Promise<AniNode> {
-  return cached(`anime-node:${id}`, DAY, async () => {
-    const result = await requestJson<{ data?: { Media: AniNode | null }; errors?: unknown[] }>(
-      'https://graphql.anilist.co',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `query($id: Int) { Media(id: $id) { ${NODE_FIELDS} } }`,
-          variables: { id },
-        }),
-        signal,
-      },
-      8000,
-    );
-    if (!result.data?.Media || result.errors?.length)
-      throw new AppError('METADATA_UNAVAILABLE', 'AniList rejected the request', 502);
-    return result.data.Media;
-  });
+  return cached(
+    `anime-node:${id}`,
+    DAY,
+    async () => {
+      const result = await requestJson<{ data?: { Media: AniNode | null }; errors?: unknown[] }>(
+        'https://graphql.anilist.co',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: `query($id: Int) { Media(id: $id) { ${NODE_FIELDS} } }`,
+            variables: { id },
+          }),
+          signal,
+        },
+        8000,
+      );
+      if (!result.data?.Media || result.errors?.length)
+        throw new AppError('METADATA_UNAVAILABLE', 'AniList rejected the request', 502);
+      return result.data.Media;
+    },
+    { expired: nodeBehind },
+  );
 }
 
 /** Episode titles/stills, aired count and next airing of one season. */
@@ -182,122 +203,166 @@ export interface SeasonRef {
  * The whole work an AniList anime belongs to: its TV seasons linked by SEQUEL/PREQUEL, oldest
  * first. A film or OVA is its own work. Cached per season (24 h) and per work (12 h).
  */
-export async function franchise(anilistId: number, signal?: AbortSignal): Promise<Franchise> {
+export async function franchise(
+  anilistId: number,
+  signal?: AbortSignal,
+  options: { fresh?: boolean } = {},
+): Promise<Franchise> {
   // Joined by hand to another work: that work is the franchise.
   const joined = linkedRoot(anilistId);
-  if (joined && joined !== anilistId) return franchise(joined, signal);
-  return cached(`anime-franchise:v5:${anilistId}`, DAY / 2, async () => {
-    // The offline id map already knows the show's other seasons: load them all at once.
-    // The offline map must be loaded first: without it a show's other seasons are unknown and
-    // a one-season work would be cached for hours.
-    await ensureAnimeIds();
-    const known = idsOfAnilist(anilistId);
-    await prefetchNodes(
-      [anilistId, ...(known?.tvdb ? tvdbSeasons(known.tvdb).map((e) => e.anilist) : [])],
-      signal,
-    );
-    const first = await node(anilistId, signal);
-    const seen = new Map<number, AniNode>([[first.id, first]]);
-    if (SEASON_FORMATS.has(first.format ?? '')) {
-      let frontier = [first];
-      while (frontier.length && seen.size < MAX_SEASONS) {
-        const next = frontier
-          .flatMap((current) => current.relations?.edges ?? [])
-          .filter(
-            (edge) =>
-              ['SEQUEL', 'PREQUEL'].includes(edge.relationType) &&
-              edge.node.type === 'ANIME' &&
-              SEASON_FORMATS.has(edge.node.format ?? '') &&
-              !seen.has(edge.node.id),
-          )
-          .map((edge) => edge.node.id);
-        await prefetchNodes(next, signal);
-        frontier = [];
-        for (const id of new Set(next)) {
-          if (seen.size >= MAX_SEASONS) break;
-          const n = await node(id, signal);
-          seen.set(n.id, n);
-          frontier.push(n);
-        }
-      }
-    }
-    // The show's other seasons as TVDB (and media servers) file them: AniList's sequel chain
-    // breaks where a sequel goes through an OVA or a film (a season 2 after an OVA).
-    if (SEASON_FORMATS.has(first.format ?? '') && known?.tvdb) {
-      const siblings = tvdbSeasons(known.tvdb)
-        .filter((e) => (e.type === 'TV' || e.type === 'ONA') && !seen.has(e.anilist))
-        .map((e) => e.anilist)
-        .slice(0, Math.max(0, MAX_SEASONS - seen.size));
-      if (siblings.length) {
-        await prefetchNodes(siblings, signal);
-        for (const id of siblings) {
-          const n = await node(id, signal).catch(() => null);
-          if (n && SEASON_FORMATS.has(n.format ?? '')) seen.set(n.id, n);
-        }
-      }
-    }
-    // Works the user joined to this one (another series, films), in airing order with the rest.
-    const members = linkedMembers(anilistId).filter((id) => !seen.has(id));
-    if (members.length) {
-      await prefetchNodes(members, signal);
-      for (const id of members) seen.set(id, await node(id, signal));
-    }
-    // A season or part not aired yet (announced, nothing out) is no part of the work so far:
-    // it joins the sheet with its first episode (the work cache lasts 12 h).
-    const ordered = [...seen.values()]
-      .filter(
-        (m) =>
-          m.id === first.id ||
-          m.status !== 'NOT_YET_RELEASED' ||
-          (m.nextAiringEpisode?.episode ?? 1) > 1,
-      )
-      .sort((a, b) => start(a) - start(b) || a.id - b.id);
-    const joinedIds = new Set(members);
-    let display = 0;
-    let before = 0;
-    let previous: AnimeSeason | null = null;
-    const seasons = ordered.map((m, i) => {
-      const facts = seasonFacts(m, i + 1, before);
-      before += Math.max(facts.episodes ?? 0, facts.aired ?? 0, facts.list.length);
-      // Films and joined works are named, not numbered.
-      if (joinedIds.has(m.id) || !SEASON_FORMATS.has(m.format ?? ''))
-        return { ...facts, label: facts.title };
-      const tvdbSeason = idsOfAnilist(m.id)?.tvdbSeason ?? null;
-      // A part: titled so ("Part 2", "2nd cour"), or filed under the same TVDB season as the
-      // season before it (TVDB keeps both cours of a season together).
-      const sameSeason =
-        previous !== null &&
-        tvdbSeason !== null &&
-        tvdbSeason >= 1 &&
-        idsOfAnilist(previous.anilistId!)?.tvdbSeason === tvdbSeason;
-      const titled = previous
-        ? partNumber([m.title.romaji, m.title.english, m.title.native])
-        : null;
-      const part = titled ?? (sameSeason ? (previous!.part ?? 1) + 1 : null);
-      const season: AnimeSeason = part
-        ? {
-            ...facts,
-            display,
-            part,
-            // Episodes of the earlier parts of the same season come first.
-            partOffset:
-              (previous!.partOffset ?? 0) +
-              Math.max(previous!.episodes ?? 0, previous!.aired ?? 0, previous!.list.length),
-          }
-        : { ...facts, display: ++display };
-      previous = season;
-      return season;
+  if (joined && joined !== anilistId) return franchise(joined, signal, options);
+  const key = `anime-franchise:v5:${anilistId}`;
+  // A sheet being rebuilt waits for an outdated work (it is rebuilt in the background anyway):
+  // otherwise the sheet keeps the old episodes until its own next refresh.
+  const load = () =>
+    cached(key, DAY / 2, () => loadFranchise(anilistId, signal), {
+      expired: workBehind,
+      waitForRefresh: options.fresh,
     });
-    const work: Franchise = {
-      root: fromAniList(ordered[0]),
-      seasons,
-      index: Object.fromEntries(seasons.map((s) => [s.anilistId!, s.number])),
-    };
-    // Every season knows its work: airing episodes and old entries map back without a request.
-    for (const s of seasons)
-      saveMetadata(`anime-season-of:${s.anilistId}`, { root: work.root, season: s.number });
-    return work;
+  if (!options.fresh) return load();
+  try {
+    return await load();
+  } catch (error) {
+    // AniList busy: the work as last known, never a lesser sheet.
+    const known = knownFranchise(anilistId);
+    if (known) return known;
+    throw error;
+  }
+}
+async function loadFranchise(anilistId: number, signal?: AbortSignal): Promise<Franchise> {
+  // The offline id map already knows the show's other seasons: load them all at once.
+  // The offline map must be loaded first: without it a show's other seasons are unknown and
+  // a one-season work would be cached for hours.
+  await ensureAnimeIds();
+  const known = idsOfAnilist(anilistId);
+  await prefetchNodes(
+    [anilistId, ...(known?.tvdb ? tvdbSeasons(known.tvdb).map((e) => e.anilist) : [])],
+    signal,
+  );
+  const first = await node(anilistId, signal);
+  const seen = new Map<number, AniNode>([[first.id, first]]);
+  if (SEASON_FORMATS.has(first.format ?? '')) {
+    let frontier = [first];
+    while (frontier.length && seen.size < MAX_SEASONS) {
+      const next = frontier
+        .flatMap((current) => current.relations?.edges ?? [])
+        .filter(
+          (edge) =>
+            ['SEQUEL', 'PREQUEL'].includes(edge.relationType) &&
+            edge.node.type === 'ANIME' &&
+            SEASON_FORMATS.has(edge.node.format ?? '') &&
+            !seen.has(edge.node.id),
+        )
+        .map((edge) => edge.node.id);
+      await prefetchNodes(next, signal);
+      frontier = [];
+      for (const id of new Set(next)) {
+        if (seen.size >= MAX_SEASONS) break;
+        // One season AniList no longer serves must not keep the whole work from refreshing.
+        const n = await node(id, signal).catch(() => null);
+        if (!n) continue;
+        seen.set(n.id, n);
+        frontier.push(n);
+      }
+    }
+  }
+  // The show's other seasons as TVDB (and media servers) file them: AniList's sequel chain
+  // breaks where a sequel goes through an OVA or a film (a season 2 after an OVA).
+  if (SEASON_FORMATS.has(first.format ?? '') && known?.tvdb) {
+    const siblings = tvdbSeasons(known.tvdb)
+      .filter((e) => (e.type === 'TV' || e.type === 'ONA') && !seen.has(e.anilist))
+      .map((e) => e.anilist)
+      .slice(0, Math.max(0, MAX_SEASONS - seen.size));
+    if (siblings.length) {
+      await prefetchNodes(siblings, signal);
+      for (const id of siblings) {
+        const n = await node(id, signal).catch(() => null);
+        if (n && SEASON_FORMATS.has(n.format ?? '')) seen.set(n.id, n);
+      }
+    }
+  }
+  // Works the user joined to this one (another series, films), in airing order with the rest.
+  const members = linkedMembers(anilistId).filter((id) => !seen.has(id));
+  if (members.length) {
+    await prefetchNodes(members, signal);
+    for (const id of members) {
+      const n = await node(id, signal).catch(() => null);
+      if (n) seen.set(id, n);
+    }
+  }
+  // A season or part not aired yet (announced, nothing out) is no part of the work so far:
+  // it joins the sheet with its first episode (the work cache lasts 12 h).
+  const ordered = [...seen.values()]
+    .filter(
+      (m) =>
+        m.id === first.id ||
+        m.status !== 'NOT_YET_RELEASED' ||
+        (m.nextAiringEpisode?.episode ?? 1) > 1,
+    )
+    .sort((a, b) => start(a) - start(b) || a.id - b.id);
+  const joinedIds = new Set(members);
+  let display = 0;
+  let before = 0;
+  let previous: AnimeSeason | null = null;
+  const seasons = ordered.map((m, i) => {
+    const facts = seasonFacts(m, i + 1, before);
+    before += Math.max(facts.episodes ?? 0, facts.aired ?? 0, facts.list.length);
+    // Films and joined works are named, not numbered.
+    if (joinedIds.has(m.id) || !SEASON_FORMATS.has(m.format ?? ''))
+      return { ...facts, label: facts.title };
+    const tvdbSeason = idsOfAnilist(m.id)?.tvdbSeason ?? null;
+    // A part: titled so ("Part 2", "2nd cour"), or filed under the same TVDB season as the
+    // season before it (TVDB keeps both cours of a season together).
+    const sameSeason =
+      previous !== null &&
+      tvdbSeason !== null &&
+      tvdbSeason >= 1 &&
+      idsOfAnilist(previous.anilistId!)?.tvdbSeason === tvdbSeason;
+    const titled = previous ? partNumber([m.title.romaji, m.title.english, m.title.native]) : null;
+    const part = titled ?? (sameSeason ? (previous!.part ?? 1) + 1 : null);
+    const season: AnimeSeason = part
+      ? {
+          ...facts,
+          display,
+          part,
+          // Episodes of the earlier parts of the same season come first.
+          partOffset:
+            (previous!.partOffset ?? 0) +
+            Math.max(previous!.episodes ?? 0, previous!.aired ?? 0, previous!.list.length),
+        }
+      : { ...facts, display: ++display };
+    previous = season;
+    return season;
   });
+  const work: Franchise = {
+    root: fromAniList(ordered[0]),
+    seasons,
+    index: Object.fromEntries(seasons.map((s) => [s.anilistId!, s.number])),
+  };
+  // Every season knows its work: airing episodes and old entries map back without a request.
+  for (const s of seasons)
+    saveMetadata(`anime-season-of:${s.anilistId}`, { root: work.root, season: s.number });
+  return work;
+}
+/**
+ * Episodes announced in stored facts that have aired since count as aired right away: AniList
+ * and the caches catch up a little later (the next episode's date comes with them).
+ */
+export function rollAiring(video: VideoDetail, now = Date.now()): VideoDetail {
+  const roll = <S extends Pick<AnimeSeason, 'aired' | 'nextEpisode' | 'list'>>(s: S): S => {
+    const next = s.nextEpisode;
+    if (!next || !(Date.parse(next.airingAt) <= now)) return s;
+    const aired = Math.max(s.aired ?? 0, next.number);
+    const list = [...s.list];
+    for (let n = list.length + 1; n <= aired; n++)
+      list.push({ number: n, title: null, thumbnail: null });
+    return { ...s, aired, list, nextEpisode: null };
+  };
+  if (!video.seasons?.length) return roll(video);
+  const seasons = video.seasons.map(roll);
+  if (seasons.every((s, i) => s === video.seasons![i])) return video;
+  // The work's own facts (absolute numbers, aired total) follow from its seasons.
+  return { ...video, ...workVideo(seasons, video.focus ?? 1, video.studios) };
 }
 /** The work and season of an AniList anime id, when its work was resolved before. */
 export function seasonRef(anilistId: number): SeasonRef | null {

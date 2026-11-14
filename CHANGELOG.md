@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Episodes: a sheet lists an episode as soon as it airs (the "latest episodes" shelf and the sheet
+  now agree), and its work and seasons are reloaded from AniList right after each airing instead
+  of after 12 to 24 hours. One season AniList no longer answers for no longer keeps a whole work
+  from refreshing. A refresh button next to the episodes loads them again on demand.
 - Picture enhancement in the player, computed by the viewer's browser on its GPU (no server
   load): Anime4K (S, M, VL; sharp, soft or denoise style) for anime, AMD FSR 1 for series and
   films, light sharpening everywhere. The automatic mode picks what the device keeps up with for

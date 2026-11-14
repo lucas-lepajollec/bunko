@@ -1,4 +1,4 @@
-import { naturalEpisode, seasonRef } from './anime-franchise';
+import { airedSince, naturalEpisode, rollAiring, seasonRef } from './anime-franchise';
 import { KINDS, KIND_IDS, byKindOrder, mixByKind, type Kind } from '@/domain/kinds';
 import { rememberMediaPreview, mediaPreview } from './media-preview';
 import { deduplicate } from './search-engine';
@@ -39,7 +39,7 @@ import { requestJson } from './http';
 import { createHash } from 'node:crypto';
 import { getSettings } from './settings';
 import { AppError } from './errors';
-import { db, listTracked, trackedForMedia, sameMedia } from './db';
+import { db, listTracked, trackedForMedia, sameMedia, statement } from './db';
 import { libraryMark } from '@/domain/library-mark';
 import { withVideoOwnership } from './video-ownership';
 import {
@@ -541,7 +541,8 @@ async function anilistDetail(id: number, signal?: AbortSignal): Promise<MediaDet
     video = videoDetail(m);
     try {
       const { franchise, workVideo } = await import('./anime-franchise');
-      const work = await franchise(id, signal);
+      // Fresh: a sheet rebuilt after an episode aired lists it (not the work as it was then).
+      const work = await franchise(id, signal, { fresh: true });
       if (work.seasons.length > 1 || work.seasons[0]?.anilistId !== id)
         video = workVideo(work.seasons, work.index[id] ?? 1, video.studios);
     } catch {
@@ -710,6 +711,14 @@ function enrichDetail(detail: MediaDetail): MediaDetail {
   };
 }
 
+/** A stored sheet announced an episode that has aired since: rebuilt before its usual time. */
+const detailBehind = (detail: MediaDetail, at: number) =>
+  airedSince(detail.video?.nextEpisode?.airingAt, at) ||
+  Boolean(detail.video?.seasons?.some((s) => airedSince(s.nextEpisode?.airingAt, at)));
+/** Episodes aired since the sheet was stored are listed at once (see `rollAiring`). */
+const withAiring = <T extends { video?: MediaDetail['video'] }>(detail: T): T =>
+  detail.video ? { ...detail, video: rollAiring(detail.video) } : detail;
+
 function detailCacheKey(id: string) {
   if (!id.startsWith('suwayomi:')) return `detail:${id}`;
   const s = getSettings();
@@ -774,10 +783,10 @@ export async function mediaDetail(
         },
         0,
       );
-    void cached(key, 30 * 60_000, load).catch(() => {
+    void cached(key, 30 * 60_000, load, { expired: detailBehind }).catch(() => {
       /* Stored followed metadata remains authoritative offline. */
     });
-    return {
+    return withAiring({
       ...enrichDetail({
         ...detail,
         ...followed.media,
@@ -789,19 +798,51 @@ export async function mediaDetail(
         recommendations: detail?.recommendations ?? [],
       }),
       ...metadataStatus(key),
-    };
+    });
   }
   signal?.throwIfAborted();
   const preview = progressive ? mediaPreview(id) : undefined;
-  const detail = await cached(
-    key,
-    30 * 60_000,
-    load,
-    preview
+  const detail = await cached(key, 30 * 60_000, load, {
+    expired: detailBehind,
+    ...(preview
       ? { initial: () => ({ ...preview, tags: [], relations: [], recommendations: [] }) }
-      : {},
-  );
-  return { ...enrichDetail(detail), ...metadataStatus(key) };
+      : {}),
+  });
+  return withAiring({ ...enrichDetail(detail), ...metadataStatus(key) });
+}
+
+/**
+ * "Refresh" on a sheet: its stored facts (and for an anime its work and seasons, for a series
+ * its TMDB seasons) count as outdated, then the sheet is rebuilt in the background like any
+ * stale sheet (the page follows `pending`). Kept when they are seconds old.
+ */
+export async function refreshMediaDetail(id: string) {
+  const key = detailCacheKey(id);
+  const stored = storedMetadata<MediaDetail>(key);
+  if (stored && Date.now() - stored.at < 20_000) return;
+  const keys = [key];
+  const patterns: string[] = [];
+  if (id.startsWith('anilist:')) {
+    const root = stored?.value.video?.seasons?.[0]?.anilistId ?? Number(id.slice(8));
+    keys.push(`anime-franchise:v5:${root}`, `anime-node:${root}`);
+    for (const s of stored?.value.video?.seasons ?? [])
+      if (s.anilistId) keys.push(`anime-node:${s.anilistId}`);
+  }
+  const tmdb = /^tmdb(tv|movie):(\d+)$/.exec(id);
+  if (tmdb) {
+    const path = `tmdb:/${tmdb[1] === 'tv' ? 'tv' : 'movie'}/${tmdb[2]}`;
+    patterns.push(`${path}?%`, `${path}/%`);
+  }
+  db().transaction(() => {
+    const outdated = statement('UPDATE metadata_cache SET updated_at=0,attempted_at=0 WHERE key=?');
+    for (const k of new Set(keys)) outdated.run(k);
+    const like = statement(
+      'UPDATE metadata_cache SET updated_at=0,attempted_at=0 WHERE key LIKE ?',
+    );
+    for (const p of patterns) like.run(p);
+  })();
+  // Starts the rebuild (the stored sheet stays shown meanwhile).
+  await mediaDetail(id);
 }
 
 export async function suwayomiDetail(id: number, signal?: AbortSignal): Promise<MediaDetail> {

@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check, RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import type {
   AnimeSeason,
@@ -34,6 +34,8 @@ export function EpisodeList({
   entry,
   busy,
   onWatched,
+  onRefresh,
+  refreshing = false,
 }: {
   /** Work title (shown in the player). */
   title: string;
@@ -52,8 +54,33 @@ export function EpisodeList({
   busy: boolean;
   /** New number of episodes watched (null = none). */
   onWatched: (watched: number | null) => void;
+  /** Load the episodes again (an episode just aired, a season was announced). */
+  onRefresh?: () => Promise<void>;
+  /** The sheet is being rebuilt. */
+  refreshing?: boolean;
 }) {
   const { t, n, locale } = useI18n();
+  // Spins from the click until the rebuilt sheet arrives.
+  const [asked, setAsked] = useState<'no' | 'sending' | 'sent'>('no');
+  const spinning = asked === 'sending' || (asked === 'sent' && refreshing);
+  const refreshButton = onRefresh && (
+    <button
+      type="button"
+      disabled={spinning}
+      onClick={() => {
+        setAsked('sending');
+        onRefresh().then(
+          () => setAsked('sent'),
+          () => setAsked('no'),
+        );
+      }}
+      aria-label={t('episodes.refresh')}
+      title={t('episodes.refresh')}
+      className="text-mid grid size-9 place-items-center rounded-full bg-white/[0.06] hover:text-white disabled:opacity-60"
+    >
+      <RefreshCw size={15} aria-hidden className={cx(spinning && 'animate-spin')} />
+    </button>
+  );
   // One work, several seasons: episodes are numbered per season, progress across the work.
   const seasons: AnimeSeason[] = video.seasons?.length
     ? video.seasons
@@ -266,14 +293,17 @@ export function EpisodeList({
     return (
       <div className="flex flex-col">
         {tabs}
-        <p className="text-muted py-6 font-serif text-xl italic">
-          {season.nextEpisode
-            ? t('episodes.nextOn', {
-                n: n(season.nextEpisode.number),
-                date: date.format(new Date(season.nextEpisode.airingAt)),
-              })
-            : t('episodes.none')}
-        </p>
+        <div className="flex items-center gap-3 py-6">
+          <p className="text-muted font-serif text-xl italic">
+            {season.nextEpisode
+              ? t('episodes.nextOn', {
+                  n: n(season.nextEpisode.number),
+                  date: date.format(new Date(season.nextEpisode.airingAt)),
+                })
+              : t('episodes.none')}
+          </p>
+          {refreshButton}
+        </div>
       </div>
     );
   return (
@@ -318,6 +348,7 @@ export function EpisodeList({
         >
           {newestFirst ? t('episodes.oldestFirst') : t('episodes.newestFirst')}
         </button>
+        {refreshButton}
       </div>
       {/* A grid of episode cards; a few rows show, the rest scrolls inside the panel. */}
       <ul className="grid max-h-[620px] grid-cols-2 gap-3 overflow-y-auto pt-4 pr-1 sm:grid-cols-3 xl:grid-cols-4">
