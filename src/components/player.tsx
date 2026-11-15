@@ -85,28 +85,32 @@ function sendMetrics(
   }).catch(() => undefined);
 }
 export const streamsPath = (episode: PlayerEpisode, language: string) =>
-  episode.seasonAnilistId
-    ? `/api/video/streams?anilist=${episode.seasonAnilistId}&episode=${episode.episode}&lang=${language}`
-    : episode.imdb && (episode.imdb.id || episode.imdb.tmdb)
-      ? `/api/video/streams?${new URLSearchParams({
-          ...(episode.imdb.id ? { imdb: episode.imdb.id } : {}),
-          ...(episode.imdb.tmdb ? { tmdb: String(episode.imdb.tmdb) } : {}),
-          ...(episode.imdb.season !== null
-            ? { season: String(episode.imdb.season), episode: String(episode.episode) }
-            : {}),
-          lang: language,
-        }).toString()}`
-      : null;
+  episode.streamsUrl
+    ? `${episode.streamsUrl}${episode.streamsUrl.includes('?') ? '&' : '?'}lang=${language}`
+    : episode.seasonAnilistId
+      ? `/api/video/streams?anilist=${episode.seasonAnilistId}&episode=${episode.episode}&lang=${language}`
+      : episode.imdb && (episode.imdb.id || episode.imdb.tmdb)
+        ? `/api/video/streams?${new URLSearchParams({
+            ...(episode.imdb.id ? { imdb: episode.imdb.id } : {}),
+            ...(episode.imdb.tmdb ? { tmdb: String(episode.imdb.tmdb) } : {}),
+            ...(episode.imdb.season !== null
+              ? { season: String(episode.imdb.season), episode: String(episode.episode) }
+              : {}),
+            lang: language,
+          }).toString()}`
+        : null;
 
 /** Key of an episode's saved position (`anilist:21:3`, `tt0944947:1:2`, `tmdb:550`). */
 export const positionKey = (e: PlayerEpisode) =>
-  e.seasonAnilistId
-    ? `anilist:${e.seasonAnilistId}:${e.episode}`
-    : e.imdb && (e.imdb.id || e.imdb.tmdb)
-      ? `${e.imdb.id ?? `tmdb:${e.imdb.tmdb}`}${
-          e.imdb.season !== null ? `:${e.imdb.season}:${e.episode}` : ''
-        }`
-      : null;
+  e.streamsUrl
+    ? `ext:${e.streamsUrl}`
+    : e.seasonAnilistId
+      ? `anilist:${e.seasonAnilistId}:${e.episode}`
+      : e.imdb && (e.imdb.id || e.imdb.tmdb)
+        ? `${e.imdb.id ?? `tmdb:${e.imdb.tmdb}`}${
+            e.imdb.season !== null ? `:${e.imdb.season}:${e.episode}` : ''
+          }`
+        : null;
 
 export interface PlayerEpisode {
   /** Work title, e.g. "Jujutsu Kaisen". */
@@ -120,6 +124,8 @@ export interface PlayerEpisode {
    * the episode (null for a film).
    */
   imdb?: { id: string | null; tmdb?: number | null; season: number | null } | null;
+  /** Streams endpoint for a generic catalog work (video extension); overrides the id lookups. */
+  streamsUrl?: string | null;
   /** Episode number inside its season. */
   episode: number;
   /** Jellyfin item of this episode, when the library has it. */
@@ -652,8 +658,7 @@ function Screen({
   // language): fall back to a subtitle extension's track in the interface language.
   // Dubbed/multi streams keep subtitles off by default.
   const embeddedInLanguage =
-    source.kind === 'stream' &&
-    source.stream.subtitles.some((s) => s.lang === language);
+    source.kind === 'stream' && source.stream.subtitles.some((s) => s.lang === language);
   const wantsDefaultSubtitle =
     source.kind === 'stream' &&
     (!source.stream.preferred || (source.stream.version === 'sub' && !embeddedInLanguage));

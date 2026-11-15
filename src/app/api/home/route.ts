@@ -10,7 +10,15 @@ const kind = z.enum(KIND_IDS).optional();
 /** `?kind=` limits the home to one universe (and loads only it). */
 export const GET = route(async (r) => {
   const feed = await homeFeed(kind.parse(new URL(r.url).searchParams.get('kind') ?? undefined));
-  // The weekly top shows anime works, not one card per season.
-  const top = withTracking(await groupAnimeSeasons(feed.top, r.signal));
+  // The weekly top shows anime works, not one card per season. Generic extension works keep
+  // their own sheet.
+  const extension = feed.top.filter((m) => m.providers.includes('extension'));
+  const top = withTracking([
+    ...(await groupAnimeSeasons(
+      feed.top.filter((m) => !m.providers.includes('extension')),
+      r.signal,
+    )),
+    ...extension,
+  ]);
   return json({ ...feed, top });
 });

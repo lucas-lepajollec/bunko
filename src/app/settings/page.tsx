@@ -26,7 +26,13 @@ import type {
 import { PERMISSIONS } from '@/types/shared';
 import type { ArrOptions, JellyfinLibrary, JellyfinRole } from '@/types/shared';
 import { UNIVERSES } from '@/lib/client/universe';
-import { KIND_IDS, KINDS as KIND_DEFS, completeKindOrder, isVideoKind } from '@/domain/kinds';
+import {
+  KIND_IDS,
+  KINDS as KIND_DEFS,
+  completeKindOrder,
+  isVideoKind,
+  kindVisible,
+} from '@/domain/kinds';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -1819,6 +1825,14 @@ function UniverseSettings() {
   const data = settings.data;
   const enabled = data?.universes?.length ? data.universes : UNIVERSES;
   const order = completeKindOrder(data?.kindOrder);
+  // Adult-only kinds (the generic extension catalog) are only offered when they can be shown.
+  const visibleOrder = order.filter((k) =>
+    kindVisible(k, {
+      adultContent: data?.adultContent,
+      adultMode: data?.adultMode,
+      extensionCatalog: data?.extensionCatalog,
+    }),
+  );
   async function save(patch: Partial<Settings>) {
     try {
       await send('/api/settings', 'PATCH', patch);
@@ -1835,13 +1849,15 @@ function UniverseSettings() {
         className="flex flex-col overflow-hidden rounded-2xl bg-white/[0.04]"
         aria-label={t('universe.settingsTitle')}
       >
-        {order.map((k, i) => {
+        {visibleOrder.map((k, i) => {
           const on = enabled.includes(k);
           const name = t(`kind.${k}`);
           const move = (to: number) => {
+            const target = visibleOrder[to];
+            if (!target) return;
             const next = [...order];
-            next.splice(i, 1);
-            next.splice(to, 0, k);
+            next.splice(next.indexOf(k), 1);
+            next.splice(next.indexOf(target), 0, k);
             void save({ kindOrder: next });
           };
           return (
@@ -1862,7 +1878,7 @@ function UniverseSettings() {
               </button>
               <button
                 type="button"
-                disabled={!data || i === order.length - 1}
+                disabled={!data || i === visibleOrder.length - 1}
                 onClick={() => move(i + 1)}
                 aria-label={t('universe.moveDown', { name })}
                 className="text-mid flex size-9 items-center justify-center rounded-full hover:bg-white/[0.07] hover:text-white disabled:opacity-25"

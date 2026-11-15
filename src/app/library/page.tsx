@@ -343,23 +343,33 @@ function Library() {
           role="group"
           aria-label={t('catalog.kind')}
         >
-          {(['all', ...byKindOrder(KIND_IDS, universe.order)] as Kind[]).map((k) => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={kind === k}
-              onClick={() => setKind(k)}
-              className={cx(
-                'h-[34px] shrink-0 rounded-full px-3.5',
-                kind === k ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
-              )}
-            >
-              {t(`kind.${k}`)}
-              {k !== 'all' && (kindCounts.get(k) ?? 0) > 0 && (
-                <span className="text-muted ml-1.5 font-serif italic">{n(kindCounts.get(k)!)}</span>
-              )}
-            </button>
-          ))}
+          {[
+            'all',
+            ...byKindOrder(
+              KIND_IDS.filter((k) => universe.visible(k)),
+              universe.order,
+            ),
+          ]
+            .map((k) => k as Kind)
+            .map((k) => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={kind === k}
+                onClick={() => setKind(k)}
+                className={cx(
+                  'h-[34px] shrink-0 rounded-full px-3.5',
+                  kind === k ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
+                )}
+              >
+                {t(`kind.${k}`)}
+                {k !== 'all' && (kindCounts.get(k) ?? 0) > 0 && (
+                  <span className="text-muted ml-1.5 font-serif italic">
+                    {n(kindCounts.get(k)!)}
+                  </span>
+                )}
+              </button>
+            ))}
         </div>
       )}
       {shownShelf === 'updates' ? (

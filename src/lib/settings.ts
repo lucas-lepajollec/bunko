@@ -13,6 +13,7 @@ import { currentUser } from './user-context';
 import { requireAdmin } from './auth';
 import { catalogSettingKeys, type CatalogSetting } from '@/types/shared';
 import { KIND_IDS, completeKindOrder } from '@/domain/kinds';
+import { extensionCatalogAvailable, resetExtensionCatalogs } from './extension-catalog-state';
 import { createHash } from 'node:crypto';
 import type {
   DiscoverKind,
@@ -40,7 +41,7 @@ export const secretKeys: SecretSetting[] = [
   'hardcoverToken',
 ];
 // Kinds added after users had chosen their kind list: they start enabled for those users.
-const LATER_KINDS: Exclude<DiscoverKind, 'all'>[] = ['series', 'movies', 'animation'];
+const LATER_KINDS: Exclude<DiscoverKind, 'all'>[] = ['series', 'movies', 'animation', 'extensions'];
 const ALL_KINDS: Exclude<DiscoverKind, 'all'>[] = [...KIND_IDS];
 export function persistentSecret(name: string, bytes: number): Buffer {
   if (!['access.token', 'settings.key'].includes(name))
@@ -218,6 +219,7 @@ export function publicSettings(): PublicSettings {
   return {
     ...safe,
     secretsConfigured,
+    extensionCatalog: extensionCatalogAvailable(),
     catalogs: {
       canManage,
       configured: {
@@ -315,6 +317,9 @@ export function updateSettings(patch: SettingsPatch) {
       if (shared.length) writeCatalogSettings(accountsDb(), sharedRows);
     })();
   });
+  // Extension catalog availability belongs to the configured addresses and the 18+ choice.
+  if (patch.videoAddons !== undefined || patch.adultContent === false || patch.adultMode === false)
+    resetExtensionCatalogs();
   wakeWorker();
   return publicSettings();
 }

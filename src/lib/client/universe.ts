@@ -9,7 +9,9 @@ import {
   byKindOrder,
   completeKindOrder,
   kindOfMedia,
+  kindVisible,
   type Kind,
+  type KindVisibility,
 } from '@/domain/kinds';
 
 export type Universe = Kind;
@@ -31,8 +33,14 @@ export function useUniverse() {
   const data = settings.data;
   // Enabled kinds in the user's priority order (the switcher, menus and home shelves use it).
   const order = completeKindOrder(data?.kindOrder);
+  const visibility: KindVisibility = {
+    adultContent: data?.adultContent,
+    adultMode: data?.adultMode,
+    extensionCatalog: data?.extensionCatalog,
+  };
+  const visible = (kind: DiscoverKind) => kindVisible(kind, visibility);
   const enabled: Universe[] = byKindOrder(
-    data?.universes?.length ? data.universes : UNIVERSES,
+    (data?.universes?.length ? data.universes : UNIVERSES).filter(visible),
     order,
   );
   const allowAll = data?.showAllUniverse ?? true;
@@ -62,6 +70,8 @@ export function useUniverse() {
     active,
     enabled,
     order,
+    visible,
+    visibility,
     tmdb,
     allowAll,
     adultAllowed,

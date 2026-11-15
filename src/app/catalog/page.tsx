@@ -43,9 +43,11 @@ function Catalog() {
   const pathname = usePathname();
   const universe = useUniverse();
   // The kind menu opens on the current universe; another kind chosen here stays in the address.
-  const kind = (
+  const requested = (
     KINDS.includes(params.get('kind') as DiscoverKind) ? params.get('kind') : universe.active
   ) as DiscoverKind;
+  // Adult-only kinds (the generic extension catalog) never load outside their mode.
+  const kind = requested === 'all' || universe.visible(requested) ? requested : universe.active;
   const sort = (
     SORTS.includes(params.get('sort') as DiscoverSort) ? params.get('sort') : 'trending'
   ) as DiscoverSort;
@@ -72,7 +74,11 @@ function Catalog() {
   const tmdbKind = kind !== 'all' && KIND_DEFS[kind].requires === 'tmdb';
   const settings = useApi<PublicSettings>('/api/settings');
   // Search the media type of the universe on screen (AniList searches manga unless told).
-  const searched = useProgressiveSearch(q, searchTypeOf(kind));
+  const searched = useProgressiveSearch(
+    q,
+    searchTypeOf(kind),
+    kind === 'extensions' ? 'extensions' : undefined,
+  );
   const set = (key: string, value: string, extra?: Record<string, string>) => {
     const next = new URLSearchParams(params);
     for (const [k, v] of Object.entries({ [key]: value, ...extra })) {

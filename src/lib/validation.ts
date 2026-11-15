@@ -56,7 +56,7 @@ export const selection = z.object({
 export const media = z.object({
   adult: z.boolean().optional(),
   adultOverride: z.boolean().nullable().optional(),
-  id: z.string().min(1).max(300),
+  id: z.string().min(1).max(800),
   type: mediaType,
   title: z.string().min(1).max(500),
   altTitles: z.array(text).max(200),
@@ -74,7 +74,9 @@ export const media = z.object({
   episodes: z.number().nonnegative().nullable(),
   webUrl: nullableUrl,
   providers: z
-    .array(z.enum(['anilist', 'mangadex', 'mangaupdates', 'local', 'kavita', 'tmdb']))
+    .array(
+      z.enum(['anilist', 'mangadex', 'mangaupdates', 'local', 'kavita', 'tmdb', 'extension']),
+    )
     .max(5),
   sources: z
     .array(
@@ -137,9 +139,9 @@ export const media = z.object({
 });
 export const mediaId = z
   .string()
-  .max(80)
+  .max(800)
   .regex(
-    /^(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary|googlebooks|bnf|metron|hardcover|rakuten|jellyfin|tmdbtv|tmdbmovie):[0-9a-zA-Z_-]+$/,
+    /^(?:(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary|googlebooks|bnf|metron|hardcover|rakuten|jellyfin|tmdbtv|tmdbmovie):[0-9a-zA-Z_-]+|ext:[0-9a-f]{12}:[A-Za-z0-9_-]+)$/,
     'Unknown media identifier',
   );
 export const adultOverrideBody = z.object({
@@ -200,6 +202,8 @@ export const discoverQuery = z
 export const searchParams = z.object({
   q: z.string().trim().min(1).max(200),
   type: searchType.optional(),
+  /** Search the generic extension catalog instead of the usual providers. */
+  kind: z.literal('extensions').optional(),
   fast: z.literal('1').optional(),
 });
 export const settingsPatch = z
