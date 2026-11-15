@@ -4,6 +4,7 @@ import { heroArtwork } from './hero-artwork';
 import type { ChapterRelease, DiscoverKind, HomeFeed } from '@/types/shared';
 import { releaseStore, refreshReleases, mediaKind, releaseLoadingState } from './releases';
 import { discover, discoverAniList, withTracking } from './catalog';
+import { extensionCatalogPage, extensionReleases } from './extension-catalog';
 import { cached, storedMetadata, metadataStatus } from './metadata-cache';
 import { mediaVisibility, adultKey } from './adult';
 import { tenantState } from './tenant-context';
@@ -88,7 +89,63 @@ function mixScope() {
   const custom = universes.length || kindOrder.join() !== KIND_IDS.join();
   return custom ? `:${universes.join(',')}:${kindOrder.join(',')}` : '';
 }
+/** Fewer than eight recent releases with artwork: trending titles fill the rest of the hero. */
+function fillHero(home: HomeFeed): HomeFeed {
+  if (home.hero.length >= 8) return home;
+  const shown = new Set(home.hero.map((r) => r.media.id));
+  const fill = (m: (typeof home.top)[number]) => {
+    const tmdb = m.id.startsWith('tmdb:');
+    return {
+      id: `top:${m.id}`,
+      media: m,
+      chapter: null,
+      volume: null,
+      label: '',
+      group: null,
+      releasedAt: m.startDate ?? new Date().toISOString().slice(0, 10),
+      hasTime: false,
+      provider: tmdb
+        ? ('tmdb' as const)
+        : m.providers.includes('extension')
+          ? ('extension' as const)
+          : ('anilist' as const),
+      trackedId: m.trackedId ?? null,
+      featured: true as const,
+    };
+  };
+  const candidates = home.top.filter((m) => !shown.has(m.id) && (m.bannerUrl || m.coverUrl));
+  return {
+    ...home,
+    hero: [
+      ...home.hero,
+      // Wide artwork first: it fills the stage best.
+      ...[...candidates.filter((m) => m.bannerUrl), ...candidates.filter((m) => !m.bannerUrl)]
+        .slice(0, 8 - home.hero.length)
+        .map(fill),
+    ],
+  };
+}
+/** The generic extension catalog has no persisted home: everything is read in memory. */
+async function extensionHome(): Promise<HomeFeed> {
+  const settings = getSettings();
+  if (!settings.adultContent || !settings.adultMode)
+    return normalizeHome(composeHome([], [], 'extensions'));
+  const page = await extensionCatalogPage(
+    'extensions',
+    { kind: 'extensions', sort: 'trending' },
+    1,
+  );
+  const releases = await extensionReleases(new Date(Date.now() - 30 * 86400_000), new Date()).catch(
+    () => [],
+  );
+  const home = fillHero(
+    normalizeHome(composeHome(heroArtwork(releases), page.items, 'extensions')),
+  );
+  return { ...home, pending: page.pending };
+}
 export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<HomeFeed> {
+  // No metadata_cache entry is written for extension catalog works.
+  if (kind === 'extensions') return extensionHome();
   const video = isVideoKind(kind);
   // Reading releases are not video: those homes never start their ingestion.
   if (!video) void refreshReleases().catch(() => {});
@@ -117,6 +174,7 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
                   discoverQuery.parse({ sort: 'trending', kind: 'all', perPage: '8' }),
                   undefined,
                   true,
+                  false,
                 )
               : discoverAniList(
                   { sort: 'trending', kind: kind ?? 'all', perPage: 20 },
@@ -157,39 +215,23 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
           new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
         ])
       : [];
-  const pool = [...reading, ...episodes, ...tmdbWeek].filter(
+  const settings = getSettings();
+  const extensionOn =
+    !kind &&
+    settings.adultContent &&
+    settings.adultMode &&
+    (!enabled.length || enabled.includes('extensions'));
+  // Extension releases are read in memory; a slow extension never holds the home feed.
+  const extensionWeek = extensionOn
+    ? await Promise.race([
+        extensionReleases(new Date(Date.now() - 7 * 86400_000), new Date()).catch(() => []),
+        new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
+      ])
+    : [];
+  const pool = [...reading, ...episodes, ...tmdbWeek, ...extensionWeek].filter(
     (r) => !kind || mediaKind(r.media) === kind,
   );
-  const home = normalizeHome(composeHome(heroArtwork(pool), top, kind));
-  // Fewer than eight recent releases with artwork: releases stay first and the kind's (or the
-  // mix's) trending titles fill the rest, so the hero never shows one lonely title.
-  if (home.hero.length < 8) {
-    const shown = new Set(home.hero.map((r) => r.media.id));
-    const fill = (m: (typeof home.top)[number]) => {
-      const tmdb = m.id.startsWith('tmdb:');
-      return {
-        id: `top:${m.id}`,
-        media: m,
-        chapter: null,
-        volume: null,
-        label: '',
-        group: null,
-        releasedAt: m.startDate ?? new Date().toISOString().slice(0, 10),
-        hasTime: false,
-        provider: tmdb ? ('tmdb' as const) : ('anilist' as const),
-        trackedId: m.trackedId ?? null,
-        featured: true as const,
-      };
-    };
-    const candidates = home.top.filter((m) => !shown.has(m.id) && (m.bannerUrl || m.coverUrl));
-    home.hero = [
-      ...home.hero,
-      // Wide artwork first: it fills the stage best.
-      ...[...candidates.filter((m) => m.bannerUrl), ...candidates.filter((m) => !m.bannerUrl)]
-        .slice(0, 8 - home.hero.length)
-        .map(fill),
-    ];
-  }
+  const home = fillHero(normalizeHome(composeHome(heroArtwork(pool), top, kind)));
   return {
     ...home,
     pending: releases.pending || ranking.pending,

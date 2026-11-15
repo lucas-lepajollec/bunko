@@ -19,9 +19,9 @@ export interface KindDef {
   /** What provider searches are asked for this kind. */
   search: SearchType;
   /** Where the catalog of this kind comes from. */
-  catalog: 'anilist' | 'aggregate' | 'tmdb' | 'anilist+tmdb';
+  catalog: 'anilist' | 'aggregate' | 'tmdb' | 'anilist+tmdb' | 'extension';
   /** Where its latest releases come from. */
-  releases: 'reading' | 'anilist' | 'tmdb';
+  releases: 'reading' | 'anilist' | 'tmdb' | 'extension';
   /** What one step of progress is. */
   unit: 'chapter' | 'episode' | 'film';
   /** Reading sources (Suwayomi extensions) apply. */
@@ -30,6 +30,8 @@ export interface KindDef {
   datedReleases: boolean;
   /** A provider key the kind cannot work without. */
   requires?: 'tmdb';
+  /** Only offered while the whole interface is in the account's 18+ only mode. */
+  adultOnly?: boolean;
 }
 
 /** Display and iteration order (menus, chips, homes). */
@@ -46,6 +48,7 @@ export const KIND_IDS = [
   'series',
   'movies',
   'animation',
+  'extensions',
 ] as const satisfies readonly Kind[];
 
 const reading = (formats: readonly MediaFormat[], extra: Partial<KindDef> = {}): KindDef => ({
@@ -118,7 +121,47 @@ export const KINDS: Record<Kind, KindDef> = {
     sources: false,
     datedReleases: true,
   },
+  extensions: {
+    family: 'video',
+    mediaType: 'ANIME',
+    formats: [],
+    search: 'MOVIE',
+    catalog: 'extension',
+    releases: 'extension',
+    unit: 'film',
+    sources: false,
+    datedReleases: true,
+    adultOnly: true,
+  },
 };
+
+/** Account facts that decide whether a kind may appear anywhere in the interface. */
+export interface KindVisibility {
+  adultContent?: boolean;
+  adultMode?: boolean;
+  /** At least one configured video extension exposes a catalog of type `extvideo`. */
+  extensionCatalog?: boolean;
+}
+/**
+ * The kinds a menu, order or filter may offer. Adult-only kinds need the whole interface in the
+ * account's full 18+ mode; the generic extension catalog also needs an extension that provides it.
+ */
+export function kindVisible(
+  kind: DiscoverKind | null | undefined,
+  settings: KindVisibility,
+): boolean {
+  if (!kind || kind === 'all') return true;
+  const def = KINDS[kind];
+  if (!def.adultOnly) return true;
+  if (!settings.adultContent || !settings.adultMode) return false;
+  return kind !== 'extensions' || Boolean(settings.extensionCatalog);
+}
+export function availableKinds<T extends DiscoverKind>(
+  kinds: readonly T[],
+  settings: KindVisibility,
+): T[] {
+  return kinds.filter((kind) => kindVisible(kind, settings));
+}
 
 export const isKind = (value: unknown): value is Kind =>
   typeof value === 'string' && (KIND_IDS as readonly string[]).includes(value);

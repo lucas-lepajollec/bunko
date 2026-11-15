@@ -142,6 +142,8 @@ export function EpisodeList({
   const episodeFor = (at: { season: number; episode: number }): PlayerEpisode => {
     const s = seasons[at.season];
     const jf = jellyfinSeason(s, jellyfin);
+    // Generic extension catalog work: its own streams endpoint replaces id-based lookups.
+    const extension = media?.id.startsWith('ext:') ?? false;
     return {
       title,
       label: film
@@ -152,15 +154,21 @@ export function EpisodeList({
               n: n((s.partOffset ?? 0) + at.episode),
             })
           : t('episodes.short', { n: n(at.episode) }),
-      seasonAnilistId: s.anilistId ?? anilistId,
-      imdb:
-        video.ids?.imdb || video.ids?.tmdb
+      seasonAnilistId: extension ? null : (s.anilistId ?? anilistId),
+      imdb: extension
+        ? null
+        : video.ids?.imdb || video.ids?.tmdb
           ? {
               id: video.ids.imdb ?? null,
               tmdb: video.ids.tmdb ?? null,
               season: video.ids.kind === 'movie' ? null : (s.tmdbSeason ?? s.number),
             }
           : null,
+      ...(extension && media
+        ? {
+            streamsUrl: `/api/video/streams?ext=${encodeURIComponent(media.id)}&episode=${at.episode}`,
+          }
+        : {}),
       episode: at.episode,
       jellyfinItemId: jf?.episodeIds[at.episode] ?? null,
       ...(media

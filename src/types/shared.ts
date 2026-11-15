@@ -1,7 +1,15 @@
 /** Browser-safe API contract. No database/server imports in this file. */
 export type MediaType = 'MANGA' | 'NOVEL' | 'ANIME';
 /** `kavita` = a series known only from Kavita (no catalog match). */
-export type Provider = 'anilist' | 'mangadex' | 'mangaupdates' | 'local' | 'kavita' | 'tmdb';
+export type Provider =
+  | 'anilist'
+  | 'mangadex'
+  | 'mangaupdates'
+  | 'local'
+  | 'kavita'
+  | 'tmdb'
+  /** A work offered by a configured video extension's own catalog. */
+  | 'extension';
 /** Reading format derived from provider format and country of origin. */
 export type MediaFormat =
   | 'MANGA'
@@ -313,6 +321,8 @@ export interface MediaDetail extends UnifiedMedia, LoadState {
   /** Series and films: main cast (TMDB credits); directors/creators are in `authors`. */
   credits?: { cast: string[] };
   video?: VideoDetail;
+  /** A work from a video extension catalog: the type its own metadata declares. */
+  extension?: { type: 'movie' | 'series' };
   jellyfin?: JellyfinPresence | null;
   /** This id is a later season of another work: the client opens that work instead. */
   workOf?: { id: string; season: number };
@@ -334,7 +344,8 @@ export type DiscoverKind =
   | 'anime'
   | 'series'
   | 'movies'
-  | 'animation';
+  | 'animation'
+  | 'extensions';
 /** "new" = most recent publication start first, never future or undated titles. */
 export type DiscoverSort = 'trending' | 'popular' | 'score' | 'new';
 /** Quarter-based seasons, AniList convention: WINTER Jan–Mar, SPRING Apr–Jun, SUMMER Jul–Sep, FALL Oct–Dec. */
@@ -399,7 +410,8 @@ export interface ChapterRelease {
     | 'metron'
     | 'rakuten'
     | 'anilist'
-    | 'tmdb';
+    | 'tmdb'
+    | 'extension';
   /** `volume` = a new tome/edition (books, LN volumes, BD albums); `episode` = an episode airing;
    *  `film` = a film released. */
   unit?: 'chapter' | 'volume' | 'episode' | 'film';
@@ -787,6 +799,8 @@ export type PublicSettings = Omit<Settings, SecretSetting> & {
   secretsConfigured: Record<SecretSetting, boolean>;
   /** Shared availability is visible to members; credential changes/probes require an admin. */
   catalogs: { canManage: boolean; configured: Record<CatalogProvider, boolean> };
+  /** At least one configured video extension exposes a catalog of type `extvideo`. */
+  extensionCatalog: boolean;
 };
 export type CatalogProvider = 'googlebooks' | 'metron' | 'rakuten' | 'hardcover' | 'tmdb';
 export const catalogSettingKeys = [

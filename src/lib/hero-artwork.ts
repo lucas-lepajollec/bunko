@@ -50,7 +50,8 @@ export function heroArtwork(items: ChapterRelease[]): ChapterRelease[] {
         .map((r) => [r.media.id, r.media]),
     ).values(),
   ]
-    .filter((m) => !m.bannerUrl)
+    // Extension catalog works keep their own runtime artwork: never looked up or persisted.
+    .filter((m) => !m.bannerUrl && !m.providers.includes('extension'))
     .slice(0, 12);
   if (!candidates.length) return items;
   const tenantKey = dataDir();

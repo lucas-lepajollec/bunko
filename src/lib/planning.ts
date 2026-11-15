@@ -9,6 +9,7 @@ import {
   refreshReleases,
   releaseLoadingState,
 } from './releases';
+import { extensionReleases } from './extension-catalog';
 export function localDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
@@ -231,6 +232,53 @@ export async function withAnimeAiring(
  * Series episodes and film releases of the week (TMDB): followed series episode by episode,
  * shows on the air, films out that week. Bounded wait; the cache fills for the next look.
  */
+/**
+ * Generic extension catalog items whose own metadata carries a release date that week. Items
+ * without a real date contribute nothing (never an invented date).
+ */
+export async function withExtensionReleases(
+  week: PlanningWeek,
+  q: z.infer<typeof planningQuery>,
+): Promise<PlanningWeek> {
+  const kind = q.kind ?? 'all';
+  if (!['all', 'extensions'].includes(kind)) return week;
+  const from = dateFromDay(week.start);
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(from);
+  to.setDate(to.getDate() + 7);
+  const releases = await Promise.race([
+    extensionReleases(from, to).catch(() => []),
+    new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
+  ]);
+  const wanted = q.library ? releases.filter((r) => r.trackedId !== null) : releases;
+  if (!wanted.length) return week;
+  const today = localDate(new Date());
+  const days = week.days.map((d) => ({ ...d, items: [...d.items] }));
+  const byDay = new Map(days.map((d) => [d.date, d]));
+  for (const r of wanted) {
+    const day = byDay.get(r.releasedAt.slice(0, 10));
+    if (!day) continue;
+    day.items.push({
+      media: r.media,
+      kind: r.releasedAt.slice(0, 10) <= today ? 'released' : 'expected',
+      chapter: r.chapter,
+      season: r.season ?? null,
+      unit: 'episode',
+      time: null,
+      trackedId: r.trackedId,
+    });
+  }
+  for (const day of days) {
+    day.items = groupDay(day.items);
+    day.items.sort(
+      (a, b) =>
+        (a.time ?? '99:99').localeCompare(b.time ?? '99:99') ||
+        a.media.title.localeCompare(b.media.title),
+    );
+  }
+  return { ...week, days };
+}
+
 export async function withTmdbReleases(
   week: PlanningWeek,
   q: z.infer<typeof planningQuery>,

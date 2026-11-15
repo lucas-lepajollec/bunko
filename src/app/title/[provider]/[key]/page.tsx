@@ -149,11 +149,13 @@ function Title({
   const [busy, setBusy] = useState(false);
   const isComic = media.type === 'MANGA';
   const video = media.type === 'ANIME' ? media.video : undefined;
+  const extension = media.providers.includes('extension');
   // A film (live action or animated) is watched, not browsed by episode.
   const filmSheet =
     media.format === 'MOVIE' ||
     media.format === 'ANIMATION_FILM' ||
-    media.video?.ids?.kind === 'movie';
+    media.video?.ids?.kind === 'movie' ||
+    media.extension?.type === 'movie';
   const seasonParam = Number(useSearchParams().get('season')) || undefined;
   const fromDetail: ChapterSelection[] = media.sources.map((s) => ({
     suwayomiMangaId: s.suwayomiMangaId,
@@ -727,7 +729,7 @@ function Title({
                   entry={entry}
                   busy={false}
                   onWatched={(w) => void setWatched(w)}
-                  onRefresh={filmSheet ? undefined : onRefresh}
+                  onRefresh={extension || filmSheet ? undefined : onRefresh}
                   refreshing={media.pending}
                 />
               </>

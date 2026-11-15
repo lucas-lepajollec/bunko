@@ -73,6 +73,7 @@ it('loads an unversioned old-shaped home cache with every current shelf and arra
     'anime',
     'book',
     'comic',
+    'extensions',
     'lightnovel',
     'manga',
     'manhua',

@@ -57,5 +57,11 @@ export const GET = route(async (r) => {
   // Anime are listed as works: a trending later season shows its whole work once.
   // Anime are listed as works (seasons grouped); other kinds are returned as is.
   if (q.kind && q.kind !== 'all' && KINDS[q.kind].releases !== 'anilist') return json(page);
-  return json({ ...page, items: withTracking(await groupAnimeSeasons(page.items, r.signal)) });
+  // Generic extension works keep their own sheet: never regrouped into an AniList work.
+  const extension = page.items.filter((m) => m.providers.includes('extension'));
+  const grouped = await groupAnimeSeasons(
+    page.items.filter((m) => !m.providers.includes('extension')),
+    r.signal,
+  );
+  return json({ ...page, items: withTracking([...grouped, ...extension]) });
 });

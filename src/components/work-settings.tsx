@@ -198,7 +198,11 @@ export function GeneralTab({
                   kind: t(`kind.${kindOfMedia({ ...entry.media, kindOverride: undefined })}`),
                 }),
               },
-              ...KIND_IDS.filter((k) => KINDS[k].mediaType === entry.type).map((k) => ({
+              ...KIND_IDS.filter(
+                (k) =>
+                  KINDS[k].mediaType === entry.type &&
+                  (KINDS[k].catalog !== 'extension' || entry.media.providers.includes('extension')),
+              ).map((k) => ({
                 value: k,
                 label: t(`kind.${k}`),
               })),

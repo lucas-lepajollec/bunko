@@ -64,7 +64,8 @@ it('names every job in every language', () => {
 
 it('keeps the kind priority order the user saves', async () => {
   const { getSettings } = await import('@/lib/settings');
+  const { KIND_IDS } = await import('@/domain/kinds');
   updateSettings({ kindOrder: ['anime', 'comic'] });
   expect(getSettings().kindOrder.slice(0, 3)).toEqual(['anime', 'comic', 'manga']);
-  expect(getSettings().kindOrder).toHaveLength(12);
+  expect(getSettings().kindOrder).toHaveLength(KIND_IDS.length);
 });

@@ -1,5 +1,12 @@
 import { airedSince, naturalEpisode, rollAiring, seasonRef } from './anime-franchise';
-import { KINDS, KIND_IDS, byKindOrder, mixByKind, type Kind } from '@/domain/kinds';
+import { KINDS, KIND_IDS, availableKinds, byKindOrder, mixByKind, type Kind } from '@/domain/kinds';
+import {
+  clearExtensionCatalogCache,
+  extensionCatalogFilters,
+  extensionCatalogPage,
+  extensionDetail,
+} from './extension-catalog';
+import { extensionCatalogAddons } from './video-addons';
 import { rememberMediaPreview, mediaPreview } from './media-preview';
 import { deduplicate } from './search-engine';
 import { rakutenDetail } from './rakuten';
@@ -130,16 +137,25 @@ export async function discover(
   q: DiscoverQuery,
   signal?: AbortSignal,
   raw = false,
+  /** The mixed home stores its top in SQLite; extension catalog items stay in memory only. */
+  includeExtensions = true,
 ): Promise<DiscoverPage> {
   if (q.kind && q.kind !== 'all') return discoverLane(q, signal, raw);
   signal?.throwIfAborted();
   // "Everything": one lane per enabled kind, mixed kind by kind in the user's priority order, so
   // no kind (comics, novels…) floods the page and video kinds are part of it.
   const settings = getSettings();
+  // The generic extension catalog is read only in the account's full 18+ mode.
+  const extensionAddons =
+    includeExtensions && settings.adultContent && settings.adultMode
+      ? await extensionCatalogAddons(signal).catch(() => [])
+      : [];
+  const visibility = { ...settings, extensionCatalog: extensionAddons.length > 0 };
   const order = byKindOrder(
-    settings.universes.length ? settings.universes : [...KIND_IDS],
+    availableKinds(settings.universes.length ? settings.universes : [...KIND_IDS], visibility),
     settings.kindOrder,
   );
+  const extensionOn = includeExtensions && order.includes('extensions');
   // 18+ only: comics have no 18+ catalog (Metron does not rate works).
   const adultOnly = adultScope() === 'only';
   const on = (k: Kind) => order.includes(k) && (!adultOnly || k !== 'comic');
@@ -170,11 +186,31 @@ export async function discover(
     ...(on('comic') && metronConfigured() ? { comic: lane('comic') } : {}),
   };
   // Only kinds without a reachable catalog (series without TMDB…): an empty page, not an outage.
-  if (!Object.keys(providers).length) return { items: [], page: q.page ?? 1, hasNextPage: false };
+  if (!Object.keys(providers).length) {
+    if (extensionOn) return discoverLane({ ...q, kind: 'extensions' }, signal, raw);
+    return { items: [], page: q.page ?? 1, hasNextPage: false };
+  }
   const key = `discover:all:v3:${JSON.stringify(q)}:${order.join(',')}:${tmdb}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}:${adultKey()}:${metronScope()}:${credentialScope(settings.hardcoverToken)}`;
   const result = await discoverAll(key, q.page ?? 1, providers);
-  const items = mixByKind(result.items, order);
-  return { ...result, items: raw ? items : withTracking(items).filter(visibleMedia) };
+  // Extension catalog items are merged after the persisted lanes: their names and works never
+  // enter the SQLite metadata cache.
+  const extensionPage = extensionOn
+    ? await extensionCatalogPage('extensions', q, q.page ?? 1, signal)
+    : null;
+  const items = mixByKind([...result.items, ...(extensionPage?.items ?? [])], order);
+  return {
+    ...result,
+    items: raw ? items : withTracking(items).filter(visibleMedia),
+    ...(extensionPage
+      ? {
+          hasNextPage: result.hasNextPage || extensionPage.hasNextPage,
+          pending: Boolean(result.pending || extensionPage.pending),
+          ...(result.warnings?.length || extensionPage.warnings?.length
+            ? { warnings: [...(result.warnings ?? []), ...(extensionPage.warnings ?? [])] }
+            : {}),
+        }
+      : {}),
+  };
 }
 
 /** Interactive pages expose completed provider lanes while the others continue independently. */
@@ -183,7 +219,12 @@ export async function progressiveDiscover(
   signal?: AbortSignal,
 ): Promise<DiscoverPage> {
   signal?.throwIfAborted();
-  if (!q.kind || q.kind === 'all' || (q.kind === 'comic' && !metronConfigured()))
+  if (
+    !q.kind ||
+    q.kind === 'all' ||
+    q.kind === 'extensions' ||
+    (q.kind === 'comic' && !metronConfigured())
+  )
     return discover(q, signal);
   const providers =
     q.kind === 'novel' || q.kind === 'book'
@@ -250,6 +291,13 @@ async function discoverLane(
   }
   if (kind === 'comic') {
     const result = await discoverComics(q);
+    return {
+      ...result,
+      items: raw ? result.items : withTracking(result.items).filter(visibleMedia),
+    };
+  }
+  if (kind === 'extensions') {
+    const result = await extensionCatalogPage(kind, q, page, signal);
     return {
       ...result,
       items: raw ? result.items : withTracking(result.items).filter(visibleMedia),
@@ -406,6 +454,8 @@ export async function catalogFilters(
 ): Promise<CatalogFilters> {
   const scope = adultScope();
   const adult = scope !== 'off';
+  // Generic extension catalogs have no shared facets.
+  if (kind !== 'all' && KINDS[kind].catalog === 'extension') return extensionCatalogFilters();
   // Series and films: TMDB's own genres and keywords, its statuses and years.
   if (kind !== 'all' && KINDS[kind].catalog === 'tmdb') {
     const tv = KINDS[kind].search === 'TV';
@@ -732,6 +782,8 @@ export async function mediaDetail(
   signal?: AbortSignal,
   progressive = false,
 ): Promise<MediaDetail> {
+  // Extension catalog sheets stay in memory: never stored as durable catalog metadata.
+  if (id.startsWith('ext:')) return enrichDetail(await extensionDetail(id, signal));
   const followed = listTracked().find(
     (t) =>
       t.media.id === id ||
@@ -817,6 +869,10 @@ export async function mediaDetail(
  * stale sheet (the page follows `pending`). Kept when they are seconds old.
  */
 export async function refreshMediaDetail(id: string) {
+  if (id.startsWith('ext:')) {
+    clearExtensionCatalogCache();
+    return;
+  }
   const key = detailCacheKey(id);
   const stored = storedMetadata<MediaDetail>(key);
   if (stored && Date.now() - stored.at < 20_000) return;

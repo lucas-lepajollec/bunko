@@ -124,9 +124,13 @@ export function openStream(
 export function useProgressiveSearch(
   q: string,
   type?: 'MANGA' | 'NOVEL' | 'ANIME' | 'TV' | 'MOVIE',
+  /** Search the generic extension catalog instead of the usual providers. */
+  kind?: 'extensions',
 ) {
   const path =
-    q.length >= 2 ? `/api/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ''}` : null;
+    q.length >= 2
+      ? `/api/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ''}${kind ? `&kind=${kind}` : ''}`
+      : null;
   // Retaining a previous query lets its full answer mask the new query's fast results.
   const fast = useApi<SearchResponse>(path && `${path}&fast=1`);
   const full = useApi<SearchResponse>(path, {

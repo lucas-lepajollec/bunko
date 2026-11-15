@@ -4,11 +4,21 @@ import { json, route } from '@/lib/api';
 import { KINDS } from '@/domain/kinds';
 import { feedQuery, releasesPage } from '@/lib/releases';
 import { episodeReleases } from '@/lib/home';
+import { extensionReleases } from '@/lib/extension-catalog';
 import type { ReleasesPage } from '@/types/shared';
 
 const WEEK = 7 * 86400_000;
 export const GET = route(async (r) => {
   const q = feedQuery.parse(Object.fromEntries(new URL(r.url).searchParams));
+  // Generic extension catalogs: only items whose own metadata carries a real date.
+  if (q.kind === 'extensions') {
+    const to = q.cursor && !Number.isNaN(Date.parse(q.cursor)) ? new Date(q.cursor) : new Date();
+    const from = new Date(to.getTime() - WEEK);
+    return json({
+      items: await extensionReleases(from, to),
+      nextCursor: Date.now() - from.getTime() < 8 * WEEK ? from.toISOString() : null,
+    } satisfies ReleasesPage);
+  }
   // Series and films: TMDB episodes and film releases, one week per page.
   if (q.kind && q.kind !== 'all' && KINDS[q.kind].releases === 'tmdb') {
     const to = q.cursor && !Number.isNaN(Date.parse(q.cursor)) ? new Date(q.cursor) : new Date();

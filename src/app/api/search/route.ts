@@ -6,9 +6,19 @@ import { search } from '@/lib/search-engine';
 import { withTracking } from '@/lib/catalog';
 import { groupAnimeSeasons } from '@/lib/anime-works';
 import { searchTmdb, tmdbConfigured } from '@/lib/tmdb';
+import { extensionSearch } from '@/lib/extension-catalog';
 import type { SearchResponse } from '@/types/shared';
 export const GET = route(async (r) => {
   const p = searchParams.parse(Object.fromEntries(new URL(r.url).searchParams));
+  // The generic extension catalog searches its own `extvideo` catalogs.
+  if (p.kind === 'extensions') {
+    const results = await extensionSearch(p.q, r.signal);
+    return json({
+      results: withTracking(results),
+      providers: [],
+      durationMs: 0,
+    } as SearchResponse);
+  }
   // Series and films: TMDB only.
   if (p.type === 'TV' || p.type === 'MOVIE') {
     const results = tmdbConfigured()

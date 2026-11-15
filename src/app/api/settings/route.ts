@@ -5,7 +5,12 @@ import { publicSettings, updateSettings } from '@/lib/settings';
 import { settingsPatch } from '@/lib/validation';
 import { configureRepos } from '@/lib/suwayomi';
 import { requirePermission } from '@/lib/auth';
-export const GET = route(() => json(publicSettings()));
+import { primeExtensionCatalog } from '@/lib/video-addons';
+export const GET = route(async () => {
+  // Menus decide whether the generic extension catalog exists; manifests are cached.
+  await primeExtensionCatalog().catch(() => false);
+  return json(publicSettings());
+});
 /** Connection settings a member needs the `services` permission for. */
 const SERVICE_KEYS = [
   'suwayomiUrl',

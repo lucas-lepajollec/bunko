@@ -4,11 +4,15 @@ import type { VideoAddon, VideoStream, VideoStreams, VideoSubtitle } from '@/typ
 import { ensureAnimeIds, idsOfAnilist, tmdbEntries } from './anime-ids';
 import { naturalEpisode } from './anime-franchise';
 import { AppError } from './errors';
-import { cached } from './metadata-cache';
+import {
+  extensionCatalogAvailable,
+  noteExtensionCatalog,
+  resetExtensionCatalogs,
+} from './extension-catalog-state';
 import { addonId, getSettings, updateSettings } from './settings';
 import { relayPath, safeHeaders, subtitlePath } from './video-relay';
 import { onPublicInternet, plausiblyPublic, safeJson } from './safe-fetch';
-import { tenantId } from './tenant-context';
+import { tenantId, tenantState } from './tenant-context';
 
 /**
  * Video extensions speak the Stremio addon protocol: a manifest says which ids an addon knows
@@ -27,6 +31,13 @@ const resource = z.union([
     })
     .passthrough(),
 ]);
+const catalog = z
+  .object({
+    type: z.string(),
+    id: z.string(),
+    name: z.string().optional(),
+  })
+  .passthrough();
 const manifestSchema = z
   .object({
     id: z.string().optional(),
@@ -35,10 +46,24 @@ const manifestSchema = z
     resources: z.array(resource).default([]),
     types: z.array(z.string()).default([]),
     idPrefixes: z.array(z.string()).optional(),
+    catalogs: z.array(catalog).default([]),
   })
   .passthrough();
 type Manifest = z.infer<typeof manifestSchema>;
 type Resource = 'stream' | 'subtitles';
+/** The generic catalog type an extension may expose: its content and names are runtime only. */
+export const EXTENSION_CATALOG_TYPE = 'extvideo';
+const extvideoCatalogs = (m: Manifest) =>
+  m.catalogs
+    .filter((c) => c.type === EXTENSION_CATALOG_TYPE)
+    .map((c) => ({ id: c.id, name: c.name ?? c.id }));
+export interface ExtensionCatalogAddon {
+  /** Server-side manifest address (never sent to the browser). */
+  url: string;
+  id: string;
+  name: string;
+  catalogs: { id: string; name: string }[];
+}
 
 /** Optional, generic per-source health: an extension may expose it at `{baseManifest}/health.json`. */
 const healthSchema = z
@@ -86,8 +111,20 @@ export function normalizeAddonUrl(raw: string) {
     : `${base(url.toString())}/manifest.json`;
 }
 
+/** Extension manifests and health are runtime configuration: memory only, per account. */
+const addonMemory = tenantState(() => new Map<string, { at: number; value: unknown }>());
+async function addonCached<T>(key: string, ttl: number, load: () => Promise<T>): Promise<T> {
+  const state = addonMemory();
+  const hit = state.get(key);
+  if (hit && Date.now() - hit.at < ttl) return hit.value as T;
+  const value = await load();
+  for (const [k, v] of state) if (Date.now() - v.at > 24 * 3600_000) state.delete(k);
+  state.set(key, { at: Date.now(), value });
+  if (state.size > 200) state.delete(state.keys().next().value!);
+  return value;
+}
 async function manifest(url: string, signal?: AbortSignal): Promise<Manifest> {
-  return cached(`addon-manifest:${addonId(url)}`, 6 * 3600_000, async () => {
+  return addonCached(`manifest:${addonId(url)}`, 6 * 3600_000, async () => {
     const data = await safeJson(`${base(url)}/manifest.json`, {
       timeoutMs: 8000,
       signal: AbortSignal.any([AbortSignal.timeout(10_000), ...(signal ? [signal] : [])]),
@@ -105,7 +142,7 @@ const resourcesOf = (m: Manifest) =>
  * "no health", never an error: the extension keeps working exactly as before.
  */
 async function addonHealth(url: string, signal?: AbortSignal) {
-  return cached(`addon-health:${addonId(url)}`, 60_000, async () => {
+  return addonCached(`health:${addonId(url)}`, 60_000, async () => {
     try {
       const data = await safeJson(`${base(url)}/health.json`, {
         timeoutMs: 3000,
@@ -139,6 +176,7 @@ export async function videoAddons(signal?: AbortSignal): Promise<VideoAddon[]> {
       const host = new URL(base(url)).host;
       try {
         const [m, health] = await Promise.all([manifest(url, signal), addonHealth(url, signal)]);
+        noteExtensionCatalog(id, extvideoCatalogs(m).length > 0);
         return {
           id,
           host,
@@ -149,6 +187,7 @@ export async function videoAddons(signal?: AbortSignal): Promise<VideoAddon[]> {
           health,
         };
       } catch (e) {
+        noteExtensionCatalog(id, false);
         const error = (e as AppError).code === 'DESTINATION_REFUSED' ? 'private' : 'unreachable';
         return {
           id,
@@ -162,6 +201,42 @@ export async function videoAddons(signal?: AbortSignal): Promise<VideoAddon[]> {
       }
     }),
   );
+}
+
+/**
+ * Configured extensions that expose a generic `extvideo` catalog, with their server-side address.
+ * Only read in the account's full 18+ mode: a mixed or off account never asks for it.
+ */
+export async function extensionCatalogAddons(
+  signal?: AbortSignal,
+): Promise<ExtensionCatalogAddon[]> {
+  const settings = getSettings();
+  if (!settings.adultContent || !settings.adultMode) {
+    resetExtensionCatalogs();
+    return [];
+  }
+  resetExtensionCatalogs();
+  const out: ExtensionCatalogAddon[] = [];
+  await Promise.all(
+    settings.videoAddons.map(async (url) => {
+      const id = addonId(url);
+      try {
+        const m = await manifest(url, signal);
+        const catalogs = extvideoCatalogs(m);
+        noteExtensionCatalog(id, catalogs.length > 0);
+        if (catalogs.length) out.push({ url, id, name: m.name, catalogs });
+      } catch {
+        noteExtensionCatalog(id, false);
+      }
+    }),
+  );
+  return out.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** Refreshes the in-memory "an extension offers a catalog" flag before menus are rendered. */
+export async function primeExtensionCatalog(signal?: AbortSignal) {
+  await extensionCatalogAddons(signal);
+  return extensionCatalogAvailable();
 }
 
 /** Adds an extension after reading its manifest (a wrong address is refused, not stored). */
