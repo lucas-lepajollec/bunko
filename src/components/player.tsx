@@ -648,10 +648,19 @@ function Screen({
         ]
       : [];
   const [streamSub, setStreamSub] = useState<string | null | undefined>(undefined);
+  // A VOSTFR-labelled stream sometimes carries no embedded track (or only another
+  // language): fall back to a subtitle extension's track in the interface language.
+  // Dubbed/multi streams keep subtitles off by default.
+  const embeddedInLanguage =
+    source.kind === 'stream' &&
+    source.stream.subtitles.some((s) => s.lang === language);
+  const wantsDefaultSubtitle =
+    source.kind === 'stream' &&
+    (!source.stream.preferred || (source.stream.version === 'sub' && !embeddedInLanguage));
   const streamSubId =
     streamSub !== undefined
       ? streamSub
-      : source.kind === 'stream' && !source.stream.preferred
+      : wantsDefaultSubtitle
         ? (streamSubs.find((s) => s.lang === language)?.id ?? null)
         : null;
   const shownTrack =
