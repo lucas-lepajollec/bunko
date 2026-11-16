@@ -9,7 +9,7 @@ import {
   refreshReleases,
   releaseLoadingState,
 } from './releases';
-import { extensionReleases } from './extension-catalog';
+import { extensionReleases, sectionTarget, type ExtensionTarget } from './extension-catalog';
 export function localDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
@@ -229,7 +229,7 @@ export async function withAnimeAiring(
 }
 
 /**
- * Generic extension catalog items whose own metadata carries a release date that week. Items
+ * Extension works whose own metadata carries a release date that week. Items
  * without a real date contribute nothing (never an invented date).
  */
 export async function withExtensionReleases(
@@ -237,13 +237,15 @@ export async function withExtensionReleases(
   q: z.infer<typeof planningQuery>,
 ): Promise<PlanningWeek> {
   const kind = q.kind ?? 'all';
-  if (!['all', 'jav', 'tube'].includes(kind)) return week;
+  const target: ExtensionTarget | null =
+    kind === 'all' ? { every: true } : kind === 'extension' ? sectionTarget(q.section) : null;
+  if (!target) return week;
   const from = dateFromDay(week.start);
   from.setHours(0, 0, 0, 0);
   const to = new Date(from);
   to.setDate(to.getDate() + 7);
   const releases = await Promise.race([
-    extensionReleases(from, to).catch(() => []),
+    extensionReleases(from, to, target).catch(() => []),
     new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
   ]);
   const wanted = q.library ? releases.filter((r) => r.trackedId !== null) : releases;

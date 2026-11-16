@@ -23,6 +23,11 @@ import { KIND_IDS, kindOfMedia } from '@/domain/kinds';
 const DAY = 86400_000;
 export const feedQuery = z.object({
   kind: z.enum(['all', ...KIND_IDS]).optional(),
+  /** With the extension kind: one extension section. */
+  section: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9_-]{0,39}$|^[0-9a-f]{12}$/)
+    .optional(),
   genre: z.string().max(60).optional(),
   library: z.literal('1').optional(),
   cursor: z.string().max(1500).optional(),

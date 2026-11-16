@@ -12,8 +12,8 @@ import { catalogSettingsRows, writeCatalogSettings } from './catalog-settings-st
 import { currentUser } from './user-context';
 import { requireAdmin } from './auth';
 import { catalogSettingKeys, type CatalogSetting } from '@/types/shared';
-import { KIND_IDS, completeKindOrder } from '@/domain/kinds';
-import { extensionCatalogAvailable, resetExtensionCatalogs } from './extension-catalog-state';
+import { KIND_IDS, completeKindOrder, isKind } from '@/domain/kinds';
+import { resetExtensionSections, visibleExtensionSections } from './extension-catalog-state';
 import { createHash } from 'node:crypto';
 import type {
   DiscoverKind,
@@ -41,7 +41,7 @@ export const secretKeys: SecretSetting[] = [
   'hardcoverToken',
 ];
 // Kinds added after users had chosen their kind list: they start enabled for those users.
-const LATER_KINDS: Exclude<DiscoverKind, 'all'>[] = ['series', 'movies', 'animation', 'jav', 'tube'];
+const LATER_KINDS: Exclude<DiscoverKind, 'all'>[] = ['series', 'movies', 'animation', 'extension'];
 const ALL_KINDS: Exclude<DiscoverKind, 'all'>[] = [...KIND_IDS];
 export function persistentSecret(name: string, bytes: number): Buffer {
   if (!['access.token', 'settings.key'].includes(name))
@@ -141,6 +141,7 @@ function serverSettings(): Settings {
     hideNsfwSources: true,
     progressSource: 'suwayomi',
     universe: 'all',
+    extensionSection: null,
     universes: [],
     universesKnown: [],
     showAllUniverse: true,
@@ -165,6 +166,10 @@ function serverSettings(): Settings {
   }
   result.updateIntervalMinutes = Math.max(5, Math.min(1440, result.updateIntervalMinutes));
   result.kindOrder = completeKindOrder(result.kindOrder);
+  // Kinds saved by an older version that no longer exist are dropped.
+  result.universes = result.universes.filter(isKind);
+  result.universesKnown = result.universesKnown.filter(isKind);
+  if (result.universe !== 'all' && !isKind(result.universe)) result.universe = 'all';
   // A list chosen before series, films or animation films existed: those start enabled.
   if (result.universes.length)
     for (const kind of LATER_KINDS)
@@ -219,7 +224,9 @@ export function publicSettings(): PublicSettings {
   return {
     ...safe,
     secretsConfigured,
-    extensionCatalog: extensionCatalogAvailable(),
+    extensionSections: visibleExtensionSections(
+      Boolean(settings.adultContent && settings.adultMode),
+    ),
     catalogs: {
       canManage,
       configured: {
@@ -317,9 +324,8 @@ export function updateSettings(patch: SettingsPatch) {
       if (shared.length) writeCatalogSettings(accountsDb(), sharedRows);
     })();
   });
-  // Extension catalog availability belongs to the configured addresses and the 18+ choice.
-  if (patch.videoAddons !== undefined || patch.adultContent === false || patch.adultMode === false)
-    resetExtensionCatalogs();
+  // Extension sections belong to the configured addresses (read again on the next look).
+  if (patch.videoAddons !== undefined) resetExtensionSections();
   wakeWorker();
   return publicSettings();
 }

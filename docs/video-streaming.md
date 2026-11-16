@@ -158,19 +158,50 @@ firewall rule giving the Bunko host the same egress list achieves the same.
 ## Extension catalogs
 
 An extension may also offer works of its own: catalogs of the custom type `extvideo` in its
-manifest (`catalogs[].type = "extvideo"`), each with an optional `category` (`anime` joins the
-Anime kind; `jav` and `tube` fill the kinds of the same name) and optional `genre`/`tag` extras
-whose `options` become the catalog filters. Bunko then reads `/catalog/extvideo/<id>[/<extras>].json`,
-`/meta/extvideo/<id>.json` and `/stream/extvideo/<id>.json` (with `?episode=` for series).
+manifest. Bunko names nothing itself: the extension declares the sections its works form, and
+the interface shows them under the extension's own names.
 
-- These works exist only while the account is in its full 18+ mode: catalog, home, planning,
-  releases, search, sheet and player read them only then, and every list that keeps works
-  (pick up, library, notifications…) drops them as soon as the account leaves that mode.
+```json
+{
+  "behaviorHints": { "adult": false },
+  "catalogs": [
+    {
+      "type": "extvideo",
+      "id": "shorts-latest",
+      "name": "Shorts — Latest",
+      "category": "shorts",
+      "categoryName": "Shorts",
+      "extra": [{ "name": "skip" }, { "name": "genre", "options": ["Comedy"] }]
+    },
+    {
+      "type": "extvideo",
+      "id": "shorts-search",
+      "category": "shorts",
+      "extra": [{ "name": "search", "isRequired": true }]
+    }
+  ]
+}
+```
+
+- `category` is the section id (lower case, up to 40 characters) and `categoryName` its label;
+  each section becomes one entry of the extension kind in the kind menu and the catalog. A
+  catalog without a category forms a section named after the extension. A category naming one of
+  Bunko's video kinds (`anime`, `series`, `movies`, `animation`) joins that kind instead (today:
+  the anime catalog, home and search read them).
+- Within a section, a search reads the catalogs that accept a `search` extra; otherwise the
+  catalog whose id contains `latest` or `trending` serves that sort, else the first one that
+  does not require a search. `genre` and `tag` extras become the catalog filters.
+- Bunko reads `/catalog/extvideo/<id>[/<extras>].json`, `/meta/extvideo/<id>.json` and
+  `/stream/extvideo/<id>.json` (with `?episode=` for series).
+- `behaviorHints.adult: true` (Stremio's own flag) makes every section of the extension 18+:
+  they exist only in the account's full 18+ mode (catalog, home, planning, releases, search,
+  sheet, player), and every list that keeps works (pick up, library, notifications…) drops them
+  as soon as the account leaves that mode. Sections of other extensions show outside that mode.
 - Responses stay in memory (never in the metadata cache). A work that also carries an AniList,
   TMDB or IMDb id is left to the native catalog.
-- The sheet keeps what the catalog card showed (poster, wide picture, category, synopsis,
-  genres) when the extension's own sheet lacks it, and opens from the card when that sheet does
-  not answer.
+- The sheet keeps what the catalog card showed (poster, wide picture, section, synopsis, genres)
+  when the extension's own sheet lacks it, and opens from the card when that sheet does not
+  answer.
 
 ## Picture enhancement
 

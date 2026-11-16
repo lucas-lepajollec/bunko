@@ -41,6 +41,8 @@ export interface SourceMatch {
 export interface UnifiedMedia {
   /** The user's choice of kind for this work, over the provider's (e.g. a series kept as anime). */
   kindOverride?: Exclude<DiscoverKind, 'all'>;
+  /** A work from an extension's own catalog: the section that extension declared for it. */
+  extensionSection?: ExtensionSectionRef;
   id: string;
   type: MediaType;
   title: string;
@@ -345,14 +347,16 @@ export type DiscoverKind =
   | 'series'
   | 'movies'
   | 'animation'
-  | 'jav'
-  | 'tube';
+  /** Works from the sections video extensions declare in their own catalogs. */
+  | 'extension';
 /** "new" = most recent publication start first, never future or undated titles. */
 export type DiscoverSort = 'trending' | 'popular' | 'score' | 'new';
 /** Quarter-based seasons, AniList convention: WINTER Jan–Mar, SPRING Apr–Jun, SUMMER Jul–Sep, FALL Oct–Dec. */
 export type Season = 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL';
 export interface DiscoverQuery {
   kind?: DiscoverKind;
+  /** With the extension kind: one extension section (none = every section). */
+  section?: string;
   sort?: DiscoverSort;
   genre?: string;
   status?: 'RELEASING' | 'FINISHED';
@@ -759,6 +763,8 @@ export interface Settings {
    * with a kind menu on each page). Default `all`.
    */
   universe: DiscoverKind;
+  /** With the `extension` universe: the extension section shown (null = every section). */
+  extensionSection: string | null;
   /** Universes offered in the switcher (empty = every kind). */
   universes: Exclude<DiscoverKind, 'all'>[];
   /** Kinds that existed when `universes` was last saved (later kinds start enabled). */
@@ -800,9 +806,18 @@ export type PublicSettings = Omit<Settings, SecretSetting> & {
   secretsConfigured: Record<SecretSetting, boolean>;
   /** Shared availability is visible to members; credential changes/probes require an admin. */
   catalogs: { canManage: boolean; configured: Record<CatalogProvider, boolean> };
-  /** At least one configured video extension exposes a catalog of type `extvideo`. */
-  extensionCatalog: boolean;
+  /** Sections the account's video extensions declare, those the current 18+ mode shows. */
+  extensionSections: ExtensionSection[];
 };
+/** A section of works an extension declares in its manifest (names are the extension's). */
+export interface ExtensionSectionRef {
+  id: string;
+  name: string;
+}
+export interface ExtensionSection extends ExtensionSectionRef {
+  /** Declared adult by its extension: shown only in the account's full 18+ mode. */
+  adult: boolean;
+}
 export type CatalogProvider = 'googlebooks' | 'metron' | 'rakuten' | 'hardcover' | 'tmdb';
 export const catalogSettingKeys = [
   'googleBooksApiKey',
@@ -1142,7 +1157,16 @@ export type SearchService = ArrService | 'prowlarr';
 /** The few fields of a work "Pick up where you left off" needs (kind, 18+, card). */
 export type ContinueMedia = Pick<
   UnifiedMedia,
-  'id' | 'title' | 'coverUrl' | 'type' | 'format' | 'origin' | 'adult' | 'color' | 'kindOverride'
+  | 'id'
+  | 'title'
+  | 'coverUrl'
+  | 'type'
+  | 'format'
+  | 'origin'
+  | 'adult'
+  | 'color'
+  | 'kindOverride'
+  | 'extensionSection'
 >;
 /** PUT /api/continue — something started in Bunko's reader or player. */
 export interface ContinueUpdate {

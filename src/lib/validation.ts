@@ -74,9 +74,7 @@ export const media = z.object({
   episodes: z.number().nonnegative().nullable(),
   webUrl: nullableUrl,
   providers: z
-    .array(
-      z.enum(['anilist', 'mangadex', 'mangaupdates', 'local', 'kavita', 'tmdb', 'extension']),
-    )
+    .array(z.enum(['anilist', 'mangadex', 'mangaupdates', 'local', 'kavita', 'tmdb', 'extension']))
     .max(5),
   sources: z
     .array(
@@ -167,9 +165,13 @@ export const adultOverrideBody = z.object({
     .transform((value) => (value.startsWith('mangadex:') ? value.toLowerCase() : value)),
   adult: z.boolean().nullable(),
 });
+/** An extension section id, as extensions declare it (see `video-addons.ts`). */
+export const extensionSection = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$|^[0-9a-f]{12}$/);
 export const discoverQuery = z
   .object({
     kind: z.enum(['all', ...KIND_IDS]).optional(),
+    /** With the extension kind: one extension section (none = every section). */
+    section: extensionSection.optional(),
     sort: z.enum(['trending', 'popular', 'score', 'new']).optional(),
     genre: z.string().max(60).optional(),
     status: z.enum(['RELEASING', 'FINISHED']).optional(),
@@ -202,8 +204,9 @@ export const discoverQuery = z
 export const searchParams = z.object({
   q: z.string().trim().min(1).max(200),
   type: searchType.optional(),
-  /** Search the JAV or scene extension catalog instead of the usual providers. */
-  kind: z.enum(['jav', 'tube']).optional(),
+  /** Search the extensions' own catalogs (one section, or every section) instead. */
+  kind: z.literal('extension').optional(),
+  section: extensionSection.optional(),
   fast: z.literal('1').optional(),
 });
 export const settingsPatch = z
@@ -343,6 +346,7 @@ export const settingsPatch = z
     hideNsfwSources: z.boolean().optional(),
     progressSource: z.enum(['suwayomi', 'kavita']).optional(),
     universe: z.enum(['all', ...KIND_IDS]).optional(),
+    extensionSection: extensionSection.nullable().optional(),
     universes: z.array(z.enum(KIND_IDS)).max(KIND_IDS.length).optional(),
     showAllUniverse: z.boolean().optional(),
     librarySort: z

@@ -130,5 +130,6 @@ function summary(m: UnifiedMedia): ContinueMedia {
     adult: m.adult,
     color: m.color,
     ...(m.kindOverride ? { kindOverride: m.kindOverride } : {}),
+    ...(m.extensionSection ? { extensionSection: m.extensionSection } : {}),
   };
 }

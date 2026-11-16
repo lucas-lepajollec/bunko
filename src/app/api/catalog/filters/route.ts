@@ -6,8 +6,10 @@ import { discoverQuery } from '@/lib/validation';
 
 /** The filters the catalog can apply for one kind, given this account's 18+ choice. */
 export const GET = route(async (r) => {
-  const { kind } = discoverQuery.parse({
-    kind: new URL(r.url).searchParams.get('kind') ?? undefined,
+  const params = new URL(r.url).searchParams;
+  const { kind, section } = discoverQuery.parse({
+    kind: params.get('kind') ?? undefined,
+    section: params.get('section') ?? undefined,
   });
-  return json(await catalogFilters(kind, r.signal));
+  return json(await catalogFilters(kind, r.signal, section));
 });

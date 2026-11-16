@@ -32,6 +32,7 @@ export const activeFilterCount = (v: FilterValues) =>
  */
 export function CatalogFilterBar({
   kind,
+  section,
   values,
   releasesView,
   onChange,
@@ -42,13 +43,17 @@ export function CatalogFilterBar({
   leading?: ReactNode;
   className?: string;
   kind: DiscoverKind;
+  /** With the extension kind: the section on screen (its own genres and tags). */
+  section?: string | null;
   values: FilterValues;
   /** Latest chapters view: only the genre applies there. */
   releasesView: boolean;
   onChange: (patch: Record<string, string>) => void;
 }) {
   const { t, language } = useI18n();
-  const filters = useApi<CatalogFilters>(`/api/catalog/filters?kind=${kind}`);
+  const filters = useApi<CatalogFilters>(
+    `/api/catalog/filters?kind=${kind}${section ? `&section=${encodeURIComponent(section)}` : ''}`,
+  );
   const f = filters.data;
   const thisYear = seasonOf().year;
   const [tagsOpen, setTagsOpen] = useState(false);

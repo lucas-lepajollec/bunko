@@ -423,7 +423,9 @@ function Title({
     [
       t('title.facts.format'),
       [
-        media.format ? t(`format.${media.format}`) : t(`type.${media.type}`),
+        // An extension's own work: the section name its extension declared.
+        media.extensionSection?.name ??
+          (media.format ? t(`format.${media.format}`) : t(`type.${media.type}`)),
         media.origin && t(`origin.${media.origin}`) !== `origin.${media.origin}`
           ? t(`origin.${media.origin}`)
           : null,
@@ -721,6 +723,8 @@ function Title({
                     origin: media.origin,
                     adult: Boolean(media.adult),
                     color: media.color,
+                    ...(media.kindOverride ? { kindOverride: media.kindOverride } : {}),
+                    ...(media.extensionSection ? { extensionSection: media.extensionSection } : {}),
                   }}
                   artwork={media.bannerUrl ?? media.coverUrl}
                   anilistId={media.anilistId}
@@ -945,7 +949,9 @@ function Title({
 function Kicker({ media }: { media: MediaDetail }) {
   const { t } = useI18n();
   const parts = [
-    media.format ? t(`format.${media.format}`) : t(`type.${media.type}`),
+    // An extension's own work: the section name its extension declared.
+    media.extensionSection?.name ??
+      (media.format ? t(`format.${media.format}`) : t(`type.${media.type}`)),
     media.origin && t(`origin.${media.origin}`) !== `origin.${media.origin}`
       ? t(`origin.${media.origin}`)
       : null,

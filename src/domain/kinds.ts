@@ -30,8 +30,6 @@ export interface KindDef {
   datedReleases: boolean;
   /** A provider key the kind cannot work without. */
   requires?: 'tmdb';
-  /** Only offered while the whole interface is in the account's 18+ only mode. */
-  adultOnly?: boolean;
 }
 
 /** Display and iteration order (menus, chips, homes). */
@@ -48,8 +46,7 @@ export const KIND_IDS = [
   'series',
   'movies',
   'animation',
-  'jav',
-  'tube',
+  'extension',
 ] as const satisfies readonly Kind[];
 
 const reading = (formats: readonly MediaFormat[], extra: Partial<KindDef> = {}): KindDef => ({
@@ -122,7 +119,8 @@ export const KINDS: Record<Kind, KindDef> = {
     sources: false,
     datedReleases: true,
   },
-  jav: {
+  // Generic: what its works are, and what they are called, comes from the extensions.
+  extension: {
     family: 'video',
     mediaType: 'ANIME',
     formats: [],
@@ -132,42 +130,22 @@ export const KINDS: Record<Kind, KindDef> = {
     unit: 'film',
     sources: false,
     datedReleases: true,
-    adultOnly: true,
-  },
-  tube: {
-    family: 'video',
-    mediaType: 'ANIME',
-    formats: [],
-    search: 'MOVIE',
-    catalog: 'extension',
-    releases: 'extension',
-    unit: 'film',
-    sources: false,
-    datedReleases: true,
-    adultOnly: true,
   },
 };
 
 /** Account facts that decide whether a kind may appear anywhere in the interface. */
 export interface KindVisibility {
-  adultContent?: boolean;
-  adultMode?: boolean;
-  /** At least one configured video extension exposes a catalog of type `extvideo`. */
-  extensionCatalog?: boolean;
+  /** Extension sections the account's current 18+ mode shows (see `PublicSettings`). */
+  extensionSections?: readonly unknown[];
 }
-/**
- * The kinds a menu, order or filter may offer. Adult-only kinds need the whole interface in the
- * account's full 18+ mode; the generic extension catalog also needs an extension that provides it.
- */
+/** The extension kind exists only while an extension declares a section the account can see. */
 export function kindVisible(
   kind: DiscoverKind | null | undefined,
   settings: KindVisibility,
 ): boolean {
   if (!kind || kind === 'all') return true;
-  const def = KINDS[kind];
-  if (!def.adultOnly) return true;
-  if (!settings.adultContent || !settings.adultMode) return false;
-  return Boolean(settings.extensionCatalog);
+  if (KINDS[kind].catalog !== 'extension') return true;
+  return Boolean(settings.extensionSections?.length);
 }
 export function availableKinds<T extends DiscoverKind>(
   kinds: readonly T[],
@@ -197,8 +175,12 @@ export function kindOfMedia(media: {
   format: MediaFormat | null;
   origin?: string | null;
   kindOverride?: Kind;
+  extensionSection?: unknown;
+  id?: string;
 }): Kind {
   if (media.kindOverride && isKind(media.kindOverride)) return media.kindOverride;
+  // An extension's own work saved under a kind that no longer exists stays an extension work.
+  if (media.extensionSection || media.id?.startsWith('ext:')) return 'extension';
   const fromFormat = media.format ? byFormat.get(media.format) : undefined;
   if (fromFormat) return fromFormat;
   if (media.type === 'ANIME') return 'anime';

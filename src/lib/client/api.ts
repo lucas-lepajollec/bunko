@@ -124,12 +124,16 @@ export function openStream(
 export function useProgressiveSearch(
   q: string,
   type?: 'MANGA' | 'NOVEL' | 'ANIME' | 'TV' | 'MOVIE',
-  /** Search the generic extension catalog instead of the usual providers. */
-  kind?: 'jav' | 'tube',
+  /** Search the extensions' own catalogs (one section, or every section with null). */
+  extension?: { section: string | null },
 ) {
   const path =
     q.length >= 2
-      ? `/api/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ''}${kind ? `&kind=${kind}` : ''}`
+      ? `/api/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ''}${
+          extension
+            ? `&kind=extension${extension.section ? `&section=${encodeURIComponent(extension.section)}` : ''}`
+            : ''
+        }`
       : null;
   // Retaining a previous query lets its full answer mask the new query's fast results.
   const fast = useApi<SearchResponse>(path && `${path}&fast=1`);

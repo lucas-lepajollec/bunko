@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Extension catalogs are generic: Bunko has one "Extensions" kind, and each video extension
+  declares the sections its works form (`category`, `categoryName` on its `extvideo` catalogs)
+  and whether it is adult (`behaviorHints.adult`). Each section is one entry of the kind menu and
+  the catalog, under the extension's own name; adult sections need the full 18+ mode, the others
+  show outside it. A category naming one of Bunko's kinds (`anime`) joins that kind. The two
+  built-in extension kinds are gone (choices saved for them are dropped).
+
 - Extension catalogs: their works only show in the full 18+ mode, everywhere. Once the account
   leaves it, "Pick up where you left off", the library and the other lists drop them too (they
   stayed in "Pick up" with 18+ shown next to everything else). A sheet keeps the poster, wide
