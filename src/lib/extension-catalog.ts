@@ -294,7 +294,9 @@ async function extensionPage(
     {
       skip: (current - 1) * PER_PAGE,
       ...(search ? { search } : {}),
-      ...(filters.genre ? { genre: filters.genre } : {}),
+      ...(filters.genre || filters.tags?.[0]
+        ? { genre: filters.genre || filters.tags?.[0] }
+        : {}),
     },
     signal,
     filters.sort,
@@ -358,7 +360,8 @@ export async function extensionCatalogFilters(
     for (const catalog of addon.catalogs)
       if ((catalog.category ?? 'tube') === kind)
         for (const genre of catalog.genres ?? []) genres.add(genre);
-  return { ...empty, genres: [...genres].sort((a, b) => a.localeCompare(b)) };
+  const names = [...genres].sort((a, b) => a.localeCompare(b));
+  return { ...empty, genres: names, tags: names.length ? [{ category: 'genre', names }] : [] };
 }
 
 /** Search inside the configured `extvideo` catalogs (`search=` extras), never outside 18+ only. */
