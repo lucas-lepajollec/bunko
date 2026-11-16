@@ -16,6 +16,10 @@ const continueMedia = z
     adult: z.boolean(),
     color: z.string().max(20).nullable(),
     kindOverride: z.string().max(20).optional(),
+    extensionSection: z
+      .object({ id: z.string().min(1).max(40), name: z.string().min(1).max(60) })
+      .strict()
+      .optional(),
   })
   .strict();
 const update = z

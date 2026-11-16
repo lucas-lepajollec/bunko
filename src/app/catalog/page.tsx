@@ -16,7 +16,7 @@ import type {
 import { SEASONS, formatStartDate } from '@/lib/client/season';
 import { api, useApi, useProgressiveSearch } from '@/lib/client/api';
 import { catalogLoading } from '@/lib/client/catalog-loading';
-import { inUniverse, useUniverse, searchTypeOf } from '@/lib/client/universe';
+import { choiceLabel, inUniverse, useUniverse, searchTypeOf } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { PosterCard } from '@/components/media';
@@ -46,8 +46,15 @@ function Catalog() {
   const requested = (
     KINDS.includes(params.get('kind') as DiscoverKind) ? params.get('kind') : universe.active
   ) as DiscoverKind;
-  // Adult-only kinds (the generic extension catalog) never load outside their mode.
+  // The extension kind only exists while an extension declares a section the account sees.
   const kind = requested === 'all' || universe.visible(requested) ? requested : universe.active;
+  // Its section: the address's, else the universe's (unknown ids fall back to every section).
+  const askedSection =
+    params.get('section') ?? (kind === universe.active ? universe.section : null);
+  const section =
+    kind === 'extension' && universe.sections.some((s) => s.id === askedSection)
+      ? askedSection
+      : null;
   const sort = (
     SORTS.includes(params.get('sort') as DiscoverSort) ? params.get('sort') : 'trending'
   ) as DiscoverSort;
@@ -77,7 +84,7 @@ function Catalog() {
   const searched = useProgressiveSearch(
     q,
     searchTypeOf(kind),
-    kind === 'jav' || kind === 'tube' ? kind : undefined,
+    kind === 'extension' ? { section } : undefined,
   );
   const set = (key: string, value: string, extra?: Record<string, string>) => {
     const next = new URLSearchParams(params);
@@ -95,6 +102,7 @@ function Catalog() {
       perPage: kind === 'all' ? '8' : '32',
     });
     if (kind !== 'all') q.set('kind', kind);
+    if (section) q.set('section', section);
     if (genre) q.set('genre', genre);
     if (status) q.set('status', status);
     if (year) q.set('year', String(year));
@@ -121,6 +129,7 @@ function Catalog() {
         return null;
       const r = new URLSearchParams();
       if (kind !== 'all') r.set('kind', kind);
+      if (section) r.set('section', section);
       if (genre) r.set('genre', genre);
       if (previous?.nextCursor) r.set('cursor', previous.nextCursor);
       return `/api/releases${r.size ? `?${r}` : ''}`;
@@ -221,20 +230,24 @@ function Catalog() {
         role="group"
         aria-label={t('catalog.kind')}
       >
-        {(['all', ...universe.enabled] as DiscoverKind[]).map((k) => (
-          <button
-            key={k}
-            type="button"
-            aria-pressed={kind === k}
-            onClick={() => set('kind', k)}
-            className={cx(
-              'h-[34px] shrink-0 rounded-full px-3.5',
-              kind === k ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
-            )}
-          >
-            {t(`kind.${k}`)}
-          </button>
-        ))}
+        {universe.choices(['all', ...universe.enabled] as DiscoverKind[]).map((c) => {
+          const on = kind === c.kind && (c.kind !== 'extension' || section === c.section);
+          return (
+            <button
+              key={`${c.kind}:${c.section ?? ''}`}
+              type="button"
+              aria-pressed={on}
+              // A section is always written down: the universe's own may differ.
+              onClick={() => set('kind', c.kind, { section: c.section ?? '' })}
+              className={cx(
+                'h-[34px] shrink-0 rounded-full px-3.5',
+                on ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
+              )}
+            >
+              {choiceLabel(t, c)}
+            </button>
+          );
+        })}
       </div>
       {q ? (
         <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -303,6 +316,7 @@ function Catalog() {
             {!tmdbKind || settings.data?.catalogs?.configured.tmdb ? (
               <CatalogFilterBar
                 kind={kind}
+                section={section}
                 values={filterValues}
                 releasesView={view === 'chapters'}
                 className="min-w-0 md:flex-auto"

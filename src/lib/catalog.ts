@@ -2,8 +2,8 @@ import { airedSince, naturalEpisode, rollAiring, seasonRef } from './anime-franc
 import { KINDS, KIND_IDS, availableKinds, byKindOrder, mixByKind, type Kind } from '@/domain/kinds';
 import {
   clearExtensionCatalogCache,
-  extensionAnimeCatalogPage,
   extensionCatalogFilters,
+  sectionTarget,
   extensionCatalogPage,
   extensionDetail,
 } from './extension-catalog';
@@ -146,20 +146,20 @@ export async function discover(
   // "Everything": one lane per enabled kind, mixed kind by kind in the user's priority order, so
   // no kind (comics, novels…) floods the page and video kinds are part of it.
   const settings = getSettings();
-  // The generic extension catalog is read only in the account's full 18+ mode.
-  const extensionAddons =
-    includeExtensions && settings.adultContent && settings.adultMode
-      ? await extensionCatalogAddons(signal).catch(() => [])
-      : [];
-  const visibility = { ...settings, extensionCatalog: extensionAddons.length > 0 };
+  // Extension sections exist only while an extension the 18+ mode shows declares one.
+  const extensionAddons = includeExtensions
+    ? await extensionCatalogAddons(signal).catch(() => [])
+    : [];
+  const extensionSections = extensionAddons.flatMap((addon) =>
+    addon.catalogs.flatMap((catalog) => (catalog.section ? [catalog.section] : [])),
+  );
   const order = byKindOrder(
-    availableKinds(settings.universes.length ? settings.universes : [...KIND_IDS], visibility),
+    availableKinds(settings.universes.length ? settings.universes : [...KIND_IDS], {
+      extensionSections,
+    }),
     settings.kindOrder,
   );
-  const extensionKinds = includeExtensions
-    ? (['jav', 'tube'] as const).filter((kind) => order.includes(kind))
-    : [];
-  const extensionOn = extensionKinds.length > 0;
+  const extensionOn = includeExtensions && order.includes('extension');
   // 18+ only: comics have no 18+ catalog (Metron does not rate works).
   const adultOnly = adultScope() === 'only';
   const on = (k: Kind) => order.includes(k) && (!adultOnly || k !== 'comic');
@@ -198,16 +198,16 @@ export async function discover(
   };
   // Only kinds without a reachable catalog (series without TMDB…): an empty page, not an outage.
   if (!Object.keys(providers).length) {
-    if (extensionOn) return discoverLane({ ...q, kind: extensionKinds[0] }, signal, raw);
+    if (extensionOn) return discoverLane({ ...q, kind: 'extension' }, signal, raw);
     return { items: [], page: q.page ?? 1, hasNextPage: false };
   }
   const key = `discover:all:v3:${JSON.stringify(q)}:${order.join(',')}:${tmdb}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}:${adultKey()}:${metronScope()}:${credentialScope(settings.hardcoverToken)}`;
   const result = await discoverAll(key, q.page ?? 1, providers);
   // Extension catalog items are merged after the persisted lanes: their names and works never
   // enter the SQLite metadata cache.
-  const extensionPages = await Promise.all(
-    extensionKinds.map((kind) => extensionCatalogPage(kind, q, q.page ?? 1, signal)),
-  );
+  const extensionPages = extensionOn
+    ? [await extensionCatalogPage(sectionTarget(null), q, q.page ?? 1, signal)]
+    : [];
   const extensionItems = extensionPages.flatMap((page) => page.items);
   const items = mixByKind([...result.items, ...extensionItems], order);
   return {
@@ -239,8 +239,7 @@ export async function progressiveDiscover(
   if (
     !q.kind ||
     q.kind === 'all' ||
-    q.kind === 'jav' ||
-    q.kind === 'tube' ||
+    KINDS[q.kind].catalog === 'extension' ||
     (q.kind === 'comic' && !metronConfigured())
   )
     return discover(q, signal);
@@ -314,8 +313,8 @@ async function discoverLane(
       items: raw ? result.items : withTracking(result.items).filter(visibleMedia),
     };
   }
-  if (kind === 'jav' || kind === 'tube') {
-    const result = await extensionCatalogPage(kind, q, page, signal);
+  if (kind !== 'all' && KINDS[kind].catalog === 'extension') {
+    const result = await extensionCatalogPage(sectionTarget(q.section), q, page, signal);
     return {
       ...result,
       items: raw ? result.items : withTracking(result.items).filter(visibleMedia),
@@ -417,13 +416,11 @@ export async function discoverAniList(
     q.minScore !== undefined ||
     q.year !== undefined;
   const extension =
-    kind === 'anime' && withExtensions && !filtered && adultScope() === 'only'
-      ? await extensionAnimeCatalogPage(q, page, signal).catch(() => null)
+    kind === 'anime' && withExtensions && !filtered
+      ? await extensionCatalogPage({ native: 'anime' }, q, page, signal).catch(() => null)
       : null;
   const items = [
-    ...(raw
-      ? data.Page.media.map(fromAniList)
-      : withTracking(data.Page.media.map(fromAniList))),
+    ...(raw ? data.Page.media.map(fromAniList) : withTracking(data.Page.media.map(fromAniList))),
     ...(extension?.items ?? []),
   ];
   return {
@@ -486,12 +483,14 @@ const ADULT_GENRES = ['Ecchi', 'Hentai'];
 export async function catalogFilters(
   kind: DiscoverQuery['kind'] = 'all',
   signal?: AbortSignal,
+  /** With the extension kind: one extension section. */
+  section?: string,
 ): Promise<CatalogFilters> {
   const scope = adultScope();
   const adult = scope !== 'off';
-  // Generic extension catalogs have no shared facets.
+  // Extension sections: the genres and tags their own catalogs offer.
   if (kind !== 'all' && KINDS[kind].catalog === 'extension')
-    return extensionCatalogFilters(kind, signal);
+    return extensionCatalogFilters(sectionTarget(section), signal);
   // Series and films: TMDB's own genres and keywords, its statuses and years.
   if (kind !== 'all' && KINDS[kind].catalog === 'tmdb') {
     const tv = KINDS[kind].search === 'TV';

@@ -83,11 +83,46 @@ const server: Server = createServer((req, res) => {
       name: 'Fixture Extension',
       resources: ['stream'],
       types: ['extvideo', 'movie', 'series'],
+      behaviorHints: { adult: true },
       catalogs: [
-        { type: 'extvideo', id: 'fixtures', name: 'Fixture Catalog' },
-        { type: 'extvideo', id: 'other-fixtures', name: 'Other Catalog', category: 'jav' },
+        {
+          type: 'extvideo',
+          id: 'fixtures',
+          name: 'Fixture Catalog',
+          category: 'scenes',
+          categoryName: 'Scenes',
+          extra: [{ name: 'search' }, { name: 'skip' }],
+        },
+        {
+          type: 'extvideo',
+          id: 'other-fixtures',
+          name: 'Other Catalog',
+          category: 'clips',
+          categoryName: 'Clips',
+        },
       ],
     });
+  // A general extension: one section of its own, one catalog joining the anime kind.
+  if (url.pathname === '/plain/manifest.json')
+    return send({
+      name: 'Plain Extension',
+      resources: ['stream'],
+      types: ['extvideo'],
+      catalogs: [
+        {
+          type: 'extvideo',
+          id: 'shorts',
+          name: 'Shorts',
+          category: 'shorts',
+          categoryName: 'Shorts',
+        },
+        { type: 'extvideo', id: 'toons', name: 'Toons', category: 'anime' },
+      ],
+    });
+  if (url.pathname.startsWith('/plain/catalog/extvideo/shorts'))
+    return send({ metas: [meta('short-1')] });
+  if (url.pathname.startsWith('/plain/catalog/extvideo/toons'))
+    return send({ metas: [meta('toon-1')] });
   if (url.pathname.startsWith('/fixture/catalog/extvideo/other-fixtures'))
     return send({ metas: [listedOnly, gone] });
   if (url.pathname === '/fixture/meta/extvideo/fixture-5.json')
@@ -144,7 +179,7 @@ it('does not read extension catalogs outside the full 18+ mode', async () =>
       adultMode: false,
     });
     calls.length = 0;
-    const page = await catalog.extensionCatalogPage('tube', { kind: 'tube' }, 1);
+    const page = await catalog.extensionCatalogPage({ section: 'scenes' }, {}, 1);
     expect(page.items).toEqual([]);
     expect(calls.some((call) => call.includes('/catalog/'))).toBe(false);
   }));
@@ -152,7 +187,7 @@ it('does not read extension catalogs outside the full 18+ mode', async () =>
 it('maps generic extvideo catalogs, excludes works already known, and stays in memory', async () =>
   inTenant(1, async () => {
     updateSettings({ adultContent: true, adultMode: true });
-    const page = await catalog.extensionCatalogPage('tube', { kind: 'tube' }, 1);
+    const page = await catalog.extensionCatalogPage({ section: 'scenes' }, {}, 1);
     // Any external identity (AniList or TMDB) belongs to the native catalog: left out.
     expect(page.items.map((item) => item.title)).toEqual([
       'Fixture Video fixture-2',
@@ -162,13 +197,14 @@ it('maps generic extvideo catalogs, excludes works already known, and stays in m
       expect(item).toMatchObject({
         type: 'ANIME',
         format: null,
-        kindOverride: 'tube',
+        kindOverride: 'extension',
+        extensionSection: { id: 'scenes', name: 'Scenes' },
         providers: ['extension'],
         adult: true,
       });
       expect(item.id).toMatch(/^ext:[0-9a-f]{12}:[A-Za-z0-9_-]+$/);
     }
-    const search = await catalog.extensionSearch('fixture');
+    const search = await catalog.extensionSearch('fixture', { section: 'scenes' });
     expect(search.map((item) => item.title)).toEqual(['Fixture Video fixture-2']);
 
     const known = page.items.find((item) => item.title.includes('fixture-2'))!;
@@ -176,7 +212,8 @@ it('maps generic extvideo catalogs, excludes works already known, and stays in m
     expect(detail).toMatchObject({
       title: 'Fixture Video fixture-2',
       adult: true,
-      kindOverride: 'tube',
+      kindOverride: 'extension',
+      extensionSection: { id: 'scenes', name: 'Scenes' },
       extension: { type: 'movie' },
     });
     expect(detail.video?.list).toHaveLength(1);
@@ -190,7 +227,7 @@ it('maps generic extvideo catalogs, excludes works already known, and stays in m
 
 it('plays extension streams through safe links and maps real release dates', async () =>
   inTenant(1, async () => {
-    const page = await catalog.extensionCatalogPage('tube', { kind: 'tube' }, 1);
+    const page = await catalog.extensionCatalogPage({ section: 'scenes' }, {}, 1);
     const movie = page.items.find((item) => item.title.includes('fixture-2'))!;
     const streams = await catalog.extensionStreams(movie.id, 'fr');
     expect(streams.errors).toEqual([]);
@@ -219,7 +256,7 @@ it('plays extension streams through safe links and maps real release dates', asy
 it('keeps what the catalog card showed when the extension sheet is poorer or gone', async () =>
   inTenant(1, async () => {
     updateSettings({ adultContent: true, adultMode: true });
-    const page = await catalog.extensionCatalogPage('jav', { kind: 'jav' }, 1);
+    const page = await catalog.extensionCatalogPage({ section: 'clips' }, {}, 1);
     const [poor, missing] = ['fixture-5', 'fixture-6'].map((id) =>
       page.items.find((item) => item.title.endsWith(id))!,
     );
@@ -228,13 +265,13 @@ it('keeps what the catalog card showed when the extension sheet is poorer or gon
     expect(await catalog.extensionDetail(poor.id)).toMatchObject({
       coverUrl: 'https://images.example/card-5.jpg',
       bannerUrl: 'https://images.example/fixture-5-wide.jpg',
-      kindOverride: 'jav',
+      extensionSection: { id: 'clips', name: 'Clips' },
     });
     // The sheet fails: the work still opens as listed.
     expect(await catalog.extensionDetail(missing.id)).toMatchObject({
       title: 'Fixture Video fixture-6',
       coverUrl: 'https://images.example/fixture-6.jpg',
-      kindOverride: 'jav',
+      extensionSection: { id: 'clips', name: 'Clips' },
       extension: { type: 'movie' },
     });
   }));
@@ -245,7 +282,7 @@ it('drops extension catalog works from every list once the account leaves the 18
     const { visibleTracked } = await import('@/lib/adult');
     const { listTracked } = await import('@/lib/db');
     updateSettings({ adultContent: true, adultMode: true });
-    const page = await catalog.extensionCatalogPage('tube', { kind: 'tube' }, 1);
+    const page = await catalog.extensionCatalogPage({ section: 'scenes' }, {}, 1);
     const work = page.items[0];
     saveContinue({
       media: {
@@ -257,7 +294,8 @@ it('drops extension catalog works from every list once the account leaves the 18
         origin: null,
         adult: true,
         color: null,
-        kindOverride: 'tube',
+        kindOverride: 'extension',
+        extensionSection: work.extensionSection,
       },
       kind: 'watch',
       label: 'Film',
@@ -276,4 +314,40 @@ it('drops extension catalog works from every list once the account leaves the 18
     expect(followed()).toContain('anilist:42');
     updateSettings({ adultContent: false });
     expect(ids()).not.toContain(work.id);
+  }));
+
+it('reads the sections extensions declare, and general extensions outside 18+ only', async () =>
+  inTenant(1, async () => {
+    const { visibleExtensionSections } = await import('@/lib/extension-catalog-state');
+    const { extensionCatalogAddons } = await import('@/lib/video-addons');
+    updateSettings({
+      videoAddons: [`${base}/fixture/manifest.json`, `${base}/plain/manifest.json`],
+      adultContent: true,
+      adultMode: true,
+    });
+    await extensionCatalogAddons();
+    // Names come from the extensions; adult ones only in the full 18+ mode, the others outside.
+    expect(visibleExtensionSections(true).map((s) => s.name)).toEqual(['Scenes', 'Clips']);
+    expect(visibleExtensionSections(false).map((s) => s.name)).toEqual(['Shorts']);
+    expect(
+      (await catalog.extensionCatalogPage({ section: null }, {}, 1)).items.map((i) => i.title),
+    ).not.toContain('Fixture Video short-1');
+
+    updateSettings({ adultMode: false });
+    const shorts = await catalog.extensionCatalogPage({ section: null }, {}, 1);
+    expect(shorts.items.map((i) => [i.title, i.adult, i.extensionSection?.name])).toEqual([
+      ['Fixture Video short-1', false, 'Shorts'],
+    ]);
+    // A catalog naming one of Bunko's kinds joins it instead of forming a section.
+    const anime = await catalog.extensionCatalogPage({ native: 'anime' }, {}, 1);
+    expect(anime.items.map((i) => [i.title, i.kindOverride, i.extensionSection])).toEqual([
+      ['Fixture Video toon-1', 'anime', undefined],
+    ]);
+    // An adult extension's work does not open outside 18+ only.
+    const adultWork = (await catalog.extensionSearch('fixture', { section: 'scenes' }))[0];
+    expect(adultWork).toBeUndefined();
+    updateSettings({ adultContent: false });
+    expect((await catalog.extensionCatalogPage({ section: 'shorts' }, {}, 1)).items).toHaveLength(
+      1,
+    );
   }));

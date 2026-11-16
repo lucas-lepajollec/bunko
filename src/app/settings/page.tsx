@@ -1821,17 +1821,13 @@ function HideNsfwSources() {
 function UniverseSettings() {
   const { t } = useI18n();
   const { mutate } = useSWRConfig();
-  const settings = useApi<Settings>('/api/settings');
+  const settings = useApi<PublicSettings>('/api/settings');
   const data = settings.data;
   const enabled = data?.universes?.length ? data.universes : UNIVERSES;
   const order = completeKindOrder(data?.kindOrder);
-  // Adult-only kinds (the generic extension catalog) are only offered when they can be shown.
+  // The extension kind is only offered while an extension declares a section to show.
   const visibleOrder = order.filter((k) =>
-    kindVisible(k, {
-      adultContent: data?.adultContent,
-      adultMode: data?.adultMode,
-      extensionCatalog: data?.extensionCatalog,
-    }),
+    kindVisible(k, { extensionSections: data?.extensionSections }),
   );
   async function save(patch: Partial<Settings>) {
     try {

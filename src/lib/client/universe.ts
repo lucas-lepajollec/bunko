@@ -15,6 +15,15 @@ import {
 } from '@/domain/kinds';
 
 export type Universe = Kind;
+/** One entry of a kind menu: a kind, or one section of the extension kind (named by it). */
+export interface UniverseChoice {
+  kind: DiscoverKind;
+  section: string | null;
+  name: string | null;
+}
+/** Label of a menu entry: the extension's own section name, else the kind's. */
+export const choiceLabel = (t: (key: string) => string, choice: UniverseChoice) =>
+  choice.name ?? (choice.kind === 'all' ? t('universe.all') : t(`kind.${choice.kind}`));
 /** Every kind, in menu order (from the kind registry). */
 export const UNIVERSES: Universe[] = [...KIND_IDS];
 /** Universes that have reading sources (Suwayomi extensions). */
@@ -33,11 +42,9 @@ export function useUniverse() {
   const data = settings.data;
   // Enabled kinds in the user's priority order (the switcher, menus and home shelves use it).
   const order = completeKindOrder(data?.kindOrder);
-  const visibility: KindVisibility = {
-    adultContent: data?.adultContent,
-    adultMode: data?.adultMode,
-    extensionCatalog: data?.extensionCatalog,
-  };
+  // Sections the account's extensions declare (names are theirs), for the current 18+ mode.
+  const sections = data?.extensionSections ?? [];
+  const visibility: KindVisibility = { extensionSections: sections };
   const visible = (kind: DiscoverKind) => kindVisible(kind, visibility);
   const enabled: Universe[] = byKindOrder(
     (data?.universes?.length ? data.universes : UNIVERSES).filter(visible),
@@ -47,10 +54,15 @@ export function useUniverse() {
   let active: DiscoverKind = data?.universe ?? 'all';
   if (active === 'all' && !allowAll) active = enabled[0];
   if (active !== 'all' && !enabled.includes(active)) active = allowAll ? 'all' : enabled[0];
-  async function set(next: DiscoverKind) {
-    if (!data || next === active) return;
-    await mutate('/api/settings', { ...data, universe: next }, { revalidate: false });
-    await send('/api/settings', 'PATCH', { universe: next });
+  const section =
+    active === 'extension' && sections.some((s) => s.id === data?.extensionSection)
+      ? (data?.extensionSection ?? null)
+      : null;
+  async function set(next: DiscoverKind, nextSection: string | null = null) {
+    if (!data || (next === active && nextSection === section)) return;
+    const patch = { universe: next, extensionSection: nextSection };
+    await mutate('/api/settings', { ...data, ...patch }, { revalidate: false });
+    await send('/api/settings', 'PATCH', patch);
     // Every page reloads for the new universe (only what it needs).
     await mutate((key) => typeof key === 'string' && key.startsWith('/api/'));
   }
@@ -66,8 +78,18 @@ export function useUniverse() {
     clearPersistentCache({ resume: true });
     await mutate((key) => typeof key === 'string' && key.startsWith('/api/'));
   }
+  /** Menu entries: each kind once, the extension kind once per declared section. */
+  const choices = (kinds: readonly DiscoverKind[]): UniverseChoice[] =>
+    kinds.flatMap((kind): UniverseChoice[] =>
+      kind === 'extension' && sections.length
+        ? sections.map((s) => ({ kind, section: s.id, name: s.name }))
+        : [{ kind, section: null, name: null }],
+    );
   return {
     active,
+    section,
+    sections,
+    choices,
     enabled,
     order,
     visible,

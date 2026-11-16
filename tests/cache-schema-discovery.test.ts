@@ -73,7 +73,7 @@ it('loads an unversioned old-shaped home cache with every current shelf and arra
     'anime',
     'book',
     'comic',
-    'jav',
+    'extension',
     'lightnovel',
     'manga',
     'manhua',
@@ -81,7 +81,6 @@ it('loads an unversioned old-shaped home cache with every current shelf and arra
     'movies',
     'novel',
     'series',
-    'tube',
     'webnovel',
   ]);
   expect(Object.values(feed.latest).every(Array.isArray)).toBe(true);

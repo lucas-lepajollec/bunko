@@ -5,10 +5,10 @@ import { publicSettings, updateSettings } from '@/lib/settings';
 import { settingsPatch } from '@/lib/validation';
 import { configureRepos } from '@/lib/suwayomi';
 import { requirePermission } from '@/lib/auth';
-import { primeExtensionCatalog } from '@/lib/video-addons';
+import { primeExtensionSections } from '@/lib/video-addons';
 export const GET = route(async () => {
-  // Menus decide whether the generic extension catalog exists; manifests are cached.
-  await primeExtensionCatalog().catch(() => false);
+  // Menus list the sections the extensions declare; manifests are cached.
+  await primeExtensionSections().catch(() => []);
   return json(publicSettings());
 });
 /** Connection settings a member needs the `services` permission for. */

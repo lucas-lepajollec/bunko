@@ -2,7 +2,6 @@ import { tenantState } from './tenant-context';
 import type { UnifiedMedia, ChapterSelection, TrackedMedia, Source } from '@/types/shared';
 import { statement, writeVersion, db } from './db';
 import { getSettings } from './settings';
-import { KINDS } from '@/domain/kinds';
 
 export function recordSourceFlags(sources: Source[]) {
   db().transaction(() => {
@@ -230,15 +229,12 @@ export function mediaAdult(
   return adultClassifier()(media);
 }
 /**
- * Works read from an extension's own catalog (and the kinds made only of them) exist only in the
- * account's full 18+ mode, like their catalog, sheet and streams: once the account leaves it,
- * every list (pick up, library, releases, notifications…) drops them too.
+ * Works from an adult extension's own catalog exist only in the account's full 18+ mode, like
+ * their catalog, sheet and streams: once the account leaves it, every list (pick up, library,
+ * releases, notifications…) drops them too.
  */
-export function onlyInAdultMode(media: Pick<UnifiedMedia, 'id' | 'kindOverride'>) {
-  return (
-    media.id.startsWith('ext:') ||
-    Boolean(media.kindOverride && KINDS[media.kindOverride]?.adultOnly)
-  );
+export function onlyInAdultMode(media: Pick<UnifiedMedia, 'id' | 'adult'>) {
+  return media.id.startsWith('ext:') && Boolean(media.adult);
 }
 export function mediaVisibility() {
   const scope = adultScope();

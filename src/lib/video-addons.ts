@@ -5,11 +5,12 @@ import { ensureAnimeIds, idsOfAnilist, tmdbEntries } from './anime-ids';
 import { naturalEpisode } from './anime-franchise';
 import { AppError } from './errors';
 import {
-  extensionCatalogAvailable,
-  noteExtensionCatalog,
-  pruneExtensionCatalogs,
-  resetExtensionCatalogs,
+  noteExtensionSections,
+  pruneExtensionSections,
+  visibleExtensionSections,
 } from './extension-catalog-state';
+import { KINDS, isKind, type Kind } from '@/domain/kinds';
+import type { ExtensionSection } from '@/types/shared';
 import { addonId, getSettings, updateSettings } from './settings';
 import { relayPath, safeHeaders, subtitlePath } from './video-relay';
 import { onPublicInternet, plausiblyPublic, safeJson } from './safe-fetch';
@@ -37,13 +38,18 @@ const catalog = z
     type: z.string(),
     id: z.string(),
     name: z.string().optional(),
-    /** Optional generic shelf: `anime` joins the anime kind, anything else the extension kind. */
+    /**
+     * The section its works form. The name of one of Bunko's video kinds (`anime`…) joins that
+     * kind; any other id is a section of the generic extension kind, shown as `categoryName`.
+     */
     category: z.string().max(40).optional(),
+    categoryName: z.string().max(60).optional(),
     extra: z
       .array(
         z
           .object({
             name: z.string().max(40),
+            isRequired: z.boolean().optional(),
             options: z.array(z.string().max(100)).max(100).optional(),
           })
           .passthrough(),
@@ -61,28 +67,74 @@ const manifestSchema = z
     types: z.array(z.string()).default([]),
     idPrefixes: z.array(z.string()).optional(),
     catalogs: z.array(catalog).default([]),
+    /** Stremio's own flag: an adult extension (its sections need the full 18+ mode). */
+    behaviorHints: z
+      .object({ adult: z.boolean().optional() })
+      .passthrough()
+      .optional()
+      .catch(undefined),
   })
   .passthrough();
 type Manifest = z.infer<typeof manifestSchema>;
 type Resource = 'stream' | 'subtitles';
 /** The generic catalog type an extension may expose: its content and names are runtime only. */
 export const EXTENSION_CATALOG_TYPE = 'extvideo';
-const extvideoCatalogs = (m: Manifest) =>
-  m.catalogs
+const SECTION_ID = /^[a-z0-9][a-z0-9_-]{0,39}$/;
+/** Video kinds a catalog may join by naming them (the extension kind itself excluded). */
+const nativeKind = (category: string | undefined): Kind | null =>
+  category && isKind(category) && category !== 'extension' && KINDS[category].family === 'video'
+    ? category
+    : null;
+function extvideoCatalogs(m: Manifest, addonId: string): ExtensionCatalog[] {
+  const adult = m.behaviorHints?.adult === true;
+  return m.catalogs
     .filter((c) => c.type === EXTENSION_CATALOG_TYPE)
-    .map((c) => ({
-      id: c.id,
-      name: c.name ?? c.id,
-      category: c.category,
-      genres: c.extra?.find((extra) => extra.name === 'genre')?.options,
-      tags: c.extra?.find((extra) => extra.name === 'tag')?.options,
-    }));
+    .map((c) => {
+      const category = c.category?.trim().toLowerCase();
+      const native = nativeKind(category);
+      // No usable category: the extension itself is the section, under its own name.
+      const id = !native && category && SECTION_ID.test(category) ? category : addonId;
+      return {
+        id: c.id,
+        name: c.name ?? c.id,
+        native,
+        section: native
+          ? null
+          : { id, name: c.categoryName?.trim() || (id === addonId ? m.name : category!), adult },
+        search: Boolean(c.extra?.some((extra) => extra.name === 'search')),
+        searchOnly: Boolean(c.extra?.some((extra) => extra.name === 'search' && extra.isRequired)),
+        genres: c.extra?.find((extra) => extra.name === 'genre')?.options,
+        tags: c.extra?.find((extra) => extra.name === 'tag')?.options,
+      };
+    });
+}
+/** The extension sections a manifest declares (one per section id). */
+function sectionsOf(catalogs: ExtensionCatalog[]): ExtensionSection[] {
+  const out = new Map<string, ExtensionSection>();
+  for (const c of catalogs)
+    if (c.section && !out.has(c.section.id)) out.set(c.section.id, c.section);
+  return [...out.values()];
+}
+export interface ExtensionCatalog {
+  id: string;
+  name: string;
+  /** Joins one of Bunko's own video kinds instead of an extension section. */
+  native: Kind | null;
+  section: ExtensionSection | null;
+  /** Accepts a `search` extra; `searchOnly` when it requires one (a search-only list). */
+  search: boolean;
+  searchOnly: boolean;
+  genres?: string[];
+  tags?: string[];
+}
 export interface ExtensionCatalogAddon {
   /** Server-side manifest address (never sent to the browser). */
   url: string;
   id: string;
   name: string;
-  catalogs: { id: string; name: string; category?: string; genres?: string[]; tags?: string[] }[];
+  /** Declared adult (`behaviorHints.adult`): read only in the account's full 18+ mode. */
+  adult: boolean;
+  catalogs: ExtensionCatalog[];
 }
 
 /** Optional, generic per-source health: an extension may expose it at `{baseManifest}/health.json`. */
@@ -196,7 +248,7 @@ export async function videoAddons(signal?: AbortSignal): Promise<VideoAddon[]> {
       const host = new URL(base(url)).host;
       try {
         const [m, health] = await Promise.all([manifest(url, signal), addonHealth(url, signal)]);
-        noteExtensionCatalog(id, extvideoCatalogs(m).length > 0);
+        noteExtensionSections(id, sectionsOf(extvideoCatalogs(m, id)));
         return {
           id,
           host,
@@ -207,7 +259,7 @@ export async function videoAddons(signal?: AbortSignal): Promise<VideoAddon[]> {
           health,
         };
       } catch (e) {
-        noteExtensionCatalog(id, false);
+        noteExtensionSections(id, []);
         const error = (e as AppError).code === 'DESTINATION_REFUSED' ? 'private' : 'unreachable';
         return {
           id,
@@ -225,41 +277,41 @@ export async function videoAddons(signal?: AbortSignal): Promise<VideoAddon[]> {
 
 /**
  * Configured extensions that expose a generic `extvideo` catalog, with their server-side address.
- * Only read in the account's full 18+ mode: a mixed or off account never asks for it.
+ * Adult extensions are only listed in the account's full 18+ mode, the others outside it.
  */
 export async function extensionCatalogAddons(
   signal?: AbortSignal,
 ): Promise<ExtensionCatalogAddon[]> {
   const settings = getSettings();
-  if (!settings.adultContent || !settings.adultMode) {
-    resetExtensionCatalogs();
-    return [];
-  }
+  const adultOnly = Boolean(settings.adultContent && settings.adultMode);
   const out: ExtensionCatalogAddon[] = [];
-  // Each extension's flag is updated where it is read (never cleared first: menus asking
-  // meanwhile would see no catalog for a moment).
+  // Each extension's sections are updated where they are read (never cleared first: menus
+  // asking meanwhile would see none for a moment).
   await Promise.all(
     settings.videoAddons.map(async (url) => {
       const id = addonId(url);
       try {
         const m = await manifest(url, signal);
-        const catalogs = extvideoCatalogs(m);
-        noteExtensionCatalog(id, catalogs.length > 0);
-        if (catalogs.length) out.push({ url, id, name: m.name, catalogs });
+        const catalogs = extvideoCatalogs(m, id);
+        noteExtensionSections(id, sectionsOf(catalogs));
+        const adult = m.behaviorHints?.adult === true;
+        if (catalogs.length && adult === adultOnly)
+          out.push({ url, id, name: m.name, adult, catalogs });
       } catch {
-        noteExtensionCatalog(id, false);
+        noteExtensionSections(id, []);
       }
     }),
   );
   // Extensions removed from the account no longer count.
-  pruneExtensionCatalogs(settings.videoAddons.map(addonId));
+  pruneExtensionSections(settings.videoAddons.map(addonId));
   return out.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-/** Refreshes the in-memory "an extension offers a catalog" flag before menus are rendered. */
-export async function primeExtensionCatalog(signal?: AbortSignal) {
+/** Reads the extensions' sections before menus are rendered (see `PublicSettings`). */
+export async function primeExtensionSections(signal?: AbortSignal) {
   await extensionCatalogAddons(signal);
-  return extensionCatalogAvailable();
+  const settings = getSettings();
+  return visibleExtensionSections(Boolean(settings.adultContent && settings.adultMode));
 }
 
 /** Adds an extension after reading its manifest (a wrong address is refused, not stored). */

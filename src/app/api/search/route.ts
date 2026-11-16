@@ -6,13 +6,13 @@ import { search } from '@/lib/search-engine';
 import { withTracking } from '@/lib/catalog';
 import { groupAnimeSeasons } from '@/lib/anime-works';
 import { searchTmdb, tmdbConfigured } from '@/lib/tmdb';
-import { extensionSearch } from '@/lib/extension-catalog';
+import { extensionSearch, sectionTarget } from '@/lib/extension-catalog';
 import type { SearchResponse } from '@/types/shared';
 export const GET = route(async (r) => {
   const p = searchParams.parse(Object.fromEntries(new URL(r.url).searchParams));
-  // The generic extension catalog searches its own `extvideo` catalogs.
-  if (p.kind === 'jav' || p.kind === 'tube') {
-    const results = await extensionSearch(p.q, p.kind, r.signal);
+  // The extension kind searches the extensions' own `extvideo` catalogs.
+  if (p.kind === 'extension') {
+    const results = await extensionSearch(p.q, sectionTarget(p.section), r.signal);
     return json({
       results: withTracking(results),
       providers: [],
@@ -32,8 +32,8 @@ export const GET = route(async (r) => {
     !p.type && p.fast !== '1' && tmdbConfigured()
       ? searchTmdb(p.q).catch(() => [])
       : Promise.resolve([]),
-    // Adult anime whose extension sheet is not in AniList joins the anime search too.
-    p.type === 'ANIME' ? extensionSearch(p.q, 'anime', r.signal).catch(() => []) : [],
+    // Extension works that joined the anime kind (not in AniList) join its search too.
+    p.type === 'ANIME' ? extensionSearch(p.q, { native: 'anime' }, r.signal).catch(() => []) : [],
   ]);
   return json({
     ...response,

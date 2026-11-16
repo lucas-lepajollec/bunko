@@ -387,17 +387,16 @@ export function statusKey(status: string) {
 export function useMediaMeta() {
   const { t } = useI18n();
   return (
-    m: Pick<UnifiedMedia, 'format' | 'type' | 'year' | 'status' | 'kindOverride'>,
+    m: Pick<UnifiedMedia, 'format' | 'type' | 'year' | 'status' | 'extensionSection'>,
     withStatus = false,
   ) =>
     [
-      m.kindOverride === 'jav'
-        ? t('kind.jav')
-        : m.kindOverride === 'tube'
-          ? t('kind.tube')
-          : m.format
-            ? t(`format.${m.format}`)
-            : t(`type.${m.type}`),
+      // An extension's own work: the section name that extension declared.
+      m.extensionSection
+        ? m.extensionSection.name
+        : m.format
+          ? t(`format.${m.format}`)
+          : t(`type.${m.type}`),
       m.year,
       withStatus && m.status ? t(`status.${statusKey(m.status)}`) : null,
     ]

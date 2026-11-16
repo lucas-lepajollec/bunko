@@ -5,9 +5,10 @@ import type { ChapterRelease, DiscoverKind, HomeFeed } from '@/types/shared';
 import { releaseStore, refreshReleases, mediaKind, releaseLoadingState } from './releases';
 import { discover, discoverAniList, withTracking } from './catalog';
 import {
-  extensionAnimeCatalogPage,
   extensionCatalogPage,
   extensionReleases,
+  sectionTarget,
+  type ExtensionTarget,
 } from './extension-catalog';
 import { cached, storedMetadata, metadataStatus } from './metadata-cache';
 import { mediaVisibility, adultKey } from './adult';
@@ -129,27 +130,21 @@ function fillHero(home: HomeFeed): HomeFeed {
     ],
   };
 }
-/** The generic extension catalog has no persisted home: everything is read in memory. */
-async function extensionHome(kind: 'jav' | 'tube'): Promise<HomeFeed> {
-  const settings = getSettings();
-  if (!settings.adultContent || !settings.adultMode)
-    return normalizeHome(composeHome([], [], kind));
-  const page = await extensionCatalogPage(kind, { kind, sort: 'trending' }, 1);
+/** The extension kind has no persisted home: everything is read in memory. */
+async function extensionHome(): Promise<HomeFeed> {
+  const target = sectionTarget(getSettings().extensionSection);
+  const page = await extensionCatalogPage(target, { kind: 'extension', sort: 'trending' }, 1);
   const releases = await extensionReleases(
     new Date(Date.now() - 30 * 86400_000),
     new Date(),
-    undefined,
-    kind,
+    target,
   ).catch(() => []);
-  const home = fillHero(
-    normalizeHome(composeHome(heroArtwork(releases), page.items, kind)),
-  );
+  const home = fillHero(normalizeHome(composeHome(heroArtwork(releases), page.items, 'extension')));
   return { ...home, pending: page.pending };
 }
 export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<HomeFeed> {
-  // No metadata_cache entry is written for extension catalog works.
-  if (kind === 'jav' || kind === 'tube') return extensionHome(kind);
-  const settings = getSettings();
+  // No metadata_cache entry is written for extension works.
+  if (kind && KINDS[kind].catalog === 'extension') return extensionHome();
   const video = isVideoKind(kind);
   // Reading releases are not video: those homes never start their ingestion.
   if (!video) void refreshReleases().catch(() => {});
@@ -221,33 +216,28 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
           new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
         ])
       : [];
-  const extensionAnimeOn =
-    (kind === 'anime' || !kind) &&
-    settings.adultContent &&
-    settings.adultMode &&
-    (!kind || !enabled.length || enabled.includes(kind));
-  const extensionOtherOn =
-    !kind &&
-    settings.adultContent &&
-    settings.adultMode &&
-    (!enabled.length || enabled.includes('jav') || enabled.includes('tube'));
-  // Extension releases are read in memory; a slow extension never holds the home feed.
-  const extensionWeek =
-    extensionAnimeOn || extensionOtherOn
-      ? await Promise.race([
-          extensionReleases(
-            new Date(Date.now() - 7 * 86400_000),
-            new Date(),
-            undefined,
-            kind === 'anime' ? 'anime' : undefined,
-          ).catch(() => []),
-          new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
-        ])
-      : [];
+  // Extension works (the extension kind, or those that joined the anime kind) are read in
+  // memory; a slow extension never holds the home feed. Which extensions count follows the
+  // account's 18+ mode (see `extensionCatalogAddons`).
+  const extensionTarget: ExtensionTarget | null =
+    kind === 'anime'
+      ? { native: 'anime' }
+      : !kind && (!enabled.length || enabled.includes('anime') || enabled.includes('extension'))
+        ? { every: true }
+        : null;
+  const extensionWeek = extensionTarget
+    ? await Promise.race([
+        extensionReleases(new Date(Date.now() - 7 * 86400_000), new Date(), extensionTarget).catch(
+          () => [],
+        ),
+        new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
+      ])
+    : [];
   const extensionAnimeTop =
-    kind === 'anime' && settings.adultContent && settings.adultMode
+    kind === 'anime'
       ? await Promise.race([
-          extensionAnimeCatalogPage(
+          extensionCatalogPage(
+            { native: 'anime' },
             { sort: 'trending', kind: 'anime', perPage: 20 },
             1,
           )
