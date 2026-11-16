@@ -70,7 +70,7 @@ const metaSchema = z
     genres: z.array(z.string().max(100)).max(100).optional().default([]),
     year: z.number().int().min(0).max(3000).optional().nullable(),
     type: z.enum(['movie', 'series', 'extvideo']).optional().default('movie'),
-    category: z.enum(['anime', 'jav', 'tube']).optional().default('tube'),
+    category: z.enum(['anime', 'jav', 'tube']).optional(),
     releaseInfo: z.string().max(100).optional().nullable(),
     externalIds: externalIdsSchema.optional().nullable(),
     videos: z.array(videoSchema).max(5000).optional().default([]),
@@ -78,6 +78,7 @@ const metaSchema = z
   .passthrough();
 
 type ExtMeta = z.infer<typeof metaSchema>;
+type Group = 'anime' | 'jav' | 'tube';
 
 const streamSchema = z
   .object({
@@ -134,6 +135,23 @@ export function clearExtensionCatalogCache() {
   cache().clear();
 }
 
+/**
+ * What the catalog showed for each work (memory only, bounded). An extension's sheet is often
+ * poorer than its listing (no poster, no category): the sheet then keeps what the card showed,
+ * and still opens from it when the extension's sheet does not answer.
+ */
+const listed = tenantState(() => new Map<string, { meta: ExtMeta; group: Group }>());
+const LISTED_MAX = 3000;
+function remember(entries: CatalogEntry[]) {
+  const state = listed();
+  for (const { addon, meta, group } of entries) {
+    const key = `${addon.id}:${meta.id}`;
+    state.delete(key);
+    state.set(key, { meta, group });
+  }
+  while (state.size > LISTED_MAX) state.delete(state.keys().next().value!);
+}
+
 /** `ext:<addonId>:<base64url(meta id)>`, so no provider address ever leaves the server. */
 export function extensionMediaId(addonId: string, metaId: string) {
   return `ext:${addonId}:${Buffer.from(metaId, 'utf8').toString('base64url')}`;
@@ -149,7 +167,7 @@ export function decodeExtensionMediaId(id: string) {
 function toMedia(
   addon: ExtensionCatalogAddon,
   meta: ExtMeta,
-  category: 'anime' | 'jav' | 'tube' = meta.category ?? 'tube',
+  category: Group = meta.category ?? 'tube',
 ): UnifiedMedia {
   const external = meta.externalIds;
   const year =
@@ -182,7 +200,7 @@ function collides(meta: ExtMeta) {
 interface CatalogEntry {
   addon: ExtensionCatalogAddon;
   meta: ExtMeta;
-  group: 'anime' | 'jav' | 'tube';
+  group: Group;
 }
 interface CatalogRequest {
   skip?: number;
@@ -227,12 +245,18 @@ async function readCatalog(
   request: CatalogRequest,
   signal?: AbortSignal,
   sort?: string,
-  group?: 'anime' | 'jav' | 'tube',
+  group?: Group,
 ): Promise<CatalogEntry[]> {
   if (!ADULT_ONLY()) return [];
   const addons = await extensionCatalogAddons(signal);
-  const wanted = request.search ? 'search' : sort === 'new' ? 'latest' : sort === 'trending' || sort === 'popular' ? 'trending' : null;
-  const groupOf = (catalog: { category?: string }): 'anime' | 'jav' | 'tube' =>
+  const wanted = request.search
+    ? 'search'
+    : sort === 'new'
+      ? 'latest'
+      : sort === 'trending' || sort === 'popular'
+        ? 'trending'
+        : null;
+  const groupOf = (catalog: { category?: string }): Group =>
     catalog.category === 'anime' ? 'anime' : catalog.category === 'jav' ? 'jav' : 'tube';
   const catalogs = addons.flatMap((addon) => {
     const inGroup = group
@@ -270,6 +294,7 @@ async function readCatalog(
       seen.add(key);
       out.push(entry);
     }
+  remember(out);
   return out;
 }
 
@@ -285,7 +310,7 @@ function usable(entries: CatalogEntry[]) {
 }
 
 async function extensionPage(
-  group: 'anime' | 'jav' | 'tube',
+  group: Group,
   filters: DiscoverQuery,
   page: number,
   signal?: AbortSignal,
@@ -324,8 +349,7 @@ export async function extensionCatalogPage(
   signal?: AbortSignal,
   search?: string,
 ): Promise<DiscoverPage> {
-  if (kind !== 'jav' && kind !== 'tube')
-    return { items: [], page: page || 1, hasNextPage: false };
+  if (kind !== 'jav' && kind !== 'tube') return { items: [], page: page || 1, hasNextPage: false };
   return extensionPage(kind, filters, page, signal, search);
 }
 
@@ -377,7 +401,7 @@ export async function extensionCatalogFilters(
 /** Search inside the configured `extvideo` catalogs (`search=` extras), never outside 18+ only. */
 export async function extensionSearch(
   query: string,
-  group: 'anime' | 'jav' | 'tube' = 'tube',
+  group: Group = 'tube',
   signal?: AbortSignal,
 ): Promise<UnifiedMedia[]> {
   const page = await extensionPage(group, { kind: group }, 1, signal, query);
@@ -475,10 +499,29 @@ export async function extensionDetail(mediaId: string, signal?: AbortSignal): Pr
   if (!decoded || !ADULT_ONLY()) throw new AppError('NOT_FOUND', 'Title not found', 404);
   const addon = await addonFor(decoded.addonId, signal);
   if (!addon) throw new AppError('NOT_FOUND', 'Title not found', 404);
-  const meta = await metaOf(addon, decoded.metaId, signal);
+  const card = listed().get(`${addon.id}:${decoded.metaId}`);
+  const sheet = await metaOf(addon, decoded.metaId, signal).catch((error: unknown) => {
+    // The card was listed moments ago: open it as listed rather than fail.
+    if (card) return null;
+    throw error;
+  });
+  const meta: ExtMeta = sheet
+    ? {
+        ...sheet,
+        // The listing's picture is the one already shown (and loading) on the card.
+        poster: card?.meta.poster || sheet.poster || sheet.logo || card?.meta.logo,
+        background: sheet.background || card?.meta.background,
+        description: sheet.description || card?.meta.description,
+        genres: sheet.genres?.length ? sheet.genres : (card?.meta.genres ?? []),
+        year: sheet.year ?? card?.meta.year,
+        releaseInfo: sheet.releaseInfo ?? card?.meta.releaseInfo,
+      }
+    : { ...card!.meta, type: card!.meta.type === 'series' ? 'series' : 'movie' };
   const type = meta.type === 'series' ? 'series' : 'movie';
+  // A sheet without a category is not a tube scene: the catalog the card came from decides.
+  const group = card?.group ?? sheet?.category ?? 'tube';
   return {
-    ...toMedia(addon, meta),
+    ...toMedia(addon, meta, group),
     id: mediaId,
     extension: { type },
     video: videoOf(meta),
@@ -579,12 +622,13 @@ function releaseOf(
   meta: ExtMeta,
   video: z.infer<typeof videoSchema>,
   tracked: ReturnType<typeof listTracked>,
+  group: Group,
 ): ChapterRelease | null {
   const raw = video.released?.trim();
   if (!raw) return null;
   const at = new Date(raw);
   if (Number.isNaN(at.getTime())) return null;
-  const baseMedia = toMedia(addon, meta);
+  const baseMedia = toMedia(addon, meta, group);
   const followed = tracked.find(
     (entry) =>
       entry.media.id === baseMedia.id ||
@@ -622,15 +666,15 @@ export async function extensionReleases(
   from: Date,
   to: Date,
   signal?: AbortSignal,
-  group?: 'anime' | 'jav' | 'tube',
+  group?: Group,
 ): Promise<ChapterRelease[]> {
   if (!ADULT_ONLY()) return [];
   const entries = await readCatalog({ skip: 0 }, signal, undefined, group);
   const tracked = listTracked();
   const out: ChapterRelease[] = [];
-  for (const { addon, meta } of usable(entries))
+  for (const { addon, meta, group: entryGroup } of usable(entries))
     for (const video of meta.videos ?? []) {
-      const release = releaseOf(addon, meta, video, tracked);
+      const release = releaseOf(addon, meta, video, tracked, entryGroup);
       if (!release) continue;
       const at = Date.parse(release.releasedAt);
       if (at < from.getTime() || at > to.getTime()) continue;

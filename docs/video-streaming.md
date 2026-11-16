@@ -155,6 +155,23 @@ Keep the existing hardening of the compose file (`read_only`, `cap_drop: [ALL]`,
 `no-new-privileges`, no Docker socket, only the Bunko port published). A Proxmox or router
 firewall rule giving the Bunko host the same egress list achieves the same.
 
+## Extension catalogs
+
+An extension may also offer works of its own: catalogs of the custom type `extvideo` in its
+manifest (`catalogs[].type = "extvideo"`), each with an optional `category` (`anime` joins the
+Anime kind; `jav` and `tube` fill the kinds of the same name) and optional `genre`/`tag` extras
+whose `options` become the catalog filters. Bunko then reads `/catalog/extvideo/<id>[/<extras>].json`,
+`/meta/extvideo/<id>.json` and `/stream/extvideo/<id>.json` (with `?episode=` for series).
+
+- These works exist only while the account is in its full 18+ mode: catalog, home, planning,
+  releases, search, sheet and player read them only then, and every list that keeps works
+  (pick up, library, notifications…) drops them as soon as the account leaves that mode.
+- Responses stay in memory (never in the metadata cache). A work that also carries an AniList,
+  TMDB or IMDb id is left to the native catalog.
+- The sheet keeps what the catalog card showed (poster, wide picture, category, synopsis,
+  genres) when the extension's own sheet lacks it, and opens from the card when that sheet does
+  not answer.
+
 ## Picture enhancement
 
 The player can improve the picture in the viewer's browser, on its GPU (WebGL 2): the server sends

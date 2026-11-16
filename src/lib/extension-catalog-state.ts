@@ -10,6 +10,10 @@ export function noteExtensionCatalog(addonId: string, available: boolean) {
   if (available) state().addons.add(addonId);
   else state().addons.delete(addonId);
 }
+export function pruneExtensionCatalogs(configured: string[]) {
+  const keep = new Set(configured);
+  for (const id of state().addons) if (!keep.has(id)) state().addons.delete(id);
+}
 export function resetExtensionCatalogs() {
   state().addons.clear();
 }
