@@ -57,31 +57,35 @@ it('classifies works the same way everywhere', () => {
   expect(kindOfMedia({ type: 'MANGA', format: null, origin: 'CN' })).toBe('manhua');
   expect(kindOfMedia({ type: 'NOVEL', format: null })).toBe('novel');
   expect(searchTypeOf('series')).toBe('TV');
-  expect(searchTypeOf('extensions')).toBe('MOVIE');
+  expect(searchTypeOf('jav')).toBe('MOVIE');
+  expect(searchTypeOf('tube')).toBe('MOVIE');
   expect(searchTypeOf('all')).toBeUndefined();
   expect(KIND_IDS.filter(isVideoKind)).toEqual([
     'anime',
     'series',
     'movies',
     'animation',
-    'extensions',
+    'jav',
+    'tube',
   ]);
 });
 
-it('only offers the generic extension catalog in full 18+ mode and with a catalog', () => {
+it('only offers the JAV and tube catalogs in full 18+ mode and with a catalog', () => {
   const off = { adultContent: false, adultMode: false, extensionCatalog: true };
   const mixed = { adultContent: true, adultMode: false, extensionCatalog: true };
   const only = { adultContent: true, adultMode: true, extensionCatalog: false };
   const ready = { adultContent: true, adultMode: true, extensionCatalog: true };
-  expect(KINDS.extensions.adultOnly).toBe(true);
-  expect(KINDS.extensions.catalog).toBe('extension');
-  expect(kindVisible('extensions', off)).toBe(false);
-  expect(kindVisible('extensions', mixed)).toBe(false);
-  expect(kindVisible('extensions', only)).toBe(false);
-  expect(kindVisible('extensions', ready)).toBe(true);
+  for (const kind of ['jav', 'tube'] as const) {
+    expect(KINDS[kind].adultOnly).toBe(true);
+    expect(KINDS[kind].catalog).toBe('extension');
+    expect(kindVisible(kind, off)).toBe(false);
+    expect(kindVisible(kind, mixed)).toBe(false);
+    expect(kindVisible(kind, only)).toBe(false);
+    expect(kindVisible(kind, ready)).toBe(true);
+    expect(availableKinds(KIND_IDS, only)).not.toContain(kind);
+    expect(availableKinds(KIND_IDS, ready)).toContain(kind);
+  }
   expect(kindVisible('anime', off)).toBe(true);
-  expect(availableKinds(KIND_IDS, only)).not.toContain('extensions');
-  expect(availableKinds(KIND_IDS, ready)).toContain('extensions');
 });
 
 it('accepts every kind wherever a kind is chosen, and gives each a home shelf', () => {

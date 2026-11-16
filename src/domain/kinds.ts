@@ -48,7 +48,8 @@ export const KIND_IDS = [
   'series',
   'movies',
   'animation',
-  'extensions',
+  'jav',
+  'tube',
 ] as const satisfies readonly Kind[];
 
 const reading = (formats: readonly MediaFormat[], extra: Partial<KindDef> = {}): KindDef => ({
@@ -121,7 +122,19 @@ export const KINDS: Record<Kind, KindDef> = {
     sources: false,
     datedReleases: true,
   },
-  extensions: {
+  jav: {
+    family: 'video',
+    mediaType: 'ANIME',
+    formats: [],
+    search: 'MOVIE',
+    catalog: 'extension',
+    releases: 'extension',
+    unit: 'film',
+    sources: false,
+    datedReleases: true,
+    adultOnly: true,
+  },
+  tube: {
     family: 'video',
     mediaType: 'ANIME',
     formats: [],
@@ -154,7 +167,7 @@ export function kindVisible(
   const def = KINDS[kind];
   if (!def.adultOnly) return true;
   if (!settings.adultContent || !settings.adultMode) return false;
-  return kind !== 'extensions' || Boolean(settings.extensionCatalog);
+  return Boolean(settings.extensionCatalog);
 }
 export function availableKinds<T extends DiscoverKind>(
   kinds: readonly T[],

@@ -130,26 +130,25 @@ function fillHero(home: HomeFeed): HomeFeed {
   };
 }
 /** The generic extension catalog has no persisted home: everything is read in memory. */
-async function extensionHome(): Promise<HomeFeed> {
+async function extensionHome(kind: 'jav' | 'tube'): Promise<HomeFeed> {
   const settings = getSettings();
   if (!settings.adultContent || !settings.adultMode)
-    return normalizeHome(composeHome([], [], 'extensions'));
-  const page = await extensionCatalogPage(
-    'extensions',
-    { kind: 'extensions', sort: 'trending' },
-    1,
-  );
-  const releases = await extensionReleases(new Date(Date.now() - 30 * 86400_000), new Date()).catch(
-    () => [],
-  );
+    return normalizeHome(composeHome([], [], kind));
+  const page = await extensionCatalogPage(kind, { kind, sort: 'trending' }, 1);
+  const releases = await extensionReleases(
+    new Date(Date.now() - 30 * 86400_000),
+    new Date(),
+    undefined,
+    kind,
+  ).catch(() => []);
   const home = fillHero(
-    normalizeHome(composeHome(heroArtwork(releases), page.items, 'extensions')),
+    normalizeHome(composeHome(heroArtwork(releases), page.items, kind)),
   );
   return { ...home, pending: page.pending };
 }
 export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<HomeFeed> {
   // No metadata_cache entry is written for extension catalog works.
-  if (kind === 'extensions') return extensionHome();
+  if (kind === 'jav' || kind === 'tube') return extensionHome(kind);
   const settings = getSettings();
   const video = isVideoKind(kind);
   // Reading releases are not video: those homes never start their ingestion.
@@ -231,7 +230,7 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
     !kind &&
     settings.adultContent &&
     settings.adultMode &&
-    (!enabled.length || enabled.includes('extensions'));
+    (!enabled.length || enabled.includes('jav') || enabled.includes('tube'));
   // Extension releases are read in memory; a slow extension never holds the home feed.
   const extensionWeek =
     extensionAnimeOn || extensionOtherOn

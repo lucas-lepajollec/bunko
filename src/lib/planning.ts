@@ -241,7 +241,7 @@ export async function withExtensionReleases(
   q: z.infer<typeof planningQuery>,
 ): Promise<PlanningWeek> {
   const kind = q.kind ?? 'all';
-  if (!['all', 'extensions'].includes(kind)) return week;
+  if (!['all', 'jav', 'tube'].includes(kind)) return week;
   const from = dateFromDay(week.start);
   from.setHours(0, 0, 0, 0);
   const to = new Date(from);

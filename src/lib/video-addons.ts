@@ -38,6 +38,17 @@ const catalog = z
     name: z.string().optional(),
     /** Optional generic shelf: `anime` joins the anime kind, anything else the extension kind. */
     category: z.string().max(40).optional(),
+    extra: z
+      .array(
+        z
+          .object({
+            name: z.string().max(40),
+            options: z.array(z.string().max(100)).max(100).optional(),
+          })
+          .passthrough(),
+      )
+      .max(20)
+      .optional(),
   })
   .passthrough();
 const manifestSchema = z
@@ -58,13 +69,18 @@ export const EXTENSION_CATALOG_TYPE = 'extvideo';
 const extvideoCatalogs = (m: Manifest) =>
   m.catalogs
     .filter((c) => c.type === EXTENSION_CATALOG_TYPE)
-    .map((c) => ({ id: c.id, name: c.name ?? c.id, category: c.category }));
+    .map((c) => ({
+      id: c.id,
+      name: c.name ?? c.id,
+      category: c.category,
+      genres: c.extra?.find((extra) => extra.name === 'genre')?.options,
+    }));
 export interface ExtensionCatalogAddon {
   /** Server-side manifest address (never sent to the browser). */
   url: string;
   id: string;
   name: string;
-  catalogs: { id: string; name: string; category?: string }[];
+  catalogs: { id: string; name: string; category?: string; genres?: string[] }[];
 }
 
 /** Optional, generic per-source health: an extension may expose it at `{baseManifest}/health.json`. */

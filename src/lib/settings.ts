@@ -41,7 +41,7 @@ export const secretKeys: SecretSetting[] = [
   'hardcoverToken',
 ];
 // Kinds added after users had chosen their kind list: they start enabled for those users.
-const LATER_KINDS: Exclude<DiscoverKind, 'all'>[] = ['series', 'movies', 'animation', 'extensions'];
+const LATER_KINDS: Exclude<DiscoverKind, 'all'>[] = ['series', 'movies', 'animation', 'jav', 'tube'];
 const ALL_KINDS: Exclude<DiscoverKind, 'all'>[] = [...KIND_IDS];
 export function persistentSecret(name: string, bytes: number): Buffer {
   if (!['access.token', 'settings.key'].includes(name))

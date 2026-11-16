@@ -125,7 +125,7 @@ export function useProgressiveSearch(
   q: string,
   type?: 'MANGA' | 'NOVEL' | 'ANIME' | 'TV' | 'MOVIE',
   /** Search the generic extension catalog instead of the usual providers. */
-  kind?: 'extensions',
+  kind?: 'jav' | 'tube',
 ) {
   const path =
     q.length >= 2
