@@ -12,7 +12,7 @@ export const GET = route(async (r) => {
   const p = searchParams.parse(Object.fromEntries(new URL(r.url).searchParams));
   // The generic extension catalog searches its own `extvideo` catalogs.
   if (p.kind === 'extensions') {
-    const results = await extensionSearch(p.q, r.signal);
+    const results = await extensionSearch(p.q, 'extensions', r.signal);
     return json({
       results: withTracking(results),
       providers: [],
@@ -26,17 +26,20 @@ export const GET = route(async (r) => {
       : [];
     return json({ results: withTracking(results), providers: [], durationMs: 0 } as SearchResponse);
   }
-  const [response, tmdb] = await Promise.all([
+  const [response, tmdb, extAnime] = await Promise.all([
     search(p.q, p.type, r.signal, p.fast === '1', true),
     // Everything search also finds series and films (e.g. western animation like Arcane).
     !p.type && p.fast !== '1' && tmdbConfigured()
       ? searchTmdb(p.q).catch(() => [])
       : Promise.resolve([]),
+    // Adult anime whose extension sheet is not in AniList joins the anime search too.
+    p.type === 'ANIME' ? extensionSearch(p.q, 'anime', r.signal).catch(() => []) : [],
   ]);
   return json({
     ...response,
     results: withTracking([
       ...(await groupAnimeSeasons(response.results, r.signal)),
+      ...extAnime,
       ...tmdb.slice(0, 10),
     ]),
   });

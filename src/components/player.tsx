@@ -370,7 +370,7 @@ export function Player({
               )}
               {!streams.isLoading && !episode.jellyfinItemId && !streams.data?.streams.length && (
                 <li className="text-mid px-3 py-4 text-sm leading-relaxed">
-                  {episode.seasonAnilistId || episode.imdb
+                  {episode.seasonAnilistId || episode.imdb || episode.streamsUrl
                     ? t('player.noStreams')
                     : t('player.noIds')}
                 </li>
