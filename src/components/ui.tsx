@@ -386,9 +386,18 @@ export function statusKey(status: string) {
 
 export function useMediaMeta() {
   const { t } = useI18n();
-  return (m: Pick<UnifiedMedia, 'format' | 'type' | 'year' | 'status'>, withStatus = false) =>
+  return (
+    m: Pick<UnifiedMedia, 'format' | 'type' | 'year' | 'status' | 'kindOverride'>,
+    withStatus = false,
+  ) =>
     [
-      m.format ? t(`format.${m.format}`) : t(`type.${m.type}`),
+      m.kindOverride === 'jav'
+        ? t('kind.jav')
+        : m.kindOverride === 'tube'
+          ? t('kind.tube')
+          : m.format
+            ? t(`format.${m.format}`)
+            : t(`type.${m.type}`),
       m.year,
       withStatus && m.status ? t(`status.${statusKey(m.status)}`) : null,
     ]
