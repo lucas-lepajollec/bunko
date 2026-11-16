@@ -4,7 +4,11 @@ import { heroArtwork } from './hero-artwork';
 import type { ChapterRelease, DiscoverKind, HomeFeed } from '@/types/shared';
 import { releaseStore, refreshReleases, mediaKind, releaseLoadingState } from './releases';
 import { discover, discoverAniList, withTracking } from './catalog';
-import { extensionCatalogPage, extensionReleases } from './extension-catalog';
+import {
+  extensionAnimeCatalogPage,
+  extensionCatalogPage,
+  extensionReleases,
+} from './extension-catalog';
 import { cached, storedMetadata, metadataStatus } from './metadata-cache';
 import { mediaVisibility, adultKey } from './adult';
 import { tenantState } from './tenant-context';
@@ -146,6 +150,7 @@ async function extensionHome(): Promise<HomeFeed> {
 export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<HomeFeed> {
   // No metadata_cache entry is written for extension catalog works.
   if (kind === 'extensions') return extensionHome();
+  const settings = getSettings();
   const video = isVideoKind(kind);
   // Reading releases are not video: those homes never start their ingestion.
   if (!video) void refreshReleases().catch(() => {});
@@ -181,6 +186,8 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
                   undefined,
                   true,
                   true,
+                  false,
+                  false,
                 ))
       ).items;
       if (items.length) rankingFailures().delete(key);
@@ -215,23 +222,46 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
           new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
         ])
       : [];
-  const settings = getSettings();
-  const extensionOn =
+  const extensionAnimeOn =
+    (kind === 'anime' || !kind) &&
+    settings.adultContent &&
+    settings.adultMode &&
+    (!kind || !enabled.length || enabled.includes(kind));
+  const extensionOtherOn =
     !kind &&
     settings.adultContent &&
     settings.adultMode &&
     (!enabled.length || enabled.includes('extensions'));
   // Extension releases are read in memory; a slow extension never holds the home feed.
-  const extensionWeek = extensionOn
-    ? await Promise.race([
-        extensionReleases(new Date(Date.now() - 7 * 86400_000), new Date()).catch(() => []),
-        new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
-      ])
-    : [];
+  const extensionWeek =
+    extensionAnimeOn || extensionOtherOn
+      ? await Promise.race([
+          extensionReleases(
+            new Date(Date.now() - 7 * 86400_000),
+            new Date(),
+            undefined,
+            kind === 'anime' ? 'anime' : undefined,
+          ).catch(() => []),
+          new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
+        ])
+      : [];
+  const extensionAnimeTop =
+    kind === 'anime' && settings.adultContent && settings.adultMode
+      ? await Promise.race([
+          extensionAnimeCatalogPage(
+            { sort: 'trending', kind: 'anime', perPage: 20 },
+            1,
+          )
+            .then((page) => page.items)
+            .catch(() => []),
+          new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
+        ])
+      : [];
+  const topWithExtension = [...(Array.isArray(top) ? top : []), ...extensionAnimeTop];
   const pool = [...reading, ...episodes, ...tmdbWeek, ...extensionWeek].filter(
     (r) => !kind || mediaKind(r.media) === kind,
   );
-  const home = fillHero(normalizeHome(composeHome(heroArtwork(pool), top, kind)));
+  const home = fillHero(normalizeHome(composeHome(heroArtwork(pool), topWithExtension, kind)));
   return {
     ...home,
     pending: releases.pending || ranking.pending,

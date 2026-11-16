@@ -70,6 +70,7 @@ const metaSchema = z
     genres: z.array(z.string().max(100)).max(100).optional().default([]),
     year: z.number().int().min(0).max(3000).optional().nullable(),
     type: z.enum(['movie', 'series', 'extvideo']).optional().default('movie'),
+    category: z.enum(['anime', 'extensions']).optional().default('extensions'),
     releaseInfo: z.string().max(100).optional().nullable(),
     externalIds: externalIdsSchema.optional().nullable(),
     videos: z.array(videoSchema).max(5000).optional().default([]),
@@ -145,7 +146,11 @@ export function decodeExtensionMediaId(id: string) {
   return { addonId: match[1], metaId };
 }
 
-function toMedia(addon: ExtensionCatalogAddon, meta: ExtMeta): UnifiedMedia {
+function toMedia(
+  addon: ExtensionCatalogAddon,
+  meta: ExtMeta,
+  category: 'anime' | 'extensions' = meta.category ?? 'extensions',
+): UnifiedMedia {
   const external = meta.externalIds;
   const year =
     meta.year ??
@@ -153,7 +158,7 @@ function toMedia(addon: ExtensionCatalogAddon, meta: ExtMeta): UnifiedMedia {
   return {
     ...emptyMedia(extensionMediaId(addon.id, meta.id), meta.name, 'ANIME'),
     adult: true,
-    kindOverride: 'extensions',
+    kindOverride: category === 'anime' ? 'anime' : 'extensions',
     providers: ['extension'],
     coverUrl: meta.poster ?? meta.logo ?? null,
     bannerUrl: meta.background ?? null,
@@ -177,6 +182,7 @@ function collides(meta: ExtMeta) {
 interface CatalogEntry {
   addon: ExtensionCatalogAddon;
   meta: ExtMeta;
+  group: 'anime' | 'extensions';
 }
 interface CatalogRequest {
   skip?: number;
@@ -215,36 +221,49 @@ async function readCatalog(
   request: CatalogRequest,
   signal?: AbortSignal,
   sort?: string,
+  group?: 'anime' | 'extensions',
 ): Promise<CatalogEntry[]> {
   if (!ADULT_ONLY()) return [];
   const addons = await extensionCatalogAddons(signal);
   const wanted = request.search ? 'search' : sort === 'new' ? 'latest' : sort === 'trending' || sort === 'popular' ? 'trending' : null;
+  const groupOf = (catalog: { category?: string }): 'anime' | 'extensions' =>
+    catalog.category === 'anime' ? 'anime' : 'extensions';
   const catalogs = addons.flatMap((addon) => {
-    const matching = wanted
-      ? addon.catalogs.filter((catalog) => catalog.id.toLowerCase().includes(wanted))
+    const inGroup = group
+      ? addon.catalogs.filter((catalog) => groupOf(catalog) === group)
       : addon.catalogs;
-    const list = matching.length ? matching : addon.catalogs;
-    return list.slice(0, MAX_CATALOGS).map((catalog) => ({ addon, catalog }));
+    const matching = wanted
+      ? inGroup.filter((catalog) => catalog.id.toLowerCase().includes(wanted))
+      : inGroup;
+    const list = matching.length ? matching : inGroup;
+    return list.slice(0, MAX_CATALOGS).map((catalog) => ({
+      addon,
+      catalog,
+      group: groupOf(catalog),
+    }));
   });
   const pages = await Promise.allSettled(
     catalogs
       .slice(0, MAX_CATALOGS)
-      .map(({ addon, catalog }) =>
+      .map(({ addon, catalog, group: catalogGroup }) =>
         catalogPage(addon, catalog.id, request, signal).then((metas) =>
-          metas.map((meta) => ({ addon, meta })),
+          metas.map((meta) => ({ addon, meta, group: catalogGroup })),
         ),
       ),
   );
+  const lanes = pages.flatMap((page) => (page.status === 'fulfilled' ? [page.value] : []));
+  // Round-robin the catalogs: one large JAV page must not hide the tube shelf behind 40 rows.
   const seen = new Set<string>();
   const out: CatalogEntry[] = [];
-  for (const page of pages)
-    if (page.status === 'fulfilled')
-      for (const entry of page.value) {
-        const key = `${entry.addon.id}:${entry.meta.id}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(entry);
-      }
+  for (let i = 0; lanes.some((lane) => i < lane.length); i++)
+    for (const lane of lanes) {
+      const entry = lane[i];
+      if (!entry) continue;
+      const key = `${entry.addon.id}:${entry.meta.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(entry);
+    }
   return out;
 }
 
@@ -259,7 +278,34 @@ function usable(entries: CatalogEntry[]) {
   });
 }
 
-/** One page of the generic extension catalog (all configured `extvideo` catalogs, merged). */
+async function extensionPage(
+  group: 'anime' | 'extensions',
+  filters: DiscoverQuery,
+  page: number,
+  signal?: AbortSignal,
+  search?: string,
+): Promise<DiscoverPage> {
+  const current = Math.min(Math.max(1, page || 1), MAX_PAGES);
+  if (!ADULT_ONLY()) return { items: [], page: current, hasNextPage: false };
+  const entries = await readCatalog(
+    { skip: (current - 1) * PER_PAGE, ...(search ? { search } : {}) },
+    signal,
+    filters.sort,
+    group,
+  );
+  const usableEntries = usable(entries);
+  const items = usableEntries
+    .slice(0, PER_PAGE)
+    .map(({ addon, meta, group: entryGroup }) => toMedia(addon, meta, entryGroup));
+  void filters;
+  return {
+    items,
+    page: current,
+    hasNextPage: current < MAX_PAGES && usableEntries.length > PER_PAGE,
+  };
+}
+
+/** One page of the non-anime extension shelf (JAV and scene-level tube works). */
 export async function extensionCatalogPage(
   kind: DiscoverKind,
   filters: DiscoverQuery,
@@ -267,21 +313,18 @@ export async function extensionCatalogPage(
   signal?: AbortSignal,
   search?: string,
 ): Promise<DiscoverPage> {
-  const current = Math.min(Math.max(1, page || 1), MAX_PAGES);
-  if (kind !== 'extensions' || !ADULT_ONLY())
-    return { items: [], page: current, hasNextPage: false };
-  const entries = await readCatalog(
-    { skip: (current - 1) * PER_PAGE, ...(search ? { search } : {}) },
-    signal,
-    filters.sort,
-  );
-  const items = usable(entries).map(({ addon, meta }) => toMedia(addon, meta));
-  void filters;
-  return {
-    items,
-    page: current,
-    hasNextPage: current < MAX_PAGES && entries.length >= PER_PAGE,
-  };
+  if (kind !== 'extensions') return { items: [], page: page || 1, hasNextPage: false };
+  return extensionPage('extensions', filters, page, signal, search);
+}
+
+/** One page of the extension works that declare the generic `anime` category. */
+export async function extensionAnimeCatalogPage(
+  filters: DiscoverQuery,
+  page: number,
+  signal?: AbortSignal,
+  search?: string,
+): Promise<DiscoverPage> {
+  return extensionPage('anime', filters, page, signal, search);
 }
 
 /** The extension catalog has no shared facets: a generic, empty filter set. */
@@ -302,9 +345,10 @@ export function extensionCatalogFilters(): CatalogFilters {
 /** Search inside the configured `extvideo` catalogs (`search=` extras), never outside 18+ only. */
 export async function extensionSearch(
   query: string,
+  group: 'anime' | 'extensions' = 'extensions',
   signal?: AbortSignal,
 ): Promise<UnifiedMedia[]> {
-  const page = await extensionCatalogPage('extensions', { kind: 'extensions' }, 1, signal, query);
+  const page = await extensionPage(group, { kind: group }, 1, signal, query);
   return page.items;
 }
 
@@ -546,9 +590,10 @@ export async function extensionReleases(
   from: Date,
   to: Date,
   signal?: AbortSignal,
+  group?: 'anime' | 'extensions',
 ): Promise<ChapterRelease[]> {
   if (!ADULT_ONLY()) return [];
-  const entries = await readCatalog({ skip: 0 }, signal);
+  const entries = await readCatalog({ skip: 0 }, signal, undefined, group);
   const tracked = listTracked();
   const out: ChapterRelease[] = [];
   for (const { addon, meta } of usable(entries))

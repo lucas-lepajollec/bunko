@@ -2,6 +2,7 @@ import { airedSince, naturalEpisode, rollAiring, seasonRef } from './anime-franc
 import { KINDS, KIND_IDS, availableKinds, byKindOrder, mixByKind, type Kind } from '@/domain/kinds';
 import {
   clearExtensionCatalogCache,
+  extensionAnimeCatalogPage,
   extensionCatalogFilters,
   extensionCatalogPage,
   extensionDetail,
@@ -174,7 +175,14 @@ export async function discover(
     ...(on('anime')
       ? {
           anime: () =>
-            discoverAniList({ ...q, kind: 'anime' }, undefined, true, false, on('animation')),
+            discoverAniList(
+              { ...q, kind: 'anime' },
+              undefined,
+              true,
+              false,
+              on('animation'),
+              includeExtensions,
+            ),
         }
       : {}),
     ...(tmdb && on('series') ? { series: () => discoverTmdb('tv', sort, q.page ?? 1) } : {}),
@@ -313,6 +321,8 @@ export async function discoverAniList(
   waitForRefresh = false,
   /** Anime with their films (the mixed catalog splits them by kind afterwards). */
   withFilms = false,
+  /** Read the extension anime shelf too; home top caches pass false to stay SQLite-free. */
+  withExtensions = true,
 ): Promise<DiscoverPage> {
   signal?.throwIfAborted();
   const kind = q.kind ?? 'all';
@@ -390,13 +400,28 @@ export async function discoverAniList(
     },
     { accept: (value) => value.Page.media.length > 0, waitForRefresh },
   );
+  const filtered =
+    Boolean(q.genre) ||
+    Boolean(q.status) ||
+    Boolean(q.tags?.length) ||
+    q.minScore !== undefined ||
+    q.year !== undefined;
+  const extension =
+    kind === 'anime' && withExtensions && !filtered && adultScope() === 'only'
+      ? await extensionAnimeCatalogPage(q, page, signal).catch(() => null)
+      : null;
+  const items = [
+    ...(raw
+      ? data.Page.media.map(fromAniList)
+      : withTracking(data.Page.media.map(fromAniList))),
+    ...(extension?.items ?? []),
+  ];
   return {
     ...discoveryStatus(cacheKey, 'anilist'),
-    items: raw
-      ? data.Page.media.map(fromAniList)
-      : withTracking(data.Page.media.map(fromAniList)).filter(visibleMedia),
+    items: raw ? items : withTracking(items).filter(visibleMedia),
     page,
-    hasNextPage: data.Page.pageInfo.hasNextPage,
+    hasNextPage: data.Page.pageInfo.hasNextPage || Boolean(extension?.hasNextPage),
+    ...(extension?.pending ? { pending: true } : {}),
   };
 }
 const BOOK_KINDS = new Set(['novel', 'book']);
