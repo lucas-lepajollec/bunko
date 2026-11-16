@@ -188,6 +188,7 @@ interface CatalogRequest {
   skip?: number;
   search?: string;
   genre?: string;
+  tag?: string;
 }
 async function catalogPage(
   addon: ExtensionCatalogAddon,
@@ -198,9 +199,11 @@ async function catalogPage(
   const skip = Math.max(0, Math.min(10_000, request.skip ?? 0));
   const search = request.search?.trim().slice(0, 200) || undefined;
   const genre = request.genre?.trim().slice(0, 100) || undefined;
+  const tag = request.tag?.trim().slice(0, 100) || undefined;
   const extras = [
     search ? `search=${encodeURIComponent(search)}` : null,
     genre ? `genre=${encodeURIComponent(genre)}` : null,
+    tag ? `tag=${encodeURIComponent(tag)}` : null,
     skip ? `skip=${skip}` : null,
   ]
     .filter(Boolean)
@@ -294,9 +297,8 @@ async function extensionPage(
     {
       skip: (current - 1) * PER_PAGE,
       ...(search ? { search } : {}),
-      ...(filters.genre || filters.tags?.[0]
-        ? { genre: filters.genre || filters.tags?.[0] }
-        : {}),
+      ...(filters.genre ? { genre: filters.genre } : {}),
+      ...(filters.tags?.[0] ? { tag: filters.tags[0] } : {}),
     },
     signal,
     filters.sort,
@@ -356,12 +358,20 @@ export async function extensionCatalogFilters(
   if (!ADULT_ONLY() || (kind !== 'jav' && kind !== 'tube')) return empty;
   const addons = await extensionCatalogAddons(signal);
   const genres = new Set<string>();
+  const tags = new Set<string>();
   for (const addon of addons)
     for (const catalog of addon.catalogs)
-      if ((catalog.category ?? 'tube') === kind)
+      if ((catalog.category ?? 'tube') === kind) {
         for (const genre of catalog.genres ?? []) genres.add(genre);
-  const names = [...genres].sort((a, b) => a.localeCompare(b));
-  return { ...empty, genres: names, tags: names.length ? [{ category: 'genre', names }] : [] };
+        for (const tag of catalog.tags ?? []) tags.add(tag);
+      }
+  return {
+    ...empty,
+    genres: [...genres].sort((a, b) => a.localeCompare(b)),
+    tags: tags.size
+      ? [{ category: 'tags', names: [...tags].sort((a, b) => a.localeCompare(b)) }]
+      : [],
+  };
 }
 
 /** Search inside the configured `extvideo` catalogs (`search=` extras), never outside 18+ only. */

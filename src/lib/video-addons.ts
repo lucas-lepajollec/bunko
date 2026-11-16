@@ -74,13 +74,14 @@ const extvideoCatalogs = (m: Manifest) =>
       name: c.name ?? c.id,
       category: c.category,
       genres: c.extra?.find((extra) => extra.name === 'genre')?.options,
+      tags: c.extra?.find((extra) => extra.name === 'tag')?.options,
     }));
 export interface ExtensionCatalogAddon {
   /** Server-side manifest address (never sent to the browser). */
   url: string;
   id: string;
   name: string;
-  catalogs: { id: string; name: string; category?: string; genres?: string[] }[];
+  catalogs: { id: string; name: string; category?: string; genres?: string[]; tags?: string[] }[];
 }
 
 /** Optional, generic per-source health: an extension may expose it at `{baseManifest}/health.json`. */
