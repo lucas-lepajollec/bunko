@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Extension catalogs: their works only show in the full 18+ mode, everywhere. Once the account
+  leaves it, "Pick up where you left off", the library and the other lists drop them too (they
+  stayed in "Pick up" with 18+ shown next to everything else). A sheet keeps the poster, wide
+  picture and kind its catalog card showed when the extension's own sheet lacks them, and still
+  opens when that sheet does not answer.
+- Cards no longer stretch while a cover loads or fails: an empty image used to lay its long
+  title out as text, which made "Pick up where you left off" (and its whole row) very tall.
+
 - Episodes: a sheet lists an episode as soon as it airs (the "latest episodes" shelf and the sheet
   now agree), and its work and seasons are reloaded from AniList right after each airing instead
   of after 12 to 24 hours. One season AniList no longer answers for no longer keeps a whole work

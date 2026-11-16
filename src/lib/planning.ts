@@ -229,10 +229,6 @@ export async function withAnimeAiring(
 }
 
 /**
- * Series episodes and film releases of the week (TMDB): followed series episode by episode,
- * shows on the air, films out that week. Bounded wait; the cache fills for the next look.
- */
-/**
  * Generic extension catalog items whose own metadata carries a release date that week. Items
  * without a real date contribute nothing (never an invented date).
  */
@@ -279,6 +275,10 @@ export async function withExtensionReleases(
   return { ...week, days };
 }
 
+/**
+ * Series episodes and film releases of the week (TMDB): followed series episode by episode,
+ * shows on the air, films out that week. Bounded wait; the cache fills for the next look.
+ */
 export async function withTmdbReleases(
   week: PlanningWeek,
   q: z.infer<typeof planningQuery>,

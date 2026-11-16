@@ -66,6 +66,10 @@ const metas = [
   }),
 ];
 const byId = new Map(metas.map((m) => [m.id, m]));
+// Listed with a poster in a catalog of its own category; its sheet has no poster nor category.
+const listedOnly = meta('fixture-5', { poster: 'https://images.example/card-5.jpg' });
+// Listed, but its sheet no longer answers.
+const gone = meta('fixture-6');
 
 const server: Server = createServer((req, res) => {
   const url = new URL(req.url!, 'http://x');
@@ -79,8 +83,19 @@ const server: Server = createServer((req, res) => {
       name: 'Fixture Extension',
       resources: ['stream'],
       types: ['extvideo', 'movie', 'series'],
-      catalogs: [{ type: 'extvideo', id: 'fixtures', name: 'Fixture Catalog' }],
+      catalogs: [
+        { type: 'extvideo', id: 'fixtures', name: 'Fixture Catalog' },
+        { type: 'extvideo', id: 'other-fixtures', name: 'Other Catalog', category: 'jav' },
+      ],
     });
+  if (url.pathname.startsWith('/fixture/catalog/extvideo/other-fixtures'))
+    return send({ metas: [listedOnly, gone] });
+  if (url.pathname === '/fixture/meta/extvideo/fixture-5.json')
+    return send({ meta: { id: 'fixture-5', name: listedOnly.name, type: 'movie' } });
+  if (url.pathname === '/fixture/meta/extvideo/fixture-6.json') {
+    res.writeHead(502);
+    return res.end();
+  }
   if (url.pathname.startsWith('/fixture/catalog/extvideo/fixtures')) {
     const search = url.pathname.includes('search=');
     return send({ metas: search ? [byId.get('fixture-2')] : metas });
@@ -199,4 +214,66 @@ it('plays extension streams through safe links and maps real release dates', asy
       ['Ep. 1', '2026-11-16T12:00:00.000Z'],
     ]);
     expect(releases.every((release) => release.provider === 'extension')).toBe(true);
+  }));
+
+it('keeps what the catalog card showed when the extension sheet is poorer or gone', async () =>
+  inTenant(1, async () => {
+    updateSettings({ adultContent: true, adultMode: true });
+    const page = await catalog.extensionCatalogPage('jav', { kind: 'jav' }, 1);
+    const [poor, missing] = ['fixture-5', 'fixture-6'].map((id) =>
+      page.items.find((item) => item.title.endsWith(id))!,
+    );
+    expect(poor.coverUrl).toBe('https://images.example/card-5.jpg');
+    // The sheet has no poster and no category: the card's poster and kind stay.
+    expect(await catalog.extensionDetail(poor.id)).toMatchObject({
+      coverUrl: 'https://images.example/card-5.jpg',
+      bannerUrl: 'https://images.example/fixture-5-wide.jpg',
+      kindOverride: 'jav',
+    });
+    // The sheet fails: the work still opens as listed.
+    expect(await catalog.extensionDetail(missing.id)).toMatchObject({
+      title: 'Fixture Video fixture-6',
+      coverUrl: 'https://images.example/fixture-6.jpg',
+      kindOverride: 'jav',
+      extension: { type: 'movie' },
+    });
+  }));
+
+it('drops extension catalog works from every list once the account leaves the 18+ only mode', async () =>
+  inTenant(1, async () => {
+    const { saveContinue, continueItems } = await import('@/lib/continue');
+    const { visibleTracked } = await import('@/lib/adult');
+    const { listTracked } = await import('@/lib/db');
+    updateSettings({ adultContent: true, adultMode: true });
+    const page = await catalog.extensionCatalogPage('tube', { kind: 'tube' }, 1);
+    const work = page.items[0];
+    saveContinue({
+      media: {
+        id: work.id,
+        title: work.title,
+        coverUrl: work.coverUrl,
+        type: 'ANIME',
+        format: null,
+        origin: null,
+        adult: true,
+        color: null,
+        kindOverride: 'tube',
+      },
+      kind: 'watch',
+      label: 'Film',
+      href: '/title/ext/fixture',
+      position: 0.4,
+    });
+    track({ media: work, status: 'READING' });
+    const ids = () => continueItems().map((item) => item.media.id);
+    const followed = () => visibleTracked(listTracked()).map((t) => t.media.id);
+    expect(ids()).toContain(work.id);
+    expect(followed()).toContain(work.id);
+    // 18+ next to everything else: ordinary 18+ works stay, extension catalog works do not.
+    updateSettings({ adultMode: false });
+    expect(ids()).not.toContain(work.id);
+    expect(followed()).not.toContain(work.id);
+    expect(followed()).toContain('anilist:42');
+    updateSettings({ adultContent: false });
+    expect(ids()).not.toContain(work.id);
   }));

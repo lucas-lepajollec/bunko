@@ -7,6 +7,7 @@ import { AppError } from './errors';
 import {
   extensionCatalogAvailable,
   noteExtensionCatalog,
+  pruneExtensionCatalogs,
   resetExtensionCatalogs,
 } from './extension-catalog-state';
 import { addonId, getSettings, updateSettings } from './settings';
@@ -234,8 +235,9 @@ export async function extensionCatalogAddons(
     resetExtensionCatalogs();
     return [];
   }
-  resetExtensionCatalogs();
   const out: ExtensionCatalogAddon[] = [];
+  // Each extension's flag is updated where it is read (never cleared first: menus asking
+  // meanwhile would see no catalog for a moment).
   await Promise.all(
     settings.videoAddons.map(async (url) => {
       const id = addonId(url);
@@ -249,6 +251,8 @@ export async function extensionCatalogAddons(
       }
     }),
   );
+  // Extensions removed from the account no longer count.
+  pruneExtensionCatalogs(settings.videoAddons.map(addonId));
   return out.sort((a, b) => a.id.localeCompare(b.id));
 }
 

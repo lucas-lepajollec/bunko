@@ -2,6 +2,7 @@ import { tenantState } from './tenant-context';
 import type { UnifiedMedia, ChapterSelection, TrackedMedia, Source } from '@/types/shared';
 import { statement, writeVersion, db } from './db';
 import { getSettings } from './settings';
+import { KINDS } from '@/domain/kinds';
 
 export function recordSourceFlags(sources: Source[]) {
   db().transaction(() => {
@@ -228,20 +229,38 @@ export function mediaAdult(
   void sources;
   return adultClassifier()(media);
 }
+/**
+ * Works read from an extension's own catalog (and the kinds made only of them) exist only in the
+ * account's full 18+ mode, like their catalog, sheet and streams: once the account leaves it,
+ * every list (pick up, library, releases, notifications…) drops them too.
+ */
+export function onlyInAdultMode(media: Pick<UnifiedMedia, 'id' | 'kindOverride'>) {
+  return (
+    media.id.startsWith('ext:') ||
+    Boolean(media.kindOverride && KINDS[media.kindOverride]?.adultOnly)
+  );
+}
 export function mediaVisibility() {
   const scope = adultScope();
   const classify = adultClassifier();
   return (media: UnifiedMedia) =>
-    scope === 'on' ? true : scope === 'only' ? classify(media) : !classify(media);
+    scope === 'only'
+      ? classify(media)
+      : !onlyInAdultMode(media) && (scope === 'on' || !classify(media));
 }
 export function visibleMedia(media: UnifiedMedia) {
   return mediaVisibility()(media);
 }
 export function visibleTracked(entries: TrackedMedia[]) {
   const scope = adultScope();
-  if (scope === 'on') return entries;
+  if (scope === 'only') {
+    const classify = adultClassifier();
+    return entries.filter((t) => classify(t.media));
+  }
+  const kept = entries.filter((t) => !onlyInAdultMode(t.media));
+  if (scope === 'on') return kept;
   const classify = adultClassifier();
-  return entries.filter((t) => (scope === 'only') === classify(t.media));
+  return kept.filter((t) => !classify(t.media));
 }
 /**
  * With 18+ off and "hide 18+ extensions" on (the default), extensions their authors mark NSFW are

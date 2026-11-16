@@ -127,7 +127,9 @@ export function ManagedImage({
       src={loaded || undefined}
       style={{ ...props.style, visibility: loaded ? props.style?.visibility : 'hidden' }}
       onError={() => failure.current?.()}
-      alt={props.alt ?? ''}
+      // Until the picture is there the alternative text stays out: an empty image with a long
+      // title would otherwise lay the title out as text and stretch its card (and its row).
+      alt={loaded ? (props.alt ?? '') : ''}
     />
   );
 }
