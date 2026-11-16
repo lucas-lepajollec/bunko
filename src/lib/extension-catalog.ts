@@ -308,7 +308,7 @@ async function extensionPage(
   return {
     items,
     page: current,
-    hasNextPage: current < MAX_PAGES && usableEntries.length > PER_PAGE,
+    hasNextPage: current < MAX_PAGES && usableEntries.length > 0,
   };
 }
 
