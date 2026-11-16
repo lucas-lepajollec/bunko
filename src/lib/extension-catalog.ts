@@ -70,7 +70,7 @@ const metaSchema = z
     genres: z.array(z.string().max(100)).max(100).optional().default([]),
     year: z.number().int().min(0).max(3000).optional().nullable(),
     type: z.enum(['movie', 'series', 'extvideo']).optional().default('movie'),
-    category: z.enum(['anime', 'extensions']).optional().default('extensions'),
+    category: z.enum(['anime', 'jav', 'tube']).optional().default('tube'),
     releaseInfo: z.string().max(100).optional().nullable(),
     externalIds: externalIdsSchema.optional().nullable(),
     videos: z.array(videoSchema).max(5000).optional().default([]),
@@ -149,7 +149,7 @@ export function decodeExtensionMediaId(id: string) {
 function toMedia(
   addon: ExtensionCatalogAddon,
   meta: ExtMeta,
-  category: 'anime' | 'extensions' = meta.category ?? 'extensions',
+  category: 'anime' | 'jav' | 'tube' = meta.category ?? 'tube',
 ): UnifiedMedia {
   const external = meta.externalIds;
   const year =
@@ -158,7 +158,7 @@ function toMedia(
   return {
     ...emptyMedia(extensionMediaId(addon.id, meta.id), meta.name, 'ANIME'),
     adult: true,
-    kindOverride: category === 'anime' ? 'anime' : 'extensions',
+    kindOverride: category,
     providers: ['extension'],
     coverUrl: meta.poster ?? meta.logo ?? null,
     bannerUrl: meta.background ?? null,
@@ -182,11 +182,12 @@ function collides(meta: ExtMeta) {
 interface CatalogEntry {
   addon: ExtensionCatalogAddon;
   meta: ExtMeta;
-  group: 'anime' | 'extensions';
+  group: 'anime' | 'jav' | 'tube';
 }
 interface CatalogRequest {
   skip?: number;
   search?: string;
+  genre?: string;
 }
 async function catalogPage(
   addon: ExtensionCatalogAddon,
@@ -196,8 +197,10 @@ async function catalogPage(
 ): Promise<ExtMeta[]> {
   const skip = Math.max(0, Math.min(10_000, request.skip ?? 0));
   const search = request.search?.trim().slice(0, 200) || undefined;
+  const genre = request.genre?.trim().slice(0, 100) || undefined;
   const extras = [
     search ? `search=${encodeURIComponent(search)}` : null,
+    genre ? `genre=${encodeURIComponent(genre)}` : null,
     skip ? `skip=${skip}` : null,
   ]
     .filter(Boolean)
@@ -221,13 +224,13 @@ async function readCatalog(
   request: CatalogRequest,
   signal?: AbortSignal,
   sort?: string,
-  group?: 'anime' | 'extensions',
+  group?: 'anime' | 'jav' | 'tube',
 ): Promise<CatalogEntry[]> {
   if (!ADULT_ONLY()) return [];
   const addons = await extensionCatalogAddons(signal);
   const wanted = request.search ? 'search' : sort === 'new' ? 'latest' : sort === 'trending' || sort === 'popular' ? 'trending' : null;
-  const groupOf = (catalog: { category?: string }): 'anime' | 'extensions' =>
-    catalog.category === 'anime' ? 'anime' : 'extensions';
+  const groupOf = (catalog: { category?: string }): 'anime' | 'jav' | 'tube' =>
+    catalog.category === 'anime' ? 'anime' : catalog.category === 'jav' ? 'jav' : 'tube';
   const catalogs = addons.flatMap((addon) => {
     const inGroup = group
       ? addon.catalogs.filter((catalog) => groupOf(catalog) === group)
@@ -279,7 +282,7 @@ function usable(entries: CatalogEntry[]) {
 }
 
 async function extensionPage(
-  group: 'anime' | 'extensions',
+  group: 'anime' | 'jav' | 'tube',
   filters: DiscoverQuery,
   page: number,
   signal?: AbortSignal,
@@ -288,7 +291,11 @@ async function extensionPage(
   const current = Math.min(Math.max(1, page || 1), MAX_PAGES);
   if (!ADULT_ONLY()) return { items: [], page: current, hasNextPage: false };
   const entries = await readCatalog(
-    { skip: (current - 1) * PER_PAGE, ...(search ? { search } : {}) },
+    {
+      skip: (current - 1) * PER_PAGE,
+      ...(search ? { search } : {}),
+      ...(filters.genre ? { genre: filters.genre } : {}),
+    },
     signal,
     filters.sort,
     group,
@@ -305,7 +312,7 @@ async function extensionPage(
   };
 }
 
-/** One page of the non-anime extension shelf (JAV and scene-level tube works). */
+/** One page of the JAV or scene-level tube shelf. */
 export async function extensionCatalogPage(
   kind: DiscoverKind,
   filters: DiscoverQuery,
@@ -313,8 +320,9 @@ export async function extensionCatalogPage(
   signal?: AbortSignal,
   search?: string,
 ): Promise<DiscoverPage> {
-  if (kind !== 'extensions') return { items: [], page: page || 1, hasNextPage: false };
-  return extensionPage('extensions', filters, page, signal, search);
+  if (kind !== 'jav' && kind !== 'tube')
+    return { items: [], page: page || 1, hasNextPage: false };
+  return extensionPage(kind, filters, page, signal, search);
 }
 
 /** One page of the extension works that declare the generic `anime` category. */
@@ -327,9 +335,12 @@ export async function extensionAnimeCatalogPage(
   return extensionPage('anime', filters, page, signal, search);
 }
 
-/** The extension catalog has no shared facets: a generic, empty filter set. */
-export function extensionCatalogFilters(): CatalogFilters {
-  return {
+/** Genres offered by the extension catalogs themselves (runtime data, never project data). */
+export async function extensionCatalogFilters(
+  kind: DiscoverKind = 'tube',
+  signal?: AbortSignal,
+): Promise<CatalogFilters> {
+  const empty: CatalogFilters = {
     genres: [],
     adultGenres: [],
     tags: [],
@@ -340,12 +351,20 @@ export function extensionCatalogFilters(): CatalogFilters {
     score: false,
     adult: false,
   };
+  if (!ADULT_ONLY() || (kind !== 'jav' && kind !== 'tube')) return empty;
+  const addons = await extensionCatalogAddons(signal);
+  const genres = new Set<string>();
+  for (const addon of addons)
+    for (const catalog of addon.catalogs)
+      if ((catalog.category ?? 'tube') === kind)
+        for (const genre of catalog.genres ?? []) genres.add(genre);
+  return { ...empty, genres: [...genres].sort((a, b) => a.localeCompare(b)) };
 }
 
 /** Search inside the configured `extvideo` catalogs (`search=` extras), never outside 18+ only. */
 export async function extensionSearch(
   query: string,
-  group: 'anime' | 'extensions' = 'extensions',
+  group: 'anime' | 'jav' | 'tube' = 'tube',
   signal?: AbortSignal,
 ): Promise<UnifiedMedia[]> {
   const page = await extensionPage(group, { kind: group }, 1, signal, query);
@@ -590,7 +609,7 @@ export async function extensionReleases(
   from: Date,
   to: Date,
   signal?: AbortSignal,
-  group?: 'anime' | 'extensions',
+  group?: 'anime' | 'jav' | 'tube',
 ): Promise<ChapterRelease[]> {
   if (!ADULT_ONLY()) return [];
   const entries = await readCatalog({ skip: 0 }, signal, undefined, group);

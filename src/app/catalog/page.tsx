@@ -77,7 +77,7 @@ function Catalog() {
   const searched = useProgressiveSearch(
     q,
     searchTypeOf(kind),
-    kind === 'extensions' ? 'extensions' : undefined,
+    kind === 'jav' || kind === 'tube' ? kind : undefined,
   );
   const set = (key: string, value: string, extra?: Record<string, string>) => {
     const next = new URLSearchParams(params);

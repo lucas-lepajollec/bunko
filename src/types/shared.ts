@@ -345,7 +345,8 @@ export type DiscoverKind =
   | 'series'
   | 'movies'
   | 'animation'
-  | 'extensions';
+  | 'jav'
+  | 'tube';
 /** "new" = most recent publication start first, never future or undated titles. */
 export type DiscoverSort = 'trending' | 'popular' | 'score' | 'new';
 /** Quarter-based seasons, AniList convention: WINTER Jan–Mar, SPRING Apr–Jun, SUMMER Jul–Sep, FALL Oct–Dec. */

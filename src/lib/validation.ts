@@ -202,8 +202,8 @@ export const discoverQuery = z
 export const searchParams = z.object({
   q: z.string().trim().min(1).max(200),
   type: searchType.optional(),
-  /** Search the generic extension catalog instead of the usual providers. */
-  kind: z.literal('extensions').optional(),
+  /** Search the JAV or scene extension catalog instead of the usual providers. */
+  kind: z.enum(['jav', 'tube']).optional(),
   fast: z.literal('1').optional(),
 });
 export const settingsPatch = z

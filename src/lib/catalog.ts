@@ -156,7 +156,10 @@ export async function discover(
     availableKinds(settings.universes.length ? settings.universes : [...KIND_IDS], visibility),
     settings.kindOrder,
   );
-  const extensionOn = includeExtensions && order.includes('extensions');
+  const extensionKinds = includeExtensions
+    ? (['jav', 'tube'] as const).filter((kind) => order.includes(kind))
+    : [];
+  const extensionOn = extensionKinds.length > 0;
   // 18+ only: comics have no 18+ catalog (Metron does not rate works).
   const adultOnly = adultScope() === 'only';
   const on = (k: Kind) => order.includes(k) && (!adultOnly || k !== 'comic');
@@ -195,26 +198,32 @@ export async function discover(
   };
   // Only kinds without a reachable catalog (series without TMDB…): an empty page, not an outage.
   if (!Object.keys(providers).length) {
-    if (extensionOn) return discoverLane({ ...q, kind: 'extensions' }, signal, raw);
+    if (extensionOn) return discoverLane({ ...q, kind: extensionKinds[0] }, signal, raw);
     return { items: [], page: q.page ?? 1, hasNextPage: false };
   }
   const key = `discover:all:v3:${JSON.stringify(q)}:${order.join(',')}:${tmdb}:${q.sort === 'new' ? new Date().toISOString().slice(0, 10) : ''}:${adultKey()}:${metronScope()}:${credentialScope(settings.hardcoverToken)}`;
   const result = await discoverAll(key, q.page ?? 1, providers);
   // Extension catalog items are merged after the persisted lanes: their names and works never
   // enter the SQLite metadata cache.
-  const extensionPage = extensionOn
-    ? await extensionCatalogPage('extensions', q, q.page ?? 1, signal)
-    : null;
-  const items = mixByKind([...result.items, ...(extensionPage?.items ?? [])], order);
+  const extensionPages = await Promise.all(
+    extensionKinds.map((kind) => extensionCatalogPage(kind, q, q.page ?? 1, signal)),
+  );
+  const extensionItems = extensionPages.flatMap((page) => page.items);
+  const items = mixByKind([...result.items, ...extensionItems], order);
   return {
     ...result,
     items: raw ? items : withTracking(items).filter(visibleMedia),
-    ...(extensionPage
+    ...(extensionPages.length
       ? {
-          hasNextPage: result.hasNextPage || extensionPage.hasNextPage,
-          pending: Boolean(result.pending || extensionPage.pending),
-          ...(result.warnings?.length || extensionPage.warnings?.length
-            ? { warnings: [...(result.warnings ?? []), ...(extensionPage.warnings ?? [])] }
+          hasNextPage: result.hasNextPage || extensionPages.some((page) => page.hasNextPage),
+          pending: Boolean(result.pending || extensionPages.some((page) => page.pending)),
+          ...(result.warnings?.length || extensionPages.some((page) => page.warnings?.length)
+            ? {
+                warnings: [
+                  ...(result.warnings ?? []),
+                  ...extensionPages.flatMap((page) => page.warnings ?? []),
+                ],
+              }
             : {}),
         }
       : {}),
@@ -230,7 +239,8 @@ export async function progressiveDiscover(
   if (
     !q.kind ||
     q.kind === 'all' ||
-    q.kind === 'extensions' ||
+    q.kind === 'jav' ||
+    q.kind === 'tube' ||
     (q.kind === 'comic' && !metronConfigured())
   )
     return discover(q, signal);
@@ -304,7 +314,7 @@ async function discoverLane(
       items: raw ? result.items : withTracking(result.items).filter(visibleMedia),
     };
   }
-  if (kind === 'extensions') {
+  if (kind === 'jav' || kind === 'tube') {
     const result = await extensionCatalogPage(kind, q, page, signal);
     return {
       ...result,
@@ -480,7 +490,8 @@ export async function catalogFilters(
   const scope = adultScope();
   const adult = scope !== 'off';
   // Generic extension catalogs have no shared facets.
-  if (kind !== 'all' && KINDS[kind].catalog === 'extension') return extensionCatalogFilters();
+  if (kind !== 'all' && KINDS[kind].catalog === 'extension')
+    return extensionCatalogFilters(kind, signal);
   // Series and films: TMDB's own genres and keywords, its statuses and years.
   if (kind !== 'all' && KINDS[kind].catalog === 'tmdb') {
     const tv = KINDS[kind].search === 'TV';

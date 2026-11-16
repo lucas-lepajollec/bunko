@@ -11,7 +11,7 @@ const WEEK = 7 * 86400_000;
 export const GET = route(async (r) => {
   const q = feedQuery.parse(Object.fromEntries(new URL(r.url).searchParams));
   // Generic extension catalogs: only items whose own metadata carries a real date.
-  if (q.kind === 'extensions') {
+  if (q.kind === 'jav' || q.kind === 'tube') {
     const to = q.cursor && !Number.isNaN(Date.parse(q.cursor)) ? new Date(q.cursor) : new Date();
     const from = new Date(to.getTime() - WEEK);
     return json({

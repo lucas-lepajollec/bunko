@@ -129,7 +129,7 @@ it('does not read extension catalogs outside the full 18+ mode', async () =>
       adultMode: false,
     });
     calls.length = 0;
-    const page = await catalog.extensionCatalogPage('extensions', { kind: 'extensions' }, 1);
+    const page = await catalog.extensionCatalogPage('tube', { kind: 'tube' }, 1);
     expect(page.items).toEqual([]);
     expect(calls.some((call) => call.includes('/catalog/'))).toBe(false);
   }));
@@ -137,7 +137,7 @@ it('does not read extension catalogs outside the full 18+ mode', async () =>
 it('maps generic extvideo catalogs, excludes works already known, and stays in memory', async () =>
   inTenant(1, async () => {
     updateSettings({ adultContent: true, adultMode: true });
-    const page = await catalog.extensionCatalogPage('extensions', { kind: 'extensions' }, 1);
+    const page = await catalog.extensionCatalogPage('tube', { kind: 'tube' }, 1);
     // Any external identity (AniList or TMDB) belongs to the native catalog: left out.
     expect(page.items.map((item) => item.title)).toEqual([
       'Fixture Video fixture-2',
@@ -147,7 +147,7 @@ it('maps generic extvideo catalogs, excludes works already known, and stays in m
       expect(item).toMatchObject({
         type: 'ANIME',
         format: null,
-        kindOverride: 'extensions',
+        kindOverride: 'tube',
         providers: ['extension'],
         adult: true,
       });
@@ -161,7 +161,7 @@ it('maps generic extvideo catalogs, excludes works already known, and stays in m
     expect(detail).toMatchObject({
       title: 'Fixture Video fixture-2',
       adult: true,
-      kindOverride: 'extensions',
+      kindOverride: 'tube',
       extension: { type: 'movie' },
     });
     expect(detail.video?.list).toHaveLength(1);
@@ -175,7 +175,7 @@ it('maps generic extvideo catalogs, excludes works already known, and stays in m
 
 it('plays extension streams through safe links and maps real release dates', async () =>
   inTenant(1, async () => {
-    const page = await catalog.extensionCatalogPage('extensions', { kind: 'extensions' }, 1);
+    const page = await catalog.extensionCatalogPage('tube', { kind: 'tube' }, 1);
     const movie = page.items.find((item) => item.title.includes('fixture-2'))!;
     const streams = await catalog.extensionStreams(movie.id, 'fr');
     expect(streams.errors).toEqual([]);
