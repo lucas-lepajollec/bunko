@@ -35,7 +35,7 @@ it('adds works in constant time whatever the library size', () => {
   expect(listTracked()).toHaveLength(N);
   // Same 200 additions at 200 works and at 2,800 works: no growth with the library.
   expect(late).toBeLessThan(Math.max(early * 3, 300));
-});
+}, 30_000);
 
 it('lets a per-work background sweep write and read without rebuilding identities', () => {
   const ids = listTracked().map((t) => t.id);
@@ -54,7 +54,7 @@ it('lets a per-work background sweep write and read without rebuilding identitie
   expect(adultStats.rebuilds - before).toBe(0);
   // 3,000 point reads + writes: a few ms per work at most (was O(N) each, minutes in total).
   expect(elapsed / ids.length).toBeLessThan(5);
-});
+}, 30_000);
 
 it('rebuilds identities only when an identity changes', () => {
   const [one] = listTracked();

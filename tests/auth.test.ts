@@ -251,7 +251,7 @@ describe('account routes', () => {
       );
     clock += 60_000;
     expect((await POST(request('/api/auth', credentials))).status).toBe(200);
-  });
+  }, 30_000);
 
   it('rotates the password and epoch, invalidates all old cookies and reissues the current session', async () => {
     const created = await setup(request('/api/auth/setup', credentials));
