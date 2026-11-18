@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Lists follow the type and the 18+ mode: a list shows under every kind its works have (a list
+  made for one kind under that kind only, an empty list everywhere); works hidden by the 18+ mode
+  leave the lists (and a list holding only those leaves too), keeping their places for when they
+  come back. The profile's favorites and rankings open on the type on screen. Changing the type
+  now updates pages that kept a kind in their address (library, catalog, planning): that kind and
+  its filters are dropped.
+
 - Back and forward put the page where it was from its first frame (the page keeps its height
   while its lists load, and the move is known before the router renders: Navigation API, else a
   capturing popstate), instead of showing the top first. "See all" in a ranking keeps the height

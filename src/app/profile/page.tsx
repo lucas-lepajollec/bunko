@@ -13,7 +13,7 @@ import { ContinueCard, useContinue } from '@/components/reading';
 import { PosterCard } from '@/components/media';
 import { libraryMark } from '@/domain/library-mark';
 import { Tops } from '@/components/tops';
-import { ListsGrid, NewListDialog, listWorks, useLists } from '@/components/lists';
+import { ListsGrid, NewListDialog, listInUniverse, listWorks, useLists } from '@/components/lists';
 import { Page } from '@/components/shell';
 import {
   Empty,
@@ -43,10 +43,13 @@ export default function ProfilePage() {
   // Everything in progress for the universe on screen, followed or not.
   const resume = useContinue();
   const favoritesList = lists.data?.find((l) => l.system === 'favorites');
-  const own = (lists.data ?? []).filter((l) => !l.system);
-  const [creating, setCreating] = useState(false);
-  // The profile lists every kind together: its subtitle says reading, watching or both.
   const universe = useUniverse();
+  // The lists of the type on screen (and of the 18+ mode).
+  const own = (lists.data ?? []).filter(
+    (l) => !l.system && listInUniverse(l, entries, universe.active),
+  );
+  const [creating, setCreating] = useState(false);
+  // The profile's subtitle says reading, watching or both.
   const recent = universeAsides(universe.active, universe.enabled).recent;
   return (
     <Page className="pb-16">
@@ -130,7 +133,9 @@ function Favorites({
   const works = list ? listWorks(list, entries).map((w) => w.entry) : [];
   const kinds = universe.order.filter((k) => works.some((w) => kindOfMedia(w.media) === k));
   const [chosen, setChosen] = useViewState<string>('fav', '');
-  const kind = kinds.find((k) => k === chosen) ?? kinds[0];
+  // Opens on the type on screen when it has favorites.
+  const kind =
+    kinds.find((k) => k === chosen) ?? kinds.find((k) => k === universe.active) ?? kinds[0];
   const ofKind = works.filter((w) => kindOfMedia(w.media) === kind);
   return (
     <section id="favorites" className="flex scroll-mt-28 flex-col gap-5">

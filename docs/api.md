@@ -26,14 +26,16 @@ kind, in the user's order). The former `/favorites` route redirects there.
 
 ### Lists and rankings
 
-`GET /api/lists` returns the tenant's `WorkList[]` (schema v28, `lists` + `list_items`): name,
+`GET /api/lists` returns the tenant's `WorkList[]`, items limited to the works the account shows
+in its current 18+ mode (`hidden` counts the others; they keep their places) (schema v28, `lists` + `list_items`): name,
 description, optional kind, `ranked` (numbered: the order is the ranking), `layout` (`list` or
 `grid` for a list; `tiers` marks a tier list, created as such and never switched, schema v29), `system` and the items in order (`trackedId`, `tier` S–D or null, `note`).
 The favorites are the one system list (`system:"favorites"`, listed first, named by the interface):
 its items are exactly the works with `favorite` set, kept in step by triggers whatever path sets the
 flag; adding to or removing from it sets the flag. `POST /api/lists {name,kind,ranked,description?,
 layout?,add?}` returns 201 `{id,lists}`. `PATCH /api/lists/<id>` takes `name`, `description`,
-`kind`, `ranked`, `layout`, `order` (ids first, the others keep their order after them), `add`
+`kind`, `ranked`, `layout`, `order` (the works given take, in that order, the places they held;
+the others keep theirs), `add`
 (with an optional 0-based `at`), `remove`, `items` (`{trackedId,note?,tier?}`; in a tier list a
 null tier is the "to place" area, any other must be one of its rows) and, for a tier list, `tiers`
 (its rows in order, `{id,label,color}`, 1–20, schema v30 `list_tiers`; works of a removed row go

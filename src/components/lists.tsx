@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { Check, ListPlus, Plus } from 'lucide-react';
-import type { TrackedMedia, UnifiedMedia, WorkList } from '@/types/shared';
+import type { DiscoverKind, TrackedMedia, UnifiedMedia, WorkList } from '@/types/shared';
 import { KIND_IDS, kindOfMedia, type Kind } from '@/domain/kinds';
 import { DEFAULT_TIERS, tierOfRating } from '@/domain/tiers';
 import { send, useApi } from '@/lib/client/api';
@@ -46,6 +46,19 @@ export function useListWrite() {
       return null;
     }
   };
+}
+
+/**
+ * Whether a list belongs to the type on screen: a list made for a kind belongs to that kind; any
+ * other list to every kind its works have (a list of manga and anime shows under both). An empty
+ * list shows everywhere; a list whose works are all hidden by the 18+ mode shows nowhere.
+ */
+export function listInUniverse(list: WorkList, entries: TrackedMedia[], active: DiscoverKind) {
+  if (list.system) return true;
+  if (list.kind) return active === 'all' || list.kind === active;
+  const works = listWorks(list, entries);
+  if (!works.length) return list.hidden === 0;
+  return active === 'all' || works.some((w) => kindOfMedia(w.entry.media) === active);
 }
 
 export const isTierList = (list: Pick<WorkList, 'layout'>) => list.layout === 'tiers';
