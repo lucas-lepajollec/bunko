@@ -42,6 +42,9 @@ export const GET = route(async (r) => {
   const headers = new Headers({
     'Content-Type': upstream.headers.get('content-type') ?? 'application/octet-stream',
     'Cache-Control': 'no-store',
+    // Served from Bunko's origin: never let a browser run what Jellyfin returns as a page.
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': "default-src 'none'; sandbox",
   });
   for (const name of ['content-length', 'content-range', 'accept-ranges']) {
     const value = upstream.headers.get(name);

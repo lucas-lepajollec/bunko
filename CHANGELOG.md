@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Maintenance: Next.js 16.4.6 (moderate cache advisories GHSA-mfr8-8qww-v76h and
+  GHSA-vc7v-qv4w-wrv8 in 16.4.3); the Jellyfin stream relay answers with `nosniff` and a
+  sandboxing CSP like the other relays; a stray empty cookie file left at the repository root is
+  removed; the timing-heavy library-scale and login-limit tests get a 30 s budget so a busy machine
+  does not fail them.
+
 - Extension catalogs are generic: Bunko has one "Extensions" kind, and each video extension
   declares the sections its works form (`category`, `categoryName` on its `extvideo` catalogs)
   and whether it is adult (`behaviorHints.adult`). Each section is one entry of the kind menu and
