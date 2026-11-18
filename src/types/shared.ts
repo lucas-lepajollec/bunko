@@ -126,7 +126,14 @@ export interface Ranking {
   builtin: boolean;
 }
 export type ListLayout = 'list' | 'grid' | 'tiers';
-export type ListTier = 'S' | 'A' | 'B' | 'C' | 'D';
+/** A row id of a tier list (S to D by default, then the user's own rows). */
+export type ListTier = string;
+export interface TierRow {
+  id: ListTier;
+  label: string;
+  /** `#rrggbb`. */
+  color: string;
+}
 export interface WorkListItem {
   trackedId: number;
   tier: ListTier | null;
@@ -144,6 +151,8 @@ export interface WorkList {
   ranked: boolean;
   layout: ListLayout;
   system: 'favorites' | null;
+  /** A tier list's rows, top first (empty for a list). */
+  tiers: TierRow[];
   /** In the list's order. */
   items: WorkListItem[];
   createdAt: string;

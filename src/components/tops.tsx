@@ -1,6 +1,6 @@
 'use client';
 import * as Dialog from '@radix-ui/react-dialog';
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { GripVertical, Plus, Star } from 'lucide-react';
 import type { Ranking, TrackedMedia } from '@/types/shared';
 import { KIND_IDS, type Kind } from '@/domain/kinds';
@@ -64,15 +64,20 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
   }, [entries, saved, universe.order]);
   const [chosen, setChosen] = useViewState<string>('top', '');
   // Opens on the kind with the most rated works.
+  // Each ranking is sorted once per change of the library or the rankings, not per render.
+  const counts = useMemo(
+    () => new Map(views.map((v) => [v.key, rankingWorks(v, entries).length])),
+    [views, entries],
+  );
   const largest = [...views]
     .filter((v) => v.builtin)
-    .sort((a, b) => rankingWorks(b, entries).length - rankingWorks(a, entries).length)[0];
+    .sort((a, b) => (counts.get(b.key) ?? 0) - (counts.get(a.key) ?? 0))[0];
   const view = views.find((v) => v.key === chosen) ?? largest ?? views[0];
   const [all, setAll] = useState(false);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [duel, setDuel] = useState<RankedWork[] | null>(null);
-  const works = view ? rankingWorks(view, entries) : [];
+  const works = useMemo(() => (view ? rankingWorks(view, entries) : []), [view, entries]);
   const ids = works.map((w) => w.entry.id);
   const title = (v: View) =>
     v.builtin ? t('tops.kindTitle', { kind: t(`kind.${v.builtin}`) }) : (v.name ?? '');
@@ -149,9 +154,7 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
             )}
           >
             {title(v)}
-            <span className="text-muted ml-1.5 font-serif italic">
-              {n(rankingWorks(v, entries).length)}
-            </span>
+            <span className="text-muted ml-1.5 font-serif italic">{n(counts.get(v.key) ?? 0)}</span>
           </button>
         ))}
         <button
@@ -207,7 +210,7 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
             </span>
           </div>
           {editing ? (
-            <div className="flex max-h-[min(72vh,760px)] max-w-3xl flex-col gap-1 overflow-y-auto overscroll-contain pr-1">
+            <div className="anim-rise flex max-h-[min(72vh,760px)] flex-col gap-1 overflow-y-auto overscroll-contain pr-1">
               {groups.map((group) =>
                 group.length === 1 ? (
                   <RankRow key={group[0].entry.id} work={group[0]} />
@@ -244,7 +247,7 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
           ) : (
             <ol
               className={cx(
-                'grid gap-x-8 gap-y-1 md:grid-cols-2',
+                'anim-rise flex flex-col gap-1',
                 all && 'max-h-[min(72vh,760px)] overflow-y-auto overscroll-contain pr-1',
               )}
             >
@@ -309,10 +312,10 @@ function Score({ rating, small }: { rating: number; small?: boolean }) {
   );
 }
 
-function RankBody({ work: w }: { work: RankedWork }) {
+function RankBody({ work: w, link = true }: { work: RankedWork; link?: boolean }) {
   const { n } = useI18n();
-  return (
-    <MediaLink media={w.entry.media} className="flex min-w-0 flex-1 items-center gap-3 md:gap-4">
+  const body = (
+    <>
       <span className="font-display w-8 shrink-0 text-right text-2xl font-extrabold tracking-[-0.05em] text-white/80 tabular-nums md:w-10 md:text-3xl">
         {n(w.rank)}
       </span>
@@ -323,44 +326,54 @@ function RankBody({ work: w }: { work: RankedWork }) {
       />
       <span className="min-w-0 flex-1 truncate font-medium">{w.entry.title}</span>
       <Score rating={w.entry.rating!} />
+    </>
+  );
+  const row = 'flex min-w-0 flex-1 items-center gap-3 md:gap-4';
+  return link ? (
+    <MediaLink media={w.entry.media} className={row}>
+      {body}
     </MediaLink>
+  ) : (
+    <span className={row}>{body}</span>
   );
 }
 
-function RankRow({ work, as: Tag = 'div' }: { work: RankedWork; as?: 'li' | 'div' }) {
+const RankRow = memo(function RankRow({
+  work,
+  as: Tag = 'div',
+}: {
+  work: RankedWork;
+  as?: 'li' | 'div';
+}) {
   return (
-    <Tag className="flex min-w-0 items-center rounded-2xl px-2 py-2 hover:bg-white/[0.04]">
+    <Tag className="flex min-w-0 items-center rounded-2xl px-2 py-2 transition-colors hover:bg-white/[0.04]">
       <RankBody work={work} />
     </Tag>
   );
-}
+});
 
-function SortableRankRow({ work }: { work: RankedWork }) {
+/** A row of equal scores in the edit mode: the whole row is grabbed. */
+const SortableRankRow = memo(function SortableRankRow({ work }: { work: RankedWork }) {
   const { t } = useI18n();
-  const { setNode, style, dragging, handle } = useSortableItem(work.entry.id);
+  const { setNode, style, dragging, grab } = useSortableItem(work.entry.id);
   return (
     <div
       ref={setNode}
       style={style}
+      {...grab}
+      aria-label={t('lists.drag', { title: work.entry.title })}
       className={cx(
-        'flex min-w-0 items-center gap-1 rounded-xl py-1.5 pr-2',
+        'flex min-w-0 items-center gap-1 rounded-xl py-1.5 pr-2 pl-1 transition-[background-color,box-shadow] select-none',
         dragging
           ? 'bg-[#22201d] shadow-[0_12px_32px_rgba(0,0,0,0.5)] ring-1 ring-white/25'
-          : 'bg-transparent',
+          : 'hover:bg-white/[0.04]',
       )}
     >
-      <button
-        type="button"
-        aria-label={t('lists.drag', { title: work.entry.title })}
-        className="text-mid flex size-9 shrink-0 cursor-grab items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white active:cursor-grabbing"
-        {...handle}
-      >
-        <GripVertical className="size-4" aria-hidden />
-      </button>
-      <RankBody work={work} />
+      <GripVertical className="text-faint size-4 shrink-0" aria-hidden />
+      <RankBody work={work} link={false} />
     </div>
   );
-}
+});
 
 function CreateRanking({
   open,
@@ -379,8 +392,8 @@ function CreateRanking({
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-4 rounded-3xl border p-6 outline-none">
+        <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-black/70" />
+        <Dialog.Content className="anim-dialog bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-4 rounded-3xl border p-6 outline-none">
           <Dialog.Title className="font-display text-[22px] leading-none font-extrabold tracking-[-0.03em]">
             {t('tops.new')}
           </Dialog.Title>

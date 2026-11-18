@@ -1,5 +1,6 @@
-import type { ListLayout, ListTier, WorkList } from '@/types/shared';
+import type { ListLayout, ListTier, TierRow, WorkList } from '@/types/shared';
 import { KINDS, type Kind } from '@/domain/kinds';
+import { DEFAULT_TIERS } from '@/domain/tiers';
 import { db, statement } from './db';
 import { AppError } from './errors';
 
@@ -33,6 +34,11 @@ export function listLists(): WorkList[] {
   const items = statement(
     'SELECT list_id,tracked_id,tier,note,added_at FROM list_items ORDER BY list_id, position',
   ).all() as ItemRow[];
+  const tiers = statement(
+    'SELECT list_id,id,label,color FROM list_tiers ORDER BY list_id, position',
+  ).all() as (TierRow & { list_id: number })[];
+  const tiersOf = new Map<number, TierRow[]>();
+  for (const { list_id, ...t } of tiers) tiersOf.set(list_id, [...(tiersOf.get(list_id) ?? []), t]);
   const byList = new Map<number, ItemRow[]>();
   for (const i of items) {
     const at = byList.get(i.list_id);
@@ -47,6 +53,7 @@ export function listLists(): WorkList[] {
     ranked: r.ranked === 1,
     layout: r.layout,
     system: r.system,
+    tiers: r.layout === 'tiers' ? (tiersOf.get(r.id) ?? []) : [],
     items: (byList.get(r.id) ?? []).map((i) => ({
       trackedId: i.tracked_id,
       tier: i.tier,
@@ -81,6 +88,7 @@ export function createList(input: {
         now,
       ).lastInsertRowid,
     );
+    if (input.layout === 'tiers') writeTiers(id, DEFAULT_TIERS);
     if (input.add?.length) addItems(id, input.add);
     return id;
   })();
@@ -108,7 +116,8 @@ function writeOrder(id: number, order: readonly number[]) {
   ).map((r) => r.tracked_id);
   const present = new Set(current);
   const given = [...new Set(order)].filter((t) => present.has(t));
-  const rest = current.filter((t) => !given.includes(t));
+  const placed = new Set(given);
+  const rest = current.filter((t) => !placed.has(t));
   const update = statement('UPDATE list_items SET position=? WHERE list_id=? AND tracked_id=?');
   [...given, ...rest].forEach((t, i) => update.run(i, id, t));
 }
@@ -142,6 +151,20 @@ function addItems(id: number, ids: readonly number[], at?: number) {
   }
 }
 
+/** A tier list's rows, in order; works in a row that is gone go back to "to place". */
+function writeTiers(id: number, tiers: readonly TierRow[]) {
+  if (new Set(tiers.map((t) => t.id)).size !== tiers.length)
+    throw new AppError('VALIDATION_ERROR', 'Tier ids must be unique', 400);
+  statement('DELETE FROM list_tiers WHERE list_id=?').run(id);
+  const insert = statement(
+    'INSERT INTO list_tiers(list_id,id,label,color,position) VALUES(?,?,?,?,?)',
+  );
+  tiers.forEach((t, i) => insert.run(id, t.id, t.label, t.color, i));
+  statement(
+    'UPDATE list_items SET tier=NULL WHERE list_id=? AND tier IS NOT NULL AND tier NOT IN (SELECT id FROM list_tiers WHERE list_id=?)',
+  ).run(id, id);
+}
+
 function removeItems(id: number, ids: readonly number[]) {
   const r = row(id);
   if (r.system === 'favorites') {
@@ -166,6 +189,7 @@ export function updateList(
     at?: number;
     remove?: number[];
     items?: { trackedId: number; note?: string; tier?: ListTier | null }[];
+    tiers?: TierRow[];
   },
 ) {
   db().transaction(() => {
@@ -183,9 +207,14 @@ export function updateList(
       statement('UPDATE lists SET kind=? WHERE id=?').run(input.kind, id);
     if (input.layout !== undefined && input.layout !== r.layout) {
       // A tier list stays one, a list stays a list (shown as a list or a grid).
-      if (input.layout === 'tiers' || r.layout === 'tiers' || r.system)
+      if (input.layout === 'tiers' || r.layout === 'tiers')
         throw new AppError('VALIDATION_ERROR', 'A list cannot become a tier list or back', 400);
       statement('UPDATE lists SET layout=? WHERE id=?').run(input.layout, id);
+    }
+    if (input.tiers) {
+      if (r.layout !== 'tiers')
+        throw new AppError('VALIDATION_ERROR', 'Only a tier list has tiers', 400);
+      writeTiers(id, input.tiers);
     }
     if (input.remove?.length) removeItems(id, input.remove);
     if (input.add?.length) addItems(id, input.add, input.at);
@@ -193,6 +222,14 @@ export function updateList(
     if (input.items?.length) {
       const note = statement('UPDATE list_items SET note=? WHERE list_id=? AND tracked_id=?');
       const tier = statement('UPDATE list_items SET tier=? WHERE list_id=? AND tracked_id=?');
+      const rows = new Set(
+        (statement('SELECT id FROM list_tiers WHERE list_id=?').all(id) as { id: string }[]).map(
+          (t) => t.id,
+        ),
+      );
+      for (const i of input.items)
+        if (i.tier != null && !rows.has(i.tier))
+          throw new AppError('VALIDATION_ERROR', 'Unknown tier', 400);
       for (const i of input.items) {
         if (i.note !== undefined) note.run(i.note, id, i.trackedId);
         if (i.tier !== undefined) tier.run(i.tier, id, i.trackedId);

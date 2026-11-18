@@ -51,8 +51,8 @@ export function Duel({
   return (
     <Dialog.Root open onOpenChange={(o) => !o && onCancel()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80" />
-        <Dialog.Content className="bg-bg border-line fixed inset-x-3 top-1/2 z-50 mx-auto flex max-h-[92vh] max-w-[640px] -translate-y-1/2 flex-col items-center gap-5 overflow-y-auto rounded-3xl border p-5 outline-none md:p-7">
+        <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-black/80" />
+        <Dialog.Content className="anim-dialog bg-bg border-line fixed inset-x-3 top-1/2 z-50 mx-auto flex max-h-[92vh] max-w-[640px] -translate-y-1/2 flex-col items-center gap-5 overflow-y-auto rounded-3xl border p-5 outline-none md:p-7">
           <div className="flex flex-col items-center gap-1 text-center">
             <span className="text-muted text-xs tracking-[0.06em] uppercase">
               {title} ·{' '}

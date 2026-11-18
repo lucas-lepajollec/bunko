@@ -5,6 +5,7 @@ import { body, json, route } from '@/lib/api';
 import { KIND_IDS } from '@/domain/kinds';
 import { deleteList, listLists, updateList } from '@/lib/lists';
 
+const tierId = z.string().regex(/^[A-Za-z0-9_-]{1,24}$/);
 const ids = z.array(z.number().int().positive()).max(5000);
 const listId = (r: Request) =>
   z.coerce.number().int().positive().parse(new URL(r.url).pathname.split('/').at(-1));
@@ -20,6 +21,19 @@ export const PATCH = route(async (r) => {
         kind: z.enum(KIND_IDS).nullable().optional(),
         ranked: z.boolean().optional(),
         layout: z.enum(['list', 'grid', 'tiers']).optional(),
+        tiers: z
+          .array(
+            z
+              .object({
+                id: tierId,
+                label: z.string().trim().min(1).max(24),
+                color: z.string().regex(/^#[0-9a-f]{6}$/i),
+              })
+              .strict(),
+          )
+          .min(1)
+          .max(20)
+          .optional(),
         order: ids.optional(),
         add: ids.optional(),
         at: z.number().int().min(0).max(5000).optional(),
@@ -30,7 +44,7 @@ export const PATCH = route(async (r) => {
               .object({
                 trackedId: z.number().int().positive(),
                 note: z.string().trim().max(280).optional(),
-                tier: z.enum(['S', 'A', 'B', 'C', 'D']).nullable().optional(),
+                tier: tierId.nullable().optional(),
               })
               .strict(),
           )
