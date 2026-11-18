@@ -39,6 +39,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { LanguageSelect, Page } from '@/components/shell';
 import { YamtrackImport } from '@/components/yamtrack-import';
 import { EnhanceSettings } from '@/components/enhance-settings';
+import { AppearanceSettings } from '@/components/appearance-settings';
 import { useRelativeTime } from '@/components/time';
 import { Dot, ErrorNote, Skeleton, cx, errorText, field, smallButton } from '@/components/ui';
 
@@ -47,7 +48,7 @@ import { Dot, ErrorNote, Skeleton, cx, errorText, field, smallButton } from '@/c
  * external service with its connection and its options together, then catalogs and streaming.
  */
 const GROUPS = [
-  { id: 'personal', sections: ['account', 'media', 'playback', 'import'] },
+  { id: 'personal', sections: ['account', 'appearance', 'media', 'playback', 'import'] },
   { id: 'admin', sections: ['users'] },
   { id: 'services', sections: ['suwayomi', 'kavita', 'jellyfin', 'arr', 'translation'] },
   { id: 'content', sections: ['catalogs', 'extensions'] },
@@ -170,6 +171,9 @@ export default function SettingsPage() {
         </button>
         <Section open={open} visible={visible} id="account">
           <Account />
+        </Section>
+        <Section open={open} visible={visible} id="appearance">
+          <AppearanceSettings />
         </Section>
         <Section open={open} visible={visible} id="media">
           <UniverseSettings />

@@ -420,7 +420,7 @@ function Score({ rating }: { rating: number | null | undefined }) {
   const { locale } = useI18n();
   if (rating == null) return null;
   return (
-    <span className="flex min-w-[58px] shrink-0 items-center justify-center gap-1 rounded-full bg-[#f5c518] px-2.5 py-1 text-sm font-bold text-black">
+    <span className="flex min-w-[58px] shrink-0 items-center justify-center gap-1 rounded-full bg-star px-2.5 py-1 text-sm font-bold text-on-bright">
       <Star className="size-3.5" fill="currentColor" strokeWidth={0} aria-hidden />
       {formatRating(rating, locale)}
     </span>
@@ -455,7 +455,7 @@ const SortableRow = memo(function SortableRow({
       className={cx(
         'flex min-w-0 items-center gap-2 rounded-xl py-1.5 pr-1 pl-2 transition-[background-color,box-shadow] select-none md:gap-3',
         dragging
-          ? 'bg-[#22201d] shadow-[0_12px_32px_rgba(0,0,0,0.5)] ring-1 ring-white/25'
+          ? 'bg-panel-hi shadow-[0_12px_32px_rgba(0,0,0,0.5)] ring-1 ring-white/25'
           : 'hover:bg-white/[0.03]',
       )}
     >
@@ -572,7 +572,7 @@ function AddWorks({
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="anim-dialog bg-bg border-line fixed inset-x-3 top-[8vh] z-50 mx-auto flex h-[min(640px,84vh)] max-w-[520px] flex-col overflow-hidden rounded-3xl border outline-none">
+        <Dialog.Content className="ui-panel anim-dialog bg-bg border-line fixed inset-x-3 top-[8vh] z-50 mx-auto flex h-[min(640px,84vh)] max-w-[520px] flex-col overflow-hidden rounded-3xl border outline-none">
           <div className="flex shrink-0 flex-col gap-3 p-5 pb-3">
             <div className="flex items-start gap-3">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -648,7 +648,7 @@ function ListSettings({ list, onClose }: { list: WorkList; onClose: () => void }
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="anim-dialog bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-3 rounded-3xl border p-6 outline-none">
+        <Dialog.Content className="ui-panel anim-dialog bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-3 rounded-3xl border p-6 outline-none">
           <Dialog.Title className="font-display text-[22px] font-extrabold tracking-[-0.03em]">
             {t('lists.settings')}
           </Dialog.Title>

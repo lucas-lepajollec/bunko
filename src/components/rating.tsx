@@ -72,7 +72,7 @@ export function RatingButton({
           title={label}
           className={cx(
             'relative inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/15',
-            rating !== null ? 'text-[#f5c518]' : 'text-fg',
+            rating !== null ? 'text-star' : 'text-fg',
             className,
           )}
         >
@@ -82,7 +82,7 @@ export function RatingButton({
             aria-hidden
           />
           {rating !== null && (
-            <span className="absolute -right-1 -bottom-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#f5c518] px-1 text-[11px] font-bold text-black">
+            <span className="absolute -right-1 -bottom-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-star px-1 text-[11px] font-bold text-on-bright">
               {formatRating(rating, locale)}
             </span>
           )}
@@ -90,7 +90,7 @@ export function RatingButton({
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[380px] -translate-y-1/2 flex-col gap-5 rounded-3xl border p-6 outline-none">
+        <Dialog.Content className="ui-panel bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[380px] -translate-y-1/2 flex-col gap-5 rounded-3xl border p-6 outline-none">
           <Dialog.Title className="font-display text-[22px] leading-none font-extrabold tracking-[-0.03em]">
             {t('marks.rating')}
           </Dialog.Title>
@@ -106,7 +106,7 @@ export function RatingButton({
             >
               −
             </button>
-            <span className="flex items-center gap-2 text-[#f5c518]">
+            <span className="flex items-center gap-2 text-star">
               <Star className="size-7" fill="currentColor" strokeWidth={0} aria-hidden />
               <input
                 inputMode="decimal"
@@ -140,7 +140,7 @@ export function RatingButton({
             value={draft}
             aria-label={t('marks.rating')}
             onChange={(e) => pick(Number(e.target.value))}
-            className="w-full accent-[#f5c518]"
+            className="w-full accent-star"
           />
           <div className="flex flex-wrap items-center justify-end gap-2">
             {rating !== null && (

@@ -1,6 +1,7 @@
 'use client';
 import { ManagedImage } from '@/components/managed-image';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { setAmbient } from '@/lib/client/ambient';
 import { cx } from './ui';
 
 /**
@@ -15,7 +16,10 @@ export function Backdrop({
   color,
   className,
   mobileImage,
+  ambient: ambientArt,
 }: {
+  /** Artwork for themes that tint the whole page (Ciné, Aurore) when this hero shows none. */
+  ambient?: string | null;
   image: string | null;
   /**
    * Portrait artwork for phones: a wide banner cropped into a tall screen shows only a sliver, so
@@ -35,6 +39,11 @@ export function Backdrop({
   const attempt = failed.key === key ? failed.count : 0;
   const src = candidates[attempt] ?? null;
   const sharp = Boolean(image) && src === image;
+  // Themes that tint the whole page with the current artwork follow this one.
+  const ambient = src ?? mobileImage ?? ambientArt;
+  useEffect(() => {
+    if (ambient) setAmbient(ambient);
+  }, [ambient]);
   return (
     <div
       aria-hidden
@@ -90,8 +99,21 @@ export function Backdrop({
             className="absolute inset-0 size-full object-cover object-top opacity-70 md:hidden"
           />
         )}
-        <div className="absolute inset-0 hidden bg-[linear-gradient(90deg,#0b0a09_0%,rgba(11,10,9,0.75)_34%,rgba(11,10,9,0)_70%)] md:block" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(11,10,9,0.55)_0%,rgba(11,10,9,0)_22%,rgba(11,10,9,0)_45%,rgba(11,10,9,0.6)_75%)]" />
+        {/* Shades take the page colour, so they also work on light themes. */}
+        <div
+          className="absolute inset-0 hidden md:block"
+          style={{
+            background:
+              'linear-gradient(90deg, var(--color-bg) 0%, color-mix(in oklab, var(--color-bg) 75%, transparent) 34%, transparent 70%)',
+          }}
+        />
+        <div
+          className="backdrop-shade absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(180deg, color-mix(in oklab, var(--color-bg) 55%, transparent) 0%, transparent 22%, transparent 45%, color-mix(in oklab, var(--color-bg) 60%, transparent) 75%)',
+          }}
+        />
         <div
           className="absolute bottom-[8%] left-[-220px] h-[600px] w-[900px] opacity-[0.13]"
           style={{

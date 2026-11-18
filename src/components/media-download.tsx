@@ -327,7 +327,7 @@ function MediaSearchDialog({
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
-        <Dialog.Content className="bg-bg border-line fixed inset-0 z-50 flex flex-col outline-none md:inset-auto md:top-1/2 md:left-1/2 md:h-[min(88dvh,920px)] md:w-[min(1080px,calc(100vw-48px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl md:border">
+        <Dialog.Content className="ui-panel bg-bg border-line fixed inset-0 z-50 flex flex-col outline-none md:inset-auto md:top-1/2 md:left-1/2 md:h-[min(88dvh,920px)] md:w-[min(1080px,calc(100vw-48px))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl md:border">
           <header className="border-line flex items-center gap-3 border-b px-4 pt-[max(env(safe-area-inset-top),14px)] pb-3 md:px-6 md:pt-5">
             <Cover src={media.coverUrl} alt="" className="w-10 shrink-0 shadow-none" />
             <div className="flex min-w-0 flex-1 flex-col">

@@ -267,7 +267,7 @@ export function Player({
       role="dialog"
       aria-modal
       aria-label={`${episode.title} · ${episode.label}`}
-      className="fixed inset-0 z-[70] bg-black text-white"
+      className="theme-lock fixed inset-0 z-[70] bg-black text-white"
     >
       {source && (
         <Screen
@@ -291,7 +291,7 @@ export function Player({
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 p-2 backdrop-blur-sm sm:p-4">
           {/* Never taller than the player (an inline player on a phone is short): the list
               scrolls inside the panel, the header stays. */}
-          <div className="border-line flex max-h-full min-h-0 w-full max-w-xl flex-col gap-2 overflow-hidden rounded-2xl border bg-[#141210] p-3 sm:gap-3 sm:rounded-3xl sm:p-5">
+          <div className="border-line flex max-h-full min-h-0 w-full max-w-xl flex-col gap-2 overflow-hidden rounded-2xl border bg-panel p-3 sm:gap-3 sm:rounded-3xl sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 flex-col">
                 <span className="font-display truncate text-xl font-bold">{episode.title}</span>
@@ -1177,7 +1177,7 @@ function Screen({
               <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
             </CtrlButton>
             {menu && (
-              <div className="border-line absolute right-0 bottom-14 flex max-h-[60vh] w-72 flex-col gap-3 overflow-y-auto rounded-2xl border bg-[#141210]/95 p-3 text-sm shadow-2xl backdrop-blur-xl">
+              <div className="border-line absolute right-0 bottom-14 flex max-h-[60vh] w-72 flex-col gap-3 overflow-y-auto rounded-2xl border bg-panel/95 p-3 text-sm shadow-2xl backdrop-blur-xl">
                 {source.kind === 'jellyfin' && p ? (
                   <>
                     <Choice

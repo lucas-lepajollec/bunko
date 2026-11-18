@@ -147,7 +147,7 @@ export function NewListDialog({
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="anim-dialog bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-4 rounded-3xl border p-6 outline-none">
+        <Dialog.Content className="ui-panel anim-dialog bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-4 rounded-3xl border p-6 outline-none">
           <Dialog.Title className="font-display text-[22px] leading-none font-extrabold tracking-[-0.03em]">
             {t(tier ? 'lists.newTier' : 'lists.new')}
           </Dialog.Title>
@@ -331,7 +331,7 @@ export function ListsButton({ media, entry }: { media: UnifiedMedia; entry?: Tra
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-black/60" />
-          <Dialog.Content className="anim-dialog border-line fixed inset-x-3 bottom-[max(env(safe-area-inset-bottom),12px)] z-50 flex max-h-[80vh] flex-col gap-1 overflow-y-auto rounded-3xl border bg-[#161412] p-4 outline-none md:inset-x-auto md:top-1/2 md:bottom-auto md:left-1/2 md:w-[400px] md:-translate-x-1/2 md:-translate-y-1/2">
+          <Dialog.Content className="ui-panel anim-dialog border-line fixed inset-x-3 bottom-[max(env(safe-area-inset-bottom),12px)] z-50 flex max-h-[80vh] flex-col gap-1 overflow-y-auto rounded-3xl border bg-panel p-4 outline-none md:inset-x-auto md:top-1/2 md:bottom-auto md:left-1/2 md:w-[400px] md:-translate-x-1/2 md:-translate-y-1/2">
             <Dialog.Title className="px-2 pt-1 pb-2 font-semibold">{t('lists.addTo')}</Dialog.Title>
             <Dialog.Description className="sr-only">{t('lists.addToHint')}</Dialog.Description>
             {(lists.data ?? []).map((list) => {

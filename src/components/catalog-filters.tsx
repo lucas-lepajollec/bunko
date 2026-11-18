@@ -298,7 +298,7 @@ function TagPicker({
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="bg-bg border-line fixed inset-x-3 top-[6dvh] bottom-[6dvh] z-50 mx-auto flex max-w-[960px] flex-col rounded-3xl border outline-none">
+        <Dialog.Content className="ui-panel bg-bg border-line fixed inset-x-3 top-[6dvh] bottom-[6dvh] z-50 mx-auto flex max-w-[960px] flex-col rounded-3xl border outline-none">
           <div className="flex flex-col gap-4 p-5 pb-4 md:p-7 md:pb-5">
             <div className="flex items-start gap-3">
               <div className="flex flex-1 flex-col gap-1">
