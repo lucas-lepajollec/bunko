@@ -34,8 +34,10 @@ its items are exactly the works with `favorite` set, kept in step by triggers wh
 flag; adding to or removing from it sets the flag. `POST /api/lists {name,kind,ranked,description?,
 layout?,add?}` returns 201 `{id,lists}`. `PATCH /api/lists/<id>` takes `name`, `description`,
 `kind`, `ranked`, `layout`, `order` (ids first, the others keep their order after them), `add`
-(with an optional 0-based `at`), `remove` and `items` (`{trackedId,note?,tier?}`; in a tier list a
-null tier is the "to place" area) in one
+(with an optional 0-based `at`), `remove`, `items` (`{trackedId,note?,tier?}`; in a tier list a
+null tier is the "to place" area, any other must be one of its rows) and, for a tier list, `tiers`
+(its rows in order, `{id,label,color}`, 1–20, schema v30 `list_tiers`; works of a removed row go
+back to "to place") in one
 transaction and returns every list; works outside the library are ignored, and a removed work
 leaves every list. `DELETE /api/lists/<id>` refuses the system list (403). Lists hold library works
 only: the interface follows a catalog work as `PLANNING` with `autoDownload:false` first.

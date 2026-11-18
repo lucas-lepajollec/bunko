@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Lists, round three: a tier list's rows are its own (schema v30, `list_tiers`): add, rename,
+  recolor, move and remove them in "Edit the tiers" (works of a removed row go back to "to
+  place"). In an edit mode the whole row of a work is grabbed (fields stay editable with a click).
+  Rankings on the profile take one full-width column; favorites' buttons share the heading line;
+  a list's count and kind sit beside its title. Fixed: the favorites could not switch to the grid
+  ("some values are invalid"); dropdowns inside dialogs did not react to the pointer. Dialogs,
+  menus, edit bars and rows ease in; rankings are computed once per change.
+
 - Lists, round two: tier lists are their own kind (Lists page, "Tier lists" tab): rows S to D
   and a "to place" area, posters dragged between rows, started from the library (rated works or
   all of a kind) and placed by your ratings if you like. Rankings and lists move works only in an

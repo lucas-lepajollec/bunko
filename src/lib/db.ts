@@ -5,6 +5,7 @@ import { adultResolver, automaticMedia } from './adult';
 import { storedCover, deleteStoredCoverFile } from './stored-covers';
 import { wakeWorker } from './worker-events';
 import Database from 'better-sqlite3';
+import { DEFAULT_TIERS } from '@/domain/tiers';
 import { coverContext } from './cover-state';
 import { activeSourceMatch, SOURCE_MATCH_RETRY_MS } from './source-match-state';
 import { matchKavita, kavitaPresence, kavitaMatcher } from './kavita-index';
@@ -210,6 +211,7 @@ export function db(): Database.Database {
     migrateV27(connection);
     migrateV28(connection);
     migrateV29(connection);
+    migrateV30(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -1591,6 +1593,42 @@ export function migrateV29(database: Database.Database) {
     if (Number(database.pragma('user_version', { simple: true })) >= 29) return;
     database.exec("UPDATE lists SET layout='list' WHERE system IS NOT NULL AND layout='tiers'");
     database.pragma('user_version=29');
+  })();
+}
+/**
+ * A tier list's rows are its own (`list_tiers`: label, color, order): the fixed S–D check on
+ * `list_items.tier` goes (the table is rebuilt), and existing tier lists get S–D as rows.
+ */
+export function migrateV30(database: Database.Database) {
+  database.transaction(() => {
+    database.exec(`CREATE TABLE IF NOT EXISTS list_tiers (
+        list_id INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+        id TEXT NOT NULL, label TEXT NOT NULL, color TEXT NOT NULL, position INTEGER NOT NULL,
+        PRIMARY KEY(list_id, id));`);
+    if (Number(database.pragma('user_version', { simple: true })) >= 30) return;
+    // The favorites triggers name list_items: out of the way while it is rebuilt.
+    database.exec(`DROP TRIGGER IF EXISTS favorites_list_insert;
+      DROP TRIGGER IF EXISTS favorites_list_add;
+      DROP TRIGGER IF EXISTS favorites_list_remove;`);
+    database.exec(`CREATE TABLE list_items_v30 (
+        list_id INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+        tracked_id INTEGER NOT NULL REFERENCES tracked_media(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL, tier TEXT, note TEXT NOT NULL DEFAULT '', added_at TEXT NOT NULL,
+        PRIMARY KEY(list_id, tracked_id));
+      INSERT INTO list_items_v30 SELECT list_id,tracked_id,position,tier,note,added_at FROM list_items;
+      DROP TABLE list_items;
+      ALTER TABLE list_items_v30 RENAME TO list_items;
+      CREATE INDEX IF NOT EXISTS list_items_tracked ON list_items(tracked_id);`);
+    const insert = database.prepare(
+      'INSERT OR IGNORE INTO list_tiers(list_id,id,label,color,position) VALUES(?,?,?,?,?)',
+    );
+    for (const { id } of database.prepare("SELECT id FROM lists WHERE layout='tiers'").all() as {
+      id: number;
+    }[])
+      DEFAULT_TIERS.forEach((t, i) => insert.run(id, t.id, t.label, t.color, i));
+    // Recreates the favorites triggers (its tables exist, its version is passed).
+    migrateV28(database);
+    database.pragma('user_version=30');
   })();
 }
 /** Parts of a catalog sheet that a followed work never stores. */

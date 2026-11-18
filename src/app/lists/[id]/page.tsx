@@ -2,10 +2,10 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { ArrowLeft, GripVertical, Plus, Search, Star, X } from 'lucide-react';
-import type { ListTier, TrackedMedia, WorkList, WorkListItem } from '@/types/shared';
+import type { ListTier, TierRow, TrackedMedia, WorkList, WorkListItem } from '@/types/shared';
 import { kindOfMedia } from '@/domain/kinds';
 import { formatRating, libraryMark } from '@/domain/library-mark';
 import { send, useApi } from '@/lib/client/api';
@@ -15,7 +15,13 @@ import { Duel } from '@/components/duel';
 import { MediaLink } from '@/components/media-link';
 import { PosterCard } from '@/components/media';
 import { Select } from '@/components/select';
-import { SortableList, useSortableItem } from '@/components/sortable';
+import {
+  SortableList,
+  buttonInDraggable,
+  fieldInDraggable,
+  useSortableItem,
+} from '@/components/sortable';
+import { tierOfRating } from '@/domain/tiers';
 import { TierBoard } from '@/components/tier-board';
 import { toast } from '@/components/notify';
 import {
@@ -23,7 +29,6 @@ import {
   listMeta,
   listName,
   listWorks,
-  tierOfRating,
   useListWrite,
   useLists,
 } from '@/components/lists';
@@ -40,6 +45,7 @@ import {
 } from '@/components/ui';
 
 type Work = { item: WorkListItem; entry: TrackedMedia };
+const NONE: TrackedMedia[] = [];
 
 export default function ListPage() {
   const { t, n } = useI18n();
@@ -49,8 +55,8 @@ export default function ListPage() {
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const write = useListWrite();
   const list = lists.data?.find((l) => l.id === Number(params.id));
-  const entries = library.data ?? [];
-  const works = list ? listWorks(list, entries) : [];
+  const entries = library.data ?? NONE;
+  const works = useMemo(() => (list ? listWorks(list, entries) : []), [list, entries]);
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -118,9 +124,20 @@ export default function ListPage() {
       { order, ...(changed.length ? { items: changed } : {}) },
     );
   };
+  const saveRows = (tiers: TierRow[]) => {
+    const ids = new Set(tiers.map((x) => x.id));
+    patch(
+      (l) => ({
+        ...l,
+        tiers,
+        items: l.items.map((i) => (i.tier && !ids.has(i.tier) ? { ...i, tier: null } : i)),
+      }),
+      { tiers },
+    );
+  };
   const placeByRating = () => {
     const changed = works.flatMap((w) => {
-      const tierOf = w.item.tier ? null : tierOfRating(w.entry.rating);
+      const tierOf = w.item.tier ? null : tierOfRating(w.entry.rating, list.tiers);
       return tierOf ? [{ trackedId: w.entry.id, tier: tierOf }] : [];
     });
     if (changed.length) saveTiers(ids, changed);
@@ -131,12 +148,14 @@ export default function ListPage() {
     <Page className="pb-24">
       <BackLink tier={tier} />
       <div className="-mt-2 flex flex-col gap-2">
-        <span className="text-muted text-xs tracking-[0.06em] uppercase">
-          {listMeta(t, n, list, works.length)}
-        </span>
-        <h1 className="font-display text-[40px] leading-[0.95] font-extrabold tracking-[-0.04em] md:text-[56px]">
-          {listName(t, list)}
-        </h1>
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <h1 className="font-display text-[40px] leading-[0.95] font-extrabold tracking-[-0.04em] md:text-[56px]">
+            {listName(t, list)}
+          </h1>
+          <span className="text-muted font-serif text-[17px] italic md:text-[22px]">
+            {listMeta(t, n, list, works.length)}
+          </span>
+        </div>
         {list.description && (
           <p className="text-mid max-w-2xl font-serif text-xl italic">{list.description}</p>
         )}
@@ -175,22 +194,24 @@ export default function ListPage() {
               {t('lists.settings')}
             </button>
           )}
-          {!tier && works.length > 0 && (
+          {(tier || works.length > 0) && (
             <button
               type="button"
               aria-pressed={editing}
               onClick={() => setEditing(!editing)}
               className={editing ? primarySmall : smallButton}
             >
-              {editing ? t('tops.done') : t('lists.edit')}
+              {editing ? t('tops.done') : t(tier ? 'tiers.editRows' : 'lists.edit')}
             </button>
           )}
         </span>
       </div>
       {editing && (
-        <div className="text-mid flex flex-wrap items-center gap-3 text-sm">
-          <span>{t(list.ranked ? 'lists.editHint' : 'lists.editHintFree')}</span>
-          {list.ranked && works.some((w) => w.entry.rating != null) && (
+        <div className="anim-rise text-mid flex flex-wrap items-center gap-3 text-sm">
+          <span>
+            {t(tier ? 'tiers.hint' : list.ranked ? 'lists.editHint' : 'lists.editHintFree')}
+          </span>
+          {!tier && list.ranked && works.some((w) => w.entry.rating != null) && (
             <button
               type="button"
               className="ml-auto underline decoration-white/30 underline-offset-4 hover:text-white"
@@ -221,7 +242,14 @@ export default function ListPage() {
         </Empty>
       )}
       {tier ? (
-        <TierBoard works={works} onSave={saveTiers} onRemove={remove} />
+        <TierBoard
+          works={works}
+          tiers={list.tiers}
+          editing={editing}
+          onSave={saveTiers}
+          onRemove={remove}
+          onTiers={saveRows}
+        />
       ) : editing ? (
         <SortableList ids={ids} onReorder={reorder} grid={list.layout === 'grid'}>
           {list.layout === 'grid' ? (
@@ -236,7 +264,7 @@ export default function ListPage() {
               ))}
             </div>
           ) : (
-            <div className="flex max-w-4xl flex-col gap-1">
+            <div className="anim-rise flex flex-col gap-1">
               {works.map((w, i) => (
                 <SortableRow
                   key={w.entry.id}
@@ -266,11 +294,11 @@ export default function ListPage() {
           ))}
         </div>
       ) : (
-        <ol className="flex max-w-4xl flex-col gap-1">
+        <ol className="anim-rise flex flex-col gap-1">
           {works.map((w, i) => (
             <li
               key={w.entry.id}
-              className="flex min-w-0 items-center rounded-2xl px-2 py-2 hover:bg-white/[0.04]"
+              className="flex min-w-0 items-center rounded-2xl px-2 py-2 transition-colors hover:bg-white/[0.04]"
             >
               <MediaLink
                 media={w.entry.media}
@@ -366,7 +394,7 @@ function Score({ rating }: { rating: number | null | undefined }) {
   );
 }
 
-function SortableRow({
+const SortableRow = memo(function SortableRow({
   work: w,
   index,
   ranked,
@@ -384,33 +412,28 @@ function SortableRow({
   onRemove: () => void;
 }) {
   const { t } = useI18n();
-  const { setNode, style, dragging, handle } = useSortableItem(w.entry.id);
+  const { setNode, style, dragging, grab } = useSortableItem(w.entry.id);
   return (
     <div
       ref={setNode}
       style={style}
+      {...grab}
+      aria-label={t('lists.drag', { title: w.entry.title })}
       className={cx(
-        'flex min-w-0 items-center gap-2 rounded-xl py-1.5 pr-1 md:gap-3',
+        'flex min-w-0 items-center gap-2 rounded-xl py-1.5 pr-1 pl-2 transition-[background-color,box-shadow] select-none md:gap-3',
         dragging
           ? 'bg-[#22201d] shadow-[0_12px_32px_rgba(0,0,0,0.5)] ring-1 ring-white/25'
           : 'hover:bg-white/[0.03]',
       )}
     >
-      <button
-        type="button"
-        aria-label={t('lists.drag', { title: w.entry.title })}
-        className="text-mid flex size-9 shrink-0 cursor-grab items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white active:cursor-grabbing"
-        {...handle}
-      >
-        <GripVertical className="size-4" aria-hidden />
-      </button>
+      <GripVertical className="text-faint size-4 shrink-0" aria-hidden />
       {ranked && (
         <input
           key={`${w.entry.id}:${index}`}
           defaultValue={index + 1}
           inputMode="numeric"
           aria-label={t('lists.place', { title: w.entry.title })}
-          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          {...fieldInDraggable}
           onBlur={(e) => {
             const place = Number(e.currentTarget.value);
             if (Number.isInteger(place) && place >= 1 && place <= count && place !== index + 1)
@@ -432,7 +455,7 @@ function SortableRow({
           maxLength={280}
           placeholder={t('lists.notePlaceholder')}
           aria-label={t('lists.note', { title: w.entry.title })}
-          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          {...fieldInDraggable}
           onBlur={(e) => {
             const note = e.currentTarget.value.trim();
             if (note !== w.item.note) onNote(note);
@@ -443,6 +466,7 @@ function SortableRow({
       <Score rating={w.entry.rating} />
       <button
         type="button"
+        {...buttonInDraggable}
         onClick={onRemove}
         aria-label={t('lists.remove', { title: w.entry.title })}
         className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
@@ -451,7 +475,7 @@ function SortableRow({
       </button>
     </div>
   );
-}
+});
 
 function SortablePoster({
   work: w,
@@ -463,19 +487,17 @@ function SortablePoster({
   onRemove: (trackedId: number) => void;
 }) {
   const { t } = useI18n();
-  const { setNode, style, dragging, handle } = useSortableItem(w.entry.id);
+  const { setNode, style, dragging, grab } = useSortableItem(w.entry.id);
   return (
     <article
       ref={setNode}
       style={style}
-      className={cx('relative flex min-w-0 flex-col gap-1', dragging && 'opacity-80')}
+      {...grab}
+      aria-label={t('lists.drag', { title: w.entry.title })}
+      className={cx('relative flex min-w-0 flex-col gap-1 select-none', dragging && 'opacity-80')}
     >
       {index !== null && <Rank n={index + 1} />}
-      <span
-        className="block cursor-grab rounded-[6px] active:cursor-grabbing"
-        aria-label={t('lists.drag', { title: w.entry.title })}
-        {...handle}
-      >
+      <span className="block rounded-[6px]">
         <Cover
           src={w.entry.coverUrl ?? w.entry.media.coverUrl}
           fallbacks={w.entry.coverFallbacks}
@@ -484,6 +506,7 @@ function SortablePoster({
       <span className="truncate text-sm">{w.entry.title}</span>
       <button
         type="button"
+        {...buttonInDraggable}
         onClick={() => onRemove(w.entry.id)}
         aria-label={t('lists.remove', { title: w.entry.title })}
         className="bg-bg/85 absolute right-1 bottom-8 flex size-8 items-center justify-center rounded-full"
@@ -515,8 +538,8 @@ function AddWorks({
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="bg-bg border-line fixed inset-x-3 top-[8vh] z-50 mx-auto flex h-[min(640px,84vh)] max-w-[520px] flex-col overflow-hidden rounded-3xl border outline-none">
+        <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-black/70" />
+        <Dialog.Content className="anim-dialog bg-bg border-line fixed inset-x-3 top-[8vh] z-50 mx-auto flex h-[min(640px,84vh)] max-w-[520px] flex-col overflow-hidden rounded-3xl border outline-none">
           <div className="flex shrink-0 flex-col gap-3 p-5 pb-3">
             <div className="flex items-start gap-3">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -591,8 +614,8 @@ function ListSettings({ list, onClose }: { list: WorkList; onClose: () => void }
   return (
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-3 rounded-3xl border p-6 outline-none">
+        <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-black/70" />
+        <Dialog.Content className="anim-dialog bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-3 rounded-3xl border p-6 outline-none">
           <Dialog.Title className="font-display text-[22px] font-extrabold tracking-[-0.03em]">
             {t('lists.settings')}
           </Dialog.Title>

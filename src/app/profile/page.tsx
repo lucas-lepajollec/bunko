@@ -134,12 +134,19 @@ function Favorites({
   const ofKind = works.filter((w) => kindOfMedia(w.media) === kind);
   return (
     <section id="favorites" className="flex scroll-mt-28 flex-col gap-5">
-      <SectionHeading
-        title={t('favorites.title')}
-        aside={t('favorites.aside')}
-        href={list ? `/lists/${list.id}` : undefined}
-        linkLabel={t('favorites.all', { count: n(works.length) })}
-      />
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <SectionHeading title={t('favorites.title')} aside={t('favorites.aside')} />
+        {list && works.length > 0 && (
+          <span className="ml-auto flex items-center gap-3">
+            <Link href={`/lists/${list.id}`} className={smallButton}>
+              {t('favorites.reorder')}
+            </Link>
+            <Link href={`/lists/${list.id}`} className="text-muted hover:text-fg text-[13px]">
+              {t('favorites.all', { count: n(works.length) })} →
+            </Link>
+          </span>
+        )}
+      </div>
       {loading && <Skeleton className="h-36 rounded-2xl" />}
       {!loading && !works.length && (
         <Empty
@@ -153,31 +160,28 @@ function Favorites({
           {t('favorites.emptyBody')}
         </Empty>
       )}
-      {kinds.length > 0 && (
+      {kinds.length > 1 && (
         <div className="flex flex-wrap items-center gap-1 text-sm">
-          {kinds.length > 1 &&
-            kinds.map((k) => (
-              <button
-                key={k}
-                type="button"
-                aria-pressed={k === kind}
-                onClick={() => setChosen(k)}
-                className={cx(
-                  'h-[34px] rounded-full px-3.5',
-                  k === kind ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
-                )}
-              >
-                {t(`kind.${k}`)}
-              </button>
-            ))}
-          {list && (
-            <Link href={`/lists/${list.id}`} className={cx(smallButton, 'ml-auto')}>
-              {t('favorites.reorder')}
-            </Link>
-          )}
+          {kinds.map((k) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={k === kind}
+              onClick={() => setChosen(k)}
+              className={cx(
+                'h-[34px] rounded-full px-3.5 transition-colors',
+                k === kind ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
+              )}
+            >
+              {t(`kind.${k}`)}
+            </button>
+          ))}
         </div>
       )}
-      <ol className="grid max-w-[1100px] grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-5 md:gap-x-[26px]">
+      <ol
+        key={kind}
+        className="anim-rise grid max-w-[1100px] grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-5 md:gap-x-[26px]"
+      >
         {ofKind.slice(0, FAVORITES_SHOWN).map((entry, i) => (
           <li key={entry.id} className="flex min-w-0 flex-col gap-1">
             <span className="font-display text-mid text-2xl leading-none font-extrabold tracking-[-0.04em] tabular-nums md:text-3xl">

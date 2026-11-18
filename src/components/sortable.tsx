@@ -64,7 +64,7 @@ export function SortableList<Id extends UniqueIdentifier>({
   );
 }
 
-/** One draggable item: its node, its moving style, and the props of its handle. */
+/** One draggable item: its node, its moving style, and the props that make it grabbable. */
 export function useSortableItem(id: UniqueIdentifier) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -74,11 +74,32 @@ export function useSortableItem(id: UniqueIdentifier) {
     transition,
     zIndex: isDragging ? 20 : undefined,
     position: 'relative',
+    // The whole item is grabbed: a swipe still scrolls, a press then drag moves it.
+    touchAction: 'manipulation',
+    cursor: isDragging ? 'grabbing' : 'grab',
   };
   return {
     setNode: setNodeRef,
     style,
     dragging: isDragging,
-    handle: { ...attributes, ...listeners, style: { touchAction: 'none' as const } },
+    grab: { ...attributes, ...listeners },
   };
 }
+
+/**
+ * A field inside a draggable item: a click focuses it, a press-and-drag still moves the item,
+ * but typing (space, arrows) never starts a keyboard drag; Enter leaves the field.
+ */
+export const fieldInDraggable = {
+  onKeyDown: (e: { stopPropagation: () => void; key: string; currentTarget: EventTarget }) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') (e.currentTarget as HTMLElement).blur();
+  },
+};
+/** A button inside a draggable item: pressing it never starts a drag. */
+export const buttonInDraggable = {
+  onPointerDown: (e: { stopPropagation: () => void }) => e.stopPropagation(),
+  onMouseDown: (e: { stopPropagation: () => void }) => e.stopPropagation(),
+  onTouchStart: (e: { stopPropagation: () => void }) => e.stopPropagation(),
+  onKeyDown: (e: { stopPropagation: () => void }) => e.stopPropagation(),
+};

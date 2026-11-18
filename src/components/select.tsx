@@ -126,7 +126,7 @@ export function Select({
               setOpen(false);
             }
           }}
-          className="z-[70] max-h-[min(360px,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl bg-[#1c1a17] p-1 text-sm shadow-[0_18px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10"
+          className="anim-pop pointer-events-auto z-[70] max-h-[min(360px,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl bg-[#1c1a17] p-1 text-sm shadow-[0_18px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10"
         >
           <RS.Viewport>
             {options.map((o, i) => {
@@ -141,7 +141,7 @@ export function Select({
                   <RS.Item
                     value={o.value === '' ? EMPTY : o.value}
                     disabled={o.disabled}
-                    className="text-soft flex min-h-9 cursor-default items-center justify-between gap-6 rounded-xl px-3 py-1.5 outline-none select-none data-[disabled]:opacity-40 data-[highlighted]:bg-white/[0.08] data-[highlighted]:text-white data-[state=checked]:font-semibold data-[state=checked]:text-white"
+                    className="text-soft flex min-h-9 cursor-default items-center justify-between gap-6 rounded-xl px-3 py-1.5 outline-none select-none data-[disabled]:opacity-40 transition-colors hover:bg-white/[0.08] hover:text-white data-[highlighted]:bg-white/[0.08] data-[highlighted]:text-white data-[state=checked]:font-semibold data-[state=checked]:text-white"
                   >
                     <RS.ItemText>{o.label}</RS.ItemText>
                     <RS.ItemIndicator aria-hidden>✓</RS.ItemIndicator>

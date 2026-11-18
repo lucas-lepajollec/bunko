@@ -1903,6 +1903,19 @@ const en: Dictionary = {
   'lists.noTiersBody':
     'Make one from your library: your rated works of a kind, already placed by their score, then drag them where they belong.',
   'tops.duel': 'Settle by duels',
+  'tiers.editRows': 'Edit the tiers',
+  'tiers.hint':
+    'Add, rename, recolor, move or remove tiers. Works of a removed tier go back to “To place”.',
+  'tiers.add': 'Add a tier',
+  'tiers.create': 'Add',
+  'tiers.editTitle': 'Tier',
+  'tiers.edit': 'Edit the tier {label}',
+  'tiers.up': 'Move {label} up',
+  'tiers.down': 'Move {label} down',
+  'tiers.label': 'Name',
+  'tiers.labelPlaceholder': 'S, Masterpiece, Guilty pleasure…',
+  'tiers.color': 'Color',
+  'tiers.delete': 'Remove this tier',
 };
 
 const fr: Dictionary = {
@@ -3795,6 +3808,19 @@ const fr: Dictionary = {
   'lists.noTiersBody':
     'Crée-en une depuis ta bibliothèque : tes œuvres notées d’un type, déjà placées selon leur note, puis glisse-les où elles le méritent.',
   'tops.duel': 'Départager par duels',
+  'tiers.editRows': 'Modifier les tiers',
+  'tiers.hint':
+    'Ajoute, renomme, recolore, déplace ou supprime des tiers. Les œuvres d’un tier supprimé reviennent dans « À placer ».',
+  'tiers.add': 'Ajouter un tier',
+  'tiers.create': 'Ajouter',
+  'tiers.editTitle': 'Tier',
+  'tiers.edit': 'Modifier le tier {label}',
+  'tiers.up': 'Monter {label}',
+  'tiers.down': 'Descendre {label}',
+  'tiers.label': 'Nom',
+  'tiers.labelPlaceholder': 'S, Chef-d’œuvre, Plaisir coupable…',
+  'tiers.color': 'Couleur',
+  'tiers.delete': 'Supprimer ce tier',
 };
 
 const es: Dictionary = {
@@ -5678,6 +5704,19 @@ const es: Dictionary = {
   'lists.noTiersBody':
     'Crea una desde tu biblioteca: tus obras puntuadas de un tipo, ya colocadas según su nota, y arrástralas a su sitio.',
   'tops.duel': 'Desempatar por duelos',
+  'tiers.editRows': 'Editar los tiers',
+  'tiers.hint':
+    'Añade, renombra, cambia el color, mueve o elimina tiers. Las obras de un tier eliminado vuelven a «Por colocar».',
+  'tiers.add': 'Añadir un tier',
+  'tiers.create': 'Añadir',
+  'tiers.editTitle': 'Tier',
+  'tiers.edit': 'Editar el tier {label}',
+  'tiers.up': 'Subir {label}',
+  'tiers.down': 'Bajar {label}',
+  'tiers.label': 'Nombre',
+  'tiers.labelPlaceholder': 'S, Obra maestra, Placer culpable…',
+  'tiers.color': 'Color',
+  'tiers.delete': 'Eliminar este tier',
 };
 
 const de: Dictionary = {
@@ -7572,6 +7611,19 @@ const de: Dictionary = {
   'lists.noTiersBody':
     'Erstelle eine aus deiner Bibliothek: deine bewerteten Titel einer Art, schon nach Bewertung platziert, dann zieh sie dorthin, wo sie hingehören.',
   'tops.duel': 'Per Duell entscheiden',
+  'tiers.editRows': 'Tiers bearbeiten',
+  'tiers.hint':
+    'Tiers hinzufügen, umbenennen, umfärben, verschieben oder entfernen. Titel eines entfernten Tiers kommen zurück zu „Zu platzieren“.',
+  'tiers.add': 'Tier hinzufügen',
+  'tiers.create': 'Hinzufügen',
+  'tiers.editTitle': 'Tier',
+  'tiers.edit': 'Tier {label} bearbeiten',
+  'tiers.up': '{label} nach oben',
+  'tiers.down': '{label} nach unten',
+  'tiers.label': 'Name',
+  'tiers.labelPlaceholder': 'S, Meisterwerk, Guilty Pleasure…',
+  'tiers.color': 'Farbe',
+  'tiers.delete': 'Dieses Tier entfernen',
 };
 
 const it: Dictionary = {
@@ -9452,6 +9504,19 @@ const it: Dictionary = {
   'lists.noTiersBody':
     'Creane una dalla tua libreria: le tue opere votate di un tipo, già piazzate secondo il voto, poi trascinale dove meritano.',
   'tops.duel': 'Spareggia con i duelli',
+  'tiers.editRows': 'Modifica i tier',
+  'tiers.hint':
+    'Aggiungi, rinomina, ricolora, sposta o elimina i tier. Le opere di un tier eliminato tornano in «Da piazzare».',
+  'tiers.add': 'Aggiungi un tier',
+  'tiers.create': 'Aggiungi',
+  'tiers.editTitle': 'Tier',
+  'tiers.edit': 'Modifica il tier {label}',
+  'tiers.up': 'Sposta su {label}',
+  'tiers.down': 'Sposta giù {label}',
+  'tiers.label': 'Nome',
+  'tiers.labelPlaceholder': 'S, Capolavoro, Piacere colpevole…',
+  'tiers.color': 'Colore',
+  'tiers.delete': 'Elimina questo tier',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };

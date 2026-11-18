@@ -10,7 +10,7 @@ process.env.BUNKO_LIBRARY_DIR = path.join(folder, 'library');
 process.env.BUNKO_WORKER = 'false';
 const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant();
-const { db, track, closeTenant, migrateV28 } = await import('@/lib/db');
+const { db, track, closeTenant, migrateV28, migrateV29, migrateV30 } = await import('@/lib/db');
 const { emptyMedia } = await import('@/lib/media');
 const { persistentSecret } = await import('@/lib/settings');
 const listsRoute = await import('@/app/api/lists/route');
@@ -83,14 +83,27 @@ it('creates, fills, orders, annotates and deletes a list', async () => {
     await listRoute.PATCH(
       request(
         'PATCH',
-        { order: [b.id, a.id], items: [{ trackedId: a.id, note: 'pour rire', tier: 'S' }] },
+        { order: [b.id, a.id], items: [{ trackedId: a.id, note: 'pour rire' }] },
         `/api/lists/${id}`,
       ),
     )
   ).json()) as WorkList[];
   const list = saved.find((l) => l.id === id)!;
   expect(order(list)).toEqual([b.id, a.id, c.id]);
-  expect(list.items[1]).toMatchObject({ note: 'pour rire', tier: 'S' });
+  expect(list.items[1]).toMatchObject({ note: 'pour rire', tier: null });
+  // A list has no tiers; the favorites can be shown as a grid.
+  expect(
+    (
+      await listRoute.PATCH(
+        request('PATCH', { items: [{ trackedId: a.id, tier: 'S' }] }, `/api/lists/${id}`),
+      )
+    ).status,
+  ).toBe(400);
+  const favorites = (await lists()).find((l) => l.system === 'favorites')!;
+  expect(
+    (await listRoute.PATCH(request('PATCH', { layout: 'grid' }, `/api/lists/${favorites.id}`)))
+      .status,
+  ).toBe(200);
   await listRoute.PATCH(request('PATCH', { remove: [b.id] }, `/api/lists/${id}`));
   expect(order((await lists()).find((l) => l.id === id))).toEqual([a.id, c.id]);
   // A removed work leaves every list.
@@ -132,6 +145,20 @@ it('turns hand-made rankings and likes into lists once', () => {
       )
       .all(),
   ).toEqual([{ tracked_id: 2 }, { tracked_id: 1 }, { tracked_id: 3 }]);
+  // Lists shown as tiers become tier lists with S–D rows; the favorites go back to a list.
+  memory.exec("UPDATE lists SET layout='tiers'; UPDATE list_items SET tier='A' WHERE tracked_id=3");
+  migrateV29(memory);
+  migrateV30(memory);
+  migrateV30(memory);
+  expect(memory.prepare('SELECT system,layout FROM lists ORDER BY id').all()).toEqual([
+    { system: 'favorites', layout: 'list' },
+    { system: null, layout: 'tiers' },
+  ]);
+  expect(memory.prepare('SELECT count(*) AS n FROM list_tiers').get()).toEqual({ n: 5 });
+  memory.exec("UPDATE list_items SET tier='custom-row' WHERE tracked_id=1");
+  expect(memory.prepare("SELECT count(*) AS n FROM list_items WHERE tier='A'").get()).toEqual({
+    n: 2,
+  });
   memory.close();
 });
 
@@ -157,4 +184,63 @@ it('places works by duels with a binary insertion', async () => {
   // "The same" goes right after.
   const same = answerDuel(startDuel([10, 20, 30], [25]), 'same');
   expect(same.sorted).toEqual([10, 20, 25, 30]);
+});
+
+it("keeps a tier list's own rows: defaults, renamed, added, removed", async () => {
+  const [a, b] = [work(21), work(22)];
+  const created = await listsRoute.POST(
+    request(
+      'POST',
+      { name: 'Tiers', kind: null, ranked: false, layout: 'tiers', add: [a.id, b.id] },
+      '/api/lists',
+    ),
+  );
+  const { id } = (await created.json()) as { id: number };
+  const tierList = async () => (await lists()).find((l) => l.id === id)!;
+  expect((await tierList()).tiers.map((t) => t.id)).toEqual(['S', 'A', 'B', 'C', 'D']);
+  await listRoute.PATCH(
+    request(
+      'PATCH',
+      {
+        items: [
+          { trackedId: a.id, tier: 'S' },
+          { trackedId: b.id, tier: 'D' },
+        ],
+      },
+      `/api/lists/${id}`,
+    ),
+  );
+  // Rows replaced: D removed (its works go back to "to place"), a new row, S renamed.
+  await listRoute.PATCH(
+    request(
+      'PATCH',
+      {
+        tiers: [
+          { id: 'S', label: 'GOAT', color: '#ff7f7f' },
+          { id: 'x1', label: 'Meh', color: '#888888' },
+        ],
+      },
+      `/api/lists/${id}`,
+    ),
+  );
+  const now = await tierList();
+  expect(now.tiers).toEqual([
+    { id: 'S', label: 'GOAT', color: '#ff7f7f' },
+    { id: 'x1', label: 'Meh', color: '#888888' },
+  ]);
+  expect(now.items.map((i) => [i.trackedId, i.tier])).toEqual([
+    [a.id, 'S'],
+    [b.id, null],
+  ]);
+  expect(
+    (
+      await listRoute.PATCH(
+        request('PATCH', { items: [{ trackedId: b.id, tier: 'D' }] }, `/api/lists/${id}`),
+      )
+    ).status,
+  ).toBe(400);
+  // A tier list stays one.
+  expect(
+    (await listRoute.PATCH(request('PATCH', { layout: 'list' }, `/api/lists/${id}`))).status,
+  ).toBe(400);
 });

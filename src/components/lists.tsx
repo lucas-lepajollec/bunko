@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { Check, ListPlus, Plus } from 'lucide-react';
-import type { ListTier, TrackedMedia, UnifiedMedia, WorkList } from '@/types/shared';
+import type { TrackedMedia, UnifiedMedia, WorkList } from '@/types/shared';
 import { KIND_IDS, kindOfMedia, type Kind } from '@/domain/kinds';
+import { DEFAULT_TIERS, tierOfRating } from '@/domain/tiers';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Duel } from './duel';
@@ -57,12 +58,6 @@ export function listMeta(t: T, n: (v: number) => string, list: WorkList, count: 
   ]
     .filter(Boolean)
     .join(' · ');
-}
-
-/** A score as a tier: what "place by my ratings" does in a tier list. */
-export function tierOfRating(rating: number | null | undefined): ListTier | null {
-  if (rating == null) return null;
-  return rating >= 9.5 ? 'S' : rating >= 8.5 ? 'A' : rating >= 7 ? 'B' : rating >= 5 ? 'C' : 'D';
 }
 
 export function ListCard({ list, entries }: { list: WorkList; entries: TrackedMedia[] }) {
@@ -138,8 +133,8 @@ export function NewListDialog({
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-4 rounded-3xl border p-6 outline-none">
+        <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-black/70" />
+        <Dialog.Content className="anim-dialog bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-4 rounded-3xl border p-6 outline-none">
           <Dialog.Title className="font-display text-[22px] leading-none font-extrabold tracking-[-0.03em]">
             {t(tier ? 'lists.newTier' : 'lists.new')}
           </Dialog.Title>
@@ -170,7 +165,7 @@ export function NewListDialog({
                 const placed =
                   tier && place
                     ? from.flatMap((w) => {
-                        const tierOf = tierOfRating(w.rating);
+                        const tierOf = tierOfRating(w.rating, DEFAULT_TIERS);
                         return tierOf ? [{ trackedId: w.id, tier: tierOf }] : [];
                       })
                     : [];
@@ -322,8 +317,8 @@ export function ListsButton({ media, entry }: { media: UnifiedMedia; entry?: Tra
       </button>
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
-          <Dialog.Content className="border-line fixed inset-x-3 bottom-[max(env(safe-area-inset-bottom),12px)] z-50 flex max-h-[80vh] flex-col gap-1 overflow-y-auto rounded-3xl border bg-[#161412] p-4 outline-none md:inset-x-auto md:top-1/2 md:bottom-auto md:left-1/2 md:w-[400px] md:-translate-x-1/2 md:-translate-y-1/2">
+          <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-black/60" />
+          <Dialog.Content className="anim-dialog border-line fixed inset-x-3 bottom-[max(env(safe-area-inset-bottom),12px)] z-50 flex max-h-[80vh] flex-col gap-1 overflow-y-auto rounded-3xl border bg-[#161412] p-4 outline-none md:inset-x-auto md:top-1/2 md:bottom-auto md:left-1/2 md:w-[400px] md:-translate-x-1/2 md:-translate-y-1/2">
             <Dialog.Title className="px-2 pt-1 pb-2 font-semibold">{t('lists.addTo')}</Dialog.Title>
             <Dialog.Description className="sr-only">{t('lists.addToHint')}</Dialog.Description>
             {(lists.data ?? []).map((list) => {
@@ -351,7 +346,8 @@ export function ListsButton({ media, entry }: { media: UnifiedMedia; entry?: Tra
                   <span className="min-w-0 flex-1 truncate">{listName(t, list)}</span>
                   <span className="text-muted shrink-0 text-xs">
                     {at >= 0 && isTierList(list)
-                      ? (list.items[at].tier ?? t('lists.pool'))
+                      ? (list.tiers.find((x) => x.id === list.items[at].tier)?.label ??
+                        t('lists.pool'))
                       : at >= 0 && list.ranked
                         ? t('lists.rank', { n: n(at + 1) })
                         : n(works)}
