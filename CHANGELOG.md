@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fix: with Next.js 16.4.6, large API answers (the library list first) reached the browser
+  compressed twice and could not be read. Next now drops a route's own `Content-Encoding` and
+  compresses the answer itself, so Bunko no longer gzips JSON on its own (the server still sends
+  it compressed, once).
+
 - Maintenance: Next.js 16.4.6 (moderate cache advisories GHSA-mfr8-8qww-v76h and
   GHSA-vc7v-qv4w-wrv8 in 16.4.3); the Jellyfin stream relay answers with `nosniff` and a
   sandboxing CSP like the other relays; a stray empty cookie file left at the repository root is
