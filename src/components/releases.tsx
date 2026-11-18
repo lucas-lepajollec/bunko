@@ -68,7 +68,7 @@ export function ReleaseCard({
           video={release.media.type === 'ANIME'}
         />
       </span>
-      <span className="line-clamp-2 text-[13px] leading-snug font-medium">
+      <span className="truncate text-[13px] leading-snug font-medium" title={release.media.title}>
         {release.media.title}
       </span>
       <span className="text-muted -mt-1 truncate text-xs">

@@ -1,6 +1,6 @@
 'use client';
 import * as Dialog from '@radix-ui/react-dialog';
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useRef, useState } from 'react';
 import { GripVertical, Plus, Star } from 'lucide-react';
 import type { Ranking, TrackedMedia } from '@/types/shared';
 import { KIND_IDS, type Kind } from '@/domain/kinds';
@@ -74,6 +74,9 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
     .sort((a, b) => (counts.get(b.key) ?? 0) - (counts.get(a.key) ?? 0))[0];
   const view = views.find((v) => v.key === chosen) ?? largest ?? views[0];
   const [all, setAll] = useState(false);
+  // "See all" keeps the height of the top 10: the list scrolls inside it, nothing shifts.
+  const list = useRef<HTMLOListElement>(null);
+  const [topHeight, setTopHeight] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [duel, setDuel] = useState<RankedWork[] | null>(null);
@@ -246,9 +249,11 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
             </div>
           ) : (
             <ol
+              ref={list}
+              style={all && topHeight ? { maxHeight: topHeight } : undefined}
               className={cx(
                 'anim-rise flex flex-col gap-1',
-                all && 'max-h-[min(72vh,760px)] overflow-y-auto overscroll-contain pr-1',
+                all && 'overflow-y-auto overscroll-contain pr-1',
               )}
             >
               {shown.map((w) => (
@@ -260,7 +265,10 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
             <button
               type="button"
               className={cx(smallButton, 'self-start')}
-              onClick={() => setAll(!all)}
+              onClick={() => {
+                if (!all) setTopHeight(list.current?.offsetHeight ?? null);
+                setAll(!all);
+              }}
             >
               {all ? t('tops.less') : t('tops.all', { count: n(works.length) })}
             </button>

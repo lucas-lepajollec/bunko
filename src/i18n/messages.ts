@@ -1916,6 +1916,8 @@ const en: Dictionary = {
   'tiers.labelPlaceholder': 'S, Masterpiece, Guilty pleasure…',
   'tiers.color': 'Color',
   'tiers.delete': 'Remove this tier',
+  'lists.addShort': 'Add',
+  'lists.placeShort': 'By rating',
 };
 
 const fr: Dictionary = {
@@ -3821,6 +3823,8 @@ const fr: Dictionary = {
   'tiers.labelPlaceholder': 'S, Chef-d’œuvre, Plaisir coupable…',
   'tiers.color': 'Couleur',
   'tiers.delete': 'Supprimer ce tier',
+  'lists.addShort': 'Ajouter',
+  'lists.placeShort': 'Selon mes notes',
 };
 
 const es: Dictionary = {
@@ -5717,6 +5721,8 @@ const es: Dictionary = {
   'tiers.labelPlaceholder': 'S, Obra maestra, Placer culpable…',
   'tiers.color': 'Color',
   'tiers.delete': 'Eliminar este tier',
+  'lists.addShort': 'Añadir',
+  'lists.placeShort': 'Según mis notas',
 };
 
 const de: Dictionary = {
@@ -7624,6 +7630,8 @@ const de: Dictionary = {
   'tiers.labelPlaceholder': 'S, Meisterwerk, Guilty Pleasure…',
   'tiers.color': 'Farbe',
   'tiers.delete': 'Dieses Tier entfernen',
+  'lists.addShort': 'Hinzufügen',
+  'lists.placeShort': 'Nach Bewertung',
 };
 
 const it: Dictionary = {
@@ -9517,6 +9525,8 @@ const it: Dictionary = {
   'tiers.labelPlaceholder': 'S, Capolavoro, Piacere colpevole…',
   'tiers.color': 'Colore',
   'tiers.delete': 'Elimina questo tier',
+  'lists.addShort': 'Aggiungi',
+  'lists.placeShort': 'Per voto',
 };
 
 export const messages: Record<UiLanguage, Dictionary> = { en, fr, es, de, it };
