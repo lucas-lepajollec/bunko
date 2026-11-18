@@ -1,4 +1,5 @@
 'use client';
+import { useLook } from '@/lib/client/theme';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Suspense, useState } from 'react';
@@ -31,6 +32,7 @@ const FAVORITES_SHOWN = 5;
 
 export default function ProfilePage() {
   const { t, n } = useI18n();
+  const look = useLook();
   const router = useRouter();
   const auth = useApi<AuthState>('/api/auth');
   const library = useApi<TrackedMedia[]>('/api/tracked', {
@@ -53,26 +55,82 @@ export default function ProfilePage() {
   const recent = universeAsides(universe.active, universe.enabled).recent;
   return (
     <Page className="pb-16">
-      <PageTitle title={t('profile.title')} aside={auth.data?.username} />
-      <div className="text-mid flex flex-wrap items-center gap-3 text-sm">
-        <span>{t('profile.followed', { count: n(entries.length) })}</span>
-        <Link href="#favorites" className={smallButton}>
-          {t('favorites.title')}
-          {favoritesList ? ` · ${n(listWorks(favoritesList, entries).length)}` : ''}
-        </Link>
-        <Link href="#tops" className={smallButton}>
-          {t('tops.title')}
-        </Link>
-        <Link href="#lists" className={smallButton}>
-          {t('lists.title')} · {n(own.length)}
-        </Link>
-        <Link href="/library" className={smallButton}>
-          {t('nav.library')}
-        </Link>
-        <Link href="/settings#account" className="ml-auto underline hover:text-white">
-          {t('profile.account')}
-        </Link>
-      </div>
+      {look === 'bunko' ? (
+        <>
+          <PageTitle title={t('profile.title')} aside={auth.data?.username} />
+          <div className="text-mid flex flex-wrap items-center gap-3 text-sm">
+            <span>{t('profile.followed', { count: n(entries.length) })}</span>
+            <Link href="#favorites" className={smallButton}>
+              {t('favorites.title')}
+              {favoritesList ? ` · ${n(listWorks(favoritesList, entries).length)}` : ''}
+            </Link>
+            <Link href="#tops" className={smallButton}>
+              {t('tops.title')}
+            </Link>
+            <Link href="#lists" className={smallButton}>
+              {t('lists.title')} · {n(own.length)}
+            </Link>
+            <Link href="/library" className={smallButton}>
+              {t('nav.library')}
+            </Link>
+            <Link href="/settings#account" className="ml-auto underline hover:text-white">
+              {t('profile.account')}
+            </Link>
+          </div>
+        </>
+      ) : (
+        // Themes: a member card — initial, name, what is followed, then the same shortcuts.
+        <section
+          className={cx(
+            'flex flex-col gap-5 md:flex-row md:items-center md:gap-7',
+            look === 'edition' && 'border-fg border-b pb-7',
+            look === 'aurore' && 'ui-panel rounded-[28px] border p-5 md:p-7',
+          )}
+        >
+          <span
+            aria-hidden
+            className={cx(
+              'font-display flex size-20 shrink-0 items-center justify-center text-[38px] uppercase md:size-28 md:text-[52px]',
+              look === 'edition'
+                ? 'border-fg border text-(--tone)'
+                : 'text-on-bright rounded-full bg-(--tone)',
+            )}
+          >
+            {(auth.data?.username ?? '·').slice(0, 1)}
+          </span>
+          <span className="flex min-w-0 flex-col gap-1.5">
+            {look === 'edition' && (
+              <span className="text-[11px] tracking-[0.16em] text-(--tone) uppercase">
+                {t('profile.title')}
+              </span>
+            )}
+            <h1 className="font-display truncate text-[44px] leading-[0.9] md:text-[72px]">
+              {auth.data?.username ?? t('profile.title')}
+            </h1>
+            <span className="text-muted text-sm">
+              {t('profile.followed', { count: n(entries.length) })}
+            </span>
+          </span>
+          <span className="flex flex-wrap items-center gap-2 md:ml-auto md:justify-end">
+            <Link href="#favorites" className={smallButton}>
+              {t('favorites.title')}
+              {favoritesList ? ` · ${n(listWorks(favoritesList, entries).length)}` : ''}
+            </Link>
+            <Link href="#tops" className={smallButton}>
+              {t('tops.title')}
+            </Link>
+            <Link href="#lists" className={smallButton}>
+              {t('lists.title')} · {n(own.length)}
+            </Link>
+            <Link href="/library" className={smallButton}>
+              {t('nav.library')}
+            </Link>
+            <Link href="/settings#account" className={smallButton}>
+              {t('profile.account')}
+            </Link>
+          </span>
+        </section>
+      )}
       <section id="continue" className="flex scroll-mt-28 flex-col gap-5">
         <SectionHeading title={t('home.resume')} aside={t(recent)} />
         {resume.error && <ErrorNote error={resume.error} />}
@@ -129,6 +187,7 @@ function Favorites({
   loading: boolean;
 }) {
   const { t, n } = useI18n();
+  const look = useLook();
   const universe = useUniverse();
   const works = list ? listWorks(list, entries).map((w) => w.entry) : [];
   const kinds = universe.order.filter((k) => works.some((w) => kindOfMedia(w.media) === k));
@@ -188,8 +247,23 @@ function Favorites({
         className="anim-rise grid max-w-[1100px] grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-5 md:gap-x-[26px]"
       >
         {ofKind.slice(0, FAVORITES_SHOWN).map((entry, i) => (
-          <li key={entry.id} className="flex min-w-0 flex-col gap-1">
-            <span className="font-display text-mid text-2xl leading-none font-extrabold tracking-[-0.04em] tabular-nums md:text-3xl">
+          <li
+            key={entry.id}
+            className={cx(
+              'relative flex min-w-0 flex-col gap-1',
+              look === 'cine' && 'pl-[18%] [&>a]:relative [&>a]:z-[1]',
+            )}
+          >
+            <span
+              className={cx(
+                'font-display leading-none tabular-nums',
+                look === 'cine'
+                  ? 'top-numeral absolute bottom-[38px] left-[-4%] text-[110px] md:text-[150px]'
+                  : look === 'edition'
+                    ? 'text-[36px] text-(--tone) md:text-[44px]'
+                    : 'text-mid text-2xl font-extrabold tracking-[-0.04em] md:text-3xl',
+              )}
+            >
               {n(i + 1)}
             </span>
             <PosterCard media={{ ...entry.media, mine: libraryMark(entry) }} badge={<></>} />

@@ -10,6 +10,7 @@ import { OwnedInventory } from '@/components/owned-inventory';
 import { MediaLink } from '@/components/media-link';
 import { Select } from '@/components/select';
 import Link from 'next/link';
+import { useLook } from '@/lib/client/theme';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useUniverse } from '@/lib/client/universe';
@@ -134,6 +135,7 @@ export default function LibraryPage() {
 
 function Library() {
   const { t, n } = useI18n();
+  const look = useLook();
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const { mutate: mutateList } = library;
   const [refreshing, setRefreshing] = useState(true);
@@ -339,7 +341,7 @@ function Library() {
       />
       {shownShelf !== 'kavita' && (
         <div
-          className="no-scrollbar -mx-4 -mb-2 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0"
+          className="toolbar-kinds no-scrollbar -mx-4 -mb-2 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0"
           role="group"
           aria-label={t('catalog.kind')}
         >
@@ -527,56 +529,17 @@ function Library() {
           {library.data && entries.length > 0 && shown.length === 0 && (
             <p className="text-muted font-serif text-xl italic">{t('library.shelfEmpty')}</p>
           )}
-          <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] md:gap-y-9 xl:grid-cols-7">
+          <div
+            className={
+              look === 'edition'
+                ? 'border-fg flex flex-col border-b'
+                : 'grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] md:gap-y-9 xl:grid-cols-7'
+            }
+          >
             {!library.data && !library.error && <PosterSkeletons count={14} />}
-            {shown.map((e) => {
-              const card = (
+            {shown.map((e, index) => {
+              const meta = (
                 <>
-                  <span className="relative block">
-                    {selecting && <SelectionMark selected={picked.has(e.id)} />}
-                    <Cover
-                      src={e.coverUrl ?? e.media.coverUrl}
-                      fallbacks={e.coverFallbacks}
-                      alt={e.title}
-                      className="transition-transform duration-300 group-hover:-translate-y-1"
-                    />
-                    {e.type === 'MANGA' && e.sourceMatch !== 'linked' && (
-                      <span
-                        className={cx(
-                          'absolute inset-x-2 bottom-2 flex items-center gap-1.5 rounded-full bg-black/80 px-2 py-1 text-[11px]',
-                          'text-mid',
-                        )}
-                      >
-                        {e.sourceMatch === 'searching' && <Spinner className="size-3" />}
-                        {e.sourceMatch === 'not-found' && <Dot tone="warn" className="size-1.5" />}
-                        <span className="truncate">{t(`library.match.${e.sourceMatch}`)}</span>
-                      </span>
-                    )}
-                    <WorkMarks
-                      mark={libraryMark(e)}
-                      video={e.type === 'ANIME'}
-                      raised={e.type === 'MANGA' && e.sourceMatch !== 'linked'}
-                    />
-                    {e.newChapters > 0 && (
-                      <span
-                        className={cx(
-                          'bg-fg text-bg absolute left-1.5 flex h-[22px] items-center rounded-full px-2 text-[11px] font-bold md:h-6 md:text-xs',
-                          e.type === 'MANGA' && e.sourceMatch !== 'linked'
-                            ? 'bottom-10'
-                            : 'bottom-1.5',
-                        )}
-                      >
-                        +{n(e.newChapters)}
-                      </span>
-                    )}
-                  </span>
-                  <span
-                    className="truncate text-xs leading-snug font-medium md:text-sm"
-                    title={e.title}
-                  >
-                    {e.title}
-                  </span>
-                  <ProgressBar progress={e.progress} color={e.media.color} />
                   {e.type === 'ANIME' ? (
                     <VideoMeta entry={e} />
                   ) : (
@@ -602,6 +565,130 @@ function Library() {
                   )}
                 </>
               );
+              const card =
+                look === 'edition' ? (
+                  // Édition: the library as a table of contents.
+                  <>
+                    <span className="font-display w-7 shrink-0 text-[20px] text-(--tone) md:w-10">
+                      {index + 1}
+                    </span>
+                    <span className="relative block w-[46px] shrink-0">
+                      {selecting && <SelectionMark selected={picked.has(e.id)} />}
+                      <Cover
+                        src={e.coverUrl ?? e.media.coverUrl}
+                        fallbacks={e.coverFallbacks}
+                        alt={e.title}
+                      />
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-1">
+                      <span
+                        className="truncate font-serif text-[18px] font-semibold md:text-[20px]"
+                        title={e.title}
+                      >
+                        {e.title}
+                      </span>
+                      {e.newChapters > 0 && (
+                        <span className="text-[10.5px] tracking-[0.14em] text-(--tone) uppercase">
+                          +{n(e.newChapters)}
+                        </span>
+                      )}
+                      <span className="text-muted truncate text-[11px] tracking-[0.08em] uppercase md:hidden">
+                        {vt(`shelf.${e.status}`)}
+                      </span>
+                    </span>
+                    <span className="text-muted hidden w-[150px] shrink-0 truncate text-[11px] tracking-[0.12em] uppercase md:block">
+                      {vt(`shelf.${e.status}`)}
+                    </span>
+                    <span className="hidden w-[240px] shrink-0 flex-col gap-1.5 lg:flex">
+                      <ProgressBar
+                        progress={e.progress}
+                        color="var(--tone)"
+                        className="h-0.5 rounded-none"
+                      />
+                      {meta}
+                    </span>
+                  </>
+                ) : look === 'cine' ? (
+                  // Ciné: the title on the poster, progress along its bottom edge.
+                  <>
+                    <span className="relative block overflow-hidden rounded-(--cover-radius)">
+                      {selecting && <SelectionMark selected={picked.has(e.id)} />}
+                      <Cover
+                        src={e.coverUrl ?? e.media.coverUrl}
+                        fallbacks={e.coverFallbacks}
+                        alt={e.title}
+                        className="transition-transform duration-300 group-hover:scale-[1.03]"
+                      />
+                      <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0)_50%,rgba(0,0,0,0.85)_100%)]" />
+                      <span className="absolute inset-x-3 bottom-3.5 truncate text-[13px] font-bold text-white md:text-[14px]">
+                        {e.title}
+                      </span>
+                      <ProgressBar
+                        progress={e.progress}
+                        color="var(--tone)"
+                        className="absolute inset-x-0 bottom-0 h-1 rounded-none bg-white/20"
+                      />
+                      {e.newChapters > 0 && (
+                        <span className="text-on-bright absolute top-2 left-2 flex h-6 items-center rounded-full bg-(--tone) px-2.5 text-[11px] font-bold">
+                          +{n(e.newChapters)}
+                        </span>
+                      )}
+                      <WorkMarks mark={libraryMark(e)} video={e.type === 'ANIME'} />
+                    </span>
+                    {meta}
+                  </>
+                ) : (
+                  <>
+                    <span className="relative block">
+                      {selecting && <SelectionMark selected={picked.has(e.id)} />}
+                      <Cover
+                        src={e.coverUrl ?? e.media.coverUrl}
+                        fallbacks={e.coverFallbacks}
+                        alt={e.title}
+                        className="transition-transform duration-300 group-hover:-translate-y-1"
+                      />
+                      {e.type === 'MANGA' && e.sourceMatch !== 'linked' && (
+                        <span
+                          className={cx(
+                            'absolute inset-x-2 bottom-2 flex items-center gap-1.5 rounded-full bg-black/80 px-2 py-1 text-[11px]',
+                            'text-mid',
+                          )}
+                        >
+                          {e.sourceMatch === 'searching' && <Spinner className="size-3" />}
+                          {e.sourceMatch === 'not-found' && (
+                            <Dot tone="warn" className="size-1.5" />
+                          )}
+                          <span className="truncate">{t(`library.match.${e.sourceMatch}`)}</span>
+                        </span>
+                      )}
+                      <WorkMarks
+                        mark={libraryMark(e)}
+                        video={e.type === 'ANIME'}
+                        raised={e.type === 'MANGA' && e.sourceMatch !== 'linked'}
+                      />
+                      {e.newChapters > 0 && (
+                        <span
+                          className={cx(
+                            'bg-fg text-bg absolute left-1.5 flex h-[22px] items-center rounded-full px-2 text-[11px] font-bold md:h-6 md:text-xs',
+                            e.type === 'MANGA' && e.sourceMatch !== 'linked'
+                              ? 'bottom-10'
+                              : 'bottom-1.5',
+                          )}
+                        >
+                          +{n(e.newChapters)}
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      className="truncate text-xs leading-snug font-medium md:text-sm"
+                      title={e.title}
+                    >
+                      {e.title}
+                    </span>
+                    <ProgressBar progress={e.progress} color={e.media.color} />
+                    {meta}
+                  </>
+                );
               return selecting ? (
                 <button
                   key={e.id}
@@ -609,7 +696,8 @@ function Library() {
                   aria-pressed={picked.has(e.id)}
                   onClick={() => toggle(e.id)}
                   className={cx(
-                    'group flex min-w-0 flex-col gap-2.5 text-left transition-opacity',
+                    'group flex min-w-0 text-left transition-opacity',
+                    look === 'edition' ? EDITION_ROW : 'flex-col gap-2.5',
                     picked.size > 0 && !picked.has(e.id) && 'opacity-60',
                   )}
                 >
@@ -619,7 +707,10 @@ function Library() {
                 <MediaLink
                   key={e.id}
                   media={e.media}
-                  className="group flex min-w-0 flex-col gap-2.5"
+                  className={cx(
+                    'group flex min-w-0',
+                    look === 'edition' ? EDITION_ROW : 'flex-col gap-2.5',
+                  )}
                 >
                   {card}
                 </MediaLink>
@@ -648,6 +739,9 @@ function Library() {
     </Page>
   );
 }
+
+/** Édition: one line of the table of contents. */
+const EDITION_ROW = 'border-line items-center gap-4 border-t py-3 md:gap-6';
 
 const isFilm = (e: TrackedMedia) =>
   e.media.format === 'MOVIE' || e.media.format === 'ANIMATION_FILM';

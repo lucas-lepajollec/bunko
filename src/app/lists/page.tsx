@@ -42,7 +42,7 @@ function Lists() {
         aside={lists.data ? t('lists.total', { count: n(inView.length) }) : undefined}
       />
       <div className="flex flex-wrap items-center gap-2">
-        <span className="flex rounded-full bg-white/[0.06] p-0.5 text-sm">
+        <span className="ui-seg flex rounded-full bg-white/[0.06] p-0.5 text-sm">
           {(['lists', 'tiers'] as const).map((k) => (
             <button
               key={k}

@@ -109,15 +109,20 @@ export function SectionHeading({
   as?: 'h1' | 'h2';
 }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+    <div className="ui-heading flex flex-wrap items-baseline gap-x-4 gap-y-1">
       {num !== undefined && (
         <span className="ui-num text-muted font-serif text-lg md:text-xl">{roman(num)}</span>
       )}
-      <Tag id={id} className="font-display text-[23px] font-bold tracking-[-0.02em] md:text-[30px]">
+      <Tag
+        id={id}
+        className="ui-heading-title font-display text-[23px] font-bold tracking-[-0.02em] md:text-[30px]"
+      >
         {title}
       </Tag>
       {aside && (
-        <span className="text-muted font-serif text-[17px] italic md:text-[22px]">{aside}</span>
+        <span className="ui-heading-aside text-muted font-serif text-[17px] italic md:text-[22px]">
+          {aside}
+        </span>
       )}
       {href && linkLabel && (
         <Link href={href} className="text-muted hover:text-fg ml-auto text-[13px]">
@@ -130,12 +135,14 @@ export function SectionHeading({
 
 export function PageTitle({ title, aside }: { title: string; aside?: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1 md:flex-row md:items-baseline md:gap-5">
-      <h1 className="font-display text-[40px] leading-none font-extrabold tracking-[-0.04em] md:text-[60px]">
+    <div className="ui-page-title flex flex-col gap-1 md:flex-row md:items-baseline md:gap-5">
+      <h1 className="ui-page-title-h font-display text-[40px] leading-none font-extrabold tracking-[-0.04em] md:text-[60px]">
         {title}
       </h1>
       {aside && (
-        <span className="text-muted font-serif text-[19px] italic md:text-[26px]">{aside}</span>
+        <span className="ui-page-title-aside text-muted font-serif text-[19px] italic md:text-[26px]">
+          {aside}
+        </span>
       )}
     </div>
   );

@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 import { clearPersistentCache, persistentCache } from '@/lib/client/cache';
 import { getAmbient, subscribeAmbient } from '@/lib/client/ambient';
-import { applyTheme, getTheme } from '@/lib/client/theme';
+import { applyTheme, getTheme, useLook } from '@/lib/client/theme';
 
 export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => applyTheme(getTheme()), []);
@@ -297,6 +297,7 @@ function isActive(pathname: string, href: string) {
 
 function Header() {
   const { t } = useI18n();
+  const look = useLook();
   const pathname = usePathname();
   const activity = useActivity();
   const [solid, setSolid] = useState(false);
@@ -340,15 +341,32 @@ function Header() {
             {t(n.key)}
           </Link>
         ))}
+        {/* Ciné: search lives in the floating navigation, as a streaming app's would. */}
+        {look === 'cine' && (
+          <>
+            <span aria-hidden className="mx-1 h-6 w-px bg-white/20" />
+            <button
+              type="button"
+              aria-label={t('nav.search')}
+              onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
+              className="flex size-9 items-center justify-center rounded-full text-white hover:bg-white/[0.1]"
+            >
+              <SearchIcon size={18} />
+            </button>
+          </>
+        )}
       </nav>
-      <div className="ml-auto flex items-center gap-1">
+      <div className="app-tools ml-auto flex items-center gap-1">
         <ActivityCenter />
-        <QuickSearch variant="inline" />
+        {look !== 'cine' && <QuickSearch variant="inline" />}
         <button
           type="button"
           aria-label={t('nav.search')}
           onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
-          className="relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08] xl:hidden"
+          className={cx(
+            'relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08]',
+            look === 'cine' ? 'md:hidden' : 'xl:hidden',
+          )}
         >
           <SearchIcon size={20} />
         </button>

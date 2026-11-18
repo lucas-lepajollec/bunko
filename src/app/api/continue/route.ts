@@ -10,6 +10,7 @@ const continueMedia = z
     id: mediaId,
     title: z.string().min(1).max(500),
     coverUrl: z.string().max(2000).nullable(),
+    bannerUrl: z.string().max(2000).nullable().optional(),
     type: z.enum(['MANGA', 'NOVEL', 'ANIME']),
     format: z.string().max(40).nullable(),
     origin: z.string().max(10).nullable(),

@@ -87,7 +87,7 @@ export function UniverseMenu() {
         aria-expanded={open}
         onClick={() => (open ? setOpen(false) : show())}
         className={cx(
-          'flex items-center gap-1.5 text-[13px] xl:text-[15px]',
+          'app-universe flex items-center gap-1.5 text-[13px] xl:text-[15px]',
           open ? 'text-white' : 'text-mid hover:text-white',
         )}
       >

@@ -331,7 +331,7 @@ Books, light novels and web novels are read in Bunko from their EPUB and PDF fil
 | `GET /api/books/file/<media>/<file>/<path…>` | none                 | one file inside the EPUB, so the book's relative links resolve; anything outside the archive answers `404`     |
 | `PUT /api/books/progress`                    | `BookProgressUpdate` | `{ok:true}`; finishing (≥ 99.5 %) a numbered volume of a followed work raises its volumes read                 |
 
-EPUB documents are served with scripts, inline handlers, frames, `<base>` and refresh tags removed, under `Content-Security-Policy: script-src 'none'` (images, styles and fonts only from Bunko). The reader shows them in a same-origin frame; reading settings (theme, size, font, spacing, width, pages or scroll) stay in the browser. The reader also feeds "Pick up" (`/api/continue`, href `/book/<file>?media=<id>`).
+EPUB documents are served with scripts, inline handlers, frames, `<base>` and refresh tags removed, under `Content-Security-Policy: script-src 'none'` (images, styles and fonts only from Bunko). The reader shows them in a same-origin frame; reading settings (theme, size, font, spacing, width, pages or scroll) stay in the browser. The reader also feeds "Pick up" (`/api/continue`, href `/book/<file>?media=<id>`). `PUT /api/continue` accepts an optional `media.bannerUrl` (wide artwork, `null` when absent); `GET /api/continue` returns it on every item (`null` for rows saved before it existed), for themes that show landscape resume cards.
 
 ## Member permissions, 18+ extensions and progress source
 

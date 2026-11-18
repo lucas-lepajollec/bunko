@@ -1203,7 +1203,9 @@ export type ContinueMedia = Pick<
   | 'color'
   | 'kindOverride'
   | 'extensionSection'
->;
+> &
+  /** Wide artwork when known (themes with landscape resume cards); absent in older rows. */
+  Partial<Pick<UnifiedMedia, 'bannerUrl'>>;
 /** PUT /api/continue — something started in Bunko's reader or player. */
 export interface ContinueUpdate {
   media: ContinueMedia;
