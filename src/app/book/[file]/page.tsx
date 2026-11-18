@@ -44,7 +44,7 @@ function Book() {
   if (!media || manifest.error)
     return (
       <main
-        className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 p-6"
+        className="theme-lock fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 p-6"
         style={{ background: theme.bg, color: theme.fg }}
       >
         <ErrorNote error={manifest.error} />
@@ -58,7 +58,7 @@ function Book() {
   if (!manifest.data)
     return (
       <main
-        className="fixed inset-0 z-[80] flex items-center justify-center"
+        className="theme-lock fixed inset-0 z-[80] flex items-center justify-center"
         style={{ background: theme.bg, color: theme.fg }}
       >
         <Spinner />
@@ -178,7 +178,7 @@ function BookReader({ manifest, media }: { manifest: BookManifest; media: string
 
   return (
     <main
-      className="fixed inset-0 z-[80] flex flex-col"
+      className="theme-lock fixed inset-0 z-[80] flex flex-col"
       style={{ background: theme.bg, color: theme.fg, colorScheme: theme.scheme }}
     >
       <header
@@ -379,7 +379,7 @@ function BookReader({ manifest, media }: { manifest: BookManifest; media: string
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-[90] bg-black/50" />
           <Dialog.Content
-            className="fixed inset-y-0 left-0 z-[90] flex w-[min(380px,88vw)] flex-col gap-2 p-4 outline-none"
+            className="theme-lock fixed inset-y-0 left-0 z-[90] flex w-[min(380px,88vw)] flex-col gap-2 p-4 outline-none"
             style={{ background: theme.bg, color: theme.fg }}
           >
             <Dialog.Title className="font-display px-2 pt-2 text-[22px] font-extrabold">

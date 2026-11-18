@@ -111,7 +111,7 @@ export function SectionHeading({
   return (
     <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
       {num !== undefined && (
-        <span className="text-muted font-serif text-lg md:text-xl">{roman(num)}</span>
+        <span className="ui-num text-muted font-serif text-lg md:text-xl">{roman(num)}</span>
       )}
       <Tag id={id} className="font-display text-[23px] font-bold tracking-[-0.02em] md:text-[30px]">
         {title}
@@ -160,7 +160,7 @@ export function Pill({
       onClick={onClick}
       aria-pressed={active}
       className={cx(
-        'inline-flex h-9 shrink-0 items-center rounded-full px-4 text-sm transition-colors',
+        'ui-pill inline-flex h-9 shrink-0 items-center rounded-full px-4 text-sm transition-colors',
         active ? 'bg-fg text-bg font-semibold' : 'text-fg bg-white/[0.07] hover:bg-white/[0.12]',
         className,
       )}
@@ -187,7 +187,7 @@ export function Tabs<T extends string>({
     <div
       role="tablist"
       aria-label={label}
-      className="border-line no-scrollbar flex gap-6 overflow-x-auto border-b md:gap-8"
+      className="ui-tabs border-line no-scrollbar flex gap-6 overflow-x-auto border-b md:gap-8"
     >
       {items.map((item) => (
         <button
@@ -233,7 +233,7 @@ export function Segmented<T extends string>({
     <div
       role="tablist"
       aria-label={label}
-      className="grid rounded-full bg-white/[0.07] p-1"
+      className="ui-seg grid rounded-full bg-white/[0.07] p-1"
       style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
     >
       {items.map((item) => (
@@ -296,7 +296,7 @@ export function Dot({
     ok: 'var(--color-ok)',
     warn: 'var(--color-warn)',
     bad: 'var(--color-bad)',
-    idle: '#4b4640',
+    idle: 'var(--color-idle)',
     accent: 'var(--accent)',
   }[tone];
   return (
@@ -348,7 +348,7 @@ export function Empty({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-start gap-3 rounded-2xl bg-white/[0.04] p-6 md:p-8">
+    <div className="ui-empty flex flex-col items-start gap-3 rounded-2xl bg-white/[0.04] p-6 md:p-8">
       <p className="font-serif text-2xl leading-tight">{title}</p>
       {children && <div className="text-mid max-w-xl text-sm leading-relaxed">{children}</div>}
       {action}
@@ -405,16 +405,16 @@ export function useMediaMeta() {
 }
 
 export const primaryButton =
-  'inline-flex h-12 items-center justify-center gap-2 rounded-full bg-white px-6 text-[15px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-50';
+  'btn-primary inline-flex h-12 items-center justify-center gap-2 rounded-full bg-white px-6 text-[15px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-50';
 export const ghostButton =
-  'inline-flex h-12 items-center justify-center gap-2 rounded-full bg-white/[0.14] px-6 text-[15px] text-white backdrop-blur-md transition-colors hover:bg-white/[0.2] disabled:opacity-50';
+  'btn-ghost inline-flex h-12 items-center justify-center gap-2 rounded-full bg-white/[0.14] px-6 text-[15px] text-white backdrop-blur-md transition-colors hover:bg-white/[0.2] disabled:opacity-50';
 /** The main action of a small dialog: the size of `smallButton`, in the primary tone. */
 export const primarySmall =
-  'inline-flex h-9 items-center justify-center gap-2 rounded-full bg-fg px-4 text-[13px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-50';
+  'btn-primary inline-flex h-9 items-center justify-center gap-2 rounded-full bg-fg px-4 text-[13px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-50';
 export const smallButton =
-  'inline-flex h-9 items-center justify-center gap-2 rounded-full bg-white/[0.1] px-4 text-[13px] text-fg transition-colors hover:bg-white/[0.16] disabled:opacity-50';
+  'btn-small inline-flex h-9 items-center justify-center gap-2 rounded-full bg-white/[0.1] px-4 text-[13px] text-fg transition-colors hover:bg-white/[0.16] disabled:opacity-50';
 export const field =
-  'h-11 w-full rounded-xl border border-line bg-raised px-3.5 text-sm text-fg outline-none placeholder:text-faint focus:border-line-strong';
+  'ui-field h-11 w-full rounded-xl border border-line bg-raised px-3.5 text-sm text-fg outline-none placeholder:text-faint focus:border-line-strong';
 
 /** The opening sentence of a synopsis, used as an editorial quote. */
 export function firstSentence(text: string | null) {

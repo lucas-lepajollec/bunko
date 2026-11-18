@@ -310,7 +310,7 @@ function Score({ rating, small }: { rating: number; small?: boolean }) {
   return (
     <span
       className={cx(
-        'flex shrink-0 items-center gap-1 rounded-full bg-[#f5c518] font-bold text-black',
+        'flex shrink-0 items-center gap-1 rounded-full bg-star font-bold text-on-bright',
         small ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-sm',
       )}
     >
@@ -378,7 +378,7 @@ const SortableRankRow = memo(function SortableRankRow({ work }: { work: RankedWo
       className={cx(
         'flex min-w-0 items-center gap-1 rounded-xl py-1.5 pr-2 pl-1 transition-[background-color,box-shadow] select-none',
         dragging
-          ? 'bg-[#22201d] shadow-[0_12px_32px_rgba(0,0,0,0.5)] ring-1 ring-white/25'
+          ? 'bg-panel-hi shadow-[0_12px_32px_rgba(0,0,0,0.5)] ring-1 ring-white/25'
           : 'hover:bg-white/[0.04]',
       )}
     >
@@ -406,7 +406,7 @@ function CreateRanking({
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="anim-dialog bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-4 rounded-3xl border p-6 outline-none">
+        <Dialog.Content className="ui-panel anim-dialog bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-4 rounded-3xl border p-6 outline-none">
           <Dialog.Title className="font-display text-[22px] leading-none font-extrabold tracking-[-0.03em]">
             {t('tops.new')}
           </Dialog.Title>

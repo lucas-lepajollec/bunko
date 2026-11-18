@@ -141,7 +141,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
       className={cx(
         'flex flex-col overflow-hidden',
         variant === 'inline'
-          ? 'border-line absolute top-[50px] right-0 w-[440px] rounded-2xl border bg-[#141210] shadow-[0_24px_60px_rgba(0,0,0,0.55)]'
+          ? 'ui-panel border-line absolute top-[50px] right-0 w-[440px] rounded-2xl border bg-panel shadow-[0_24px_60px_rgba(0,0,0,0.55)]'
           : 'mt-3',
       )}
     >
@@ -222,7 +222,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
   const field = (
     <div
       className={cx(
-        'flex items-center gap-2.5 rounded-full px-4 text-sm transition-colors',
+        'ui-search flex items-center gap-2.5 rounded-full px-4 text-sm transition-colors',
         variant === 'inline'
           ? 'h-[42px] w-[240px] 2xl:w-[300px] bg-white/[0.09] backdrop-blur-md'
           : 'h-12 bg-white/[0.09]',

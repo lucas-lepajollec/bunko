@@ -1,0 +1,442 @@
+/*
+ * Interface themes (Réglages → Apparence). The default look lives in globals.css; a theme only
+ * re-colours, re-sets type and re-shapes the same interface through tokens and a few hook classes
+ * (`app-*`, `ui-*`, `btn-*`), so no page, dialog or control ever differs in content between themes.
+ *
+ * Hooks: .app-header[data-solid] .app-brand .app-nav .app-nav-link[aria-current] .app-tabbar
+ *        .ui-panel (dialogs, sheets, menus, toasts) .ui-pill[aria-pressed] .ui-seg .ui-tabs .ui-num
+ *        .btn-primary .btn-ghost .btn-small .ui-field .ambient
+ * `.theme-lock` (player, readers) keeps the default dark look whatever the theme.
+ */
+
+/* ───────────────────────── Ciné: night streaming, condensed poster titles ───────────────────────── */
+:root[data-theme='cine'] {
+  --font-sans: 'DM Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Anton', 'DM Sans Variable', sans-serif;
+  --font-serif: 'DM Sans Variable', ui-sans-serif, sans-serif;
+  --color-bg: #070b10;
+  --color-raised: #0f151c;
+  --color-hover: #151d26;
+  --color-panel: #0d131a;
+  --color-panel-hi: #17212b;
+  --color-fg: #eef4f8;
+  --color-soft: #e3ecf1;
+  --color-mid: #d4e2ea;
+  --color-muted: #9fb0bb;
+  --color-faint: #6c7c87;
+  --color-idle: #3a4954;
+  --color-line: rgb(214 232 245 / 0.1);
+  --color-line-strong: rgb(214 232 245 / 0.24);
+  --tone: #8fd3ff;
+  --veil: rgb(7 11 16 / 0.72);
+  --color-star: var(--tone);
+  --accent: var(--tone);
+  --cover-radius: 14px;
+  --cover-shadow: 0 16px 36px rgb(0 0 0 / 0.5);
+  --scrollbar: #1f2a34;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+  --radius-3xl: 1.5rem;
+}
+:root[data-theme='cine'][data-tone='braise'] {
+  --color-bg: #0f0907;
+  --color-raised: #1a110d;
+  --color-hover: #231812;
+  --color-panel: #170f0b;
+  --color-panel-hi: #261a14;
+  --color-fg: #f8efe9;
+  --color-soft: #f0e2d8;
+  --color-mid: #e6d3c6;
+  --color-muted: #b9a294;
+  --color-faint: #86705f;
+  --color-idle: #4e3b31;
+  --color-line: rgb(245 222 205 / 0.1);
+  --color-line-strong: rgb(245 222 205 / 0.24);
+  --tone: #ffb54d;
+  --veil: rgb(15 9 7 / 0.74);
+  --scrollbar: #33241c;
+}
+:root[data-theme='cine'][data-tone='jade'] {
+  --color-bg: #060f0c;
+  --color-raised: #0c1915;
+  --color-hover: #12231d;
+  --color-panel: #0b1713;
+  --color-panel-hi: #15281f;
+  --color-fg: #eaf7f1;
+  --color-soft: #dcefe6;
+  --color-mid: #c8e3d6;
+  --color-muted: #94b3a5;
+  --color-faint: #637f72;
+  --color-idle: #2f4a3f;
+  --color-line: rgb(205 245 225 / 0.1);
+  --color-line-strong: rgb(205 245 225 / 0.24);
+  --tone: #5be3a8;
+  --veil: rgb(6 15 12 / 0.74);
+  --scrollbar: #1b3029;
+}
+:root[data-theme='cine'] .font-display:not(.theme-lock *) {
+  font-weight: 400 !important;
+  letter-spacing: 0.01em !important;
+  text-transform: uppercase;
+  line-height: 0.95;
+}
+:root[data-theme='cine'] .font-serif.italic:not(.theme-lock *),
+:root[data-theme='aurore'] .font-serif.italic:not(.theme-lock *) {
+  font-style: normal;
+}
+:root[data-theme='cine'] .app-nav,
+:root[data-theme='aurore'] .app-nav {
+  margin-inline: auto;
+  align-items: center;
+  gap: 2px;
+  padding: 5px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.08);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
+}
+:root[data-theme='cine'] .app-nav-link,
+:root[data-theme='aurore'] .app-nav-link {
+  padding: 8px 14px;
+  border-radius: 999px;
+  transition:
+    background-color 160ms,
+    color 160ms;
+}
+:root[data-theme='cine'] .app-nav-link[aria-current='page'] {
+  background: #fff;
+  color: var(--color-bg);
+  font-weight: 700;
+}
+:root[data-theme='cine'] .app-header[data-solid='true'],
+:root[data-theme='aurore'] .app-header[data-solid='true'] {
+  background: color-mix(in oklab, var(--color-bg) 70%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  backdrop-filter: blur(24px) saturate(1.3);
+}
+:root[data-theme='cine'] .ui-pill[aria-pressed='true'] {
+  background: var(--tone);
+  color: var(--color-on-bright);
+}
+
+/* ───────────────────────── Aurore: frosted glass over the artwork's own colours ───────────────────────── */
+:root[data-theme='aurore'] {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Inter Variable', ui-sans-serif, sans-serif;
+  --font-serif: 'Inter Variable', ui-sans-serif, sans-serif;
+  --color-bg: #1a1410;
+  --color-raised: #2a211b;
+  --color-hover: #342922;
+  --color-panel: #241c17;
+  --color-panel-hi: #33281f;
+  --color-fg: #ffffff;
+  --color-soft: #f7efe8;
+  --color-mid: rgb(255 255 255 / 0.8);
+  --color-muted: rgb(255 255 255 / 0.62);
+  --color-faint: rgb(255 255 255 / 0.42);
+  --color-idle: rgb(255 255 255 / 0.25);
+  --color-line: rgb(255 255 255 / 0.12);
+  --color-line-strong: rgb(255 255 255 / 0.28);
+  --tone: #ffcf8a;
+  --veil: rgb(20 14 10 / 0.5);
+  --cover-radius: 14px;
+  --cover-shadow: 0 20px 40px rgb(0 0 0 / 0.35);
+  --scrollbar: rgb(255 255 255 / 0.18);
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1.375rem;
+  --radius-3xl: 1.75rem;
+}
+:root[data-theme='aurore'][data-tone='ocean'] {
+  --color-bg: #0b1420;
+  --color-raised: #16222f;
+  --color-hover: #1d2b3a;
+  --color-panel: #132030;
+  --color-panel-hi: #1c2c3e;
+  --color-soft: #e9f3fb;
+  --tone: #9fd8ff;
+  --veil: rgb(8 20 36 / 0.55);
+}
+:root[data-theme='aurore'][data-tone='rose'] {
+  --color-bg: #1c1016;
+  --color-raised: #2c1a23;
+  --color-hover: #36212b;
+  --color-panel: #28171f;
+  --color-panel-hi: #37222c;
+  --color-soft: #fbecf1;
+  --tone: #ffb3c8;
+  --veil: rgb(36 14 24 / 0.55);
+}
+:root[data-theme='aurore'] .font-display:not(.theme-lock *) {
+  font-weight: 700 !important;
+}
+:root[data-theme='aurore'] .app-nav {
+  border-color: transparent;
+  background: rgb(255 255 255 / 0.1);
+  -webkit-backdrop-filter: blur(30px);
+  backdrop-filter: blur(30px);
+}
+:root[data-theme='aurore'] .app-nav-link[aria-current='page'] {
+  background: rgb(255 255 255 / 0.92);
+  color: var(--color-bg);
+  font-weight: 600;
+}
+:root[data-theme='aurore'] .ui-pill,
+:root[data-theme='aurore'] .btn-small,
+:root[data-theme='aurore'] .btn-ghost,
+:root[data-theme='aurore'] .ui-seg {
+  -webkit-backdrop-filter: blur(30px);
+  backdrop-filter: blur(30px);
+}
+:root[data-theme='aurore'] .ui-pill[aria-pressed='true'] {
+  background: rgb(255 255 255 / 0.92);
+  color: var(--color-bg);
+}
+:root[data-theme='aurore'] .ui-field {
+  background: rgb(255 255 255 / 0.08);
+  border-color: rgb(255 255 255 / 0.1);
+}
+
+/* Glass dialogs and menus (Ciné, Aurore): the page shows through, softly. */
+:root[data-theme='cine'] .ui-panel,
+:root[data-theme='aurore'] .ui-panel {
+  background: color-mix(in oklab, var(--color-panel) 86%, transparent);
+  -webkit-backdrop-filter: blur(30px) saturate(1.4);
+  backdrop-filter: blur(30px) saturate(1.4);
+  border-color: rgb(255 255 255 / 0.12);
+}
+:root[data-theme='cine'] .app-tabbar,
+:root[data-theme='aurore'] .app-tabbar {
+  background: color-mix(in oklab, var(--color-bg) 72%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  backdrop-filter: blur(24px) saturate(1.3);
+}
+
+/* The current artwork, blurred behind every page (Ciné, Aurore). */
+.ambient {
+  display: none;
+}
+:root[data-theme='cine'] body,
+:root[data-theme='aurore'] body {
+  background: transparent;
+}
+:root[data-theme='cine'] .ambient,
+:root[data-theme='aurore'] .ambient {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ambient img {
+  position: absolute;
+  inset: -10%;
+  width: 120%;
+  height: 120%;
+  object-fit: cover;
+  transition: opacity 600ms ease;
+}
+:root[data-theme='cine'] .ambient img {
+  filter: blur(120px) saturate(1.6) brightness(0.45);
+  opacity: 0.5;
+}
+:root[data-theme='aurore'] .ambient img {
+  filter: blur(110px) saturate(1.6) brightness(0.8);
+  opacity: 0.9;
+}
+.ambient::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--veil);
+}
+:root[data-theme='cine'] .ambient::after {
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, transparent 0%, var(--veil) 100%);
+}
+
+/* ───────────────────────── Édition: paper, ink and a serif masthead ───────────────────────── */
+:root[data-theme='edition'] {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces Variable', Georgia, serif;
+  --font-serif: 'Fraunces Variable', Georgia, serif;
+  --ink: #141210;
+  --paper: #f4f1ea;
+  --color-bg: var(--paper);
+  --color-raised: #ebe6dc;
+  --color-hover: #e4ded2;
+  --color-panel: #fbf9f4;
+  --color-panel-hi: #eee9df;
+  --color-fg: var(--ink);
+  --color-soft: #2a2622;
+  --color-mid: #3a352f;
+  --color-muted: #6b645a;
+  --color-faint: #8f877b;
+  --color-idle: #bdb4a6;
+  --color-line: rgb(20 18 16 / 0.14);
+  --color-line-strong: rgb(20 18 16 / 0.5);
+  --color-ok: #1f7a4d;
+  --color-warn: #a35f00;
+  --color-bad: #b42318;
+  --color-star: #d99a1e;
+  /* Overlays written as white/black tints over a dark page become ink/paper tints. */
+  --color-white: var(--ink);
+  --color-black: var(--paper);
+  --tone: #c8361f;
+  --accent: var(--tone);
+  --cover-radius: 0px;
+  --cover-shadow: 0 1px 0 rgb(20 18 16 / 0.12);
+  --scrollbar: #cfc7b9;
+  --radius-xs: 0px;
+  --radius-sm: 1px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius-2xl: 3px;
+  --radius-3xl: 4px;
+}
+:root[data-theme='edition'][data-tone='craie'] {
+  --paper: #eef1f4;
+  --color-raised: #e3e8ed;
+  --color-hover: #dbe1e7;
+  --color-panel: #f7f9fb;
+  --color-panel-hi: #e6ebf0;
+  --color-line: rgb(16 20 26 / 0.14);
+  --scrollbar: #c5ccd4;
+  --tone: #1f4fd1;
+}
+:root[data-theme='edition'][data-tone='lin'] {
+  --paper: #efe8da;
+  --color-raised: #e6ddcc;
+  --color-hover: #ded4c1;
+  --color-panel: #f7f2e8;
+  --color-panel-hi: #e9e1d1;
+  --scrollbar: #cbbfa8;
+  --tone: #2f6b4a;
+}
+:root[data-theme='edition'] .font-display:not(.theme-lock *) {
+  font-style: italic;
+  font-weight: 360 !important;
+}
+:root[data-theme='edition'] .app-brand .font-display {
+  font-weight: 700 !important;
+}
+:root[data-theme='edition'] .ui-num {
+  color: var(--tone);
+}
+:root[data-theme='edition'] .app-header {
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--ink);
+}
+:root[data-theme='edition'] .app-nav {
+  align-items: baseline;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+:root[data-theme='edition'] .app-nav-link {
+  padding-bottom: 2px;
+  border-bottom: 1px solid transparent;
+  color: var(--ink);
+  font-weight: 400 !important;
+}
+:root[data-theme='edition'] .app-nav-link[aria-current='page'] {
+  color: var(--tone);
+  border-bottom-color: var(--tone);
+}
+:root[data-theme='edition'] .ui-pill,
+:root[data-theme='edition'] .ui-seg,
+:root[data-theme='edition'] .ui-seg > *,
+:root[data-theme='edition'] .btn-primary,
+:root[data-theme='edition'] .btn-ghost,
+:root[data-theme='edition'] .btn-small,
+:root[data-theme='edition'] .ui-field {
+  border-radius: 2px;
+}
+:root[data-theme='edition'] .btn-primary,
+:root[data-theme='edition'] .btn-ghost {
+  letter-spacing: 0.04em;
+}
+/* Text buttons and fields are squared like print; icon buttons and dots stay round. */
+:root[data-theme='edition'] :is(button, a, label, input).rounded-full:not([class*='size-']),
+:root[data-theme='edition'] .ui-search {
+  border-radius: 2px;
+}
+:root[data-theme='edition'] .ui-empty {
+  background: transparent;
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--color-line);
+  border-radius: 0;
+  padding-inline: 0;
+}
+:root[data-theme='edition'] .btn-ghost {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: inset 0 0 0 1px var(--ink);
+  background: transparent;
+}
+:root[data-theme='edition'] .ui-pill[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--paper);
+}
+:root[data-theme='edition'] .ui-tabs [aria-selected='true'] {
+  color: var(--tone);
+  border-color: var(--tone);
+}
+:root[data-theme='edition'] .ui-field {
+  background: var(--color-panel);
+}
+:root[data-theme='edition'] .ui-panel {
+  border-color: var(--ink);
+  box-shadow: 0 24px 60px -20px rgb(20 18 16 / 0.35);
+}
+:root[data-theme='edition'] .app-tabbar {
+  background: var(--color-bg);
+  border-top: 1px solid var(--ink);
+}
+:root[data-theme='edition'] .book {
+  outline: 1px solid rgb(20 18 16 / 0.08);
+  outline-offset: -1px;
+}
+
+/* ───────────────────────── Player and readers keep the default dark look ───────────────────────── */
+.theme-lock {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', var(--font-geist-sans), sans-serif;
+  --font-serif: 'Instrument Serif', Georgia, serif;
+  --color-bg: #0b0a09;
+  --color-raised: #151311;
+  --color-hover: #1c1a18;
+  --color-panel: #161412;
+  --color-panel-hi: #1f1d1a;
+  --color-fg: #f2eee8;
+  --color-soft: #e2dbd0;
+  --color-mid: #cfc8bd;
+  --color-muted: #9b958c;
+  --color-faint: #6f6a63;
+  --color-idle: #4b4640;
+  --color-line: rgb(236 231 223 / 0.1);
+  --color-line-strong: rgb(236 231 223 / 0.25);
+  --color-ok: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+  --color-star: #f5c518;
+  --color-white: #fff;
+  --color-black: #000;
+  --cover-radius: 4px;
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+  color-scheme: dark;
+  color: var(--color-fg);
+}
+
+/* Ciné and Édition colour the interface with the theme's own colour rather than each title's. */
+:root[data-theme='cine'] [style*='--accent']:not(.theme-lock *),
+:root[data-theme='edition'] [style*='--accent']:not(.theme-lock *) {
+  --accent: var(--tone) !important;
+}

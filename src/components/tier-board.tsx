@@ -158,7 +158,7 @@ export function TierBoard({
               disabled={!editing}
               onClick={() => setChanging(tier)}
               aria-label={editing ? t('tiers.edit', { label: tier.label }) : tier.label}
-              className="font-display flex min-h-[94px] items-center justify-center px-1 text-center text-xl leading-tight font-extrabold [overflow-wrap:anywhere] text-black transition-[filter] enabled:hover:brightness-110 md:min-h-[112px] md:text-2xl"
+              className="font-display flex min-h-[94px] items-center justify-center px-1 text-center text-xl leading-tight font-extrabold [overflow-wrap:anywhere] text-on-bright transition-[filter] enabled:hover:brightness-110 md:min-h-[112px] md:text-2xl"
               style={{ background: tier.color }}
             >
               {tier.label}
@@ -349,7 +349,7 @@ function TierDialog({
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="anim-dialog bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[400px] -translate-y-1/2 flex-col gap-4 rounded-3xl border p-6 outline-none">
+        <Dialog.Content className="ui-panel anim-dialog bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[400px] -translate-y-1/2 flex-col gap-4 rounded-3xl border p-6 outline-none">
           <Dialog.Title className="font-display text-[22px] font-extrabold tracking-[-0.03em]">
             {t(tier ? 'tiers.editTitle' : 'tiers.add')}
           </Dialog.Title>
@@ -363,7 +363,7 @@ function TierDialog({
           >
             <div className="flex items-center gap-3">
               <span
-                className="font-display flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-extrabold text-black"
+                className="font-display flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-extrabold text-on-bright"
                 style={{ background: color }}
                 aria-hidden
               >
@@ -390,7 +390,7 @@ function TierDialog({
                   onClick={() => setColor(c)}
                   className={cx(
                     'size-8 rounded-full transition-transform hover:scale-110',
-                    c === color && 'ring-2 ring-white ring-offset-2 ring-offset-[#121110]',
+                    c === color && 'ring-2 ring-white ring-offset-2 ring-offset-bg',
                   )}
                   style={{ background: c }}
                 />

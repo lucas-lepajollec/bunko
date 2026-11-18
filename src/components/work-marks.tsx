@@ -119,7 +119,7 @@ export function WorkMarks({
         <span
           title={t('marks.rating')}
           className={cx(
-            'pointer-events-none absolute flex items-center gap-0.5 rounded-full bg-[#f5c518] font-bold text-black shadow-[0_2px_8px_rgba(0,0,0,0.45)]',
+            'pointer-events-none absolute flex items-center gap-0.5 rounded-full bg-star font-bold text-on-bright shadow-[0_2px_8px_rgba(0,0,0,0.45)]',
             s.pill,
             raised ? s.brRaised : s.br,
           )}
@@ -147,7 +147,7 @@ function Ring({ progress }: { progress: number | null }) {
           cy="12"
           r={r}
           fill="none"
-          stroke="#f5c518"
+          stroke="var(--color-star)"
           strokeWidth="2"
           strokeLinecap="round"
           strokeDasharray={`${shown * length} ${length}`}

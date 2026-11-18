@@ -3,7 +3,14 @@ import { UniverseMenu, UniverseTab } from './universe-switch';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Suspense, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  Suspense,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { SWRConfig, useSWRConfig } from 'swr';
 import type { AuthState, DownloadBatch, Extension } from '@/types/shared';
 import { PRODUCT_NAME } from '@/lib/client/brand';
@@ -28,8 +35,11 @@ import {
   X,
 } from 'lucide-react';
 import { clearPersistentCache, persistentCache } from '@/lib/client/cache';
+import { getAmbient, subscribeAmbient } from '@/lib/client/ambient';
+import { applyTheme, getTheme } from '@/lib/client/theme';
 
 export function Providers({ children }: { children: ReactNode }) {
+  useEffect(() => applyTheme(getTheme()), []);
   return (
     <I18nProvider>
       <SWRConfig value={{ revalidateOnFocus: false, provider: persistentCache }}>
@@ -82,6 +92,7 @@ function AuthGate({ children }: { children: ReactNode }) {
     );
   return (
     <>
+      <Ambient />
       <Header />
       <Shortcuts />
       <Suspense>
@@ -91,6 +102,19 @@ function AuthGate({ children }: { children: ReactNode }) {
       <TabBar />
       <Toaster />
     </>
+  );
+}
+
+/** The current artwork, blurred behind the page; only themes that use it show it (themes.css). */
+function Ambient() {
+  const src = useSyncExternalStore(subscribeAmbient, getAmbient, () => null);
+  if (!src) return null;
+  return (
+    <div aria-hidden className="ambient">
+      {/* A plain image: it sits behind the page, where the cover loader's visibility checks never fire. */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- decorative, already in the browser cache */}
+      <img key={src} src={src} alt="" referrerPolicy="no-referrer" decoding="async" />
+    </div>
   );
 }
 
@@ -284,13 +308,15 @@ function Header() {
   }, []);
   return (
     <header
+      data-solid={solid}
       className={cx(
+        'app-header',
         // Content aligns with the 1760px page column on wide screens; no hard edge under the bar.
         'fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-6 px-4 transition-[background-color,backdrop-filter] duration-300 md:h-20 md:gap-5 xl:gap-11 md:px-[max(2.5rem,calc((100%-1760px)/2+2.5rem))]',
         solid ? 'bg-bg/90 backdrop-blur-md' : 'bg-gradient-to-b from-black/45 to-transparent',
       )}
     >
-      <Link href="/" className="flex items-center gap-2.5 text-white">
+      <Link href="/" className="app-brand flex items-center gap-2.5 text-white">
         <Logo />
         <span className="font-display text-[19px] font-extrabold tracking-[-0.03em] md:text-[21px]">
           {PRODUCT_NAME}
@@ -299,16 +325,17 @@ function Header() {
       <UniverseMenu />
       <nav
         aria-label={t('nav.label')}
-        className="hidden gap-4 text-[13px] md:flex xl:gap-7 xl:text-[15px]"
+        className="app-nav hidden gap-4 text-[13px] md:flex xl:gap-7 xl:text-[15px]"
       >
         {NAV.map((n) => (
           <Link
             key={n.href}
             href={n.href}
             aria-current={isActive(pathname, n.href) ? 'page' : undefined}
-            className={
-              isActive(pathname, n.href) ? 'font-semibold text-white' : 'text-mid hover:text-white'
-            }
+            className={cx(
+              'app-nav-link',
+              isActive(pathname, n.href) ? 'font-semibold text-white' : 'text-mid hover:text-white',
+            )}
           >
             {t(n.key)}
           </Link>
@@ -401,14 +428,14 @@ function MobileMenu() {
         {badge > 0 && (
           <span
             aria-hidden
-            className="bg-fg absolute top-2 right-2 size-2 rounded-full ring-2 ring-[#100f0e]"
+            className="bg-fg absolute top-2 right-2 size-2 rounded-full ring-2 ring-panel"
           />
         )}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px]" />
         {/* A sheet from the bottom, as on phones' own menus: reachable with the thumb. */}
-        <Dialog.Content className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] flex-col gap-4 overflow-y-auto rounded-t-[28px] bg-[#161412] px-4 pt-2.5 pb-[max(env(safe-area-inset-bottom),16px)] outline-none">
+        <Dialog.Content className="ui-panel fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] flex-col gap-4 overflow-y-auto rounded-t-[28px] bg-panel px-4 pt-2.5 pb-[max(env(safe-area-inset-bottom),16px)] outline-none">
           <span aria-hidden className="mx-auto h-1 w-9 rounded-full bg-white/20" />
           <div className="flex items-center gap-3 px-1">
             <span
@@ -527,7 +554,7 @@ function TabBar() {
   return (
     <nav
       aria-label={t('nav.label')}
-      className="border-line fixed inset-x-0 bottom-0 z-40 grid auto-cols-fr grid-flow-col border-t bg-[#100f0e]/95 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),12px)] backdrop-blur-md md:hidden"
+      className="app-tabbar border-line fixed inset-x-0 bottom-0 z-40 grid auto-cols-fr grid-flow-col border-t bg-panel/95 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),12px)] backdrop-blur-md md:hidden"
     >
       <UniverseTab />
       {TABS.map((tab) => {
@@ -538,7 +565,7 @@ function TabBar() {
               key={tab.href}
               type="button"
               onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
-              className="relative flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] text-[#8c867e]"
+              className="relative flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] text-muted"
             >
               <svg
                 width="22"
@@ -563,7 +590,7 @@ function TabBar() {
             aria-current={active ? 'page' : undefined}
             className={cx(
               'relative flex min-h-11 flex-col items-center justify-center gap-1 text-[11px]',
-              active ? 'font-semibold text-white' : 'text-[#8c867e]',
+              active ? 'font-semibold text-white' : 'text-muted',
             )}
           >
             <svg

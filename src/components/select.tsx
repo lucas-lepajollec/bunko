@@ -126,7 +126,7 @@ export function Select({
               setOpen(false);
             }
           }}
-          className="anim-pop pointer-events-auto z-[70] max-h-[min(360px,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl bg-[#1c1a17] p-1 text-sm shadow-[0_18px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10"
+          className="ui-panel anim-pop pointer-events-auto z-[70] max-h-[min(360px,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl bg-panel-hi p-1 text-sm shadow-[0_18px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10"
         >
           <RS.Viewport>
             {options.map((o, i) => {

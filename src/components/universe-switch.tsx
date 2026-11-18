@@ -111,7 +111,7 @@ export function UniverseMenu() {
         aria-label={t('universe.label')}
         aria-hidden={!open}
         className={cx(
-          'border-line absolute top-full left-[-16px] z-50 mt-4 w-[740px] max-w-[calc(100vw-48px)] rounded-3xl border bg-[#141210]/95 p-3 shadow-[0_30px_80px_rgba(0,0,0,0.6)] backdrop-blur-xl transition-[opacity,transform] duration-200',
+          'ui-panel border-line absolute top-full left-[-16px] z-50 mt-4 w-[740px] max-w-[calc(100vw-48px)] rounded-3xl border bg-panel/95 p-3 shadow-[0_30px_80px_rgba(0,0,0,0.6)] backdrop-blur-xl transition-[opacity,transform] duration-200',
           open
             ? 'translate-y-0 opacity-100'
             : 'pointer-events-none invisible -translate-y-1 opacity-0',
@@ -211,7 +211,7 @@ export function UniverseTab() {
   if (options.length < 2 && !universe.adultAllowed) return null;
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger className="relative flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] text-[#8c867e]">
+      <Dialog.Trigger className="relative flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] text-muted">
         <svg
           width="22"
           height="22"
@@ -231,7 +231,7 @@ export function UniverseTab() {
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="bg-bg border-line fixed inset-x-0 bottom-0 z-50 flex flex-col gap-2 rounded-t-3xl border-t p-4 pb-[max(env(safe-area-inset-bottom),16px)] outline-none">
+        <Dialog.Content className="ui-panel bg-bg border-line fixed inset-x-0 bottom-0 z-50 flex flex-col gap-2 rounded-t-3xl border-t p-4 pb-[max(env(safe-area-inset-bottom),16px)] outline-none">
           <span aria-hidden className="mb-1 h-1 w-10 self-center rounded-full bg-white/25" />
           <Dialog.Title className="font-display text-[22px] font-extrabold tracking-[-0.03em]">
             {t('universe.label')}

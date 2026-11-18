@@ -106,7 +106,7 @@ export function SelectionBar({
       <div
         role="toolbar"
         aria-label={t('library.selected', { count: n(count) })}
-        className="border-line fixed inset-x-3 bottom-[calc(max(env(safe-area-inset-bottom),12px)+70px)] z-40 flex flex-col gap-2.5 rounded-2xl border bg-[#161412]/95 p-3 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl md:inset-x-auto md:bottom-6 md:left-1/2 md:w-[min(920px,calc(100vw-48px))] md:-translate-x-1/2"
+        className="ui-panel border-line fixed inset-x-3 bottom-[calc(max(env(safe-area-inset-bottom),12px)+70px)] z-40 flex flex-col gap-2.5 rounded-2xl border bg-panel/95 p-3 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl md:inset-x-auto md:bottom-6 md:left-1/2 md:w-[min(920px,calc(100vw-48px))] md:-translate-x-1/2"
       >
         <div className="flex items-center gap-2">
           <span
@@ -194,7 +194,7 @@ export function SelectionBar({
       <Dialog.Root open={Boolean(asking)} onOpenChange={(o) => !o && !busy && setAsking(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-          <Dialog.Content className="border-line fixed inset-x-3 bottom-[max(env(safe-area-inset-bottom),12px)] z-50 flex flex-col gap-3 rounded-3xl border bg-[#161412] p-5 outline-none md:inset-x-auto md:top-1/2 md:bottom-auto md:left-1/2 md:w-[440px] md:-translate-x-1/2 md:-translate-y-1/2">
+          <Dialog.Content className="ui-panel border-line fixed inset-x-3 bottom-[max(env(safe-area-inset-bottom),12px)] z-50 flex flex-col gap-3 rounded-3xl border bg-panel p-5 outline-none md:inset-x-auto md:top-1/2 md:bottom-auto md:left-1/2 md:w-[440px] md:-translate-x-1/2 md:-translate-y-1/2">
             {asking && (
               <>
                 <Dialog.Title className="font-display text-[20px] leading-tight font-bold">

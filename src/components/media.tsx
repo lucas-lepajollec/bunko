@@ -91,7 +91,7 @@ export function ScrollRow({ children, label }: { children: ReactNode; label?: st
       aria-label={d === 1 ? t('common.next') : t('common.previous')}
       onClick={() => scroll(d)}
       className={cx(
-        'bg-bg/80 absolute top-[32%] z-10 hidden size-11 items-center justify-center rounded-full text-white backdrop-blur-md transition-opacity hover:bg-[#1c1a18] md:flex',
+        'bg-bg/80 absolute top-[32%] z-10 hidden size-11 items-center justify-center rounded-full text-white backdrop-blur-md transition-opacity hover:bg-hover md:flex',
         d === 1 ? '-right-5' : '-left-5',
         (d === 1 ? edges.end : edges.start) && 'pointer-events-none opacity-0',
       )}

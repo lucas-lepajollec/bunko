@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Themes (Settings → Appearance, per device like the language): Bunko (unchanged, default), Ciné
+  (night streaming, condensed poster titles, floating pill navigation; Glacier, Ember, Jade),
+  Aurore (frosted glass over the current artwork's colours; Amber, Ocean, Rose) and Édition
+  (paper and ink, serif titles, square covers; Cream, Chalk, Linen). A theme only changes tokens,
+  type and shapes (`src/app/themes.css`): every page, dialog, menu and control is the same in all
+  of them. The video player and the readers keep the default dark look. The choice applies
+  before the first paint. Raw colours left in components became tokens (`panel`, `panel-hi`,
+  `star`, `idle`, `on-bright`).
+
 - Lists follow the type and the 18+ mode: a list shows under every kind its works have (a list
   made for one kind under that kind only, an empty list everywhere); works hidden by the 18+ mode
   leave the lists (and a list holding only those leaves too), keeping their places for when they

@@ -521,6 +521,7 @@ function Title({
           entry?.identity === 'off-catalog' || entry?.backdrop === 'hidden' ? null : media.bannerUrl
         }
         color={media.color ?? '#7aa2ff'}
+        ambient={entry?.coverUrl ?? media.coverUrl}
         className="h-[440px] md:h-[720px]"
       />
       <div className="relative mx-auto grid max-w-[1760px] gap-6 px-4 pt-[110px] pb-16 md:grid-cols-[280px_minmax(0,1fr)] md:gap-12 md:px-10 md:pt-[150px] lg:grid-cols-[300px_minmax(0,1fr)] xl:gap-16">
@@ -930,7 +931,7 @@ function Title({
           <button
             type="button"
             onClick={() => setSelected(new Set())}
-            className="text-[#5b564f] text-sm underline"
+            className="text-faint text-sm underline"
           >
             {t('common.clear')}
           </button>
@@ -1140,7 +1141,7 @@ function ReadButton({
             </svg>
           </button>
           {open && (
-            <div className="absolute top-[calc(100%+6px)] right-0 z-30 flex min-w-full flex-col rounded-2xl bg-[#1c1a17] p-1 text-sm shadow-[0_18px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10">
+            <div className="ui-panel absolute top-[calc(100%+6px)] right-0 z-30 flex min-w-full flex-col rounded-2xl bg-panel-hi p-1 text-sm shadow-[0_18px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10">
               <Link
                 href={bunko.href}
                 className="rounded-xl px-3 py-2.5 whitespace-nowrap hover:bg-white/[0.08]"

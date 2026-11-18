@@ -11,11 +11,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import type {
-  MediaDetail,
-  ReaderChapter,
-  ReaderProgressUpdate,
-} from '@/types/shared';
+import type { MediaDetail, ReaderChapter, ReaderProgressUpdate } from '@/types/shared';
 import { useSWRConfig } from 'swr';
 import { api, mediaHref, send, useApi } from '@/lib/client/api';
 import { ReaderProgressWriter } from '@/lib/client/reader-progress';
@@ -223,7 +219,7 @@ function ChapterReader({ chapter, media }: { chapter: string; media: string | nu
   const back = media ? mediaHref(media) : '/library';
   const d = data.data;
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col bg-black text-white">
+    <div className="theme-lock fixed inset-0 z-[80] flex flex-col bg-black text-white">
       <header
         data-reader-bar
         // Hidden controls must not stay reachable from the keyboard.

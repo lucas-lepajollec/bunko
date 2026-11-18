@@ -54,7 +54,7 @@ export function Toaster() {
         <div
           key={x.id}
           role={x.tone === 'bad' ? 'alert' : 'status'}
-          className="animate-toast pointer-events-auto flex max-w-[560px] items-center gap-3 rounded-full bg-[#1f1d1a] py-2.5 pr-2.5 pl-4 text-sm shadow-[0_16px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10"
+          className="ui-panel animate-toast pointer-events-auto flex max-w-[560px] items-center gap-3 rounded-full bg-panel-hi py-2.5 pr-2.5 pl-4 text-sm shadow-[0_16px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10"
         >
           <span
             aria-hidden
@@ -133,7 +133,7 @@ export function InfoBubble({
         <span
           id={id}
           role="tooltip"
-          className="absolute top-8 left-1/2 z-40 w-[min(280px,80vw)] -translate-x-1/2 rounded-xl bg-[#1f1d1a] p-3 text-left text-sm leading-snug font-normal tracking-normal normal-case shadow-[0_16px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10"
+          className="ui-panel absolute top-8 left-1/2 z-40 w-[min(280px,80vw)] -translate-x-1/2 rounded-xl bg-panel-hi p-3 text-left text-sm leading-snug font-normal tracking-normal normal-case shadow-[0_16px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10"
         >
           {children}
         </span>
