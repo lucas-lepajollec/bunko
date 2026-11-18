@@ -19,6 +19,7 @@ import { Select } from './select';
 import {
   ChevronRight,
   Download,
+  ListOrdered,
   LogOut,
   Menu,
   Puzzle,
@@ -249,8 +250,8 @@ const NAV = [
   { href: '/', key: 'nav.home' },
   { href: '/catalog', key: 'nav.catalog' },
   { href: '/library', key: 'nav.library' },
-  { href: '/lists', key: 'nav.lists' },
   { href: '/planning', key: 'nav.planning' },
+  { href: '/lists', key: 'nav.lists' },
 ];
 
 function useActivity() {
@@ -384,6 +385,7 @@ function MobileMenu() {
   const badge = activity.active + activity.failed;
   const links = [
     { href: '/profile', label: t('profile.title'), Icon: UserRound },
+    { href: '/lists', label: t('nav.lists'), Icon: ListOrdered },
     { href: '/downloads', label: t('nav.activity'), badge, Icon: Download },
     { href: '/sources', label: t('nav.sources'), Icon: Puzzle },
     { href: '/settings', label: t('nav.settings'), Icon: Settings2 },

@@ -1,21 +1,32 @@
 'use client';
 import * as Dialog from '@radix-ui/react-dialog';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { GripVertical, Plus, Shuffle, Star, X } from 'lucide-react';
-import type { ListLayout, ListTier, TrackedMedia, WorkList, WorkListItem } from '@/types/shared';
+import { useSWRConfig } from 'swr';
+import { ArrowLeft, GripVertical, Plus, Search, Star, X } from 'lucide-react';
+import type { ListTier, TrackedMedia, WorkList, WorkListItem } from '@/types/shared';
 import { kindOfMedia } from '@/domain/kinds';
 import { formatRating, libraryMark } from '@/domain/library-mark';
 import { send, useApi } from '@/lib/client/api';
-import { useSortable } from '@/lib/client/sortable';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
 import { Duel } from '@/components/duel';
 import { MediaLink } from '@/components/media-link';
 import { PosterCard } from '@/components/media';
 import { Select } from '@/components/select';
+import { SortableList, useSortableItem } from '@/components/sortable';
+import { TierBoard } from '@/components/tier-board';
 import { toast } from '@/components/notify';
-import { listMeta, listName, listWorks, useListWrite, useLists } from '@/components/lists';
+import {
+  isTierList,
+  listMeta,
+  listName,
+  listWorks,
+  tierOfRating,
+  useListWrite,
+  useLists,
+} from '@/components/lists';
 import {
   Cover,
   Empty,
@@ -24,18 +35,14 @@ import {
   cx,
   errorText,
   field,
-  primaryButton,
+  primarySmall,
   smallButton,
 } from '@/components/ui';
-import { useSWRConfig } from 'swr';
 
-const TIERS: ListTier[] = ['S', 'A', 'B', 'C', 'D'];
-const LAYOUTS: ListLayout[] = ['list', 'grid', 'tiers'];
 type Work = { item: WorkListItem; entry: TrackedMedia };
 
 export default function ListPage() {
-  const { t, n, locale } = useI18n();
-  const router = useRouter();
+  const { t, n } = useI18n();
   const { mutate } = useSWRConfig();
   const params = useParams<{ id: string }>();
   const lists = useLists();
@@ -46,30 +53,8 @@ export default function ListPage() {
   const works = list ? listWorks(list, entries) : [];
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [renaming, setRenaming] = useState(false);
+  const [settings, setSettings] = useState(false);
   const [duel, setDuel] = useState<TrackedMedia | null>(null);
-  const ids = works.map((w) => w.entry.id);
-  const save = (patch: Record<string, unknown>) => (list ? write(list, patch) : null);
-  const reorder = (next: number[]) => {
-    // Shown at once; the server keeps it.
-    if (list)
-      void mutate(
-        '/api/lists',
-        (all: WorkList[] | undefined) =>
-          all?.map((l) =>
-            l.id === list.id
-              ? {
-                  ...l,
-                  items: next.flatMap((id) => l.items.filter((i) => i.trackedId === id)),
-                }
-              : l,
-          ),
-        { revalidate: false },
-      );
-    void save({ order: next });
-  };
-  const sortable = useSortable(ids, reorder);
-  const shown = sortable.order.flatMap((id) => works.filter((w) => w.entry.id === id));
 
   if (lists.error)
     return (
@@ -86,168 +71,66 @@ export default function ListPage() {
   if (!list)
     return (
       <Page>
+        <BackLink />
         <Empty title={t('lists.missing')} />
       </Page>
     );
 
-  const ranked = list.ranked;
-  const moveTo = (id: number, place: number) => {
-    const next = ids.filter((x) => x !== id);
-    next.splice(Math.max(0, Math.min(place - 1, next.length)), 0, id);
-    reorder(next);
+  const tier = isTierList(list);
+  const ids = works.map((w) => w.entry.id);
+  /** Writes at once in the cache (no jump back while the server saves), then on the server. */
+  const patch = (next: (l: WorkList) => WorkList, body: Record<string, unknown>) => {
+    void mutate(
+      '/api/lists',
+      (all: WorkList[] | undefined) => all?.map((l) => (l.id === list.id ? next(l) : l)),
+      { revalidate: false },
+    );
+    void write(list, body);
   };
-  const byRating = () => {
-    const rated = [...works].sort((a, b) => (b.entry.rating ?? -1) - (a.entry.rating ?? -1));
-    reorder(rated.map((w) => w.entry.id));
+  const reorder = (order: number[]) =>
+    patch(
+      (l) => ({ ...l, items: order.flatMap((id) => l.items.filter((i) => i.trackedId === id)) }),
+      { order },
+    );
+  const remove = (trackedId: number) =>
+    patch((l) => ({ ...l, items: l.items.filter((i) => i.trackedId !== trackedId) }), {
+      remove: [trackedId],
+    });
+  const setNote = (trackedId: number, note: string) =>
+    patch(
+      (l) => ({
+        ...l,
+        items: l.items.map((i) => (i.trackedId === trackedId ? { ...i, note } : i)),
+      }),
+      { items: [{ trackedId, note }] },
+    );
+  const saveTiers = (order: number[], changed: { trackedId: number; tier: ListTier | null }[]) => {
+    const tiers = new Map(changed.map((c) => [c.trackedId, c.tier]));
+    patch(
+      (l) => ({
+        ...l,
+        items: order.flatMap((id) =>
+          l.items
+            .filter((i) => i.trackedId === id)
+            .map((i) => (tiers.has(id) ? { ...i, tier: tiers.get(id) ?? null } : i)),
+        ),
+      }),
+      { order, ...(changed.length ? { items: changed } : {}) },
+    );
   };
-
-  const row = (w: Work, index: number) => (
-    <li
-      key={w.entry.id}
-      ref={sortable.item(w.entry.id)}
-      className={cx(
-        'flex min-w-0 items-center gap-2 rounded-2xl px-2 py-2 md:gap-3',
-        sortable.dragging === w.entry.id
-          ? 'bg-white/[0.1] ring-2 ring-white/60'
-          : 'hover:bg-white/[0.04]',
-      )}
-    >
-      {editing && (
-        <button
-          type="button"
-          aria-label={t('lists.drag', { title: w.entry.title })}
-          className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full hover:text-white"
-          {...sortable.handle(w.entry.id)}
-        >
-          <GripVertical className="size-5" aria-hidden />
-        </button>
-      )}
-      {ranked &&
-        (editing ? (
-          <input
-            key={`${w.entry.id}:${index}`}
-            defaultValue={index + 1}
-            inputMode="numeric"
-            aria-label={t('lists.place', { title: w.entry.title })}
-            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-            onBlur={(e) => {
-              const place = Number(e.currentTarget.value);
-              if (Number.isInteger(place) && place > 0 && place !== index + 1)
-                moveTo(w.entry.id, place);
-              else e.currentTarget.value = String(index + 1);
-            }}
-            className="bg-raised font-display h-10 w-12 shrink-0 rounded-lg text-center text-lg font-extrabold tabular-nums outline-none focus:ring-2 focus:ring-white/50"
-          />
-        ) : (
-          <span className="font-display w-10 shrink-0 text-right text-3xl font-extrabold tracking-[-0.05em] text-white/80 tabular-nums">
-            {n(index + 1)}
-          </span>
-        ))}
-      <MediaLink media={w.entry.media} className="flex min-w-0 flex-1 items-center gap-3 md:gap-4">
-        <Cover
-          src={w.entry.coverUrl ?? w.entry.media.coverUrl}
-          fallbacks={w.entry.coverFallbacks}
-          className="w-12 shrink-0"
-        />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate font-medium">{w.entry.title}</span>
-          {!editing && w.item.note && (
-            <span className="text-mid truncate font-serif text-[15px] italic">{w.item.note}</span>
-          )}
-        </span>
-      </MediaLink>
-      {editing && (
-        <input
-          defaultValue={w.item.note}
-          maxLength={280}
-          placeholder={t('lists.notePlaceholder')}
-          aria-label={t('lists.note', { title: w.entry.title })}
-          onBlur={(e) => {
-            const note = e.currentTarget.value.trim();
-            if (note !== w.item.note) void save({ items: [{ trackedId: w.entry.id, note }] });
-          }}
-          className={cx(field, 'hidden h-10 max-w-[260px] md:block')}
-        />
-      )}
-      {w.entry.rating != null && (
-        <span className="flex min-w-[58px] shrink-0 items-center justify-center gap-1 rounded-full bg-[#f5c518] px-2.5 py-1 text-sm font-bold text-black">
-          <Star className="size-3.5" fill="currentColor" strokeWidth={0} aria-hidden />
-          {formatRating(w.entry.rating, locale)}
-        </span>
-      )}
-      {editing && list.layout === 'tiers' && (
-        <Select
-          label={t('lists.tier')}
-          value={w.item.tier ?? ''}
-          size="sm"
-          onChange={(v) =>
-            void save({ items: [{ trackedId: w.entry.id, tier: (v || null) as ListTier | null }] })
-          }
-          options={[{ value: '', label: '—' }, ...TIERS.map((x) => ({ value: x, label: x }))]}
-        />
-      )}
-      {editing && ranked && works.length > 1 && (
-        <button
-          type="button"
-          onClick={() => setDuel(w.entry)}
-          aria-label={t('lists.duel', { title: w.entry.title })}
-          title={t('lists.duelShort')}
-          className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
-        >
-          <Shuffle className="size-4" aria-hidden />
-        </button>
-      )}
-      {editing && (
-        <button
-          type="button"
-          onClick={() => void save({ remove: [w.entry.id] })}
-          aria-label={t('lists.remove', { title: w.entry.title })}
-          className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
-        >
-          <X className="size-4" aria-hidden />
-        </button>
-      )}
-    </li>
-  );
-
-  const grid = (items: Work[]) => (
-    <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] xl:grid-cols-8">
-      {items.map((w) => {
-        const index = shown.indexOf(w);
-        return (
-          <article
-            key={w.entry.id}
-            ref={sortable.item(w.entry.id)}
-            className={cx(
-              'relative min-w-0 rounded-xl',
-              sortable.dragging === w.entry.id && 'ring-2 ring-white/60',
-            )}
-          >
-            {ranked && (
-              <span className="font-display text-mid mb-1 block text-2xl leading-none font-extrabold tracking-[-0.04em] tabular-nums">
-                {n(index + 1)}
-              </span>
-            )}
-            <PosterCard media={{ ...w.entry.media, mine: libraryMark(w.entry) }} badge={<></>} />
-            {editing && (
-              <button
-                type="button"
-                aria-label={t('lists.drag', { title: w.entry.title })}
-                className="bg-bg/85 absolute top-1 right-1 flex size-9 items-center justify-center rounded-full"
-                {...sortable.handle(w.entry.id)}
-              >
-                <GripVertical className="size-4" aria-hidden />
-              </button>
-            )}
-          </article>
-        );
-      })}
-    </div>
-  );
+  const placeByRating = () => {
+    const changed = works.flatMap((w) => {
+      const tierOf = w.item.tier ? null : tierOfRating(w.entry.rating);
+      return tierOf ? [{ trackedId: w.entry.id, tier: tierOf }] : [];
+    });
+    if (changed.length) saveTiers(ids, changed);
+  };
+  const unplacedRated = tier && works.some((w) => !w.item.tier && w.entry.rating != null);
 
   return (
     <Page className="pb-24">
-      <div className="flex flex-col gap-2">
+      <BackLink tier={tier} />
+      <div className="-mt-2 flex flex-col gap-2">
         <span className="text-muted text-xs tracking-[0.06em] uppercase">
           {listMeta(t, n, list, works.length)}
         </span>
@@ -263,76 +146,69 @@ export default function ListPage() {
           <Plus className="size-4" aria-hidden />
           {t('lists.addWorks')}
         </button>
-        {ranked && works.some((w) => w.entry.rating != null) && (
-          <button
-            type="button"
-            className={smallButton}
-            onClick={() => window.confirm(t('lists.byRatingConfirm')) && byRating()}
-          >
-            {t('lists.byRating')}
+        {unplacedRated && (
+          <button type="button" className={smallButton} onClick={placeByRating}>
+            {t('lists.placeByRating')}
           </button>
         )}
-        <span className="ml-auto flex flex-wrap items-center gap-1">
-          {LAYOUTS.map((l) => (
-            <button
-              key={l}
-              type="button"
-              aria-pressed={list.layout === l}
-              onClick={() => void save({ layout: l })}
-              className={cx(
-                'h-9 rounded-full px-3.5 text-[13px]',
-                list.layout === l ? 'bg-fg text-bg font-semibold' : 'text-mid hover:text-white',
-              )}
-            >
-              {t(`lists.layout.${l}`)}
+        <span className="ml-auto flex flex-wrap items-center gap-2">
+          {!tier && !editing && (
+            <span className="flex rounded-full bg-white/[0.06] p-0.5">
+              {(['list', 'grid'] as const).map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  aria-pressed={list.layout === l}
+                  onClick={() => patch((x) => ({ ...x, layout: l }), { layout: l })}
+                  className={cx(
+                    'h-8 rounded-full px-3.5 text-[13px]',
+                    list.layout === l ? 'bg-fg text-bg font-semibold' : 'text-mid hover:text-white',
+                  )}
+                >
+                  {t(`lists.layout.${l}`)}
+                </button>
+              ))}
+            </span>
+          )}
+          {!list.system && (
+            <button type="button" className={smallButton} onClick={() => setSettings(true)}>
+              {t('lists.settings')}
             </button>
-          ))}
+          )}
+          {!tier && works.length > 0 && (
+            <button
+              type="button"
+              aria-pressed={editing}
+              onClick={() => setEditing(!editing)}
+              className={editing ? primarySmall : smallButton}
+            >
+              {editing ? t('tops.done') : t('lists.edit')}
+            </button>
+          )}
         </span>
-        <button
-          type="button"
-          aria-pressed={editing}
-          onClick={() => setEditing(!editing)}
-          className={cx(smallButton, editing && 'bg-fg text-bg hover:bg-fg')}
-        >
-          {editing ? t('tops.done') : t('lists.edit')}
-        </button>
       </div>
       {editing && (
         <div className="text-mid flex flex-wrap items-center gap-3 text-sm">
-          <span>{t(ranked ? 'lists.editHint' : 'lists.editHintFree')}</span>
-          <span className="ml-auto flex gap-2">
-            {!list.system && (
-              <button type="button" className={smallButton} onClick={() => setRenaming(true)}>
-                {t('lists.settings')}
-              </button>
-            )}
-            {!list.system && (
-              <button
-                type="button"
-                className={cx(smallButton, 'text-bad')}
-                onClick={async () => {
-                  if (!window.confirm(t('lists.deleteConfirm', { name: list.name }))) return;
-                  try {
-                    await mutate(
-                      '/api/lists',
-                      await send<WorkList[]>(`/api/lists/${list.id}`, 'DELETE'),
-                      {
-                        revalidate: false,
-                      },
-                    );
-                    router.push('/lists');
-                  } catch (e) {
-                    toast({ tone: 'bad', text: errorText(t, e) });
-                  }
-                }}
-              >
-                {t('tops.delete')}
-              </button>
-            )}
-          </span>
+          <span>{t(list.ranked ? 'lists.editHint' : 'lists.editHintFree')}</span>
+          {list.ranked && works.some((w) => w.entry.rating != null) && (
+            <button
+              type="button"
+              className="ml-auto underline decoration-white/30 underline-offset-4 hover:text-white"
+              onClick={() => {
+                if (!window.confirm(t('lists.byRatingConfirm'))) return;
+                reorder(
+                  [...works]
+                    .sort((a, b) => (b.entry.rating ?? -1) - (a.entry.rating ?? -1))
+                    .map((w) => w.entry.id),
+                );
+              }}
+            >
+              {t('lists.byRating')}
+            </button>
+          )}
         </div>
       )}
-      {!works.length && (
+      {!works.length && !tier && (
         <Empty
           title={t('lists.empty')}
           action={
@@ -344,36 +220,86 @@ export default function ListPage() {
           {t('lists.emptyBody')}
         </Empty>
       )}
-      {list.layout === 'grid' && grid(shown)}
-      {list.layout === 'list' && (
-        <ol className="flex max-w-4xl flex-col gap-1">{shown.map((w, i) => row(w, i))}</ol>
-      )}
-      {list.layout === 'tiers' &&
-        [...TIERS, null].map((tier) => {
-          const inTier = shown.filter((w) => (w.item.tier ?? null) === tier);
-          if (!inTier.length && (tier === null || !editing)) return null;
-          return (
-            <section key={tier ?? 'none'} className="flex flex-col gap-3 md:flex-row md:gap-5">
-              <span
-                className={cx(
-                  'font-display flex h-12 w-16 shrink-0 items-center justify-center rounded-xl text-2xl font-extrabold md:h-auto md:min-h-24',
-                  tier ? 'bg-white/[0.08]' : 'text-mid bg-white/[0.03] text-sm',
-                )}
+      {tier ? (
+        <TierBoard works={works} onSave={saveTiers} onRemove={remove} />
+      ) : editing ? (
+        <SortableList ids={ids} onReorder={reorder} grid={list.layout === 'grid'}>
+          {list.layout === 'grid' ? (
+            <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] xl:grid-cols-8">
+              {works.map((w, i) => (
+                <SortablePoster
+                  key={w.entry.id}
+                  work={w}
+                  index={list.ranked ? i : null}
+                  onRemove={remove}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex max-w-4xl flex-col gap-1">
+              {works.map((w, i) => (
+                <SortableRow
+                  key={w.entry.id}
+                  work={w}
+                  index={i}
+                  ranked={list.ranked}
+                  count={works.length}
+                  onPlace={(place) => {
+                    const next = ids.filter((x) => x !== w.entry.id);
+                    next.splice(Math.max(0, Math.min(place - 1, next.length)), 0, w.entry.id);
+                    reorder(next);
+                  }}
+                  onNote={(note) => setNote(w.entry.id, note)}
+                  onRemove={() => remove(w.entry.id)}
+                />
+              ))}
+            </div>
+          )}
+        </SortableList>
+      ) : list.layout === 'grid' ? (
+        <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] xl:grid-cols-8">
+          {works.map((w, i) => (
+            <article key={w.entry.id} className="flex min-w-0 flex-col gap-1">
+              {list.ranked && <Rank n={i + 1} />}
+              <PosterCard media={{ ...w.entry.media, mine: libraryMark(w.entry) }} badge={<></>} />
+            </article>
+          ))}
+        </div>
+      ) : (
+        <ol className="flex max-w-4xl flex-col gap-1">
+          {works.map((w, i) => (
+            <li
+              key={w.entry.id}
+              className="flex min-w-0 items-center rounded-2xl px-2 py-2 hover:bg-white/[0.04]"
+            >
+              <MediaLink
+                media={w.entry.media}
+                className="flex min-w-0 flex-1 items-center gap-3 md:gap-4"
               >
-                {tier ?? t('lists.noTier')}
-              </span>
-              <div className="min-w-0 flex-1">
-                {editing ? (
-                  <ol className="flex flex-col gap-1">
-                    {inTier.map((w) => row(w, shown.indexOf(w)))}
-                  </ol>
-                ) : (
-                  grid(inTier)
+                {list.ranked && (
+                  <span className="font-display w-8 shrink-0 text-right text-2xl font-extrabold tracking-[-0.05em] text-white/80 tabular-nums md:w-10 md:text-3xl">
+                    {n(i + 1)}
+                  </span>
                 )}
-              </div>
-            </section>
-          );
-        })}
+                <Cover
+                  src={w.entry.coverUrl ?? w.entry.media.coverUrl}
+                  fallbacks={w.entry.coverFallbacks}
+                  className="w-12 shrink-0"
+                />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate font-medium">{w.entry.title}</span>
+                  {w.item.note && (
+                    <span className="text-mid truncate font-serif text-[15px] italic">
+                      {w.item.note}
+                    </span>
+                  )}
+                </span>
+                <Score rating={w.entry.rating} />
+              </MediaLink>
+            </li>
+          ))}
+        </ol>
+      )}
       <AddWorks
         open={adding}
         onClose={() => setAdding(false)}
@@ -382,15 +308,15 @@ export default function ListPage() {
             !e.partOf && !ids.includes(e.id) && (!list.kind || kindOfMedia(e.media) === list.kind),
         )}
         onAdd={async (work) => {
-          const fresh = await save({ add: [work.id] });
+          const fresh = await write(list, { add: [work.id] });
           const now = fresh?.find((l) => l.id === list.id);
-          if (now?.ranked && now.items.length > 1) {
+          if (now?.ranked && !tier && now.items.length > 1) {
             setAdding(false);
             setDuel(work);
           }
         }}
       />
-      {renaming && <ListSettings list={list} onClose={() => setRenaming(false)} onSave={save} />}
+      {settings && <ListSettings list={list} onClose={() => setSettings(false)} />}
       {duel && (
         <Duel
           title={listName(t, list)}
@@ -404,6 +330,167 @@ export default function ListPage() {
         />
       )}
     </Page>
+  );
+}
+
+function BackLink({ tier = false }: { tier?: boolean }) {
+  const { t } = useI18n();
+  return (
+    <Link
+      href={tier ? '/lists?tab=tiers' : '/lists'}
+      className="text-mid -mb-2 inline-flex items-center gap-1.5 self-start text-sm hover:text-white"
+    >
+      <ArrowLeft className="size-4" aria-hidden />
+      {t(tier ? 'lists.backTiers' : 'lists.back')}
+    </Link>
+  );
+}
+
+function Rank({ n: value }: { n: number }) {
+  const { n } = useI18n();
+  return (
+    <span className="font-display text-mid text-2xl leading-none font-extrabold tracking-[-0.04em] tabular-nums">
+      {n(value)}
+    </span>
+  );
+}
+
+function Score({ rating }: { rating: number | null | undefined }) {
+  const { locale } = useI18n();
+  if (rating == null) return null;
+  return (
+    <span className="flex min-w-[58px] shrink-0 items-center justify-center gap-1 rounded-full bg-[#f5c518] px-2.5 py-1 text-sm font-bold text-black">
+      <Star className="size-3.5" fill="currentColor" strokeWidth={0} aria-hidden />
+      {formatRating(rating, locale)}
+    </span>
+  );
+}
+
+function SortableRow({
+  work: w,
+  index,
+  ranked,
+  count,
+  onPlace,
+  onNote,
+  onRemove,
+}: {
+  work: Work;
+  index: number;
+  ranked: boolean;
+  count: number;
+  onPlace: (place: number) => void;
+  onNote: (note: string) => void;
+  onRemove: () => void;
+}) {
+  const { t } = useI18n();
+  const { setNode, style, dragging, handle } = useSortableItem(w.entry.id);
+  return (
+    <div
+      ref={setNode}
+      style={style}
+      className={cx(
+        'flex min-w-0 items-center gap-2 rounded-xl py-1.5 pr-1 md:gap-3',
+        dragging
+          ? 'bg-[#22201d] shadow-[0_12px_32px_rgba(0,0,0,0.5)] ring-1 ring-white/25'
+          : 'hover:bg-white/[0.03]',
+      )}
+    >
+      <button
+        type="button"
+        aria-label={t('lists.drag', { title: w.entry.title })}
+        className="text-mid flex size-9 shrink-0 cursor-grab items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white active:cursor-grabbing"
+        {...handle}
+      >
+        <GripVertical className="size-4" aria-hidden />
+      </button>
+      {ranked && (
+        <input
+          key={`${w.entry.id}:${index}`}
+          defaultValue={index + 1}
+          inputMode="numeric"
+          aria-label={t('lists.place', { title: w.entry.title })}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          onBlur={(e) => {
+            const place = Number(e.currentTarget.value);
+            if (Number.isInteger(place) && place >= 1 && place <= count && place !== index + 1)
+              onPlace(place);
+            else e.currentTarget.value = String(index + 1);
+          }}
+          className="font-display w-10 shrink-0 rounded-lg bg-transparent py-1 text-center text-2xl font-extrabold tracking-[-0.05em] text-white/80 tabular-nums outline-none hover:bg-white/[0.06] focus:bg-white/[0.08]"
+        />
+      )}
+      <Cover
+        src={w.entry.coverUrl ?? w.entry.media.coverUrl}
+        fallbacks={w.entry.coverFallbacks}
+        className="w-11 shrink-0"
+      />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-medium">{w.entry.title}</span>
+        <input
+          defaultValue={w.item.note}
+          maxLength={280}
+          placeholder={t('lists.notePlaceholder')}
+          aria-label={t('lists.note', { title: w.entry.title })}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          onBlur={(e) => {
+            const note = e.currentTarget.value.trim();
+            if (note !== w.item.note) onNote(note);
+          }}
+          className="text-mid placeholder:text-faint w-full truncate bg-transparent font-serif text-[15px] italic outline-none"
+        />
+      </span>
+      <Score rating={w.entry.rating} />
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={t('lists.remove', { title: w.entry.title })}
+        className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
+      >
+        <X className="size-4" aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+function SortablePoster({
+  work: w,
+  index,
+  onRemove,
+}: {
+  work: Work;
+  index: number | null;
+  onRemove: (trackedId: number) => void;
+}) {
+  const { t } = useI18n();
+  const { setNode, style, dragging, handle } = useSortableItem(w.entry.id);
+  return (
+    <article
+      ref={setNode}
+      style={style}
+      className={cx('relative flex min-w-0 flex-col gap-1', dragging && 'opacity-80')}
+    >
+      {index !== null && <Rank n={index + 1} />}
+      <span
+        className="block cursor-grab rounded-[6px] active:cursor-grabbing"
+        aria-label={t('lists.drag', { title: w.entry.title })}
+        {...handle}
+      >
+        <Cover
+          src={w.entry.coverUrl ?? w.entry.media.coverUrl}
+          fallbacks={w.entry.coverFallbacks}
+        />
+      </span>
+      <span className="truncate text-sm">{w.entry.title}</span>
+      <button
+        type="button"
+        onClick={() => onRemove(w.entry.id)}
+        aria-label={t('lists.remove', { title: w.entry.title })}
+        className="bg-bg/85 absolute right-1 bottom-8 flex size-8 items-center justify-center rounded-full"
+      >
+        <X className="size-4" aria-hidden />
+      </button>
+    </article>
   );
 }
 
@@ -424,38 +511,56 @@ function AddWorks({
   const fold = (v: string) => v.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
   const found = (
     q.trim() ? entries.filter((e) => fold(e.title).includes(fold(q.trim()))) : entries
-  ).slice(0, 40);
+  ).slice(0, 60);
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="bg-bg border-line fixed inset-x-3 top-[8vh] z-50 mx-auto flex max-h-[84vh] max-w-[520px] flex-col gap-3 rounded-3xl border p-5 outline-none">
-          <Dialog.Title className="font-display text-[22px] font-extrabold tracking-[-0.03em]">
-            {t('lists.addWorks')}
-          </Dialog.Title>
-          <Dialog.Description className="text-muted text-sm">
-            {t('lists.addWorksHint')}
-          </Dialog.Description>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={t('tops.addPlaceholder')}
-            aria-label={t('lists.addWorks')}
-            autoFocus
-            className={field}
-          />
-          <div className="-mx-2 flex min-h-0 flex-col overflow-y-auto overscroll-contain">
+        <Dialog.Content className="bg-bg border-line fixed inset-x-3 top-[8vh] z-50 mx-auto flex h-[min(640px,84vh)] max-w-[520px] flex-col overflow-hidden rounded-3xl border outline-none">
+          <div className="flex shrink-0 flex-col gap-3 p-5 pb-3">
+            <div className="flex items-start gap-3">
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <Dialog.Title className="font-display text-[22px] leading-tight font-extrabold tracking-[-0.03em]">
+                  {t('lists.addWorks')}
+                </Dialog.Title>
+                <Dialog.Description className="text-muted text-[13px]">
+                  {t('lists.addWorksHint')}
+                </Dialog.Description>
+              </div>
+              <Dialog.Close
+                aria-label={t('common.close')}
+                className="text-mid -mt-1 -mr-1 flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
+              >
+                <X className="size-5" aria-hidden />
+              </Dialog.Close>
+            </div>
+            <label className="relative block">
+              <Search
+                className="text-faint pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2"
+                aria-hidden
+              />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder={t('tops.addPlaceholder')}
+                aria-label={t('lists.addWorks')}
+                autoFocus
+                className={cx(field, 'pl-10')}
+              />
+            </label>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 pb-3">
             {found.map((e) => (
               <button
                 key={e.id}
                 type="button"
                 onClick={() => onAdd(e)}
-                className="flex items-center gap-3 rounded-xl px-2 py-1.5 text-left text-sm hover:bg-white/[0.06]"
+                className="flex shrink-0 items-center gap-3 rounded-xl px-2 py-2 text-left text-sm hover:bg-white/[0.06]"
               >
                 <Cover
                   src={e.coverUrl ?? e.media.coverUrl}
                   fallbacks={e.coverFallbacks}
-                  className="w-8 shrink-0"
+                  className="w-9 shrink-0"
                 />
                 <span className="min-w-0 flex-1 truncate">{e.title}</span>
                 <Plus className="text-mid size-4 shrink-0" aria-hidden />
@@ -463,25 +568,23 @@ function AddWorks({
             ))}
             {!found.length && <p className="text-muted px-2 py-4 text-sm">{t('lists.noMatch')}</p>}
           </div>
-          <button type="button" className={cx(smallButton, 'self-end')} onClick={onClose}>
-            {t('tops.done')}
-          </button>
+          <div className="border-line flex shrink-0 justify-end border-t px-5 py-3">
+            <button type="button" className={primarySmall} onClick={onClose}>
+              {t('tops.done')}
+            </button>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   );
 }
 
-function ListSettings({
-  list,
-  onClose,
-  onSave,
-}: {
-  list: WorkList;
-  onClose: () => void;
-  onSave: (patch: Record<string, unknown>) => unknown;
-}) {
+function ListSettings({ list, onClose }: { list: WorkList; onClose: () => void }) {
   const { t } = useI18n();
+  const router = useRouter();
+  const { mutate } = useSWRConfig();
+  const write = useListWrite();
+  const tier = isTierList(list);
   const [name, setName] = useState(list.name);
   const [description, setDescription] = useState(list.description);
   const [ranked, setRanked] = useState(list.ranked);
@@ -489,7 +592,7 @@ function ListSettings({
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-4 rounded-3xl border p-6 outline-none">
+        <Dialog.Content className="bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-3 rounded-3xl border p-6 outline-none">
           <Dialog.Title className="font-display text-[22px] font-extrabold tracking-[-0.03em]">
             {t('lists.settings')}
           </Dialog.Title>
@@ -510,25 +613,50 @@ function ListSettings({
             rows={3}
             className={cx(field, 'h-auto py-2.5')}
           />
-          <Select
-            label={t('lists.order')}
-            value={ranked ? 'ranked' : 'free'}
-            onChange={(v) => setRanked(v === 'ranked')}
-            options={[
-              { value: 'ranked', label: t('lists.ranked') },
-              { value: 'free', label: t('lists.unranked') },
-            ]}
-          />
-          <div className="flex justify-end gap-2">
+          {!tier && (
+            <Select
+              label={t('lists.order')}
+              value={ranked ? 'ranked' : 'free'}
+              onChange={(v) => setRanked(v === 'ranked')}
+              options={[
+                { value: 'ranked', label: t('lists.ranked') },
+                { value: 'free', label: t('lists.unranked') },
+              ]}
+            />
+          )}
+          <div className="mt-1 flex items-center gap-2">
+            <button
+              type="button"
+              className="text-bad mr-auto text-[13px] hover:underline"
+              onClick={async () => {
+                if (!window.confirm(t('lists.deleteConfirm', { name: list.name }))) return;
+                try {
+                  await mutate(
+                    '/api/lists',
+                    await send<WorkList[]>(`/api/lists/${list.id}`, 'DELETE'),
+                    { revalidate: false },
+                  );
+                  router.push(tier ? '/lists?tab=tiers' : '/lists');
+                } catch (e) {
+                  toast({ tone: 'bad', text: errorText(t, e) });
+                }
+              }}
+            >
+              {t('tops.delete')}
+            </button>
             <button type="button" className={smallButton} onClick={onClose}>
               {t('common.cancel')}
             </button>
             <button
               type="button"
               disabled={!name.trim()}
-              className={primaryButton}
+              className={primarySmall}
               onClick={async () => {
-                await onSave({ name: name.trim(), description: description.trim(), ranked });
+                await write(list, {
+                  name: name.trim(),
+                  description: description.trim(),
+                  ...(tier ? {} : { ranked }),
+                });
                 onClose();
               }}
             >

@@ -1,19 +1,19 @@
 'use client';
 import * as Dialog from '@radix-ui/react-dialog';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { GripVertical, Plus, Star } from 'lucide-react';
 import type { Ranking, TrackedMedia } from '@/types/shared';
 import { KIND_IDS, type Kind } from '@/domain/kinds';
 import { formatRating } from '@/domain/library-mark';
-import { rankedKinds, rankingWorks, tieGroups, type RankedWork } from '@/domain/rankings';
+import { rankedKinds, rankingWorks, type RankedWork } from '@/domain/rankings';
 import { send, useApi } from '@/lib/client/api';
-import { useSortable } from '@/lib/client/sortable';
 import { useViewState } from '@/lib/client/view-state';
 import { useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Duel } from './duel';
 import { MediaLink } from './media-link';
 import { Select } from './select';
+import { SortableList, useSortableItem } from './sortable';
 import { toast } from './notify';
 import {
   Cover,
@@ -22,7 +22,7 @@ import {
   cx,
   errorText,
   field,
-  primaryButton,
+  primarySmall,
   smallButton,
 } from './ui';
 
@@ -36,11 +36,11 @@ type View = Pick<Ranking, 'kind' | 'order' | 'size'> & {
 
 /**
  * Rankings by rating on the profile: one per kind, plus the user's own (a kind or every kind, top
- * N). A better score is always above; works with the same score can be put in the user's order,
- * by dragging them among themselves or by duels.
+ * N). A better score is always above. In the edit mode, works with the same score are grouped and
+ * can be put in the user's order, by dragging them or by duels.
  */
 export function Tops({ entries }: { entries: TrackedMedia[] }) {
-  const { t, n, locale } = useI18n();
+  const { t, n } = useI18n();
   const universe = useUniverse();
   const rankings = useApi<Ranking[]>('/api/rankings');
   const saved = useMemo(() => rankings.data ?? [], [rankings.data]);
@@ -69,12 +69,21 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
     .sort((a, b) => rankingWorks(b, entries).length - rankingWorks(a, entries).length)[0];
   const view = views.find((v) => v.key === chosen) ?? largest ?? views[0];
   const [all, setAll] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [duel, setDuel] = useState<RankedWork[] | null>(null);
   const works = view ? rankingWorks(view, entries) : [];
-  const ties = tieGroups(works);
+  const ids = works.map((w) => w.entry.id);
   const title = (v: View) =>
     v.builtin ? t('tops.kindTitle', { kind: t(`kind.${v.builtin}`) }) : (v.name ?? '');
+  // Works by score, best first: only a group of equal scores can be reordered.
+  const groups: RankedWork[][] = [];
+  for (const w of works) {
+    const last = groups.at(-1);
+    if (last && last[0].entry.rating === w.entry.rating) last.push(w);
+    else groups.push([w]);
+  }
+  const tied = groups.some((g) => g.length > 1);
 
   async function save(next: number[]) {
     if (!view) return;
@@ -111,27 +120,19 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
       void rankings.mutate();
     }
   }
-  const ids = works.map((w) => w.entry.id);
-  // A work moves only among the works with its score.
-  const bounds = useCallback(
-    (id: number, order: readonly number[]) => {
-      const rating = entries.find((e) => e.id === id)?.rating;
-      const rated = (x: number) => entries.find((e) => e.id === x)?.rating === rating;
-      const first = order.findIndex(rated);
-      let last = first;
-      while (last + 1 < order.length && rated(order[last + 1])) last++;
-      return [first, last] as const;
-    },
-    [entries],
-  );
-  const sortable = useSortable(ids, (next) => void save(next), bounds);
-  const ordered = sortable.order.flatMap((id) => works.filter((w) => w.entry.id === id));
-  const shown = all ? ordered : ordered.slice(0, SHOWN);
+  /** The whole order with one group of equal scores in a new order. */
+  const withGroup = (group: number[]) => {
+    const first = ids.indexOf(group[0]) >= 0 ? Math.min(...group.map((id) => ids.indexOf(id))) : 0;
+    const next = ids.filter((id) => !group.includes(id));
+    next.splice(first, 0, ...group);
+    return next;
+  };
+  const shown = all ? works : works.slice(0, SHOWN);
 
   return (
     <section id="tops" className="flex scroll-mt-28 flex-col gap-5">
       <SectionHeading title={t('tops.title')} aside={t('tops.aside')} />
-      <div className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0">
+      <div className="no-scrollbar -mx-4 flex items-center gap-1 overflow-x-auto px-4 py-0.5 text-sm md:mx-0 md:flex-wrap md:px-0">
         {views.map((v) => (
           <button
             key={v.key}
@@ -140,6 +141,7 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
             onClick={() => {
               setChosen(v.key);
               setAll(false);
+              setEditing(false);
             }}
             className={cx(
               'h-[34px] shrink-0 rounded-full px-3.5',
@@ -155,7 +157,7 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
         <button
           type="button"
           onClick={() => setCreating(true)}
-          className="text-mid flex h-[34px] shrink-0 items-center gap-1.5 rounded-full px-3.5 ring-1 ring-white/15 hover:text-white"
+          className="text-mid flex h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-white/15 px-3.5 hover:text-white"
         >
           <Plus className="size-4" aria-hidden />
           {t('tops.new')}
@@ -167,106 +169,91 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
         <>
           <div className="text-mid flex flex-wrap items-center gap-2 text-sm">
             <span>
-              {t('tops.autoHint')}
-              {view.size ? ` · ${t('tops.topN', { n: n(view.size) })}` : ''}
+              {editing ? t('tops.tieHint') : t('tops.autoHint')}
+              {!editing && view.size ? ` · ${t('tops.topN', { n: n(view.size) })}` : ''}
             </span>
-            {!view.builtin && view.id && (
-              <button
-                type="button"
-                className={cx(smallButton, 'ml-auto')}
-                onClick={async () => {
-                  if (!window.confirm(t('tops.deleteConfirm', { name: title(view) }))) return;
-                  try {
-                    await rankings.mutate(
-                      await send<Ranking[]>('/api/rankings', 'DELETE', { id: view.id }),
-                      { revalidate: false },
-                    );
-                    setChosen('');
-                  } catch (e) {
-                    toast({ tone: 'bad', text: errorText(t, e) });
-                  }
-                }}
-              >
-                {t('tops.delete')}
-              </button>
-            )}
-          </div>
-          {ties.length > 0 && (
-            <div className="flex flex-col gap-2 rounded-2xl bg-white/[0.04] p-3 md:flex-row md:flex-wrap md:items-center md:gap-3 md:px-4">
-              <span className="text-mid text-sm">{t('tops.tieHint')}</span>
-              <span className="flex flex-wrap gap-2 md:ml-auto">
-                {ties.map((group) => (
-                  <button
-                    key={group[0].entry.id}
-                    type="button"
-                    className={smallButton}
-                    onClick={() => setDuel(group)}
-                  >
-                    <span className="flex items-center gap-1 rounded-full bg-[#f5c518] px-2 py-0.5 text-xs font-bold text-black">
-                      <Star className="size-3" fill="currentColor" strokeWidth={0} aria-hidden />
-                      {formatRating(group[0].entry.rating!, locale)}
-                    </span>
-                    {t('tops.tieBreak', { count: n(group.length) })}
-                  </button>
-                ))}
-              </span>
-            </div>
-          )}
-          <ol
-            className={cx(
-              'grid gap-x-8 gap-y-1 md:grid-cols-2',
-              all && 'max-h-[min(72vh,760px)] overflow-y-auto overscroll-contain pr-1',
-            )}
-          >
-            {shown.map((w) => {
-              const tied = w.tiedAbove || w.tiedBelow;
-              return (
-                <li
-                  key={w.entry.id}
-                  ref={sortable.item(w.entry.id)}
-                  className={cx(
-                    'flex min-w-0 items-center gap-1 rounded-2xl py-2 pr-2',
-                    sortable.dragging === w.entry.id
-                      ? 'bg-white/[0.1] ring-2 ring-white/60'
-                      : 'hover:bg-white/[0.04]',
-                  )}
+            <span className="ml-auto flex gap-2">
+              {editing && !view.builtin && view.id && (
+                <button
+                  type="button"
+                  className={cx(smallButton, 'text-bad')}
+                  onClick={async () => {
+                    if (!window.confirm(t('tops.deleteConfirm', { name: title(view) }))) return;
+                    try {
+                      await rankings.mutate(
+                        await send<Ranking[]>('/api/rankings', 'DELETE', { id: view.id }),
+                        { revalidate: false },
+                      );
+                      setChosen('');
+                      setEditing(false);
+                    } catch (e) {
+                      toast({ tone: 'bad', text: errorText(t, e) });
+                    }
+                  }}
                 >
-                  {tied ? (
-                    <button
-                      type="button"
-                      aria-label={t('lists.drag', { title: w.entry.title })}
-                      title={t('tops.dragHint')}
-                      className="text-faint hover:text-mid flex size-8 shrink-0 items-center justify-center rounded-full"
-                      {...sortable.handle(w.entry.id)}
-                    >
-                      <GripVertical className="size-4" aria-hidden />
-                    </button>
-                  ) : (
-                    <span className="w-8 shrink-0" />
-                  )}
-                  <MediaLink
-                    media={w.entry.media}
-                    className="flex min-w-0 flex-1 items-center gap-3 md:gap-4"
+                  {t('tops.delete')}
+                </button>
+              )}
+              {(tied || (!view.builtin && view.id)) && (
+                <button
+                  type="button"
+                  aria-pressed={editing}
+                  onClick={() => setEditing(!editing)}
+                  className={editing ? primarySmall : smallButton}
+                >
+                  {editing ? t('tops.done') : t('tops.edit')}
+                </button>
+              )}
+            </span>
+          </div>
+          {editing ? (
+            <div className="flex max-h-[min(72vh,760px)] max-w-3xl flex-col gap-1 overflow-y-auto overscroll-contain pr-1">
+              {groups.map((group) =>
+                group.length === 1 ? (
+                  <RankRow key={group[0].entry.id} work={group[0]} />
+                ) : (
+                  <div
+                    key={group[0].entry.id}
+                    className="my-1 flex flex-col gap-1 rounded-2xl bg-white/[0.04] p-1.5"
                   >
-                    <span className="font-display w-8 shrink-0 text-right text-2xl font-extrabold tracking-[-0.05em] text-white/80 tabular-nums md:w-10 md:text-3xl">
-                      {n(ordered.indexOf(w) + 1)}
-                    </span>
-                    <Cover
-                      src={w.entry.coverUrl ?? w.entry.media.coverUrl}
-                      fallbacks={w.entry.coverFallbacks}
-                      className="w-12 shrink-0"
-                    />
-                    <span className="min-w-0 flex-1 truncate font-medium">{w.entry.title}</span>
-                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#f5c518] px-2.5 py-1 text-sm font-bold text-black">
-                      <Star className="size-3.5" fill="currentColor" strokeWidth={0} aria-hidden />
-                      {formatRating(w.entry.rating!, locale)}
-                    </span>
-                  </MediaLink>
-                </li>
-              );
-            })}
-          </ol>
-          {works.length > SHOWN && (
+                    <div className="flex items-center gap-2 px-2 pt-1 text-sm">
+                      <Score rating={group[0].entry.rating!} small />
+                      <span className="text-mid">
+                        {t('tops.tieBreak', { count: n(group.length) })}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-mid ml-auto rounded-full px-3 py-1 text-[13px] hover:bg-white/[0.08] hover:text-white"
+                        onClick={() => setDuel(group)}
+                      >
+                        {t('tops.duel')}
+                      </button>
+                    </div>
+                    <SortableList
+                      ids={group.map((w) => w.entry.id)}
+                      onReorder={(next) => void save(withGroup(next))}
+                    >
+                      {group.map((w) => (
+                        <SortableRankRow key={w.entry.id} work={w} />
+                      ))}
+                    </SortableList>
+                  </div>
+                ),
+              )}
+            </div>
+          ) : (
+            <ol
+              className={cx(
+                'grid gap-x-8 gap-y-1 md:grid-cols-2',
+                all && 'max-h-[min(72vh,760px)] overflow-y-auto overscroll-contain pr-1',
+              )}
+            >
+              {shown.map((w) => (
+                <RankRow key={w.entry.id} work={w} as="li" />
+              ))}
+            </ol>
+          )}
+          {!editing && works.length > SHOWN && (
             <button
               type="button"
               className={cx(smallButton, 'self-start')}
@@ -284,10 +271,7 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
           pending={duel.slice(1).map((w) => w.entry)}
           onCancel={() => setDuel(null)}
           onDone={(groupOrder) => {
-            const first = ids.indexOf(duel[0].entry.id);
-            const next = ids.filter((id) => !groupOrder.includes(id));
-            next.splice(first, 0, ...groupOrder);
-            void save(next);
+            void save(withGroup(groupOrder));
             setDuel(null);
           }}
         />
@@ -302,6 +286,79 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
         }}
       />
     </section>
+  );
+}
+
+function Score({ rating, small }: { rating: number; small?: boolean }) {
+  const { locale } = useI18n();
+  return (
+    <span
+      className={cx(
+        'flex shrink-0 items-center gap-1 rounded-full bg-[#f5c518] font-bold text-black',
+        small ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-sm',
+      )}
+    >
+      <Star
+        className={small ? 'size-3' : 'size-3.5'}
+        fill="currentColor"
+        strokeWidth={0}
+        aria-hidden
+      />
+      {formatRating(rating, locale)}
+    </span>
+  );
+}
+
+function RankBody({ work: w }: { work: RankedWork }) {
+  const { n } = useI18n();
+  return (
+    <MediaLink media={w.entry.media} className="flex min-w-0 flex-1 items-center gap-3 md:gap-4">
+      <span className="font-display w-8 shrink-0 text-right text-2xl font-extrabold tracking-[-0.05em] text-white/80 tabular-nums md:w-10 md:text-3xl">
+        {n(w.rank)}
+      </span>
+      <Cover
+        src={w.entry.coverUrl ?? w.entry.media.coverUrl}
+        fallbacks={w.entry.coverFallbacks}
+        className="w-12 shrink-0"
+      />
+      <span className="min-w-0 flex-1 truncate font-medium">{w.entry.title}</span>
+      <Score rating={w.entry.rating!} />
+    </MediaLink>
+  );
+}
+
+function RankRow({ work, as: Tag = 'div' }: { work: RankedWork; as?: 'li' | 'div' }) {
+  return (
+    <Tag className="flex min-w-0 items-center rounded-2xl px-2 py-2 hover:bg-white/[0.04]">
+      <RankBody work={work} />
+    </Tag>
+  );
+}
+
+function SortableRankRow({ work }: { work: RankedWork }) {
+  const { t } = useI18n();
+  const { setNode, style, dragging, handle } = useSortableItem(work.entry.id);
+  return (
+    <div
+      ref={setNode}
+      style={style}
+      className={cx(
+        'flex min-w-0 items-center gap-1 rounded-xl py-1.5 pr-2',
+        dragging
+          ? 'bg-[#22201d] shadow-[0_12px_32px_rgba(0,0,0,0.5)] ring-1 ring-white/25'
+          : 'bg-transparent',
+      )}
+    >
+      <button
+        type="button"
+        aria-label={t('lists.drag', { title: work.entry.title })}
+        className="text-mid flex size-9 shrink-0 cursor-grab items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white active:cursor-grabbing"
+        {...handle}
+      >
+        <GripVertical className="size-4" aria-hidden />
+      </button>
+      <RankBody work={work} />
+    </div>
   );
 }
 
@@ -368,7 +425,7 @@ function CreateRanking({
             <button
               type="button"
               disabled={busy || !name.trim()}
-              className={primaryButton}
+              className={primarySmall}
               onClick={async () => {
                 setBusy(true);
                 try {

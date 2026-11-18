@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Lists, round two: tier lists are their own kind (Lists page, "Tier lists" tab): rows S to D
+  and a "to place" area, posters dragged between rows, started from the library (rated works or
+  all of a kind) and placed by your ratings if you like. Rankings and lists move works only in an
+  edit mode; in a ranking's edit mode equal scores are grouped, each group dragged or settled by
+  duels. Drag and drop now uses dnd-kit (smooth with a mouse, a press-and-drag on touch, the
+  keyboard). A list page links back to all lists; "Add works" no longer squeezes its search field;
+  dialog buttons have the same size; Lists comes last in the menu and appears in the phone menu.
+
 - Lists: named lists of works, ranked (numbered) or not, shown as a list, a grid or tiers S–D, with
   a short note per work. A work's page has a "Lists" button (tick the lists that hold it, or create
   one); the library selection adds many at once; `/lists` and the profile show them. In a ranked
