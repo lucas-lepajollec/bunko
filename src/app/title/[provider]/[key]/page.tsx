@@ -30,6 +30,7 @@ import { MatchesSummary, type Lane } from '@/components/matches';
 import { SuwayomiNotice, useSuwayomi } from '@/components/service';
 import { FavoriteButton } from '@/components/favorite';
 import { RatingButton } from '@/components/rating';
+import { ListsButton } from '@/components/lists';
 import { workIdOf } from '@/components/matches';
 import { WorkMarks } from '@/components/work-marks';
 import { libraryMark } from '@/domain/library-mark';
@@ -569,6 +570,7 @@ function Title({
             <div className="flex gap-2 self-start sm:self-auto">
               <FavoriteButton media={media} entry={entry} />
               <RatingButton media={media} entry={entry} />
+              <ListsButton media={media} entry={entry} />
             </div>
             {isComic && (
               <button

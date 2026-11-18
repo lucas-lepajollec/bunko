@@ -208,6 +208,7 @@ export function db(): Database.Database {
     migrateV25(connection);
     migrateV26(connection);
     migrateV27(connection);
+    migrateV28(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -1495,6 +1496,89 @@ export function migrateV27(database: Database.Database) {
         position INTEGER NOT NULL, PRIMARY KEY(ranking_id, tracked_id));`);
     if (Number(database.pragma('user_version', { simple: true })) < 27)
       database.pragma('user_version=27');
+  })();
+}
+/**
+ * The user's lists: named, ranked or not, any works of the library in the user's order. The
+ * favorites are the one system list, kept in step with `tracked_media.favorite` by triggers
+ * whatever path changes the flag. Hand-made rankings become ranked lists; the automatic rankings
+ * (by rating) stay rankings.
+ */
+export function migrateV28(database: Database.Database) {
+  database.transaction(() => {
+    const now = new Date().toISOString();
+    database.exec(`CREATE TABLE IF NOT EXISTS lists (
+        id INTEGER PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+        kind TEXT, ranked INTEGER NOT NULL DEFAULT 1 CHECK(ranked IN (0,1)),
+        layout TEXT NOT NULL DEFAULT 'list' CHECK(layout IN ('list','grid','tiers')),
+        system TEXT UNIQUE CHECK(system IS NULL OR system IN ('favorites')),
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS list_items (
+        list_id INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+        tracked_id INTEGER NOT NULL REFERENCES tracked_media(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        tier TEXT CHECK(tier IS NULL OR tier IN ('S','A','B','C','D')),
+        note TEXT NOT NULL DEFAULT '', added_at TEXT NOT NULL,
+        PRIMARY KEY(list_id, tracked_id));
+      CREATE INDEX IF NOT EXISTS list_items_tracked ON list_items(tracked_id);
+      DROP TRIGGER IF EXISTS favorites_list_insert;
+      CREATE TRIGGER favorites_list_insert AFTER INSERT ON tracked_media WHEN NEW.favorite=1 BEGIN
+        INSERT OR IGNORE INTO list_items(list_id,tracked_id,position,added_at)
+          SELECT l.id, NEW.id,
+            COALESCE((SELECT MAX(position) FROM list_items WHERE list_id=l.id),-1)+1,
+            strftime('%Y-%m-%dT%H:%M:%fZ','now')
+          FROM lists l WHERE l.system='favorites';
+      END;
+      DROP TRIGGER IF EXISTS favorites_list_add;
+      CREATE TRIGGER favorites_list_add AFTER UPDATE OF favorite ON tracked_media
+        WHEN NEW.favorite=1 AND OLD.favorite IS NOT 1 BEGIN
+        INSERT OR IGNORE INTO list_items(list_id,tracked_id,position,added_at)
+          SELECT l.id, NEW.id,
+            COALESCE((SELECT MAX(position) FROM list_items WHERE list_id=l.id),-1)+1,
+            strftime('%Y-%m-%dT%H:%M:%fZ','now')
+          FROM lists l WHERE l.system='favorites';
+      END;
+      DROP TRIGGER IF EXISTS favorites_list_remove;
+      CREATE TRIGGER favorites_list_remove AFTER UPDATE OF favorite ON tracked_media
+        WHEN NEW.favorite IS NOT 1 AND OLD.favorite=1 BEGIN
+        DELETE FROM list_items WHERE tracked_id=NEW.id
+          AND list_id=(SELECT id FROM lists WHERE system='favorites');
+      END;`);
+    if (Number(database.pragma('user_version', { simple: true })) >= 28) return;
+    database
+      .prepare(
+        "INSERT OR IGNORE INTO lists(name,ranked,system,created_at,updated_at) VALUES('',1,'favorites',?,?)",
+      )
+      .run(now, now);
+    const favorites = (
+      database.prepare("SELECT id FROM lists WHERE system='favorites'").get() as { id: number }
+    ).id;
+    // Liked works keep the order they were liked in (then by title).
+    database
+      .prepare(
+        `INSERT OR IGNORE INTO list_items(list_id,tracked_id,position,added_at)
+         SELECT ?, id, ROW_NUMBER() OVER (ORDER BY created_at, title) - 1, ?
+         FROM tracked_media WHERE favorite=1`,
+      )
+      .run(favorites, now);
+    const manual = database
+      .prepare("SELECT id,name,kind,created_at FROM rankings WHERE mode='manual' ORDER BY id")
+      .all() as { id: number; name: string | null; kind: string | null; created_at: string }[];
+    for (const r of manual) {
+      const id = Number(
+        database
+          .prepare('INSERT INTO lists(name,kind,ranked,created_at,updated_at) VALUES(?,?,1,?,?)')
+          .run(r.name ?? '', r.kind, r.created_at, now).lastInsertRowid,
+      );
+      database
+        .prepare(
+          `INSERT INTO list_items(list_id,tracked_id,position,added_at)
+           SELECT ?, tracked_id, position, ? FROM ranking_items WHERE ranking_id=?`,
+        )
+        .run(id, now, r.id);
+    }
+    database.exec("DELETE FROM rankings WHERE mode='manual'");
+    database.pragma('user_version=28');
   })();
 }
 /** Parts of a catalog sheet that a followed work never stores. */

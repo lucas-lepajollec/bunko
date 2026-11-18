@@ -117,12 +117,37 @@ export interface Ranking {
   /** Null for a kind's built-in automatic ranking (named after its kind). */
   name: string | null;
   kind: Exclude<DiscoverKind, 'all'> | null;
-  mode: 'auto' | 'manual';
+  /** Rankings follow the ratings; hand-made orders are ranked lists (`WorkList`). */
+  mode: 'auto';
   /** Top N, or every work. */
   size: number | null;
-  /** Library work ids: the whole order (hand-made) or the order of equal scores (automatic). */
+  /** Library work ids: the order of equal scores. */
   order: number[];
   builtin: boolean;
+}
+export type ListLayout = 'list' | 'grid' | 'tiers';
+export type ListTier = 'S' | 'A' | 'B' | 'C' | 'D';
+export interface WorkListItem {
+  trackedId: number;
+  tier: ListTier | null;
+  note: string;
+  addedAt: string;
+}
+/** A list of the user's works, in the user's order: the favorites are the system list. */
+export interface WorkList {
+  id: number;
+  /** Empty for the system list (named in the interface's language). */
+  name: string;
+  description: string;
+  kind: Exclude<DiscoverKind, 'all'> | null;
+  /** Numbered: its order is a ranking. */
+  ranked: boolean;
+  layout: ListLayout;
+  system: 'favorites' | null;
+  /** In the list's order. */
+  items: WorkListItem[];
+  createdAt: string;
+  updatedAt: string;
 }
 /** Episodes from one point of a work to another, by season (seasons as people number them). */
 export interface EpisodeRange {

@@ -21,8 +21,28 @@ Types below refer to **the complete browser-safe definitions in `src/types/share
 `TrackedMedia.favorite` is a tenant-local persistent like (default false). `PATCH /api/tracked`
 accepts `favorite:boolean`; a favorite-only edit performs no upstream work or download. The UI can
 follow an unowned title as `PLANNING` with `autoDownload:false` before liking it. Removing a like
-keeps the title followed. Likes appear inside `/profile#favorites`, using the existing private
-tracked/auth APIs. The former `/favorites` route redirects there; navigation only exposes the profile.
+keeps the title followed. Favorites appear inside `/profile#favorites` (the first five of each
+kind, in the user's order). The former `/favorites` route redirects there.
+
+### Lists and rankings
+
+`GET /api/lists` returns the tenant's `WorkList[]` (schema v28, `lists` + `list_items`): name,
+description, optional kind, `ranked` (numbered: the order is the ranking), `layout`
+(`list`/`grid`/`tiers`), `system` and the items in order (`trackedId`, `tier` S–D or null, `note`).
+The favorites are the one system list (`system:"favorites"`, listed first, named by the interface):
+its items are exactly the works with `favorite` set, kept in step by triggers whatever path sets the
+flag; adding to or removing from it sets the flag. `POST /api/lists {name,kind,ranked,description?,
+layout?,add?}` returns 201 `{id,lists}`. `PATCH /api/lists/<id>` takes `name`, `description`,
+`kind`, `ranked`, `layout`, `order` (ids first, the others keep their order after them), `add`
+(with an optional 0-based `at`), `remove` and `items` (`{trackedId,note?,tier?}`) in one
+transaction and returns every list; works outside the library are ignored, and a removed work
+leaves every list. `DELETE /api/lists/<id>` refuses the system list (403). Lists hold library works
+only: the interface follows a catalog work as `PLANNING` with `autoDownload:false` first.
+
+`/api/rankings` keeps the automatic rankings: rated works best first (one per kind built in, plus
+the user's own `{name,kind,size}`), equal scores in the user's `order`. Migration v28 turned the
+former hand-made rankings into ranked lists and the likes into the favorites list. Placement by
+duels (`src/domain/duel.ts`) is a binary insertion: at most ⌈log₂(n+1)⌉ questions per work.
 
 `TrackedMedia.rating` is the user's own score, `1`–`10` to one decimal (8.3), or `null` (schema v20,
 column `tracked_media.rating`). `PATCH /api/tracked` accepts `rating:number|null`; like `favorite`,

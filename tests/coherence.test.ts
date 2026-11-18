@@ -264,33 +264,25 @@ it('stores a followed work without its sheet (recommendations, relations, episod
   ).not.toHaveProperty('relations');
 });
 
-it('ranks the same way everywhere: ties in the user order, hand-made orders flagged', async () => {
-  const { rankingWorks } = await import('@/domain/rankings');
+it('ranks the same way everywhere: ties in the user order', async () => {
+  const { rankingWorks, tieGroups } = await import('@/domain/rankings');
   const work = (id: number, rating: number | null, title = `W${id}`) =>
     ({ id, rating, title, media: { type: 'ANIME', format: null } }) as unknown as TrackedMedia;
   const list = [work(1, 8), work(2, 9), work(3, 8), work(4, null)];
   // Automatic: best first; the two 8s follow the user's order (3 before 1), unrated left out.
-  const auto = rankingWorks({ kind: null, mode: 'auto', order: [3, 1], size: null }, list);
+  const auto = rankingWorks({ kind: null, order: [3, 1], size: null }, list);
   expect(auto.map((w) => w.entry.id)).toEqual([2, 3, 1]);
   expect(auto.map((w) => [w.tiedAbove, w.tiedBelow])).toEqual([
     [false, false],
     [false, true],
     [true, false],
   ]);
-  // Hand-made: the user's order; an 8 placed above a 9 is flagged.
-  const manual = rankingWorks({ kind: null, mode: 'manual', order: [1, 2, 4], size: null }, list);
-  expect(manual.map((w) => w.entry.id)).toEqual([1, 2, 4]);
-  expect(manual[0].conflict?.id).toBe(2);
-  expect(manual[1].conflict).toBe(null);
-  expect(rankingWorks({ kind: null, mode: 'auto', order: [], size: 1 }, list)).toHaveLength(1);
+  expect(tieGroups(auto).map((g) => g.map((w) => w.entry.id))).toEqual([[3, 1]]);
+  expect(rankingWorks({ kind: null, order: [], size: 1 }, list)).toHaveLength(1);
 
   const rankingsRoute = await import('@/app/api/rankings/route');
   const created = await rankingsRoute.POST(
-    request(
-      'POST',
-      { name: 'Top isekai', kind: 'anime', mode: 'manual', size: 10 },
-      '/api/rankings',
-    ),
+    request('POST', { name: 'Top isekai', kind: 'anime', size: 10 }, '/api/rankings'),
   );
   const { id } = (await created.json()) as { id: number };
   const film = track({

@@ -12,13 +12,15 @@ interface Row {
   id: number;
   name: string | null;
   kind: string | null;
-  mode: 'auto' | 'manual';
+  mode: 'auto';
   size: number | null;
   created_at: string;
 }
 
 export function listRankings(): Ranking[] {
-  const rows = statement('SELECT * FROM rankings ORDER BY created_at, id').all() as Row[];
+  const rows = statement(
+    "SELECT * FROM rankings WHERE mode='auto' ORDER BY created_at, id",
+  ).all() as Row[];
   const items = statement(
     'SELECT ranking_id, tracked_id, position FROM ranking_items ORDER BY ranking_id, position',
   ).all() as { ranking_id: number; tracked_id: number; position: number }[];
@@ -36,17 +38,11 @@ export function listRankings(): Ranking[] {
   }));
 }
 
-export function createRanking(input: {
-  name: string;
-  kind: Kind | null;
-  mode: 'auto' | 'manual';
-  size: number | null;
-}) {
+export function createRanking(input: { name: string; kind: Kind | null; size: number | null }) {
   const id = Number(
-    statement('INSERT INTO rankings(name,kind,mode,size,created_at) VALUES(?,?,?,?,?)').run(
+    statement("INSERT INTO rankings(name,kind,mode,size,created_at) VALUES(?,?,'auto',?,?)").run(
       input.name,
       input.kind,
-      input.mode,
       input.size,
       new Date().toISOString(),
     ).lastInsertRowid,

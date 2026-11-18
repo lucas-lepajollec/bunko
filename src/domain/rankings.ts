@@ -2,56 +2,52 @@ import type { Ranking, TrackedMedia } from '@/types/shared';
 import { kindOfMedia, type Kind } from './kinds';
 
 /**
- * One rule for every ranking, any kind of work:
- * - automatic: the rated works (of its kind, or all), best score first; works with the same
- *   score keep the order the user gave them (then by title), so equal scores are adjustable but
- *   a higher score is never placed below a lower one;
- * - hand-made: the user's works in the user's order; a work placed above a better-rated one is
- *   flagged, the order stays the user's choice.
+ * One rule for every ranking, any kind of work: the rated works (of its kind, or all), best score
+ * first; works with the same score keep the order the user gave them (then by title), so equal
+ * scores are adjustable but a higher score is never placed below a lower one. Hand-made orders
+ * are ranked lists (`WorkList`).
  */
 export interface RankedWork {
   entry: TrackedMedia;
   rank: number;
-  /** Works with the same score right above or below: it can move among them (automatic). */
+  /** Works with the same score right above or below: it can move among them. */
   tiedAbove: boolean;
   tiedBelow: boolean;
-  /** Hand-made order against the ratings: a better-rated work placed below this one. */
-  conflict: TrackedMedia | null;
 }
 
 export function rankingWorks(
-  ranking: Pick<Ranking, 'kind' | 'mode' | 'order' | 'size'>,
+  ranking: Pick<Ranking, 'kind' | 'order' | 'size'>,
   entries: TrackedMedia[],
 ): RankedWork[] {
   const ofKind = (e: TrackedMedia) =>
     !e.partOf && (!ranking.kind || kindOfMedia(e.media) === ranking.kind);
   const position = new Map(ranking.order.map((id, i) => [id, i]));
-  let works: TrackedMedia[];
-  if (ranking.mode === 'auto') {
-    const at = (e: TrackedMedia) => position.get(e.id) ?? Number.MAX_SAFE_INTEGER;
-    works = entries
-      .filter((e) => e.rating != null && ofKind(e))
-      .sort((a, b) => b.rating! - a.rating! || at(a) - at(b) || a.title.localeCompare(b.title));
-  } else {
-    const byId = new Map(entries.map((e) => [e.id, e]));
-    works = ranking.order.map((id) => byId.get(id)).filter((e): e is TrackedMedia => Boolean(e));
-  }
+  const at = (e: TrackedMedia) => position.get(e.id) ?? Number.MAX_SAFE_INTEGER;
+  let works = entries
+    .filter((e) => e.rating != null && ofKind(e))
+    .sort((a, b) => b.rating! - a.rating! || at(a) - at(b) || a.title.localeCompare(b.title));
   if (ranking.size) works = works.slice(0, ranking.size);
   return works.map((entry, i) => {
     const above = works[i - 1];
     const below = works[i + 1];
-    const conflict =
-      ranking.mode === 'manual' && entry.rating != null
-        ? (works.slice(i + 1).find((w) => w.rating != null && w.rating > entry.rating!) ?? null)
-        : null;
     return {
       entry,
       rank: i + 1,
-      tiedAbove: Boolean(above && above.rating === entry.rating && entry.rating != null),
-      tiedBelow: Boolean(below && below.rating === entry.rating && entry.rating != null),
-      conflict,
+      tiedAbove: Boolean(above && above.rating === entry.rating),
+      tiedBelow: Boolean(below && below.rating === entry.rating),
     };
   });
+}
+
+/** Groups of equal scores (two works or more) in a ranking, in ranking order. */
+export function tieGroups(works: RankedWork[]): RankedWork[][] {
+  const groups: RankedWork[][] = [];
+  for (const w of works) {
+    const last = groups.at(-1);
+    if (last && last[0].entry.rating === w.entry.rating) last.push(w);
+    else groups.push([w]);
+  }
+  return groups.filter((g) => g.length > 1);
 }
 
 /** Kinds with at least one rated work: each has its automatic ranking. */

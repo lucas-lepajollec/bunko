@@ -249,6 +249,7 @@ const NAV = [
   { href: '/', key: 'nav.home' },
   { href: '/catalog', key: 'nav.catalog' },
   { href: '/library', key: 'nav.library' },
+  { href: '/lists', key: 'nav.lists' },
   { href: '/planning', key: 'nav.planning' },
 ];
 
