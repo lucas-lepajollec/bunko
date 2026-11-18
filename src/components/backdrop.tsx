@@ -67,7 +67,7 @@ export function Backdrop({
             onLoadError={() => setFailed({ key, count: attempt + 1 })}
             referrerPolicy="no-referrer"
             className={cx(
-              'absolute inset-x-0 top-0 w-full object-cover object-[center_30%]',
+              'backdrop-banner absolute inset-x-0 top-0 w-full object-cover object-[center_30%]',
               mobileImage && 'hidden md:block',
             )}
             style={{

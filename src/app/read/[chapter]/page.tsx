@@ -131,6 +131,7 @@ function ChapterReader({ chapter, media }: { chapter: string; media: string | nu
           id: media,
           title: m.title,
           coverUrl: m.coverUrl,
+          bannerUrl: m.bannerUrl,
           type: m.type,
           format: m.format,
           origin: m.origin,

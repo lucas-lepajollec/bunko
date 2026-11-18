@@ -1,4 +1,6 @@
 'use client';
+import { useLook } from '@/lib/client/theme';
+import { WideArt } from '@/components/reading';
 import { KIND_IDS, KINDS as KINDS_DEF } from '@/domain/kinds';
 import { MediaLink } from '@/components/media-link';
 import { Suspense, useMemo, useState } from 'react';
@@ -37,6 +39,7 @@ const fold = (value: string) => value.normalize('NFKD').replace(/\p{M}/gu, '').t
 
 function Planning() {
   const { t, locale } = useI18n();
+  const look = useLook();
   // The header search filters the week (`?q=`, written by the search field).
   const filterText = fold((useSearchParams().get('q') ?? '').trim());
   const today = isoDay(new Date());
@@ -150,7 +153,12 @@ function Planning() {
 
       {/* Mobile: one day at a time. */}
       <div
-        className="no-scrollbar -mx-4 -my-1 flex gap-1.5 overflow-x-auto px-4 py-1 lg:hidden"
+        className={cx(
+          'no-scrollbar flex gap-1.5 overflow-x-auto',
+          look === 'aurore'
+            ? 'ui-panel rounded-[22px] border p-1.5'
+            : '-mx-4 -my-1 px-4 py-1 lg:hidden',
+        )}
         role="tablist"
       >
         {days.map((d) => (
@@ -161,13 +169,25 @@ function Planning() {
             aria-selected={selected === d.date}
             onClick={() => setDay(d.date)}
             className={cx(
-              'flex h-14 min-w-12 flex-1 flex-col items-center justify-center rounded-xl text-xs',
-              selected === d.date ? 'bg-fg text-bg font-semibold' : 'bg-white/[0.06]',
+              'flex min-w-12 flex-1 flex-col items-center justify-center rounded-xl text-xs',
+              look === 'aurore' ? 'h-16 rounded-[16px] md:h-20' : 'h-14',
+              selected === d.date
+                ? look === 'aurore'
+                  ? 'bg-white/90 font-semibold text-[#1a1410]'
+                  : 'bg-fg text-bg font-semibold'
+                : look === 'aurore'
+                  ? 'hover:bg-white/[0.08]'
+                  : 'bg-white/[0.06]',
               d.date === today && selected !== d.date && 'ring-1 ring-white/40',
             )}
           >
             <span className="capitalize">{short.format(new Date(`${d.date}T12:00:00`))}</span>
-            <span className="text-[11px] opacity-70">
+            <span
+              className={cx(
+                'opacity-70',
+                look === 'aurore' ? 'text-lg font-bold md:text-2xl' : 'text-[11px]',
+              )}
+            >
               {new Date(`${d.date}T12:00:00`).getDate()}
             </span>
           </button>
@@ -181,32 +201,88 @@ function Planning() {
           ))}
         </div>
       ) : (
-        <div className="grid gap-3 lg:grid-cols-7 lg:gap-2.5 xl:gap-3.5">
+        <div
+          className={cx(
+            'grid',
+            look === 'aurore' ? '' : 'gap-3 lg:grid-cols-7 lg:gap-2.5 xl:gap-3.5',
+          )}
+        >
           {days.map((d) => (
             <section
               key={d.date}
               aria-label={weekday.format(new Date(`${d.date}T12:00:00`))}
               className={cx(
-                'min-w-0 flex-col gap-2 rounded-2xl p-2.5 lg:flex',
-                d.date === today ? 'bg-white/[0.07] ring-1 ring-white/20' : 'bg-white/[0.03]',
+                'min-w-0 flex-col',
+                look === 'aurore' ? '' : 'lg:flex',
+                look === 'edition'
+                  ? 'border-line gap-0 lg:border-l lg:px-3 lg:first:border-l-0 lg:first:pl-0'
+                  : look === 'cine'
+                    ? cx(
+                        'gap-3.5 rounded-[18px] border p-3 backdrop-blur-xl lg:min-h-[420px]',
+                        d.date === today
+                          ? 'border-white/30 bg-white/[0.12]'
+                          : 'border-white/[0.08] bg-white/[0.04]',
+                      )
+                    : look === 'aurore'
+                      ? 'gap-3'
+                      : cx(
+                          'gap-2 rounded-2xl p-2.5',
+                          d.date === today
+                            ? 'bg-white/[0.07] ring-1 ring-white/20'
+                            : 'bg-white/[0.03]',
+                        ),
                 selected === d.date ? 'flex' : 'hidden',
               )}
             >
-              <h2 className="flex items-baseline justify-between gap-2 px-1 pt-1">
-                <span className="font-display text-[17px] font-bold capitalize">
-                  {weekday.format(new Date(`${d.date}T12:00:00`))}
-                </span>
-                <span className="text-muted text-xs">
-                  {dayNum.format(new Date(`${d.date}T12:00:00`))}
-                </span>
-              </h2>
+              {look === 'aurore' ? null : look === 'cine' || look === 'edition' ? (
+                <h2
+                  className={cx(
+                    'flex items-baseline justify-between gap-2',
+                    look === 'edition' && 'border-fg border-b pb-2.5',
+                  )}
+                >
+                  <span
+                    className={cx(
+                      'capitalize',
+                      look === 'edition'
+                        ? 'text-[11px] tracking-[0.16em] uppercase'
+                        : 'text-[15px] font-bold',
+                    )}
+                  >
+                    {weekday.format(new Date(`${d.date}T12:00:00`))}
+                  </span>
+                  <span className="font-display text-[30px] leading-none md:text-[34px]">
+                    {new Date(`${d.date}T12:00:00`).getDate()}
+                  </span>
+                </h2>
+              ) : (
+                <h2 className="flex items-baseline justify-between gap-2 px-1 pt-1">
+                  <span className="font-display text-[17px] font-bold capitalize">
+                    {weekday.format(new Date(`${d.date}T12:00:00`))}
+                  </span>
+                  <span className="text-muted text-xs">
+                    {dayNum.format(new Date(`${d.date}T12:00:00`))}
+                  </span>
+                </h2>
+              )}
               {d.items.length === 0 ? (
                 <p className="text-faint px-1 py-6 text-center font-serif text-sm italic">
                   {/* Loading and partial results are in the activity panel. */}
                   {plan.data?.pending ? '' : t('planning.empty')}
                 </p>
               ) : (
-                <ul className="flex flex-col gap-1">
+                <ul
+                  className={cx(
+                    'flex flex-col',
+                    look === 'cine'
+                      ? 'gap-4'
+                      : look === 'aurore'
+                        ? 'gap-3'
+                        : look === 'edition'
+                          ? ''
+                          : 'gap-1',
+                  )}
+                >
                   {d.items.map((item, i) => (
                     <PlanningRow key={`${item.media.id}:${item.chapter}:${i}`} item={item} />
                   ))}
@@ -222,7 +298,99 @@ function Planning() {
 
 function PlanningRow({ item }: { item: PlanningItem }) {
   const { t, n } = useI18n();
+  const look = useLook();
   const expected = item.kind === 'expected';
+  const what =
+    item.unit === 'film'
+      ? t('episodes.film')
+      : item.unit === 'episode' && item.chapter !== null
+        ? item.chapterTo != null && item.chapterTo !== item.chapter
+          ? t('planning.episodeRange', { from: n(item.chapter), to: n(item.chapterTo) })
+          : item.season
+            ? t('episodes.seasonShort', { s: n(item.season), n: n(item.chapter) })
+            : t('episodes.short', { n: n(item.chapter) })
+        : item.chapter !== null && item.chapterTo != null && item.chapterTo !== item.chapter
+          ? t('planning.chapterRange', {
+              from: n(Math.floor(item.chapter)),
+              to: n(Math.floor(item.chapterTo)),
+            })
+          : item.chapter !== null
+            ? t(expected ? 'planning.expectedChapter' : 'release.chapter', {
+                n: n(item.chapter),
+              })
+            : (item.count ?? 1) > 1
+              ? t('planning.releaseCount', { n: n(item.count ?? 1) })
+              : expected
+                ? t('planning.expected')
+                : t('planning.released');
+  const when = item.time ?? (expected ? t('planning.expected') : t('planning.released'));
+  const followed = item.trackedId !== null && (
+    <span className="bg-fg size-1.5 shrink-0 rounded-full" title={t('common.inLibrary')} />
+  );
+  if (look === 'cine')
+    return (
+      <li>
+        <MediaLink
+          media={item.media}
+          className={cx('group flex flex-col gap-2', expected && 'opacity-70')}
+        >
+          <span className="relative block aspect-[16/10] overflow-hidden rounded-[10px]">
+            <WideArt media={item.media} />
+            <span className="absolute bottom-2 left-2 rounded-full bg-black/65 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur">
+              {when}
+            </span>
+          </span>
+          <span className="flex items-center gap-1.5 text-[13px] font-semibold">
+            <span className="truncate">{item.media.title}</span>
+            {followed}
+          </span>
+          <span className="text-muted -mt-1.5 truncate text-xs">{what}</span>
+        </MediaLink>
+      </li>
+    );
+  if (look === 'aurore')
+    return (
+      <li>
+        <MediaLink
+          media={item.media}
+          className={cx(
+            'ui-panel grid grid-cols-[56px_96px_minmax(0,1fr)] items-center gap-3 rounded-[22px] border p-2.5 md:grid-cols-[80px_200px_minmax(0,1fr)] md:gap-5 md:p-3',
+            expected && 'opacity-70',
+          )}
+        >
+          <span className="text-center text-[15px] font-bold md:text-[20px]">{when}</span>
+          <span className="relative block aspect-video overflow-hidden rounded-[12px]">
+            <WideArt media={item.media} />
+          </span>
+          <span className="flex min-w-0 flex-col gap-1">
+            <span className="flex items-center gap-2 text-[15px] font-bold md:text-[17px]">
+              <span className="truncate">{item.media.title}</span>
+              {followed}
+            </span>
+            <span className="text-muted truncate text-[13px] md:text-sm">{what}</span>
+          </span>
+        </MediaLink>
+      </li>
+    );
+  if (look === 'edition')
+    return (
+      <li className="border-line border-b last:border-b-0">
+        <MediaLink
+          media={item.media}
+          className={cx('flex flex-col gap-1.5 py-3', expected && 'opacity-70')}
+        >
+          <span className="flex items-center gap-2 font-serif text-[15px] text-(--tone) italic">
+            {when}
+            {followed}
+          </span>
+          <Cover src={item.media.coverUrl} className="w-14 shadow-none" />
+          <span className="line-clamp-2 font-serif text-[16px] leading-tight font-semibold">
+            {item.media.title}
+          </span>
+          <span className="text-muted text-[10.5px] tracking-[0.12em] uppercase">{what}</span>
+        </MediaLink>
+      </li>
+    );
   return (
     <li>
       <MediaLink
@@ -243,30 +411,7 @@ function PlanningRow({ item }: { item: PlanningItem }) {
           <span className="line-clamp-2 text-[13px] leading-tight font-medium">
             {item.media.title}
           </span>
-          <span className={cx('text-xs', expected ? 'text-muted italic' : 'text-mid')}>
-            {item.unit === 'film'
-              ? t('episodes.film')
-              : item.unit === 'episode' && item.chapter !== null
-                ? item.chapterTo != null && item.chapterTo !== item.chapter
-                  ? t('planning.episodeRange', { from: n(item.chapter), to: n(item.chapterTo) })
-                  : item.season
-                    ? t('episodes.seasonShort', { s: n(item.season), n: n(item.chapter) })
-                    : t('episodes.short', { n: n(item.chapter) })
-                : item.chapter !== null && item.chapterTo != null && item.chapterTo !== item.chapter
-                  ? t('planning.chapterRange', {
-                      from: n(Math.floor(item.chapter)),
-                      to: n(Math.floor(item.chapterTo)),
-                    })
-                  : item.chapter !== null
-                    ? t(expected ? 'planning.expectedChapter' : 'release.chapter', {
-                        n: n(item.chapter),
-                      })
-                    : (item.count ?? 1) > 1
-                      ? t('planning.releaseCount', { n: n(item.count ?? 1) })
-                      : expected
-                        ? t('planning.expected')
-                        : t('planning.released')}
-          </span>
+          <span className={cx('text-xs', expected ? 'text-muted italic' : 'text-mid')}>{what}</span>
         </span>
       </MediaLink>
     </li>

@@ -440,3 +440,252 @@
 :root[data-theme='edition'] [style*='--accent']:not(.theme-lock *) {
   --accent: var(--tone) !important;
 }
+
+/* ───────────────────────── Layout hooks shared by the themes ───────────────────────── */
+
+/* Poster chip (year · score), shown on hover in Ciné only. */
+.poster-chip {
+  display: none;
+}
+:root[data-theme='cine'] .poster-chip:not(:empty) {
+  display: block;
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  translate: -50% 4px;
+  white-space: nowrap;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  background: rgb(7 11 16 / 0.6);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  color: #fff;
+  font-size: 12px;
+  opacity: 0;
+  transition:
+    opacity 180ms,
+    translate 180ms;
+  pointer-events: none;
+}
+:root[data-theme='cine'] .poster:hover .poster-chip,
+:root[data-theme='cine'] .poster:focus-visible .poster-chip {
+  opacity: 1;
+  translate: -50% 0;
+}
+:root[data-theme='cine'] .poster-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+:root[data-theme='aurore'] .poster-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+:root[data-theme='edition'] .poster-title {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+}
+:root[data-theme='edition'] .poster-meta {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Section headings: no numerals in Ciné and Aurore (streaming rows), a masthead in Édition. */
+:root[data-theme='cine'] .ui-heading .ui-num,
+:root[data-theme='aurore'] .ui-heading .ui-num {
+  display: none;
+}
+:root[data-theme='cine'] .ui-heading-title {
+  font-size: clamp(26px, 3vw, 38px);
+}
+:root[data-theme='cine'] .ui-heading-aside,
+:root[data-theme='aurore'] .ui-heading-aside {
+  font-size: 15px;
+}
+:root[data-theme='aurore'] .ui-heading-title {
+  font-size: clamp(20px, 2vw, 24px);
+  letter-spacing: -0.01em;
+}
+:root[data-theme='edition'] .ui-heading .ui-num {
+  font-style: italic;
+  font-size: 22px;
+}
+:root[data-theme='edition'] .ui-heading-title {
+  font-style: normal;
+  font-weight: 600 !important;
+  font-size: clamp(26px, 3vw, 38px);
+  letter-spacing: -0.02em;
+}
+:root[data-theme='edition'] .ui-heading-aside {
+  font-size: clamp(16px, 1.6vw, 20px);
+}
+
+/* Page titles: a poster headline in Ciné, a masthead in Édition. */
+:root[data-theme='cine'] .ui-page-title-h {
+  font-size: clamp(56px, 8vw, 110px);
+  line-height: 0.85;
+}
+:root[data-theme='aurore'] .ui-page-title-h {
+  font-size: clamp(40px, 4.5vw, 56px);
+}
+:root[data-theme='aurore'] .ui-page-title-aside {
+  font-size: 16px;
+  color: var(--color-muted);
+}
+:root[data-theme='edition'] .ui-page-title {
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 20px;
+}
+:root[data-theme='edition'] .ui-page-title-h {
+  font-size: clamp(60px, 8vw, 110px);
+  font-weight: 300 !important;
+  line-height: 0.85;
+}
+:root[data-theme='cine'] .ui-page-title-aside {
+  font-size: 15px;
+  color: var(--color-muted);
+}
+
+/* Header tools. */
+:root[data-theme='cine'] .app-tools {
+  padding: 3px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.06);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
+}
+:root[data-theme='cine'] .app-universe,
+:root[data-theme='aurore'] .app-universe {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.1);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+:root[data-theme='aurore'] .ui-search {
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.1);
+  -webkit-backdrop-filter: blur(30px);
+  backdrop-filter: blur(30px);
+}
+:root[data-theme='edition'] .app-universe {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+:root[data-theme='edition'] .ui-search {
+  background: transparent;
+  border-radius: 0;
+  border-bottom: 1px solid var(--ink);
+  padding-inline: 2px;
+}
+:root[data-theme='edition'] .ui-search input {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 16px;
+}
+:root[data-theme='cine'] .top-numeral {
+  color: transparent;
+  -webkit-text-stroke: 2px rgb(255 255 255 / 0.55);
+}
+
+/* Ciné: the banner fills the whole hero before it fades into the page. */
+:root[data-theme='cine'] .backdrop-banner {
+  height: 100% !important;
+  object-position: center 25%;
+}
+
+/* Work sheet headline. */
+:root[data-theme='cine'] .sheet-title {
+  font-size: clamp(52px, 8vw, 140px);
+  line-height: 0.86;
+}
+:root[data-theme='aurore'] .sheet-title {
+  font-size: clamp(34px, 5vw, 72px);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  color: #fff;
+}
+:root[data-theme='edition'] .sheet-title {
+  font-size: clamp(52px, 7vw, 120px);
+  font-weight: 300 !important;
+  line-height: 0.86;
+  letter-spacing: -0.04em;
+}
+
+/* Toolbars (catalog, library): kinds, view switch and filters. */
+:root[data-theme='cine'] .toolbar-kinds button[aria-pressed='true'],
+:root[data-theme='aurore'] .toolbar-kinds button[aria-pressed='true'] {
+  background: #fff;
+  color: var(--color-bg);
+  font-weight: 600;
+}
+:root[data-theme='aurore'] .toolbar-row {
+  padding: 10px;
+  border-radius: 22px;
+  background: rgb(255 255 255 / 0.08);
+  -webkit-backdrop-filter: blur(30px);
+  backdrop-filter: blur(30px);
+}
+:root[data-theme='edition'] .toolbar-kinds {
+  gap: 4px 22px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+:root[data-theme='edition'] .toolbar-kinds button {
+  padding-inline: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+}
+:root[data-theme='edition'] .toolbar-kinds button[aria-pressed='true'] {
+  color: var(--tone);
+  box-shadow: inset 0 -1px 0 var(--tone);
+}
+:root[data-theme='edition'] .toolbar-row {
+  padding-block: 12px;
+  border-top: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-line);
+}
+:root[data-theme='edition'] .toolbar-seg {
+  background: transparent;
+  gap: 18px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+:root[data-theme='edition'] .toolbar-seg button {
+  padding-inline: 0;
+  background: transparent !important;
+  color: var(--ink) !important;
+  border-radius: 0;
+}
+:root[data-theme='edition'] .toolbar-seg button[aria-pressed='true'] {
+  color: var(--tone) !important;
+  box-shadow: inset 0 -1px 0 var(--tone);
+}
+:root[data-theme='edition'] .ep-tabs [role='tab'] {
+  background: transparent;
+  color: var(--ink);
+  border-radius: 0;
+  padding-inline: 0;
+  margin-right: 14px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+:root[data-theme='edition'] .ep-tabs [role='tab'][aria-selected='true'] {
+  color: var(--tone);
+  box-shadow: inset 0 -1px 0 var(--tone);
+}
+:root[data-theme='edition'] .ui-pill:not([aria-pressed='true']):not([role='radio']) {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-line);
+}

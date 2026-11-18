@@ -81,3 +81,23 @@ it('lists what was started anywhere, followed or not, newest first, per 18+ pref
   expect(done.status).toBe('COMPLETED');
   expect(continueItems().map((i) => i.media.id)).not.toContain('tmdbtv:9');
 });
+
+it('keeps the wide artwork of a work started anywhere (landscape resume cards)', () => {
+  saveContinue({
+    media: { ...media('anilist:500', 'Wide Art', 'ANIME'), bannerUrl: 'https://img.example/b.jpg' },
+    kind: 'watch',
+    label: 'ep:2',
+    href: '/title/anilist/500?play=0.2',
+    position: 0.2,
+  });
+  saveContinue({
+    media: media('anilist:501', 'No Art', 'MANGA'),
+    kind: 'read',
+    label: 'ch:4',
+    href: '/read/9?media=anilist%3A501',
+    position: 0.4,
+  });
+  const byId = new Map(continueItems().map((i) => [i.media.id, i.media]));
+  expect(byId.get('anilist:500')?.bannerUrl).toBe('https://img.example/b.jpg');
+  expect(byId.get('anilist:501')?.bannerUrl).toBeNull();
+});

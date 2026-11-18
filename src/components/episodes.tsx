@@ -14,6 +14,7 @@ import { jellyfinSeason } from '@/domain/seasons';
 import { workProgress } from '@/domain/progress';
 import { useI18n } from '@/i18n/I18nProvider';
 import { cx } from './ui';
+import { useLook } from '@/lib/client/theme';
 import { Player, type PlayerEpisode } from './player';
 
 const FIRST = 48;
@@ -60,6 +61,7 @@ export function EpisodeList({
   refreshing?: boolean;
 }) {
   const { t, n, locale } = useI18n();
+  const look = useLook();
   // Spins from the click until the rebuilt sheet arrives.
   const [asked, setAsked] = useState<'no' | 'sending' | 'sent'>('no');
   const spinning = asked === 'sending' || (asked === 'sent' && refreshing);
@@ -219,7 +221,7 @@ export function EpisodeList({
     <div
       role="tablist"
       aria-label={t('episodes.seasonsLabel')}
-      className="flex gap-1.5 overflow-x-auto pb-3"
+      className="ep-tabs flex gap-1.5 overflow-x-auto pb-3"
     >
       {seasons.map((x, i) => (
         <button
@@ -359,7 +361,16 @@ export function EpisodeList({
         {refreshButton}
       </div>
       {/* A grid of episode cards; a few rows show, the rest scrolls inside the panel. */}
-      <ul className="grid max-h-[620px] grid-cols-2 gap-3 overflow-y-auto pt-4 pr-1 sm:grid-cols-3 xl:grid-cols-4">
+      <ul
+        className={cx(
+          'grid max-h-[620px] overflow-y-auto pr-1',
+          look === 'edition'
+            ? 'grid-cols-1 pt-1'
+            : look === 'cine'
+              ? 'grid-cols-1 gap-4 pt-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'
+              : 'grid-cols-2 gap-3 pt-4 sm:grid-cols-3 xl:grid-cols-4',
+        )}
+      >
         {rows.slice(0, limit).map((e) => {
           const absolute = offset + e.number;
           const seen = absolute <= read || played.has(e.number);
@@ -375,6 +386,57 @@ export function EpisodeList({
                 : seen
                   ? t('episodes.watched')
                   : t('episodes.aired');
+          if (look === 'edition')
+            return (
+              <li
+                key={e.number}
+                className="border-line group col-span-full grid grid-cols-[44px_minmax(0,1fr)_auto_40px] items-baseline gap-3 border-b py-3 md:grid-cols-[56px_minmax(0,1fr)_160px_44px] md:gap-4"
+              >
+                <span className="font-display text-[20px] text-(--tone)">{n(e.number)}</span>
+                <button
+                  type="button"
+                  disabled={upcoming}
+                  onClick={() => setPlaying({ season: index, episode: e.number })}
+                  aria-label={t('player.playEpisode', { n: n(e.number) })}
+                  className={cx(
+                    'min-w-0 truncate text-left font-serif text-[18px] enabled:hover:underline disabled:cursor-default md:text-[19px]',
+                    seen && 'text-muted',
+                  )}
+                >
+                  {e.title ??
+                    (film ? t('episodes.film') : t('episodes.number', { n: n(e.number) }))}
+                </button>
+                <span
+                  className={cx(
+                    'truncate text-right text-[11px] tracking-[0.1em] uppercase',
+                    inJellyfin && !seen ? 'text-fg' : 'text-muted',
+                  )}
+                >
+                  {state}
+                </span>
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={seen}
+                  aria-disabled={!entry || busy || upcoming}
+                  onClick={() => {
+                    if (!entry || busy || upcoming) return;
+                    onWatched(seen ? (absolute > 1 ? absolute - 1 : null) : absolute);
+                  }}
+                  aria-label={t('episodes.markWatched', { n: n(e.number) })}
+                  title={t('episodes.markWatched', { n: n(e.number) })}
+                  className={cx(
+                    'flex size-7 items-center justify-center self-center justify-self-end border',
+                    seen
+                      ? 'bg-fg text-bg border-fg'
+                      : 'border-line-strong text-transparent hover:text-muted',
+                    upcoming && 'invisible',
+                  )}
+                >
+                  <Check size={14} strokeWidth={2.75} aria-hidden />
+                </button>
+              </li>
+            );
           return (
             <li key={e.number} className="group flex min-w-0 flex-col gap-2">
               <div className="relative overflow-hidden rounded-xl bg-white/[0.06]">
@@ -400,7 +462,7 @@ export function EpisodeList({
                       )}
                     />
                   ) : null}
-                  {!e.thumbnail && (
+                  {!e.thumbnail && look !== 'cine' && (
                     <span
                       aria-hidden
                       className={cx(
@@ -455,7 +517,24 @@ export function EpisodeList({
                     <Check size={16} strokeWidth={2.75} aria-hidden />
                   </span>
                 </button>
-                {seen && <span className="bg-fg absolute inset-x-0 bottom-0 h-1" aria-hidden />}
+                {/* Ciné: the episode number large on its still. */}
+                {look === 'cine' && (
+                  <span
+                    aria-hidden
+                    className="font-display pointer-events-none absolute bottom-2 left-3 text-[38px] leading-none text-white [text-shadow:0_2px_12px_rgba(0,0,0,0.6)]"
+                  >
+                    {n(e.number)}
+                  </span>
+                )}
+                {seen && (
+                  <span
+                    className={cx(
+                      'absolute inset-x-0 bottom-0 h-1',
+                      look === 'cine' ? 'bg-(--tone)' : 'bg-fg',
+                    )}
+                    aria-hidden
+                  />
+                )}
               </div>
               <span className="flex min-w-0 flex-col px-0.5">
                 <span className="flex items-baseline justify-between gap-2">

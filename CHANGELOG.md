@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Themes now change the layout too, not only the look, with every feature kept. Ciné: full-height
+  artwork hero with a poster headline, a play button and a grouped glass pill, search inside the
+  floating navigation, landscape resume cards, outlined top-10 numerals, year and score on hover,
+  library titles on the posters, episode stills with large numbers, a week of banner cards, fanned
+  lists, a member card on the profile. Aurore: a rounded artwork card for the home and the sheet,
+  glass toolbars and panels, numbered chips on the top 10, the planning as a day picker and a
+  timeline. Édition: the home and the sheet as a front page (headline, synopsis and printed plate),
+  the library as a table of contents, episodes as numbered lines, the planning as columns of
+  rules, numbered lists. `/api/continue` items carry the work's `bannerUrl`.
+
 - Themes (Settings → Appearance, per device like the language): Bunko (unchanged, default), Ciné
   (night streaming, condensed poster titles, floating pill navigation; Glacier, Ember, Jade),
   Aurore (frosted glass over the current artwork's colours; Amber, Ocean, Rose) and Édition

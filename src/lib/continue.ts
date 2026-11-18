@@ -46,6 +46,7 @@ export function hideContinue(mediaId: string) {
 const media = (m: ContinueMedia): UnifiedMedia => ({
   ...emptyMedia(m.id, m.title, m.type),
   ...m,
+  bannerUrl: m.bannerUrl ?? null,
 });
 /** Same rule as the library's history: read or watched, not finished or dropped. */
 const inProgress = (t: TrackedMedia) =>
@@ -124,6 +125,7 @@ function summary(m: UnifiedMedia): ContinueMedia {
     id: m.id,
     title: m.title,
     coverUrl: m.coverUrl,
+    bannerUrl: m.bannerUrl ?? null,
     type: m.type,
     format: m.format,
     origin: m.origin,

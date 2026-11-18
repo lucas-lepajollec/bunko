@@ -225,7 +225,7 @@ function Catalog() {
       {/* Same calm toolbar as the library: formats, then one row with view, filters and sort. */}
       <div
         className={cx(
-          'no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0',
+          'toolbar-kinds no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0',
         )}
         role="group"
         aria-label={t('catalog.kind')}
@@ -266,9 +266,9 @@ function Catalog() {
         <>
           {/* View, sort and filters share one row while they fit; otherwise the filters (sort
               first) take their own row, which scrolls sideways on phones. */}
-          <div className="flex flex-col gap-2.5 md:flex-row md:flex-wrap md:items-center md:gap-2">
+          <div className="toolbar-row flex flex-col gap-2.5 md:flex-row md:flex-wrap md:items-center md:gap-2">
             <div
-              className="flex shrink-0 self-start rounded-full bg-white/[0.06] p-0.5 text-sm md:self-auto"
+              className="toolbar-seg flex shrink-0 self-start rounded-full bg-white/[0.06] p-0.5 text-sm md:self-auto"
               role="group"
               aria-label={t('catalog.view')}
             >

@@ -23,6 +23,9 @@ import { trackedFor } from '@/lib/client/tracked-entry';
 import { useI18n } from '@/i18n/I18nProvider';
 import { rankSourceCandidates } from '@/lib/client/source-ranking';
 import { Backdrop } from '@/components/backdrop';
+import { ManagedImage } from '@/components/managed-image';
+import { useLook } from '@/lib/client/theme';
+import { useAmbient } from '@/lib/client/ambient';
 import { ChapterTable, missingForUnit, preferredVariant } from '@/components/chapters';
 import { PosterCard, ScrollRow } from '@/components/media';
 import { InfoBubble, Notice, toast } from '@/components/notify';
@@ -52,6 +55,7 @@ import {
   Spinner,
   cx,
   errorText,
+  firstSentence,
   ghostButton,
   primaryButton,
   smallButton,
@@ -131,6 +135,7 @@ function Title({
   onRefresh: () => Promise<void>;
 }) {
   const { t, n, language } = useI18n();
+  const look = useLook();
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const batches = useApi<DownloadBatch[]>('/api/downloads/batches', {
     refreshInterval: batchesInterval,
@@ -513,341 +518,452 @@ function Title({
     </>
   );
 
-  return (
-    <main className="relative" style={{ ['--accent' as string]: media.color ?? '#9fb6ff' }}>
-      <Backdrop
-        // Only the catalog work's own banner; none when detached, hidden, or missing.
-        image={
-          entry?.identity === 'off-catalog' || entry?.backdrop === 'hidden' ? null : media.bannerUrl
-        }
-        color={media.color ?? '#7aa2ff'}
-        ambient={entry?.coverUrl ?? media.coverUrl}
-        className="h-[440px] md:h-[720px]"
+  // Only the catalog work's own banner; none when detached, hidden, or missing.
+  const bannerShown =
+    entry?.identity === 'off-catalog' || entry?.backdrop === 'hidden' ? null : media.bannerUrl;
+  const coverArt = (
+    <span className="relative mx-auto block w-full max-w-[300px]">
+      <Cover
+        src={entry?.coverUrl ?? media.coverUrl}
+        fallbacks={entry?.coverFallbacks}
+        priority
+        alt={media.title}
       />
-      <div className="relative mx-auto grid max-w-[1760px] gap-6 px-4 pt-[110px] pb-16 md:grid-cols-[280px_minmax(0,1fr)] md:gap-12 md:px-10 md:pt-[150px] lg:grid-cols-[300px_minmax(0,1fr)] xl:gap-16">
-        {/* Left: cover, then everything about the work. */}
-        <aside className="hidden flex-col gap-7 self-start md:flex">
-          <span className="relative mx-auto block w-full max-w-[300px]">
-            <Cover
-              src={entry?.coverUrl ?? media.coverUrl}
-              fallbacks={entry?.coverFallbacks}
-              priority
-              alt={media.title}
-            />
-            <WorkMarks
-              mark={entry ? libraryMark(entry) : null}
-              inLibrary={Boolean(entry)}
-              owned={Boolean(media.kavita)}
-              video={media.type === 'ANIME'}
-              size="md"
-            />
-          </span>
-          {details}
-        </aside>
+      <WorkMarks
+        mark={entry ? libraryMark(entry) : null}
+        inLibrary={Boolean(entry)}
+        owned={Boolean(media.kavita)}
+        video={media.type === 'ANIME'}
+        size="md"
+      />
+    </span>
+  );
+  const mobileCover = (
+    <span className="relative block w-24 shrink-0 md:hidden">
+      <Cover src={entry?.coverUrl ?? media.coverUrl} fallbacks={entry?.coverFallbacks} alt="" />
+      <WorkMarks
+        mark={entry ? libraryMark(entry) : null}
+        owned={Boolean(media.kavita)}
+        video={media.type === 'ANIME'}
+      />
+    </span>
+  );
+  const titleBlock = (
+    <div className="flex min-w-0 flex-col gap-2 md:gap-4">
+      <Kicker media={media} />
+      <h1 className="sheet-title font-display text-[34px] leading-[0.92] font-extrabold tracking-[-0.05em] [overflow-wrap:anywhere] md:text-[56px] xl:text-[80px]">
+        {media.title}
+      </h1>
+    </div>
+  );
+  const actions = (
+    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="flex gap-2 self-start sm:self-auto">
+        <FavoriteButton media={media} entry={entry} />
+        <RatingButton media={media} entry={entry} />
+        <ListsButton media={media} entry={entry} />
+      </div>
+      {isComic && (
+        <button
+          type="button"
+          disabled={busy || missing.length === 0}
+          onClick={() => download(missing.map((c) => c.key))}
+          className={primaryButton}
+        >
+          {missing.length
+            ? // Nothing owned yet: "Download"; some of it: "Complete".
+              owned.size === 0 && ownedVolumes.size === 0
+              ? byVolume
+                ? t('title.downloadSeriesVol', { count: missingVolumeCount })
+                : t('title.downloadSeries', { count: missing.length })
+              : byVolume
+                ? t('title.completeSeriesVol', { count: missingVolumeCount })
+                : t('title.completeSeries', { count: missing.length })
+            : checking || (!chapters.data && sources.length > 0)
+              ? t('title.loadingChapters')
+              : incomplete
+                ? t('chapters.partialLabel')
+                : sources.length && chapters.data?.chapters.length
+                  ? t('title.complete')
+                  : t('title.noSource')}
+        </button>
+      )}
+      {video && media.jellyfin && (
+        <a
+          href={media.jellyfin.url}
+          target="_blank"
+          rel="noreferrer"
+          className={cx(ghostButton, 'gap-2')}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <path d="M7 4v16l13-8Z" />
+          </svg>
+          {t('jellyfin.open')}
+        </a>
+      )}
+      {video && <MediaDownload media={media} />}
+      <Select
+        label={t('title.readingStatus')}
+        value={entry?.status ?? 'NONE'}
+        onChange={(v) => setStatus(v as ReadingStatus | 'NONE')}
+        options={[
+          { value: 'NONE', label: t('title.notInLibrary') },
+          ...STATUSES.map((x) => ({
+            value: x,
+            label: t(video ? `watchStatus.${x}` : `status.${x}`),
+          })),
+        ]}
+        size="lg"
+        className="h-12 justify-center gap-3 bg-white/[0.14] px-5 sm:justify-between"
+      />
+      <ReadButton
+        bunko={readTarget}
+        kavita={
+          media.kavita?.url
+            ? {
+                href: media.kavita.url,
+                label: t('kavita.read', { n: media.kavita.chapters }),
+              }
+            : null
+        }
+      />
+    </div>
+  );
+  const progressBlock = entry && !filmSheet && (
+    <div className="flex max-w-[560px] flex-col gap-2">
+      <ProgressBar progress={progress} className="h-1.5" />
+      <span className="text-mid flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]">
+        <span>
+          {t(video ? 'episodes.watchedCount' : vol('title.read'), {
+            n: progress.read !== null ? n(progress.read) : '—',
+          })}
+        </span>
+        {!video && <OwnedInventory entry={entry} />}
+        {video && media.jellyfin && (
+          <span>{t('jellyfin.owned', { n: n(media.jellyfin.ownedCount) })}</span>
+        )}
+        {media.kavita && <KavitaRefresh trackedId={entry.id} />}
+        <span>
+          {video
+            ? t('episodes.airedCount', { n: video.aired !== null ? n(video.aired) : '—' })
+            : t(vol('title.released'), {
+                n: progress.released !== null ? n(progress.released) : '—',
+              })}
+        </span>
+        <InfoBubble label={t('title.progressInfo')}>
+          {progress.readSource === 'suwayomi'
+            ? t('title.readFromSuwayomi')
+            : progress.readSource === 'kavita'
+              ? t('title.readFromKavita')
+              : t('title.readUnknown')}
+        </InfoBubble>
+      </span>
+    </div>
+  );
+  const body = (
+    <>
+      {/* A fixed slot: the notice comes and goes without moving the page. */}
+      <div className="min-h-5">
+        <LoadNotice
+          quiet
+          pending={media.pending || checking || (!library.data && library.isLoading)}
+          partial={media.partial || incomplete}
+        />
+      </div>
+      <div className="mt-2 md:hidden">
+        <Segmented
+          value={tab}
+          onChange={setTab}
+          label={t('title.sections')}
+          items={[
+            {
+              id: 'chapters',
+              label: video
+                ? t('episodes.title')
+                : isComic
+                  ? t('title.tab.chapters')
+                  : t('title.tab.reading'),
+            },
+            { id: 'info', label: t('title.tab.info') },
+          ]}
+        />
+      </div>
+      <div className={cx('flex-col gap-7 md:hidden', tab === 'info' ? 'flex' : 'hidden')}>
+        {details}
+      </div>
 
-        {/* Right: title, actions, chapters. */}
-        <div className="flex min-w-0 flex-col gap-5">
-          <div className="flex items-end gap-4 md:block">
-            <span className="relative block w-24 shrink-0 md:hidden">
-              <Cover
-                src={entry?.coverUrl ?? media.coverUrl}
-                fallbacks={entry?.coverFallbacks}
-                alt=""
-              />
-              <WorkMarks
-                mark={entry ? libraryMark(entry) : null}
-                owned={Boolean(media.kavita)}
-                video={media.type === 'ANIME'}
-              />
-            </span>
-            <div className="flex min-w-0 flex-col gap-2 md:gap-4">
-              <Kicker media={media} />
-              <h1 className="font-display text-[34px] leading-[0.92] font-extrabold tracking-[-0.05em] [overflow-wrap:anywhere] md:text-[56px] xl:text-[80px]">
-                {media.title}
-              </h1>
-            </div>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <div className="flex gap-2 self-start sm:self-auto">
-              <FavoriteButton media={media} entry={entry} />
-              <RatingButton media={media} entry={entry} />
-              <ListsButton media={media} entry={entry} />
-            </div>
-            {isComic && (
-              <button
-                type="button"
-                disabled={busy || missing.length === 0}
-                onClick={() => download(missing.map((c) => c.key))}
-                className={primaryButton}
-              >
-                {missing.length
-                  ? // Nothing owned yet: "Download"; some of it: "Complete".
-                    owned.size === 0 && ownedVolumes.size === 0
-                    ? byVolume
-                      ? t('title.downloadSeriesVol', { count: missingVolumeCount })
-                      : t('title.downloadSeries', { count: missing.length })
-                    : byVolume
-                      ? t('title.completeSeriesVol', { count: missingVolumeCount })
-                      : t('title.completeSeries', { count: missing.length })
-                  : checking || (!chapters.data && sources.length > 0)
-                    ? t('title.loadingChapters')
-                    : incomplete
-                      ? t('chapters.partialLabel')
-                      : sources.length && chapters.data?.chapters.length
-                        ? t('title.complete')
-                        : t('title.noSource')}
-              </button>
-            )}
-            {video && media.jellyfin && (
-              <a
-                href={media.jellyfin.url}
-                target="_blank"
-                rel="noreferrer"
-                className={cx(ghostButton, 'gap-2')}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                  <path d="M7 4v16l13-8Z" />
-                </svg>
-                {t('jellyfin.open')}
-              </a>
-            )}
-            {video && <MediaDownload media={media} />}
-            <Select
-              label={t('title.readingStatus')}
-              value={entry?.status ?? 'NONE'}
-              onChange={(v) => setStatus(v as ReadingStatus | 'NONE')}
-              options={[
-                { value: 'NONE', label: t('title.notInLibrary') },
-                ...STATUSES.map((x) => ({
-                  value: x,
-                  label: t(video ? `watchStatus.${x}` : `status.${x}`),
-                })),
-              ]}
-              size="lg"
-              className="h-12 justify-center gap-3 bg-white/[0.14] px-5 sm:justify-between"
+      <section
+        aria-labelledby="toc"
+        className={cx(
+          'min-w-0 flex-col gap-4 md:mt-6',
+          tab === 'chapters' ? 'flex' : 'hidden md:flex',
+        )}
+      >
+        {video ? (
+          <>
+            <SectionHeading
+              id="toc"
+              num={1}
+              title={filmSheet ? t('episodes.watchTitle') : t('episodes.title')}
             />
-            <ReadButton
-              bunko={readTarget}
-              kavita={
-                media.kavita?.url
-                  ? {
-                      href: media.kavita.url,
-                      label: t('kavita.read', { n: media.kavita.chapters }),
-                    }
-                  : null
+            <EpisodeList
+              film={filmSheet}
+              title={media.title}
+              media={{
+                id: media.id,
+                title: entry?.title ?? media.title,
+                coverUrl: entry?.coverUrl ?? media.coverUrl,
+                bannerUrl: media.bannerUrl,
+                type: media.type,
+                format: media.format,
+                origin: media.origin,
+                adult: Boolean(media.adult),
+                color: media.color,
+                ...(media.kindOverride ? { kindOverride: media.kindOverride } : {}),
+                ...(media.extensionSection ? { extensionSection: media.extensionSection } : {}),
+              }}
+              artwork={media.bannerUrl ?? media.coverUrl}
+              anilistId={media.anilistId}
+              video={seasonParam ? { ...video, focus: seasonParam } : video}
+              jellyfin={media.jellyfin}
+              entry={entry}
+              busy={false}
+              onWatched={(w) => void setWatched(w)}
+              onRefresh={extension || filmSheet ? undefined : onRefresh}
+              refreshing={media.pending}
+            />
+          </>
+        ) : isComic ? (
+          <>
+            <SectionHeading
+              id="toc"
+              num={1}
+              title={t('chapters.title')}
+              aside={
+                chapters.data ? (
+                  <span className="inline-flex items-center gap-2">
+                    {t('chapters.aside', {
+                      count: n(chapters.data.chapters.length),
+                      sources: sources.length,
+                    })}
+                    {chapters.data.errors.length > 0 && (
+                      <InfoBubble tone="warn" label={t('chapters.partialLabel')}>
+                        {t('chapters.partial', { count: chapters.data.errors.length })}
+                      </InfoBubble>
+                    )}
+                  </span>
+                ) : undefined
               }
             />
-          </div>
-          {entry && !filmSheet && (
-            <div className="flex max-w-[560px] flex-col gap-2">
-              <ProgressBar progress={progress} className="h-1.5" />
-              <span className="text-mid flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]">
-                <span>
-                  {t(video ? 'episodes.watchedCount' : vol('title.read'), {
-                    n: progress.read !== null ? n(progress.read) : '—',
-                  })}
-                </span>
-                {!video && <OwnedInventory entry={entry} />}
-                {video && media.jellyfin && (
-                  <span>{t('jellyfin.owned', { n: n(media.jellyfin.ownedCount) })}</span>
-                )}
-                {media.kavita && <KavitaRefresh trackedId={entry.id} />}
-                <span>
-                  {video
-                    ? t('episodes.airedCount', { n: video.aired !== null ? n(video.aired) : '—' })
-                    : t(vol('title.released'), {
-                        n: progress.released !== null ? n(progress.released) : '—',
-                      })}
-                </span>
-                <InfoBubble label={t('title.progressInfo')}>
-                  {progress.readSource === 'suwayomi'
-                    ? t('title.readFromSuwayomi')
-                    : progress.readSource === 'kavita'
-                      ? t('title.readFromKavita')
-                      : t('title.readUnknown')}
-                </InfoBubble>
-              </span>
-            </div>
-          )}
-
-          {/* A fixed slot: the notice comes and goes without moving the page. */}
-          <div className="min-h-5">
-            <LoadNotice
-              quiet
-              pending={media.pending || checking || (!library.data && library.isLoading)}
-              partial={media.partial || incomplete}
-            />
-          </div>
-          <div className="mt-2 md:hidden">
-            <Segmented
-              value={tab}
-              onChange={setTab}
-              label={t('title.sections')}
-              items={[
-                {
-                  id: 'chapters',
-                  label: video
-                    ? t('episodes.title')
-                    : isComic
-                      ? t('title.tab.chapters')
-                      : t('title.tab.reading'),
-                },
-                { id: 'info', label: t('title.tab.info') },
-              ]}
-            />
-          </div>
-          <div className={cx('flex-col gap-7 md:hidden', tab === 'info' ? 'flex' : 'hidden')}>
-            {details}
-          </div>
-
-          <section
-            aria-labelledby="toc"
-            className={cx(
-              'min-w-0 flex-col gap-4 md:mt-6',
-              tab === 'chapters' ? 'flex' : 'hidden md:flex',
+            {entry && !sources.length && (
+              <NoSource
+                lanes={lanes}
+                started={scan.started}
+                background={entry.sourceMatch === 'queued' || entry.sourceMatch === 'searching'}
+                onSearch={() => rescan()}
+                href={settingsHref('sources')}
+              />
             )}
-          >
-            {video ? (
-              <>
-                <SectionHeading
-                  id="toc"
-                  num={1}
-                  title={filmSheet ? t('episodes.watchTitle') : t('episodes.title')}
-                />
-                <EpisodeList
-                  film={filmSheet}
-                  title={media.title}
-                  media={{
-                    id: media.id,
-                    title: entry?.title ?? media.title,
-                    coverUrl: entry?.coverUrl ?? media.coverUrl,
-                    type: media.type,
-                    format: media.format,
-                    origin: media.origin,
-                    adult: Boolean(media.adult),
-                    color: media.color,
-                    ...(media.kindOverride ? { kindOverride: media.kindOverride } : {}),
-                    ...(media.extensionSection ? { extensionSection: media.extensionSection } : {}),
-                  }}
-                  artwork={media.bannerUrl ?? media.coverUrl}
-                  anilistId={media.anilistId}
-                  video={seasonParam ? { ...video, focus: seasonParam } : video}
-                  jellyfin={media.jellyfin}
-                  entry={entry}
-                  busy={false}
-                  onWatched={(w) => void setWatched(w)}
-                  onRefresh={extension || filmSheet ? undefined : onRefresh}
-                  refreshing={media.pending}
-                />
-              </>
-            ) : isComic ? (
-              <>
-                <SectionHeading
-                  id="toc"
-                  num={1}
-                  title={t('chapters.title')}
-                  aside={
-                    chapters.data ? (
-                      <span className="inline-flex items-center gap-2">
-                        {t('chapters.aside', {
-                          count: n(chapters.data.chapters.length),
-                          sources: sources.length,
-                        })}
-                        {chapters.data.errors.length > 0 && (
-                          <InfoBubble tone="warn" label={t('chapters.partialLabel')}>
-                            {t('chapters.partial', { count: chapters.data.errors.length })}
-                          </InfoBubble>
-                        )}
-                      </span>
-                    ) : undefined
+            {!sources.length && !entry ? (
+              scan.failed ? (
+                <Notice
+                  title={t('loading.partial')}
+                  action={
+                    <button type="button" className={smallButton} onClick={() => rescan()}>
+                      {t('common.retry')}
+                    </button>
                   }
                 />
-                {entry && !sources.length && (
-                  <NoSource
-                    lanes={lanes}
-                    started={scan.started}
-                    background={entry.sourceMatch === 'queued' || entry.sourceMatch === 'searching'}
-                    onSearch={() => rescan()}
-                    href={settingsHref('sources')}
-                  />
-                )}
-                {!sources.length && !entry ? (
-                  scan.failed ? (
-                    <Notice
-                      title={t('loading.partial')}
-                      action={
-                        <button type="button" className={smallButton} onClick={() => rescan()}>
-                          {t('common.retry')}
-                        </button>
-                      }
-                    />
-                  ) : (
-                    <NoSource
-                      lanes={lanes}
-                      started={scan.started}
-                      onSearch={() => rescan()}
-                      href={settingsHref('sources')}
-                    />
-                  )
-                ) : chapters.error && !chapters.data ? (
-                  <Notice
-                    tone="bad"
-                    title={t('chapters.loadFailed')}
-                    action={
-                      <button
-                        type="button"
-                        onClick={() => chapters.mutate()}
-                        className={smallButton}
-                      >
-                        {t('common.retry')}
-                      </button>
-                    }
-                  >
-                    {errorText(t, chapters.error)}
-                  </Notice>
-                ) : !chapters.data ? (
-                  <div className="flex flex-col gap-2">
-                    {Array.from({ length: 8 }, (_, i) => (
-                      <Skeleton key={i} className="h-11" />
-                    ))}
-                  </div>
-                ) : (
-                  <ChapterTable
-                    key={media.id}
-                    pending={checking}
-                    ownedVolumes={ownedVolumes}
-                    mediaId={entry?.media.id ?? media.id}
-                    byVolume={byVolume}
-                    chapters={chapters.data.chapters}
-                    priority={priority}
-                    read={chapterSeen || (entry?.chapterRead ?? null)}
-                    volumeRead={volumeSeen ?? entry?.volumeRead ?? null}
-                    selected={selected}
-                    setSelected={setSelected}
-                    choice={choice}
-                    setChoice={(k, v) => setChoice((c) => ({ ...c, [k]: v }))}
-                    queued={queued}
-                    owned={owned}
-                  />
-                )}
-              </>
-            ) : media.type === 'ANIME' ? (
-              // Episodes arrive with the full sheet (a later season also moves to its work).
-              <div className="flex flex-col gap-3" aria-busy>
-                <SectionHeading id="toc" num={1} title={t('episodes.title')} />
-                {Array.from({ length: 6 }, (_, i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
+              ) : (
+                <NoSource
+                  lanes={lanes}
+                  started={scan.started}
+                  onSearch={() => rescan()}
+                  href={settingsHref('sources')}
+                />
+              )
+            ) : chapters.error && !chapters.data ? (
+              <Notice
+                tone="bad"
+                title={t('chapters.loadFailed')}
+                action={
+                  <button type="button" onClick={() => chapters.mutate()} className={smallButton}>
+                    {t('common.retry')}
+                  </button>
+                }
+              >
+                {errorText(t, chapters.error)}
+              </Notice>
+            ) : !chapters.data ? (
+              <div className="flex flex-col gap-2">
+                {Array.from({ length: 8 }, (_, i) => (
+                  <Skeleton key={i} className="h-11" />
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col gap-5">
-                <BookShelf mediaId={bookId} owned={Boolean(media.kavita)} />
-                {entry && <Translations entry={entry} owned={Boolean(media.kavita)} />}
-              </div>
+              <ChapterTable
+                key={media.id}
+                pending={checking}
+                ownedVolumes={ownedVolumes}
+                mediaId={entry?.media.id ?? media.id}
+                byVolume={byVolume}
+                chapters={chapters.data.chapters}
+                priority={priority}
+                read={chapterSeen || (entry?.chapterRead ?? null)}
+                volumeRead={volumeSeen ?? entry?.volumeRead ?? null}
+                selected={selected}
+                setSelected={setSelected}
+                choice={choice}
+                setChoice={(k, v) => setChoice((c) => ({ ...c, [k]: v }))}
+                queued={queued}
+                owned={owned}
+              />
             )}
-          </section>
+          </>
+        ) : media.type === 'ANIME' ? (
+          // Episodes arrive with the full sheet (a later season also moves to its work).
+          <div className="flex flex-col gap-3" aria-busy>
+            <SectionHeading id="toc" num={1} title={t('episodes.title')} />
+            {Array.from({ length: 6 }, (_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-5">
+            <BookShelf mediaId={bookId} owned={Boolean(media.kavita)} />
+            {entry && <Translations entry={entry} owned={Boolean(media.kavita)} />}
+          </div>
+        )}
+      </section>
+    </>
+  );
+
+  return (
+    <main className="relative" style={{ ['--accent' as string]: media.color ?? '#9fb6ff' }}>
+      {look === 'aurore' ? (
+        <AuroreSheetHero
+          media={media}
+          banner={bannerShown}
+          cover={entry?.coverUrl ?? media.coverUrl}
+          title={titleBlock}
+        />
+      ) : look === 'edition' ? null : (
+        <Backdrop
+          // Only the catalog work's own banner; none when detached, hidden, or missing.
+          image={
+            entry?.identity === 'off-catalog' || entry?.backdrop === 'hidden'
+              ? null
+              : media.bannerUrl
+          }
+          color={media.color ?? '#7aa2ff'}
+          ambient={entry?.coverUrl ?? media.coverUrl}
+          className="h-[440px] md:h-[720px]"
+        />
+      )}
+      {look === 'cine' ? (
+        <div className="relative mx-auto flex max-w-[1760px] flex-col px-4 pb-16 md:px-10">
+          {/* Ciné: the title over the artwork, then the episodes with the work's card aside. */}
+          <div className="flex max-w-[820px] flex-col gap-5 pt-[150px] md:pt-[min(34vh,320px)]">
+            <div className="flex items-end gap-4 md:block">
+              {mobileCover}
+              {titleBlock}
+            </div>
+            {media.synopsis && (
+              <p className="text-soft line-clamp-3 hidden max-w-[640px] text-[17px] leading-relaxed md:block">
+                {firstSentence(media.synopsis)}
+              </p>
+            )}
+            {actions}
+            {progressBlock}
+          </div>
+          <div className="mt-8 grid gap-10 md:mt-14 md:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-14">
+            <div className="flex min-w-0 flex-col gap-5">{body}</div>
+            <aside className="hidden flex-col gap-7 self-start md:flex">
+              {coverArt}
+              {details}
+            </aside>
+          </div>
         </div>
-      </div>
+      ) : look === 'aurore' ? (
+        <div className="relative mx-auto grid max-w-[1760px] gap-8 px-4 pb-16 md:grid-cols-[minmax(0,1fr)_320px] md:px-10 xl:grid-cols-[minmax(0,1fr)_360px] xl:gap-12">
+          <div className="flex min-w-0 flex-col gap-5">
+            {actions}
+            {progressBlock}
+            {body}
+          </div>
+          {/* Aurore: the work's details on a glass panel. */}
+          <aside className="ui-panel hidden flex-col gap-6 self-start rounded-[24px] border p-5 md:flex">
+            {details}
+          </aside>
+        </div>
+      ) : look === 'edition' ? (
+        <div className="relative mx-auto flex max-w-[1760px] flex-col px-4 pt-[88px] pb-16 md:px-10 md:pt-[116px]">
+          {/* Édition: an article — headline and plate, then the technical sheet beside the contents. */}
+          <section className="border-fg grid gap-6 border-b pb-9 md:grid-cols-12 md:items-end md:gap-8 md:pb-12">
+            <figure className="m-0 flex flex-col gap-2.5 md:order-2 md:col-span-7">
+              {bannerShown ? (
+                <ManagedImage
+                  src={bannerShown}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  className="h-[200px] w-full object-cover object-[center_30%] saturate-[0.85] md:h-[420px]"
+                />
+              ) : (
+                <span className="bg-raised flex h-[240px] items-center justify-center md:h-[420px]">
+                  <span className="relative block w-[130px] md:w-[220px]">{coverArt}</span>
+                </span>
+              )}
+              <figcaption className="text-muted flex justify-between gap-4 text-[11px] tracking-[0.1em] uppercase">
+                <span className="truncate">
+                  {[media.title, media.year].filter(Boolean).join(' · ')}
+                </span>
+                {media.authors[0] && <span className="truncate">{media.authors[0]}</span>}
+              </figcaption>
+            </figure>
+            <div className="flex min-w-0 flex-col gap-5 md:order-1 md:col-span-5">
+              {titleBlock}
+              {media.synopsis && (
+                <p className="text-mid line-clamp-4 font-serif text-[18px] leading-normal [overflow-wrap:anywhere] md:text-[20px]">
+                  {firstSentence(media.synopsis)}
+                </p>
+              )}
+            </div>
+          </section>
+          <div className="flex flex-col gap-5 pt-7">
+            {actions}
+            {progressBlock}
+          </div>
+          <div className="mt-8 grid gap-10 md:grid-cols-[280px_minmax(0,1fr)] md:gap-14 lg:grid-cols-[300px_minmax(0,1fr)]">
+            <aside className="hidden flex-col gap-6 self-start md:flex">
+              <h2 className="border-fg border-b pb-2 font-serif text-[24px] font-semibold">
+                {t('title.tab.info')}
+              </h2>
+              {bannerShown && <span className="relative block w-[140px]">{coverArt}</span>}
+              {details}
+            </aside>
+            <div className="flex min-w-0 flex-col gap-5">{body}</div>
+          </div>
+        </div>
+      ) : (
+        <div className="relative mx-auto grid max-w-[1760px] gap-6 px-4 pt-[110px] pb-16 md:grid-cols-[280px_minmax(0,1fr)] md:gap-12 md:px-10 md:pt-[150px] lg:grid-cols-[300px_minmax(0,1fr)] xl:gap-16">
+          {/* Left: cover, then everything about the work. */}
+          <aside className="hidden flex-col gap-7 self-start md:flex">
+            {coverArt}
+            {details}
+          </aside>
+
+          {/* Right: title, actions, chapters. */}
+          <div className="flex min-w-0 flex-col gap-5">
+            <div className="flex items-end gap-4 md:block">
+              {mobileCover}
+              {titleBlock}
+            </div>
+            {actions}
+            {progressBlock}
+            {body}
+          </div>
+        </div>
+      )}
 
       {entry &&
         !media.relations.length &&
@@ -1195,5 +1311,54 @@ function KavitaRefresh({ trackedId }: { trackedId: number }) {
       {busy && <Spinner className="size-3" />}
       {t('kavita.refresh')}
     </button>
+  );
+}
+
+/** Aurore: the sheet opens on a rounded card of the work's artwork, title inside. */
+function AuroreSheetHero({
+  media,
+  banner,
+  cover,
+  title,
+}: {
+  media: MediaDetail;
+  banner: string | null;
+  cover: string | null;
+  title: React.ReactNode;
+}) {
+  useAmbient(banner ?? cover);
+  return (
+    <div className="relative mx-auto max-w-[1760px] px-4 pt-20 pb-6 md:px-10 md:pt-28 md:pb-8">
+      <section className="relative flex min-h-[300px] items-end overflow-hidden rounded-[28px] shadow-[0_40px_80px_rgba(0,0,0,0.35)] md:min-h-[440px]">
+        {banner ? (
+          <ManagedImage
+            src={banner}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="absolute inset-0 size-full object-cover object-[center_30%]"
+          />
+        ) : (
+          cover && (
+            <ManagedImage
+              src={cover}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="absolute inset-0 size-full scale-125 object-cover opacity-70 blur-2xl"
+            />
+          )
+        )}
+        <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(0,0,0,0.78)_0%,rgba(0,0,0,0)_65%)]" />
+        <div className="relative flex w-full items-end gap-6 p-5 text-white md:p-10">
+          {cover && (
+            <Cover
+              src={cover}
+              alt={media.title}
+              className="w-[92px] shrink-0 rounded-[12px] md:w-[150px]"
+            />
+          )}
+          <div className="min-w-0 flex-1">{title}</div>
+        </div>
+      </section>
+    </div>
   );
 }

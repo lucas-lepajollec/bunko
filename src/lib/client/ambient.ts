@@ -1,4 +1,5 @@
 'use client';
+import { useEffect } from 'react';
 
 /**
  * The artwork that tints the page background in themes that use one (Ciné, Aurore). Pages with
@@ -32,4 +33,11 @@ export function setAmbient(url: string) {
 export function subscribeAmbient(listener: () => void) {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+/** Publishes `url` as the page's ambient artwork while the caller shows it. */
+export function useAmbient(url: string | null | undefined) {
+  useEffect(() => {
+    if (url) setAmbient(url);
+  }, [url]);
 }

@@ -1,6 +1,6 @@
 'use client';
 import { useSyncExternalStore } from 'react';
-import { THEME_KEY, THEMES, normalizeTheme, type ThemeChoice } from '@/lib/themes';
+import { THEME_KEY, THEMES, normalizeTheme, type ThemeChoice, type ThemeId } from '@/lib/themes';
 
 export { THEMES, TONE_SWATCHES, type ThemeChoice, type ThemeId } from '@/lib/themes';
 
@@ -62,4 +62,9 @@ export function subscribeTheme(listener: () => void) {
 
 export function useTheme(): ThemeChoice {
   return useSyncExternalStore(subscribeTheme, getTheme, getServerTheme);
+}
+
+/** The active theme's id, for components whose layout differs by theme. */
+export function useLook(): ThemeId {
+  return useTheme().theme;
 }
