@@ -181,8 +181,12 @@ export function updateList(
       statement('UPDATE lists SET description=? WHERE id=?').run(input.description, id);
     if (input.kind !== undefined)
       statement('UPDATE lists SET kind=? WHERE id=?').run(input.kind, id);
-    if (input.layout !== undefined)
+    if (input.layout !== undefined && input.layout !== r.layout) {
+      // A tier list stays one, a list stays a list (shown as a list or a grid).
+      if (input.layout === 'tiers' || r.layout === 'tiers' || r.system)
+        throw new AppError('VALIDATION_ERROR', 'A list cannot become a tier list or back', 400);
       statement('UPDATE lists SET layout=? WHERE id=?').run(input.layout, id);
+    }
     if (input.remove?.length) removeItems(id, input.remove);
     if (input.add?.length) addItems(id, input.add, input.at);
     if (input.order) writeOrder(id, input.order);

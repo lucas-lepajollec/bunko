@@ -209,6 +209,7 @@ export function db(): Database.Database {
     migrateV26(connection);
     migrateV27(connection);
     migrateV28(connection);
+    migrateV29(connection);
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {
@@ -1579,6 +1580,17 @@ export function migrateV28(database: Database.Database) {
     }
     database.exec("DELETE FROM rankings WHERE mode='manual'");
     database.pragma('user_version=28');
+  })();
+}
+/**
+ * Tier lists are their own kind of list (layout `tiers`), no longer a way to show a list: the
+ * favorites go back to a plain list; other lists shown as tiers stay tier lists.
+ */
+export function migrateV29(database: Database.Database) {
+  database.transaction(() => {
+    if (Number(database.pragma('user_version', { simple: true })) >= 29) return;
+    database.exec("UPDATE lists SET layout='list' WHERE system IS NOT NULL AND layout='tiers'");
+    database.pragma('user_version=29');
   })();
 }
 /** Parts of a catalog sheet that a followed work never stores. */

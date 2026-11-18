@@ -408,6 +408,9 @@ export const primaryButton =
   'inline-flex h-12 items-center justify-center gap-2 rounded-full bg-white px-6 text-[15px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-50';
 export const ghostButton =
   'inline-flex h-12 items-center justify-center gap-2 rounded-full bg-white/[0.14] px-6 text-[15px] text-white backdrop-blur-md transition-colors hover:bg-white/[0.2] disabled:opacity-50';
+/** The main action of a small dialog: the size of `smallButton`, in the primary tone. */
+export const primarySmall =
+  'inline-flex h-9 items-center justify-center gap-2 rounded-full bg-fg px-4 text-[13px] font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-50';
 export const smallButton =
   'inline-flex h-9 items-center justify-center gap-2 rounded-full bg-white/[0.1] px-4 text-[13px] text-fg transition-colors hover:bg-white/[0.16] disabled:opacity-50';
 export const field =

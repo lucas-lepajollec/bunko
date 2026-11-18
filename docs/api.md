@@ -27,14 +27,15 @@ kind, in the user's order). The former `/favorites` route redirects there.
 ### Lists and rankings
 
 `GET /api/lists` returns the tenant's `WorkList[]` (schema v28, `lists` + `list_items`): name,
-description, optional kind, `ranked` (numbered: the order is the ranking), `layout`
-(`list`/`grid`/`tiers`), `system` and the items in order (`trackedId`, `tier` S–D or null, `note`).
+description, optional kind, `ranked` (numbered: the order is the ranking), `layout` (`list` or
+`grid` for a list; `tiers` marks a tier list, created as such and never switched, schema v29), `system` and the items in order (`trackedId`, `tier` S–D or null, `note`).
 The favorites are the one system list (`system:"favorites"`, listed first, named by the interface):
 its items are exactly the works with `favorite` set, kept in step by triggers whatever path sets the
 flag; adding to or removing from it sets the flag. `POST /api/lists {name,kind,ranked,description?,
 layout?,add?}` returns 201 `{id,lists}`. `PATCH /api/lists/<id>` takes `name`, `description`,
 `kind`, `ranked`, `layout`, `order` (ids first, the others keep their order after them), `add`
-(with an optional 0-based `at`), `remove` and `items` (`{trackedId,note?,tier?}`) in one
+(with an optional 0-based `at`), `remove` and `items` (`{trackedId,note?,tier?}`; in a tier list a
+null tier is the "to place" area) in one
 transaction and returns every list; works outside the library are ignored, and a removed work
 leaves every list. `DELETE /api/lists/<id>` refuses the system list (403). Lists hold library works
 only: the interface follows a catalog work as `PLANNING` with `autoDownload:false` first.

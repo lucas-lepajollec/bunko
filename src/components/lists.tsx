@@ -4,14 +4,14 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { Check, ListPlus, Plus } from 'lucide-react';
-import type { TrackedMedia, UnifiedMedia, WorkList } from '@/types/shared';
-import { KIND_IDS, type Kind } from '@/domain/kinds';
+import type { ListTier, TrackedMedia, UnifiedMedia, WorkList } from '@/types/shared';
+import { KIND_IDS, kindOfMedia, type Kind } from '@/domain/kinds';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Duel } from './duel';
 import { Select } from './select';
 import { toast } from './notify';
-import { Cover, cx, errorText, field, primaryButton, smallButton } from './ui';
+import { Cover, cx, errorText, field, primarySmall, smallButton } from './ui';
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -47,21 +47,24 @@ export function useListWrite() {
   };
 }
 
+export const isTierList = (list: Pick<WorkList, 'layout'>) => list.layout === 'tiers';
+
 export function listMeta(t: T, n: (v: number) => string, list: WorkList, count: number) {
   return [
     t('lists.count', { count: n(count) }),
-    list.layout === 'tiers'
-      ? t('lists.tiers')
-      : list.ranked
-        ? t('lists.ranked')
-        : t('lists.unranked'),
+    isTierList(list) ? t('lists.tierList') : list.ranked ? t('lists.ranked') : t('lists.unranked'),
     list.kind ? t(`kind.${list.kind}`) : null,
   ]
     .filter(Boolean)
     .join(' · ');
 }
 
-/** A list as a card: a mosaic of its first four covers, its name and what it holds. */
+/** A score as a tier: what "place by my ratings" does in a tier list. */
+export function tierOfRating(rating: number | null | undefined): ListTier | null {
+  if (rating == null) return null;
+  return rating >= 9.5 ? 'S' : rating >= 8.5 ? 'A' : rating >= 7 ? 'B' : rating >= 5 ? 'C' : 'D';
+}
+
 export function ListCard({ list, entries }: { list: WorkList; entries: TrackedMedia[] }) {
   const { t, n } = useI18n();
   const works = listWorks(list, entries);
@@ -105,32 +108,46 @@ export function NewListDialog({
   onClose,
   onCreated,
   add,
+  tier = false,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated?: (list: WorkList) => void;
   /** Works the new list starts with. */
   add?: number[];
+  /** A tier list (S to D) rather than a list. */
+  tier?: boolean;
 }) {
   const { t } = useI18n();
   const { mutate } = useSWRConfig();
+  const library = useApi<TrackedMedia[]>(tier ? '/api/tracked' : null);
   const [name, setName] = useState('');
   const [kind, setKind] = useState<Kind | ''>('');
   const [ranked, setRanked] = useState(true);
+  const [fill, setFill] = useState<'rated' | 'all' | 'none'>('rated');
+  const [place, setPlace] = useState(true);
   const [busy, setBusy] = useState(false);
+  // A tier list starts from the library: its rated works (or all) of the kind chosen.
+  const from = (library.data ?? []).filter(
+    (e) =>
+      !e.partOf &&
+      (!kind || kindOfMedia(e.media) === kind) &&
+      (fill === 'all' || (fill === 'rated' && e.rating != null)),
+  );
+  const start = tier ? (fill === 'none' ? [] : from.slice(0, 500)) : (add ?? []);
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
         <Dialog.Content className="bg-bg border-line fixed inset-x-4 top-1/2 z-50 mx-auto flex max-w-[440px] -translate-y-1/2 flex-col gap-4 rounded-3xl border p-6 outline-none">
           <Dialog.Title className="font-display text-[22px] leading-none font-extrabold tracking-[-0.03em]">
-            {t('lists.new')}
+            {t(tier ? 'lists.newTier' : 'lists.new')}
           </Dialog.Title>
           <Dialog.Description className="text-muted text-sm">
-            {t('lists.newHint')}
+            {t(tier ? 'lists.newTierHint' : 'lists.newHint')}
           </Dialog.Description>
           <form
-            className="flex flex-col gap-4"
+            className="flex flex-col gap-3"
             onSubmit={async (e) => {
               e.preventDefault();
               if (!name.trim()) return;
@@ -139,11 +156,29 @@ export function NewListDialog({
                 const { id, lists } = await send<{ id: number; lists: WorkList[] }>(
                   '/api/lists',
                   'POST',
-                  { name: name.trim(), kind: kind || null, ranked, add },
+                  {
+                    name: name.trim(),
+                    kind: kind || null,
+                    ranked: tier ? false : ranked,
+                    ...(tier ? { layout: 'tiers' } : {}),
+                    add: start.length
+                      ? start.map((w) => (typeof w === 'number' ? w : w.id))
+                      : undefined,
+                  },
                 );
-                await mutate('/api/lists', lists, { revalidate: false });
+                let fresh = lists;
+                const placed =
+                  tier && place
+                    ? from.flatMap((w) => {
+                        const tierOf = tierOfRating(w.rating);
+                        return tierOf ? [{ trackedId: w.id, tier: tierOf }] : [];
+                      })
+                    : [];
+                if (placed.length)
+                  fresh = await send<WorkList[]>(`/api/lists/${id}`, 'PATCH', { items: placed });
+                await mutate('/api/lists', fresh, { revalidate: false });
                 setName('');
-                const created = lists.find((l) => l.id === id);
+                const created = fresh.find((l) => l.id === id);
                 if (created) onCreated?.(created);
                 onClose();
               } catch (error) {
@@ -156,22 +191,34 @@ export function NewListDialog({
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={t('lists.namePlaceholder')}
+              placeholder={t(tier ? 'lists.tierPlaceholder' : 'lists.namePlaceholder')}
               aria-label={t('lists.name')}
               maxLength={80}
               autoFocus
               className={field}
             />
             <div className="grid grid-cols-2 gap-2">
-              <Select
-                label={t('lists.order')}
-                value={ranked ? 'ranked' : 'free'}
-                onChange={(v) => setRanked(v === 'ranked')}
-                options={[
-                  { value: 'ranked', label: t('lists.ranked') },
-                  { value: 'free', label: t('lists.unranked') },
-                ]}
-              />
+              {tier ? (
+                <Select
+                  label={t('lists.fill')}
+                  value={fill}
+                  onChange={(v) => setFill(v as typeof fill)}
+                  options={(['rated', 'all', 'none'] as const).map((f) => ({
+                    value: f,
+                    label: t(`lists.fill.${f}`),
+                  }))}
+                />
+              ) : (
+                <Select
+                  label={t('lists.order')}
+                  value={ranked ? 'ranked' : 'free'}
+                  onChange={(v) => setRanked(v === 'ranked')}
+                  options={[
+                    { value: 'ranked', label: t('lists.ranked') },
+                    { value: 'free', label: t('lists.unranked') },
+                  ]}
+                />
+              )}
               <Select
                 label={t('catalog.kind')}
                 value={kind}
@@ -182,11 +229,22 @@ export function NewListDialog({
                 ]}
               />
             </div>
-            <div className="flex justify-end gap-2">
+            {tier && fill !== 'none' && (
+              <label className="text-mid flex items-center gap-2.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={place}
+                  onChange={(e) => setPlace(e.target.checked)}
+                  className="size-4 accent-white"
+                />
+                {t('lists.placeOnCreate', { count: String(from.length) })}
+              </label>
+            )}
+            <div className="mt-1 flex justify-end gap-2">
               <button type="button" className={smallButton} onClick={onClose}>
                 {t('common.cancel')}
               </button>
-              <button type="submit" disabled={busy || !name.trim()} className={primaryButton}>
+              <button type="submit" disabled={busy || !name.trim()} className={primarySmall}>
                 {t('lists.create')}
               </button>
             </div>
@@ -239,7 +297,7 @@ export function ListsButton({ media, entry }: { media: UnifiedMedia; entry?: Tra
       if (!entry) await mutate('/api/tracked');
       const fresh = await write(list, { add: [work.id] });
       const now = fresh?.find((l) => l.id === list.id);
-      if (now?.ranked && now.items.length > 1) setDuel({ list: now, work });
+      if (now?.ranked && !isTierList(now) && now.items.length > 1) setDuel({ list: now, work });
     } catch (e) {
       toast({ tone: 'bad', text: errorText(t, e) });
     } finally {
@@ -292,7 +350,11 @@ export function ListsButton({ media, entry }: { media: UnifiedMedia; entry?: Tra
                   </span>
                   <span className="min-w-0 flex-1 truncate">{listName(t, list)}</span>
                   <span className="text-muted shrink-0 text-xs">
-                    {at >= 0 && list.ranked ? t('lists.rank', { n: n(at + 1) }) : n(works)}
+                    {at >= 0 && isTierList(list)
+                      ? (list.items[at].tier ?? t('lists.pool'))
+                      : at >= 0 && list.ranked
+                        ? t('lists.rank', { n: n(at + 1) })
+                        : n(works)}
                   </span>
                 </button>
               );
