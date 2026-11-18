@@ -72,7 +72,12 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
   const largest = [...views]
     .filter((v) => v.builtin)
     .sort((a, b) => (counts.get(b.key) ?? 0) - (counts.get(a.key) ?? 0))[0];
-  const view = views.find((v) => v.key === chosen) ?? largest ?? views[0];
+  // Opens on the type on screen when it is ranked, else on the largest ranking.
+  const view =
+    views.find((v) => v.key === chosen) ??
+    views.find((v) => v.builtin && v.builtin === universe.active) ??
+    largest ??
+    views[0];
   const [all, setAll] = useState(false);
   // "See all" keeps the height of the top 10: the list scrolls inside it, nothing shifts.
   const list = useRef<HTMLOListElement>(null);

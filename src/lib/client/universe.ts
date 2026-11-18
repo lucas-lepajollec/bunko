@@ -36,6 +36,9 @@ export const SOURCE_UNIVERSES: DiscoverKind[] = [
  * The interface's universe. One kind: catalog, planning, home and search show only it (and
  * load only it). `all`: everything together, with the kind menu on each page.
  */
+/** Address parameters that belong to one kind: dropped when the type on screen changes. */
+const KIND_PARAMS = ['kind', 'section', 'genre', 'tags', 'season', 'top', 'fav'];
+
 export function useUniverse() {
   const settings = useApi<PublicSettings>('/api/settings');
   const { mutate } = useSWRConfig();
@@ -61,6 +64,11 @@ export function useUniverse() {
   async function set(next: DiscoverKind, nextSection: string | null = null) {
     if (!data || (next === active && nextSection === section)) return;
     const patch = { universe: next, extensionSection: nextSection };
+    // A kind chosen on the page (kept in its address) would hide the new type: it goes, with the
+    // filters that belong to a kind (genres, tags, season, extension section).
+    const url = new URL(window.location.href);
+    for (const key of KIND_PARAMS) url.searchParams.delete(key);
+    if (url.href !== window.location.href) window.history.replaceState(null, '', url);
     await mutate('/api/settings', { ...data, ...patch }, { revalidate: false });
     await send('/api/settings', 'PATCH', patch);
     // Every page reloads for the new universe (only what it needs).

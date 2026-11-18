@@ -1,11 +1,14 @@
 import type { ListLayout, ListTier, TierRow, WorkList } from '@/types/shared';
 import { KINDS, type Kind } from '@/domain/kinds';
 import { DEFAULT_TIERS } from '@/domain/tiers';
-import { db, statement } from './db';
+import { db, listTracked, statement } from './db';
+import { visibleTracked } from './adult';
 import { AppError } from './errors';
 
 /**
- * The user's lists (see migrateV28). The favorites list is the `favorite` flag of the works in
+ * The user's lists (see migrateV28). Works the account does not show (18+ outside the 18+ mode,
+ * or anything but 18+ in the 18+ only mode) are left out of every list it reads, and counted in
+ * `hidden`; reorders keep them where they were. The favorites list is the `favorite` flag of the works in
  * the user's order: adding to it or removing from it sets the flag (triggers keep its items).
  */
 interface Row {
@@ -39,8 +42,14 @@ export function listLists(): WorkList[] {
   ).all() as (TierRow & { list_id: number })[];
   const tiersOf = new Map<number, TierRow[]>();
   for (const { list_id, ...t } of tiers) tiersOf.set(list_id, [...(tiersOf.get(list_id) ?? []), t]);
+  const shown = new Set(visibleTracked(listTracked()).map((e) => e.id));
+  const hidden = new Map<number, number>();
   const byList = new Map<number, ItemRow[]>();
   for (const i of items) {
+    if (!shown.has(i.tracked_id)) {
+      hidden.set(i.list_id, (hidden.get(i.list_id) ?? 0) + 1);
+      continue;
+    }
     const at = byList.get(i.list_id);
     if (at) at.push(i);
     else byList.set(i.list_id, [i]);
@@ -54,6 +63,7 @@ export function listLists(): WorkList[] {
     layout: r.layout,
     system: r.system,
     tiers: r.layout === 'tiers' ? (tiersOf.get(r.id) ?? []) : [],
+    hidden: hidden.get(r.id) ?? 0,
     items: (byList.get(r.id) ?? []).map((i) => ({
       trackedId: i.tracked_id,
       tier: i.tier,
@@ -107,7 +117,10 @@ function known(ids: readonly number[]) {
   return ids.filter((t) => all.has(t));
 }
 
-/** Writes the list's order (works not given keep their order after the given ones). */
+/**
+ * Writes a new order for the works given: they take, in that order, the places they held;
+ * the others (works hidden from this account, works not shown) keep theirs.
+ */
 function writeOrder(id: number, order: readonly number[]) {
   const current = (
     statement('SELECT tracked_id FROM list_items WHERE list_id=? ORDER BY position').all(id) as {
@@ -117,9 +130,10 @@ function writeOrder(id: number, order: readonly number[]) {
   const present = new Set(current);
   const given = [...new Set(order)].filter((t) => present.has(t));
   const placed = new Set(given);
-  const rest = current.filter((t) => !placed.has(t));
+  let next = 0;
+  const result = current.map((t) => (placed.has(t) ? given[next++] : t));
   const update = statement('UPDATE list_items SET position=? WHERE list_id=? AND tracked_id=?');
-  [...given, ...rest].forEach((t, i) => update.run(i, id, t));
+  result.forEach((t, i) => update.run(i, id, t));
 }
 
 /** Adds works at the end, or from `at` (0-based) on, in the order given; present works move. */

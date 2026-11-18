@@ -83,14 +83,14 @@ it('creates, fills, orders, annotates and deletes a list', async () => {
     await listRoute.PATCH(
       request(
         'PATCH',
-        { order: [b.id, a.id], items: [{ trackedId: a.id, note: 'pour rire' }] },
+        { order: [b.id, c.id, a.id], items: [{ trackedId: a.id, note: 'pour rire' }] },
         `/api/lists/${id}`,
       ),
     )
   ).json()) as WorkList[];
   const list = saved.find((l) => l.id === id)!;
-  expect(order(list)).toEqual([b.id, a.id, c.id]);
-  expect(list.items[1]).toMatchObject({ note: 'pour rire', tier: null });
+  expect(order(list)).toEqual([b.id, c.id, a.id]);
+  expect(list.items[2]).toMatchObject({ note: 'pour rire', tier: null });
   // A list has no tiers; the favorites can be shown as a grid.
   expect(
     (
@@ -105,7 +105,7 @@ it('creates, fills, orders, annotates and deletes a list', async () => {
       .status,
   ).toBe(200);
   await listRoute.PATCH(request('PATCH', { remove: [b.id] }, `/api/lists/${id}`));
-  expect(order((await lists()).find((l) => l.id === id))).toEqual([a.id, c.id]);
+  expect(order((await lists()).find((l) => l.id === id))).toEqual([c.id, a.id]);
   // A removed work leaves every list.
   db().prepare('DELETE FROM tracked_media WHERE id=?').run(a.id);
   expect(order((await lists()).find((l) => l.id === id))).toEqual([c.id]);
@@ -243,4 +243,63 @@ it("keeps a tier list's own rows: defaults, renamed, added, removed", async () =
   expect(
     (await listRoute.PATCH(request('PATCH', { layout: 'list' }, `/api/lists/${id}`))).status,
   ).toBe(400);
+});
+
+it('leaves out the works the 18+ mode hides, and keeps their places on a reorder', async () => {
+  const [a, b] = [work(31), work(32)];
+  const adult = track({
+    media: { ...emptyMedia('anilist:70033', 'Adult work', 'ANIME'), adult: true },
+    status: 'COMPLETED',
+  });
+  const created = await listsRoute.POST(
+    request(
+      'POST',
+      { name: 'Mixed', kind: null, ranked: true, add: [a.id, adult.id, b.id] },
+      '/api/lists',
+    ),
+  );
+  const { id } = (await created.json()) as { id: number };
+  const list = (await lists()).find((l) => l.id === id)!;
+  expect(order(list)).toEqual([a.id, b.id]);
+  expect(list.hidden).toBe(1);
+  // The visible works swap; the hidden one keeps its place between them.
+  await listRoute.PATCH(request('PATCH', { order: [b.id, a.id] }, `/api/lists/${id}`));
+  expect(
+    db()
+      .prepare('SELECT tracked_id FROM list_items WHERE list_id=? ORDER BY position')
+      .all(id)
+      .map((r) => (r as { tracked_id: number }).tracked_id),
+  ).toEqual([b.id, adult.id, a.id]);
+});
+
+it('shows a list under the kinds of its works, an empty one everywhere', async () => {
+  const { listInUniverse } = await import('@/components/lists');
+  const entry = (id: number, type: 'MANGA' | 'ANIME') =>
+    ({ id, media: { type, format: null, origin: null } }) as never;
+  const base = {
+    id: 1,
+    name: 'x',
+    description: '',
+    ranked: true,
+    layout: 'list' as const,
+    system: null,
+    tiers: [] as WorkList['tiers'],
+    createdAt: '',
+    updatedAt: '',
+  } satisfies Partial<WorkList>;
+  const item = (trackedId: number) => ({ trackedId, tier: null, note: '', addedAt: '' });
+  const entries = [entry(1, 'MANGA'), entry(2, 'ANIME')];
+  const mixed = { ...base, kind: null, items: [item(1), item(2)], hidden: 0 };
+  expect(
+    ['manga', 'anime', 'series', 'all'].map((k) => listInUniverse(mixed, entries, k as never)),
+  ).toEqual([true, true, false, true]);
+  const empty = { ...base, kind: null, items: [], hidden: 0 };
+  expect(listInUniverse(empty, entries, 'series')).toBe(true);
+  const allHidden = { ...base, kind: null, items: [], hidden: 2 };
+  expect(listInUniverse(allHidden, entries, 'all')).toBe(false);
+  const typed = { ...base, kind: 'anime' as const, items: [], hidden: 0 };
+  expect([
+    listInUniverse(typed, entries, 'anime'),
+    listInUniverse(typed, entries, 'manga'),
+  ]).toEqual([true, false]);
 });

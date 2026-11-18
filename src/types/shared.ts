@@ -153,8 +153,10 @@ export interface WorkList {
   system: 'favorites' | null;
   /** A tier list's rows, top first (empty for a list). */
   tiers: TierRow[];
-  /** In the list's order. */
+  /** In the list's order: only works this account shows (18+ follows the mode). */
   items: WorkListItem[];
+  /** Works of the list this account does not show in the current mode. */
+  hidden: number;
   createdAt: string;
   updatedAt: string;
 }
