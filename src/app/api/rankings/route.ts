@@ -10,12 +10,12 @@ const name = z.string().trim().min(1).max(80);
 const size = z.number().int().min(1).max(1000).nullable();
 const order = z.array(z.number().int().positive()).max(5000);
 
-/** The user's rankings (built-in automatic ones are listed once their order was set). */
+/** The user's rankings by rating (built-in ones are listed once their order was set). */
 export const GET = route(() => json(listRankings()));
 export const POST = route(async (r) => {
   const input = await body(
     r,
-    z.object({ name, kind: kind.nullable(), mode: z.enum(['auto', 'manual']), size }).strict(),
+    z.object({ name, kind: kind.nullable(), size }).strict(),
   );
   return json({ id: createRanking(input) }, 201);
 });

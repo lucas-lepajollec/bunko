@@ -1,15 +1,17 @@
 'use client';
 import * as Dialog from '@radix-ui/react-dialog';
-import { useMemo, useState } from 'react';
-import { AlertTriangle, ArrowDown, ArrowUp, Plus, Star, X } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { GripVertical, Plus, Star } from 'lucide-react';
 import type { Ranking, TrackedMedia } from '@/types/shared';
-import { KIND_IDS, kindOfMedia, type Kind } from '@/domain/kinds';
+import { KIND_IDS, type Kind } from '@/domain/kinds';
 import { formatRating } from '@/domain/library-mark';
-import { rankedKinds, rankingWorks, type RankedWork } from '@/domain/rankings';
+import { rankedKinds, rankingWorks, tieGroups, type RankedWork } from '@/domain/rankings';
 import { send, useApi } from '@/lib/client/api';
+import { useSortable } from '@/lib/client/sortable';
 import { useViewState } from '@/lib/client/view-state';
 import { useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
+import { Duel } from './duel';
 import { MediaLink } from './media-link';
 import { Select } from './select';
 import { toast } from './notify';
@@ -25,7 +27,7 @@ import {
 } from './ui';
 
 const SHOWN = 10;
-type View = Pick<Ranking, 'kind' | 'mode' | 'order' | 'size'> & {
+type View = Pick<Ranking, 'kind' | 'order' | 'size'> & {
   key: string;
   id: number | null;
   name: string | null;
@@ -33,12 +35,12 @@ type View = Pick<Ranking, 'kind' | 'mode' | 'order' | 'size'> & {
 };
 
 /**
- * Rankings on the profile: one automatic ranking per kind (built from the ratings), plus the
- * user's own — automatic (a kind or every kind, top N) or hand-made. Equal scores can be put in
- * the user's order; a hand-made order against the ratings is flagged.
+ * Rankings by rating on the profile: one per kind, plus the user's own (a kind or every kind, top
+ * N). A better score is always above; works with the same score can be put in the user's order,
+ * by dragging them among themselves or by duels.
  */
 export function Tops({ entries }: { entries: TrackedMedia[] }) {
-  const { t, n } = useI18n();
+  const { t, n, locale } = useI18n();
   const universe = useUniverse();
   const rankings = useApi<Ranking[]>('/api/rankings');
   const saved = useMemo(() => rankings.data ?? [], [rankings.data]);
@@ -51,7 +53,6 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
         name: null,
         builtin: k,
         kind: k,
-        mode: 'auto' as const,
         size: null,
         order: row?.order ?? [],
       };
@@ -67,10 +68,11 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
     .filter((v) => v.builtin)
     .sort((a, b) => rankingWorks(b, entries).length - rankingWorks(a, entries).length)[0];
   const view = views.find((v) => v.key === chosen) ?? largest ?? views[0];
-  const [editing, setEditing] = useState(false);
   const [all, setAll] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [duel, setDuel] = useState<RankedWork[] | null>(null);
   const works = view ? rankingWorks(view, entries) : [];
+  const ties = tieGroups(works);
   const title = (v: View) =>
     v.builtin ? t('tops.kindTitle', { kind: t(`kind.${v.builtin}`) }) : (v.name ?? '');
 
@@ -110,16 +112,24 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
     }
   }
   const ids = works.map((w) => w.entry.id);
-  const move = (i: number, by: -1 | 1) => {
-    const next = [...ids];
-    [next[i], next[i + by]] = [next[i + by], next[i]];
-    void save(next);
-  };
-  const remove = (id: number) => void save(ids.filter((x) => x !== id));
-  const add = (id: number) => void save([...ids.filter((x) => x !== id), id]);
+  // A work moves only among the works with its score.
+  const bounds = useCallback(
+    (id: number, order: readonly number[]) => {
+      const rating = entries.find((e) => e.id === id)?.rating;
+      const rated = (x: number) => entries.find((e) => e.id === x)?.rating === rating;
+      const first = order.findIndex(rated);
+      let last = first;
+      while (last + 1 < order.length && rated(order[last + 1])) last++;
+      return [first, last] as const;
+    },
+    [entries],
+  );
+  const sortable = useSortable(ids, (next) => void save(next), bounds);
+  const ordered = sortable.order.flatMap((id) => works.filter((w) => w.entry.id === id));
+  const shown = all ? ordered : ordered.slice(0, SHOWN);
 
   return (
-    <section id="tops" className="scroll-mt-28 flex flex-col gap-5">
+    <section id="tops" className="flex scroll-mt-28 flex-col gap-5">
       <SectionHeading title={t('tops.title')} aside={t('tops.aside')} />
       <div className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0">
         {views.map((v) => (
@@ -129,7 +139,6 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
             aria-pressed={view?.key === v.key}
             onClick={() => {
               setChosen(v.key);
-              setEditing(false);
               setAll(false);
             }}
             className={cx(
@@ -158,21 +167,13 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
         <>
           <div className="text-mid flex flex-wrap items-center gap-2 text-sm">
             <span>
-              {view.mode === 'auto' ? t('tops.autoHint') : t('tops.manualHint')}
+              {t('tops.autoHint')}
               {view.size ? ` · ${t('tops.topN', { n: n(view.size) })}` : ''}
             </span>
-            <button
-              type="button"
-              aria-pressed={editing}
-              onClick={() => setEditing(!editing)}
-              className={cx(smallButton, 'ml-auto', editing && 'bg-fg text-bg hover:bg-fg')}
-            >
-              {editing ? t('tops.done') : t('tops.edit')}
-            </button>
             {!view.builtin && view.id && (
               <button
                 type="button"
-                className={smallButton}
+                className={cx(smallButton, 'ml-auto')}
                 onClick={async () => {
                   if (!window.confirm(t('tops.deleteConfirm', { name: title(view) }))) return;
                   try {
@@ -190,27 +191,82 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
               </button>
             )}
           </div>
-          {editing && view.mode === 'auto' && (
-            <p className="text-muted text-xs">{t('tops.tieHint')}</p>
+          {ties.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-2xl bg-white/[0.04] p-3 md:flex-row md:flex-wrap md:items-center md:gap-3 md:px-4">
+              <span className="text-mid text-sm">{t('tops.tieHint')}</span>
+              <span className="flex flex-wrap gap-2 md:ml-auto">
+                {ties.map((group) => (
+                  <button
+                    key={group[0].entry.id}
+                    type="button"
+                    className={smallButton}
+                    onClick={() => setDuel(group)}
+                  >
+                    <span className="flex items-center gap-1 rounded-full bg-[#f5c518] px-2 py-0.5 text-xs font-bold text-black">
+                      <Star className="size-3" fill="currentColor" strokeWidth={0} aria-hidden />
+                      {formatRating(group[0].entry.rating!, locale)}
+                    </span>
+                    {t('tops.tieBreak', { count: n(group.length) })}
+                  </button>
+                ))}
+              </span>
+            </div>
           )}
-          {!works.length && (
-            <Empty title={t(view.mode === 'manual' ? 'tops.manualEmpty' : 'tops.empty')} />
-          )}
-          <ol className="grid gap-x-8 gap-y-1 md:grid-cols-2">
-            {(all || editing ? works : works.slice(0, SHOWN)).map((w, i) => (
-              <RankRow
-                key={w.entry.id}
-                work={w}
-                editing={editing}
-                canUp={view.mode === 'manual' ? i > 0 : w.tiedAbove}
-                canDown={view.mode === 'manual' ? i < works.length - 1 : w.tiedBelow}
-                onUp={() => move(i, -1)}
-                onDown={() => move(i, 1)}
-                onRemove={view.mode === 'manual' ? () => remove(w.entry.id) : undefined}
-              />
-            ))}
+          <ol
+            className={cx(
+              'grid gap-x-8 gap-y-1 md:grid-cols-2',
+              all && 'max-h-[min(72vh,760px)] overflow-y-auto overscroll-contain pr-1',
+            )}
+          >
+            {shown.map((w) => {
+              const tied = w.tiedAbove || w.tiedBelow;
+              return (
+                <li
+                  key={w.entry.id}
+                  ref={sortable.item(w.entry.id)}
+                  className={cx(
+                    'flex min-w-0 items-center gap-1 rounded-2xl py-2 pr-2',
+                    sortable.dragging === w.entry.id
+                      ? 'bg-white/[0.1] ring-2 ring-white/60'
+                      : 'hover:bg-white/[0.04]',
+                  )}
+                >
+                  {tied ? (
+                    <button
+                      type="button"
+                      aria-label={t('lists.drag', { title: w.entry.title })}
+                      title={t('tops.dragHint')}
+                      className="text-faint hover:text-mid flex size-8 shrink-0 items-center justify-center rounded-full"
+                      {...sortable.handle(w.entry.id)}
+                    >
+                      <GripVertical className="size-4" aria-hidden />
+                    </button>
+                  ) : (
+                    <span className="w-8 shrink-0" />
+                  )}
+                  <MediaLink
+                    media={w.entry.media}
+                    className="flex min-w-0 flex-1 items-center gap-3 md:gap-4"
+                  >
+                    <span className="font-display w-8 shrink-0 text-right text-2xl font-extrabold tracking-[-0.05em] text-white/80 tabular-nums md:w-10 md:text-3xl">
+                      {n(ordered.indexOf(w) + 1)}
+                    </span>
+                    <Cover
+                      src={w.entry.coverUrl ?? w.entry.media.coverUrl}
+                      fallbacks={w.entry.coverFallbacks}
+                      className="w-12 shrink-0"
+                    />
+                    <span className="min-w-0 flex-1 truncate font-medium">{w.entry.title}</span>
+                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#f5c518] px-2.5 py-1 text-sm font-bold text-black">
+                      <Star className="size-3.5" fill="currentColor" strokeWidth={0} aria-hidden />
+                      {formatRating(w.entry.rating!, locale)}
+                    </span>
+                  </MediaLink>
+                </li>
+              );
+            })}
           </ol>
-          {!editing && works.length > SHOWN && (
+          {works.length > SHOWN && (
             <button
               type="button"
               className={cx(smallButton, 'self-start')}
@@ -219,18 +275,22 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
               {all ? t('tops.less') : t('tops.all', { count: n(works.length) })}
             </button>
           )}
-          {editing && view.mode === 'manual' && (
-            <AddWork
-              entries={entries.filter(
-                (e) =>
-                  !e.partOf &&
-                  !ids.includes(e.id) &&
-                  (!view.kind || kindOfMedia(e.media) === view.kind),
-              )}
-              onAdd={add}
-            />
-          )}
         </>
+      )}
+      {duel && view && (
+        <Duel
+          title={title(view)}
+          sorted={[duel[0].entry]}
+          pending={duel.slice(1).map((w) => w.entry)}
+          onCancel={() => setDuel(null)}
+          onDone={(groupOrder) => {
+            const first = ids.indexOf(duel[0].entry.id);
+            const next = ids.filter((id) => !groupOrder.includes(id));
+            next.splice(first, 0, ...groupOrder);
+            void save(next);
+            setDuel(null);
+          }}
+        />
       )}
       <CreateRanking
         open={creating}
@@ -239,139 +299,9 @@ export function Tops({ entries }: { entries: TrackedMedia[] }) {
           setCreating(false);
           await rankings.mutate();
           setChosen(`own:${id}`);
-          setEditing(true);
         }}
       />
     </section>
-  );
-}
-
-function RankRow({
-  work: w,
-  editing,
-  canUp,
-  canDown,
-  onUp,
-  onDown,
-  onRemove,
-}: {
-  work: RankedWork;
-  editing: boolean;
-  canUp: boolean;
-  canDown: boolean;
-  onUp: () => void;
-  onDown: () => void;
-  onRemove?: () => void;
-}) {
-  const { t, n, locale } = useI18n();
-  const e = w.entry;
-  const control =
-    'text-mid flex size-9 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white disabled:opacity-25';
-  return (
-    <li className="flex items-center gap-2 rounded-2xl px-2 py-2 hover:bg-white/[0.04]">
-      <MediaLink media={e.media} className="flex min-w-0 flex-1 items-center gap-4">
-        <span className="font-display w-10 shrink-0 text-right text-3xl font-extrabold tracking-[-0.05em] text-white/80 tabular-nums">
-          {n(w.rank)}
-        </span>
-        <Cover
-          src={e.coverUrl ?? e.media.coverUrl}
-          fallbacks={e.coverFallbacks}
-          className="w-12 shrink-0"
-        />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate font-medium">{e.title}</span>
-          {w.conflict && (
-            <span className="text-warn flex items-center gap-1 text-xs">
-              <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
-              <span className="truncate">
-                {t('tops.conflict', {
-                  title: w.conflict.title,
-                  rating: formatRating(w.conflict.rating!, locale),
-                })}
-              </span>
-            </span>
-          )}
-        </span>
-        {e.rating != null && (
-          <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#f5c518] px-2.5 py-1 text-sm font-bold text-black">
-            <Star className="size-3.5" fill="currentColor" strokeWidth={0} aria-hidden />
-            {formatRating(e.rating, locale)}
-          </span>
-        )}
-      </MediaLink>
-      {editing && (
-        <span className="flex shrink-0 items-center">
-          <button
-            type="button"
-            disabled={!canUp}
-            onClick={onUp}
-            aria-label={t('tops.up')}
-            className={control}
-          >
-            <ArrowUp className="size-4" aria-hidden />
-          </button>
-          <button
-            type="button"
-            disabled={!canDown}
-            onClick={onDown}
-            aria-label={t('tops.down')}
-            className={control}
-          >
-            <ArrowDown className="size-4" aria-hidden />
-          </button>
-          {onRemove && (
-            <button
-              type="button"
-              onClick={onRemove}
-              aria-label={t('tops.remove')}
-              className={control}
-            >
-              <X className="size-4" aria-hidden />
-            </button>
-          )}
-        </span>
-      )}
-    </li>
-  );
-}
-
-/** Adds one of the library's works to a hand-made ranking (filtered by typing). */
-function AddWork({ entries, onAdd }: { entries: TrackedMedia[]; onAdd: (id: number) => void }) {
-  const { t } = useI18n();
-  const [q, setQ] = useState('');
-  const fold = (v: string) => v.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
-  const found = q.trim()
-    ? entries.filter((e) => fold(e.title).includes(fold(q.trim()))).slice(0, 8)
-    : [];
-  return (
-    <div className="flex max-w-xl flex-col gap-2">
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder={t('tops.addPlaceholder')}
-        aria-label={t('tops.add')}
-        className={field}
-      />
-      {found.map((e) => (
-        <button
-          key={e.id}
-          type="button"
-          onClick={() => {
-            onAdd(e.id);
-            setQ('');
-          }}
-          className="flex items-center gap-3 rounded-xl px-2 py-1.5 text-left text-sm hover:bg-white/[0.06]"
-        >
-          <Cover
-            src={e.coverUrl ?? e.media.coverUrl}
-            fallbacks={e.coverFallbacks}
-            className="w-8 shrink-0"
-          />
-          <span className="min-w-0 flex-1 truncate">{e.title}</span>
-          <Plus className="text-mid size-4 shrink-0" aria-hidden />
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -387,7 +317,6 @@ function CreateRanking({
   const { t, n } = useI18n();
   const [name, setName] = useState('');
   const [kind, setKind] = useState<Kind | ''>('');
-  const [mode, setMode] = useState<'auto' | 'manual'>('manual');
   const [size, setSize] = useState('');
   const [busy, setBusy] = useState(false);
   return (
@@ -410,15 +339,6 @@ function CreateRanking({
             className={field}
           />
           <div className="grid grid-cols-2 gap-2">
-            <Select
-              label={t('tops.mode')}
-              value={mode}
-              onChange={(v) => setMode(v as 'auto' | 'manual')}
-              options={[
-                { value: 'manual', label: t('tops.modeManual') },
-                { value: 'auto', label: t('tops.modeAuto') },
-              ]}
-            />
             <Select
               label={t('catalog.kind')}
               value={kind}
@@ -455,7 +375,6 @@ function CreateRanking({
                   const { id } = await send<{ id: number }>('/api/rankings', 'POST', {
                     name: name.trim(),
                     kind: kind || null,
-                    mode,
                     size: size ? Number(size) : null,
                   });
                   setName('');

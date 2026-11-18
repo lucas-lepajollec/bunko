@@ -8,6 +8,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { Select } from './select';
 import { toast } from './notify';
 import { Spinner, cx, errorText } from './ui';
+import { AddToList } from './lists';
 
 type Action = 'remove' | 'complete' | 'status' | 'favorite' | 'unfavorite' | 'adult' | 'notAdult';
 type Status = TrackedMedia['status'];
@@ -165,6 +166,11 @@ export function SelectionBar({
           >
             {t(allFavorite ? 'bulk.unfavorite' : 'bulk.favorite')}
           </button>
+          <AddToList
+            selected={selected}
+            disabled={!count || busy}
+            className="h-10 shrink-0 bg-white/[0.1] pr-3.5 pl-4 text-[13px] hover:bg-white/[0.16]"
+          />
           {adultOn && (
             <button
               type="button"

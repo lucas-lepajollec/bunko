@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Lists: named lists of works, ranked (numbered) or not, shown as a list, a grid or tiers S–D, with
+  a short note per work. A work's page has a "Lists" button (tick the lists that hold it, or create
+  one); the library selection adds many at once; `/lists` and the profile show them. In a ranked
+  list a work is placed by dragging its handle, by typing its place, or by duels ("which one do you
+  prefer?", a binary insertion: about 7 questions for 100 works). Likes become the Favorites list:
+  same heart, now in an order of your own, the first five of each kind on the profile. Rankings by
+  rating stay; equal scores are settled by dragging them among themselves or by duels (the
+  "Reorder" mode is gone). Hand-made rankings are migrated into ranked lists. On the profile, long
+  sections ("Pick up", the full ranking, lists) scroll inside themselves.
+
 - Fix: with Next.js 16.4.6, large API answers (the library list first) reached the browser
   compressed twice and could not be read. Next now drops a route's own `Content-Encoding` and
   compresses the answer itself, so Bunko no longer gzips JSON on its own (the server still sends
