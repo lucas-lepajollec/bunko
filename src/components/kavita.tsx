@@ -25,7 +25,7 @@ export function KavitaUnmatched({
         {series?.map((s) => (
           <div key={s.seriesId} className="flex min-w-0 flex-col gap-2.5">
             <Cover src={s.coverUrl} alt={s.name} />
-            <span className="line-clamp-2 text-xs leading-snug font-medium md:text-sm">
+            <span className="truncate text-xs leading-snug font-medium md:text-sm" title={s.name}>
               {s.name}
             </span>
             <span className="text-muted -mt-1 truncate text-xs">

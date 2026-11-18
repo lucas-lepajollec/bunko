@@ -40,7 +40,9 @@ export function PosterCard({
           progressCorner={!badge}
         />
       </span>
-      <span className="line-clamp-2 text-[13px] leading-snug font-medium">{media.title}</span>
+      <span className="truncate text-[13px] leading-snug font-medium" title={media.title}>
+        {media.title}
+      </span>
       <span className="text-muted -mt-1.5 truncate text-xs">{subtitle ?? meta(media)}</span>
     </MediaLink>
   );
@@ -180,7 +182,10 @@ export function TopRow({ items }: { items: UnifiedMedia[] | undefined }) {
             alt={m.title}
             className="relative w-[92px] transition-transform duration-300 group-hover:-translate-y-1 md:w-[128px]"
           />
-          <span className="col-start-2 line-clamp-2 w-[92px] text-xs leading-snug font-medium md:w-[128px] md:text-[13px]">
+          <span
+            className="col-start-2 w-[92px] truncate text-xs leading-snug font-medium md:w-[128px] md:text-[13px]"
+            title={m.title}
+          >
             {m.title}
           </span>
         </MediaLink>

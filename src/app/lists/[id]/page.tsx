@@ -4,7 +4,17 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { memo, useMemo, useState } from 'react';
 import { useSWRConfig } from 'swr';
-import { ArrowLeft, GripVertical, Plus, Search, Star, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  GripVertical,
+  LayoutGrid,
+  List as ListIcon,
+  Plus,
+  Search,
+  Settings2,
+  Star,
+  X,
+} from 'lucide-react';
 import type { ListTier, TierRow, TrackedMedia, WorkList, WorkListItem } from '@/types/shared';
 import { kindOfMedia } from '@/domain/kinds';
 import { formatRating, libraryMark } from '@/domain/library-mark';
@@ -163,14 +173,16 @@ export default function ListPage() {
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={smallButton} onClick={() => setAdding(true)}>
           <Plus className="size-4" aria-hidden />
-          {t('lists.addWorks')}
+          <span className="md:hidden">{t('lists.addShort')}</span>
+          <span className="hidden md:inline">{t('lists.addWorks')}</span>
         </button>
         {unplacedRated && (
           <button type="button" className={smallButton} onClick={placeByRating}>
-            {t('lists.placeByRating')}
+            <span className="md:hidden">{t('lists.placeShort')}</span>
+            <span className="hidden md:inline">{t('lists.placeByRating')}</span>
           </button>
         )}
-        <span className="ml-auto flex flex-wrap items-center gap-2">
+        <span className="ml-auto flex items-center gap-2">
           {!tier && !editing && (
             <span className="flex rounded-full bg-white/[0.06] p-0.5">
               {(['list', 'grid'] as const).map((l) => (
@@ -178,20 +190,32 @@ export default function ListPage() {
                   key={l}
                   type="button"
                   aria-pressed={list.layout === l}
+                  aria-label={t(`lists.layout.${l}`)}
                   onClick={() => patch((x) => ({ ...x, layout: l }), { layout: l })}
                   className={cx(
-                    'h-8 rounded-full px-3.5 text-[13px]',
+                    'flex h-8 items-center rounded-full px-2.5 text-[13px] transition-colors md:px-3.5',
                     list.layout === l ? 'bg-fg text-bg font-semibold' : 'text-mid hover:text-white',
                   )}
                 >
-                  {t(`lists.layout.${l}`)}
+                  {l === 'list' ? (
+                    <ListIcon className="size-4 md:hidden" aria-hidden />
+                  ) : (
+                    <LayoutGrid className="size-4 md:hidden" aria-hidden />
+                  )}
+                  <span className="hidden md:inline">{t(`lists.layout.${l}`)}</span>
                 </button>
               ))}
             </span>
           )}
           {!list.system && (
-            <button type="button" className={smallButton} onClick={() => setSettings(true)}>
-              {t('lists.settings')}
+            <button
+              type="button"
+              aria-label={t('lists.settings')}
+              className={cx(smallButton, 'max-md:w-9 max-md:px-0')}
+              onClick={() => setSettings(true)}
+            >
+              <Settings2 className="size-4 md:hidden" aria-hidden />
+              <span className="hidden md:inline">{t('lists.settings')}</span>
             </button>
           )}
           {(tier || works.length > 0) && (
@@ -201,7 +225,16 @@ export default function ListPage() {
               onClick={() => setEditing(!editing)}
               className={editing ? primarySmall : smallButton}
             >
-              {editing ? t('tops.done') : t(tier ? 'tiers.editRows' : 'lists.edit')}
+              {editing ? (
+                t('tops.done')
+              ) : (
+                <>
+                  <span className="md:hidden">{t('lists.edit')}</span>
+                  <span className="hidden md:inline">
+                    {t(tier ? 'tiers.editRows' : 'lists.edit')}
+                  </span>
+                </>
+              )}
             </button>
           )}
         </span>

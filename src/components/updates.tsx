@@ -364,7 +364,10 @@ export function LibraryNews({ kind, entries }: { kind: DiscoverKind; entries: Tr
                           {label}
                         </span>
                       </span>
-                      <span className="line-clamp-2 text-xs leading-snug font-medium md:text-sm">
+                      <span
+                        className="truncate text-xs leading-snug font-medium md:text-sm"
+                        title={e.title}
+                      >
                         {e.title}
                       </span>
                       {c.latest && (

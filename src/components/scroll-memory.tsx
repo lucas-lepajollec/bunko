@@ -1,6 +1,6 @@
 'use client';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 
 const STORE = 'bunko:scroll';
 /** Long enough for a list fetched again to render, short enough never to jump late. */
@@ -8,9 +8,10 @@ const RESTORE_FOR_MS = 4000;
 const MAX_ENTRIES = 60;
 
 /**
- * Brings each page back to where it was left on back/forward and reload. Next.js only restores
- * what is already rendered; lists rebuilt from the API grow after the navigation, so the
- * position is applied as soon as the page is tall enough (or the user scrolls first).
+ * Brings each page back to where it was left on back/forward and reload. Lists rebuilt from the
+ * API grow after the navigation: rather than showing the top of the page until they are there,
+ * the page keeps the room it had (a minimum height) and is put back at once, before it is
+ * painted; the room is given back when the content fills it (or the user scrolls first).
  * Positions are keyed by address (path + query, the page's filters included).
  */
 export function ScrollMemory() {
@@ -39,9 +40,20 @@ export function ScrollMemory() {
       }
     };
     let restoring: { target: number; until: number; frame: number } | null = null;
+    /** Height of what the page really holds (the reserved room left out). */
+    const contentHeight = () => {
+      let bottom = 0;
+      for (const child of Array.from(document.body.children))
+        bottom = Math.max(bottom, child.getBoundingClientRect().bottom);
+      return bottom + window.scrollY;
+    };
+    const release = () => {
+      document.body.style.minHeight = '';
+    };
     const stopRestoring = () => {
       if (restoring) cancelAnimationFrame(restoring.frame);
       restoring = null;
+      release();
     };
     const restore = () => {
       stopRestoring();
@@ -49,17 +61,26 @@ export function ScrollMemory() {
       if (!target) return;
       const state = { target, until: performance.now() + RESTORE_FOR_MS, frame: 0 };
       restoring = state;
+      // Room for the position at once: no frame at the top while the lists load.
+      document.body.style.minHeight = `${target + window.innerHeight}px`;
+      window.scrollTo(0, target);
       const step = () => {
         if (restoring !== state) return;
-        const room = document.documentElement.scrollHeight - window.innerHeight;
-        if (room >= target - 2 || performance.now() > state.until) {
-          window.scrollTo(0, Math.min(target, Math.max(0, room)));
+        if (contentHeight() >= target + window.innerHeight - 2) {
           restoring = null;
+          release();
+          return;
+        }
+        if (performance.now() > state.until) {
+          // The page stayed shorter (fewer works now): end at its real bottom.
+          restoring = null;
+          release();
+          window.scrollTo(0, Math.min(target, Math.max(0, contentHeight() - window.innerHeight)));
           return;
         }
         state.frame = requestAnimationFrame(step);
       };
-      step();
+      state.frame = requestAnimationFrame(step);
     };
     let saveFrame = 0;
     let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -92,7 +113,22 @@ export function ScrollMemory() {
     };
     window.history.scrollRestoration = 'manual';
     window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('popstate', onPop);
+    // Known before the router renders the page (the Navigation API announces a back/forward
+    // before popstate; capture runs before the router's own popstate listener): the restore
+    // then happens in that render, before it is painted.
+    const nav = (window as { navigation?: EventTarget }).navigation;
+    let announced = 0;
+    const onNavigate = (e: Event) => {
+      if ((e as Event & { navigationType?: string }).navigationType !== 'traverse') return;
+      announced = performance.now();
+      onPop();
+    };
+    // The popstate of a move already announced must not start the restore over.
+    const onPopState = () => {
+      if (performance.now() - announced > 1000) onPop();
+    };
+    nav?.addEventListener('navigate', onNavigate);
+    window.addEventListener('popstate', onPopState, { capture: true });
     window.addEventListener('pagehide', persist);
     for (const type of ['wheel', 'touchstart', 'keydown'] as const)
       window.addEventListener(type, takeOver, { passive: true });
@@ -106,13 +142,15 @@ export function ScrollMemory() {
       clearTimeout(saveTimer);
       persist();
       window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('popstate', onPop);
+      nav?.removeEventListener('navigate', onNavigate);
+      window.removeEventListener('popstate', onPopState, { capture: true });
       window.removeEventListener('pagehide', persist);
       for (const type of ['wheel', 'touchstart', 'keydown'] as const)
         window.removeEventListener(type, takeOver);
     };
   }, []);
-  useEffect(() => {
+  // Before paint: the page shows up where it was, not at the top first.
+  useLayoutEffect(() => {
     if (!popped.current) return;
     popped.current = false;
     restoreRef.current();

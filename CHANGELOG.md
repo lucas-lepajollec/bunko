@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Back and forward put the page where it was from its first frame (the page keeps its height
+  while its lists load, and the move is known before the router renders: Navigation API, else a
+  capturing popstate), instead of showing the top first. "See all" in a ranking keeps the height
+  of the top 10 and scrolls inside it. Titles under posters hold one line with an ellipsis (full
+  title on hover), so cards and progress bars line up. On phones the list toolbars fit one line
+  (short labels, icons).
+
 - Lists, round three: a tier list's rows are its own (schema v30, `list_tiers`): add, rename,
   recolor, move and remove them in "Edit the tiers" (works of a removed row go back to "to
   place"). In an edit mode the whole row of a work is grabbed (fields stay editable with a click).
