@@ -57,11 +57,7 @@ export function compact(raw: Raw[]): AnimeIds[] {
     .filter((r) => Number.isInteger(r.anilist_id))
     .map((r) => {
       const tmdb =
-        typeof r.themoviedb_id === 'number'
-          ? r.type === 'MOVIE'
-            ? null
-            : r.themoviedb_id
-          : (r.themoviedb_id?.tv ?? null);
+        typeof r.themoviedb_id === 'number' ? r.themoviedb_id : (r.themoviedb_id?.tv ?? null);
       const imdb = Array.isArray(r.imdb_id) ? r.imdb_id[0] : r.imdb_id;
       return {
         anilist: r.anilist_id!,
@@ -102,7 +98,7 @@ function build(list: AnimeIds[]): Index {
   for (const e of list) {
     index.byAnilist.set(e.anilist, e);
     push(index.byTvdb, e.tvdb, e);
-    push(index.byTmdb, e.tmdb, e);
+    if (e.type !== 'MOVIE') push(index.byTmdb, e.tmdb, e);
     push(index.byImdb, e.imdb, e);
     if (e.anidb !== null) index.byAnidb.set(e.anidb, e);
     if (e.mal !== null) index.byMal.set(e.mal, e);
