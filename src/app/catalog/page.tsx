@@ -2,7 +2,7 @@
 import { SlidingHighlight } from '@/components/sliding-highlight';
 import { KIND_IDS, KINDS as KIND_DEFS, isVideoKind } from '@/domain/kinds';
 import { Select } from '@/components/select';
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import useSWRInfinite from 'swr/infinite';
 import Link from 'next/link';
@@ -14,6 +14,7 @@ import type {
   DiscoverSort,
   ReleasesPage,
   Season,
+  UnifiedMedia,
 } from '@/types/shared';
 import { SEASONS, formatStartDate } from '@/lib/client/season';
 import { api, useApi, useProgressiveSearch } from '@/lib/client/api';
@@ -160,7 +161,58 @@ function Catalog() {
   const releasesMore =
     releases.isLoading ||
     (releases.size > 0 && releases.data && typeof releases.data[releases.size - 1] === 'undefined');
-  const rawItems = (pages.data ?? []).flatMap((p) => p.items);
+  const rawItems = useMemo(() => {
+    // Multi-provider infinite scroll (e.g. Hardcover page 1 + OpenLibrary page 2, or AniList +
+    // TMDB) can return the same work under different provider IDs on consecutive pages.
+    const flat = (pages.data ?? []).flatMap((p) => p.items);
+    const seenIds = new Set<string>();
+    const seenCross = new Map<string, { provider: string; year: number | null }>();
+    const out: UnifiedMedia[] = [];
+    for (const m of flat) {
+      const extIds = [
+        m.id,
+        m.anilistId ? `al:${m.anilistId}` : null,
+        m.mangadexId ? `md:${m.mangadexId}` : null,
+        m.mangaUpdatesId ? `mu:${m.mangaUpdatesId}` : null,
+      ].filter((x): x is string => Boolean(x));
+      if (extIds.some((k) => seenIds.has(k))) continue;
+      const provider = m.id.slice(0, m.id.indexOf(':'));
+      const normTitle = m.title
+        .normalize('NFKD')
+        .replace(/\p{M}/gu, '')
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}]/gu, '');
+      const authorKey = m.authors[0]
+        ? m.authors[0]
+            .normalize('NFKD')
+            .replace(/\p{M}/gu, '')
+            .toLowerCase()
+            .split(/[^\p{L}\p{N}]+/u)
+            .filter(Boolean)
+            .sort()
+            .join(' ')
+        : '';
+      const crossKey =
+        normTitle && authorKey
+          ? `${m.type}:${normTitle}:${authorKey}`
+          : m.format === 'ANIMATION_FILM' && normTitle
+            ? `animfilm:${normTitle}`
+            : null;
+      if (crossKey) {
+        const prev = seenCross.get(crossKey);
+        if (
+          prev &&
+          prev.provider !== provider &&
+          (!prev.year || !m.year || Math.abs(prev.year - m.year) <= 1)
+        )
+          continue;
+        if (!prev) seenCross.set(crossKey, { provider, year: m.year });
+      }
+      for (const k of extIds) seenIds.add(k);
+      out.push(m);
+    }
+    return out;
+  }, [pages.data]);
   const catalogScope = `catalog:${kind}:${section ?? ''}:${sort}:${genre}:${status}:${year ?? ''}:${season}:${tags.join(',')}:${minScore ?? ''}:${adultOnly ? '1' : '0'}`;
   const items = useStableOrder(rawItems, (m) => m.id, catalogScope);
   const catalogState = catalogLoading(pages.data, Boolean(pages.error));
@@ -283,15 +335,9 @@ function Catalog() {
           {/* View, sort and filters share one row while they fit; otherwise the filters (sort
               first) take their own row, which scrolls sideways on phones. */}
           <div className="toolbar-row flex flex-col gap-2.5 md:flex-row md:flex-wrap md:items-center md:gap-2">
-            {/* Filters (sort first) on the left; the views, and the planning beside the
-                releases, on the right. Phones keep the views on top. */}
+            {/* Filters (sort + genres + planning in releases view) on the left; the views on the right.
+                Phones keep the views cleanly on top without wrapping into the filter row. */}
             <div className="flex items-center gap-2 self-start md:order-last md:ml-auto md:self-auto">
-              {view === 'chapters' && !q && (
-                <Link href="/planning" className={cx(smallButton, 'h-9 md:order-first')}>
-                  <CalendarDays className="size-4" aria-hidden />
-                  {t('nav.planning')}
-                </Link>
-              )}
               <div
                 className="toolbar-seg relative flex shrink-0 self-start rounded-full bg-white/[0.06] p-0.5 text-sm md:self-auto"
                 role="group"
@@ -348,13 +394,29 @@ function Catalog() {
                 releasesView={view === 'chapters'}
                 className="min-w-0 md:flex-auto"
                 leading={sortSelect}
+                trailing={
+                  view === 'chapters' && !q ? (
+                    <Link href="/planning" className={cx(smallButton, 'h-9 shrink-0')}>
+                      <CalendarDays className="size-4" aria-hidden />
+                      {t('nav.planning')}
+                    </Link>
+                  ) : null
+                }
                 onChange={(patch) => {
                   const [first, ...rest] = Object.entries(patch);
                   set(first[0], first[1], Object.fromEntries(rest));
                 }}
               />
             ) : (
-              sortSelect
+              <div className="flex items-center gap-2">
+                {sortSelect}
+                {view === 'chapters' && !q && (
+                  <Link href="/planning" className={cx(smallButton, 'h-9 shrink-0')}>
+                    <CalendarDays className="size-4" aria-hidden />
+                    {t('nav.planning')}
+                  </Link>
+                )}
+              </div>
             )}
           </div>
           {tmdbKind && settings.data && !settings.data.catalogs?.configured.tmdb && (

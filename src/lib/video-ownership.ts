@@ -1,4 +1,5 @@
 import type { AnimeSeason, EpisodeRange, TrackedMedia } from '@/types/shared';
+import { KINDS, kindOfMedia } from '@/domain/kinds';
 import { jellyfinConfigured, matchJellyfin, resetJellyfinProgress, workAired } from './jellyfin';
 import { knownSeasons } from './anime-franchise';
 import { inTenant, tenantId, tenantState } from './tenant-context';
@@ -156,7 +157,7 @@ export function withVideoOwnership(entries: TrackedMedia[]): TrackedMedia[] {
   const jellyfin = jellyfinConfigured();
   return entries.map((e) => {
     if (e.type !== 'ANIME') return e;
-    const film = e.media.format === 'MOVIE' || e.media.format === 'ANIMATION_FILM';
+    const film = KINDS[kindOfMedia(e.media)].unit === 'film';
     let jellyfinOwned = 0;
     const match = jellyfin ? matchJellyfin(e.media, e.jellyfinLink) : null;
     if (jellyfin) {

@@ -502,6 +502,10 @@ export function setPartLink(root: string, member: string, joined: boolean) {
       new Date().toISOString(),
     );
   } else statement('DELETE FROM work_links WHERE member=? AND root=?').run(member, root);
+  statement('DELETE FROM metadata_cache WHERE key IN (?,?)').run(
+    `detail:${root}`,
+    `detail:${member}`,
+  );
 }
 /** Join `member` into `root` (or undo it); works are recomputed from AniList afterwards. */
 export function setWorkLink(root: number, member: number, joined: boolean) {

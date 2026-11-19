@@ -22,11 +22,14 @@ import { withTracking } from './catalog';
 import { requestJson } from './http';
 import {
   aniFields,
+  authorsMatch,
+  canonicalTitle,
   DEX_DOUJINSHI,
   emptyMedia,
   fromAniList,
   fromMangaDex,
   fromMangaUpdates,
+  hasEditionQualifier,
   isUnwantedUpdatesType,
   normalizeTitle,
   relevance,
@@ -34,42 +37,131 @@ import {
   type DexManga,
   type UpdatesRecord,
 } from './media';
+import { anilistOfTmdbMovie, animeIdsReady, tmdbEntries } from './anime-ids';
 import { indexedSeries } from './kavita-index';
 import { kavitaMedia } from './kavita-track';
 import { cached, storedMetadata, metadataStatus } from './metadata-cache';
 export { emptyMedia, normalizeTitle };
 function identities(m: UnifiedMedia) {
-  return [m.title, ...m.altTitles].map(normalizeTitle).filter(Boolean);
+  const out = new Set<string>();
+  for (const raw of [m.title, ...m.altTitles]) {
+    const exact = normalizeTitle(raw);
+    if (exact) out.add(exact);
+    const canon = canonicalTitle(raw);
+    if (canon) out.add(canon);
+  }
+  return [...out];
 }
+const PROVIDER_RANK: Record<string, number> = {
+  anilist: 0,
+  mangadex: 1,
+  mangaupdates: 2,
+  hardcover: 3,
+  openlibrary: 4,
+  metron: 5,
+  tmdbtv: 6,
+  tmdbmovie: 6,
+  googlebooks: 7,
+  bnf: 8,
+  rakuten: 8,
+  royalroad: 8,
+  kavita: 9,
+  suwayomi: 10,
+  jellyfin: 10,
+  ext: 11,
+};
+const providerOf = (m: UnifiedMedia) => m.id.slice(0, m.id.indexOf(':'));
+const providerRank = (m: UnifiedMedia) => PROVIDER_RANK[providerOf(m)] ?? 12;
+const isLocalItem = (m: UnifiedMedia) =>
+  m.id.startsWith('kavita:') || m.id.startsWith('suwayomi:') || m.id.startsWith('jellyfin:');
+
+function effectiveFormat(m: UnifiedMedia): string | null {
+  if (m.format) return m.format;
+  // AniList anime TV/OVA have format=null; distinguish from TMDB SERIES/MOVIE so live-action
+  // shows/films never falsely merge with an anime sharing the same title and year.
+  if (m.type === 'ANIME' && m.anilistId) return 'ANIME';
+  return null;
+}
+
+function formatsCompatible(a: UnifiedMedia, b: UnifiedMedia): boolean {
+  const fa = effectiveFormat(a);
+  const fb = effectiveFormat(b);
+  if (!fa || !fb || fa === fb) return true;
+  // Manga & One-Shot belong to the same manga kind (`kinds.ts`).
+  if ((fa === 'MANGA' && fb === 'ONE_SHOT') || (fa === 'ONE_SHOT' && fb === 'MANGA')) return true;
+  // Local Kavita/Suwayomi items infer format heuristically from library/source names.
+  if (isLocalItem(a) || isLocalItem(b)) return true;
+  // Cross-provider book/novel heuristics (`NOVEL` vs `BOOK`, or AniList `LIGHT_NOVEL` vs
+  // Hardcover/OpenLibrary `NOVEL` which have no distinct LN format) when creators match.
+  const pair = new Set([fa, fb]);
+  const crossBook =
+    providerOf(a) !== providerOf(b) &&
+    ((pair.has('NOVEL') && pair.has('BOOK')) || (pair.has('LIGHT_NOVEL') && pair.has('NOVEL')));
+  if (crossBook && authorsMatch(a.authors, b.authors)) return true;
+  return false;
+}
+
 export function deduplicate(input: UnifiedMedia[]): UnifiedMedia[] {
   const output: UnifiedMedia[] = [];
   const exact = new Map<string, UnifiedMedia>();
   const providerIds = new WeakMap<UnifiedMedia, Map<string, string>>();
-  const ids = (m: UnifiedMedia) =>
-    new Map([
-      [m.id.split(':')[0], m.id.slice(m.id.indexOf(':') + 1)],
-      ...(m.anilistId ? [['anilist', String(m.anilistId)]] : []),
-      ...(m.mangadexId ? [['mangadex', m.mangadexId]] : []),
-      ...(m.mangaUpdatesId ? [['mangaupdates', m.mangaUpdatesId]] : []),
-    ] as [string, string][]);
+  const ids = (m: UnifiedMedia) => {
+    const entries: [string, string][] = [
+      [providerOf(m), m.id.slice(m.id.indexOf(':') + 1)],
+      ...(m.anilistId ? ([['anilist', String(m.anilistId)]] as [string, string][]) : []),
+      ...(m.mangadexId ? ([['mangadex', m.mangadexId]] as [string, string][]) : []),
+      ...(m.mangaUpdatesId ? ([['mangaupdates', m.mangaUpdatesId]] as [string, string][]) : []),
+      ...(m.kavitaSeriesId ? ([['kavita', String(m.kavitaSeriesId)]] as [string, string][]) : []),
+      ...m.sources.map(
+        (s) => [`suwayomi:${s.sourceId}`, String(s.suwayomiMangaId)] as [string, string],
+      ),
+    ];
+    // Bridge TMDB animated films/shows that map to an AniList anime in the offline id table.
+    if (m.type === 'ANIME' && animeIdsReady()) {
+      if (m.id.startsWith('tmdbmovie:')) {
+        const mapped = anilistOfTmdbMovie(Number(m.id.slice(10)));
+        if (mapped) entries.push(['anilist', String(mapped)]);
+      } else if (m.id.startsWith('tmdbtv:')) {
+        const mapped = tmdbEntries(Number(m.id.slice(7)))[0]?.anilist;
+        if (mapped) entries.push(['anilist', String(mapped)]);
+      }
+    }
+    return new Map(entries);
+  };
   const sameWork = (m: UnifiedMedia, other: UnifiedMedia) => {
     const left = providerIds.get(m) ?? ids(m),
       right = ids(other);
-    if ([...right].some(([p, id]) => left.has(p) && left.get(p) !== id)) return false;
+    const sameProviderConflict = [...right].some(([p, id]) => left.has(p) && left.get(p) !== id);
     const linked = [...right].some(([p, id]) => left.get(p) === id);
-    if (linked) return true;
-    if (m.format && other.format && m.format !== other.format) return false;
-    if (m.year && other.year && m.year !== other.year) return false;
-    // A title alone is insufficient for western comics/books; require a shared creator.
-    if (isTextKind(m) || isTextKind(other) || m.format === 'COMIC' || other.format === 'COMIC')
-      return m.authors.some((a) =>
-        other.authors.some((b) => normalizeTitle(a) === normalizeTitle(b)),
+    if (linked && !sameProviderConflict) return true;
+    // Allow collapsing same-provider book edition duplicates (e.g. "Dune" + "Dune (Deluxe Edition)")
+    // ONLY when an explicit edition qualifier is present and creators match; plain homonyms stay apart.
+    if (sameProviderConflict) {
+      const p = providerOf(m);
+      return (
+        p === providerOf(other) &&
+        (p === 'openlibrary' || p === 'hardcover') &&
+        (hasEditionQualifier(m.title) || hasEditionQualifier(other.title)) &&
+        canonicalTitle(m.title) === canonicalTitle(other.title) &&
+        authorsMatch(m.authors, other.authors) &&
+        (!m.year || !other.year || Math.abs(m.year - other.year) <= 1)
       );
-    return (
-      !m.authors.length ||
-      !other.authors.length ||
-      m.authors.some((a) => other.authors.some((b) => normalizeTitle(a) === normalizeTitle(b)))
-    );
+    }
+    if (!formatsCompatible(m, other)) return false;
+    if (m.year && other.year && Math.abs(m.year - other.year) > 1) return false;
+    // A title alone is insufficient for western comics/books; require a shared creator
+    // (except local Kavita/Suwayomi entries which never carry authors, or MU LN summaries).
+    if (isTextKind(m) || isTextKind(other) || m.format === 'COMIC' || other.format === 'COMIC') {
+      if (authorsMatch(m.authors, other.authors)) return true;
+      if ((isLocalItem(m) || isLocalItem(other)) && (!m.authors.length || !other.authors.length))
+        return true;
+      return (
+        (m.format === 'LIGHT_NOVEL' || other.format === 'LIGHT_NOVEL') &&
+        ((m.id.startsWith('mangaupdates:') && !m.authors.length) ||
+          (other.id.startsWith('mangaupdates:') && !other.authors.length))
+      );
+    }
+    return !m.authors.length || !other.authors.length || authorsMatch(m.authors, other.authors);
   };
   const aliases = new Map<string, UnifiedMedia[]>();
   const index = (m: UnifiedMedia) => {
@@ -83,31 +175,27 @@ export function deduplicate(input: UnifiedMedia[]): UnifiedMedia[] {
       aliases.set(name, list);
     }
   };
-  for (const media of input) {
+  // Prefer plain canonical titles before edition-tagged duplicates when both appear in the same list.
+  const ordered = input
+    .map((media, idx) => ({ media, idx }))
+    .sort((a, b) => {
+      const ea = Number(hasEditionQualifier(a.media.title));
+      const eb = Number(hasEditionQualifier(b.media.title));
+      if (ea !== eb && canonicalTitle(a.media.title) === canonicalTitle(b.media.title))
+        return ea - eb;
+      return a.idx - b.idx;
+    })
+    .map((x) => x.media);
+  for (const media of ordered) {
     const keys = identities(media);
     const candidates = new Set(keys.flatMap((k) => aliases.get(`${media.type}:${k}`) ?? []));
-    const compatible = (m: UnifiedMedia) =>
-      !(
-        m.format &&
-        media.format &&
-        m.format !== media.format &&
-        (isTextKind(m) || isTextKind(media))
-      ) &&
-      !(
-        m.id.startsWith('openlibrary:') &&
-        media.id.startsWith('openlibrary:') &&
-        m.id !== media.id
-      );
     const exactTarget = [...ids(media)]
       .flatMap(([p, id]) => exact.get(`${media.type}:${p}:${id}`) ?? [])
-      .find((m) => compatible(m) && sameWork(m, media));
+      .find((m) => sameWork(m, media));
     const target =
-      (exactTarget && compatible(exactTarget) && sameWork(exactTarget, media)
-        ? exactTarget
-        : undefined) ??
+      (exactTarget && sameWork(exactTarget, media) ? exactTarget : undefined) ??
       [...candidates].find(
         (m) =>
-          compatible(m) &&
           sameWork(m, media) &&
           !(m.anilistId && media.anilistId && m.anilistId !== media.anilistId) &&
           !(m.mangadexId && media.mangadexId && m.mangadexId !== media.mangadexId),
@@ -119,11 +207,28 @@ export function deduplicate(input: UnifiedMedia[]): UnifiedMedia[] {
       index(copy);
       continue;
     }
+    // Deterministic canonical winner: a strictly higher-priority catalog provider (e.g.
+    // Hardcover over OpenLibrary, AniList over MangaUpdates) keeps its id/title regardless of
+    // which progressive lane finished first.
+    if (
+      providerRank(media) < providerRank(target) &&
+      !target.trackedId &&
+      !hasEditionQualifier(media.title)
+    ) {
+      target.altTitles = [...new Set([target.title, ...target.altTitles, ...media.altTitles])].filter(
+        (t) => t !== media.title,
+      );
+      target.id = media.id;
+      target.title = media.title;
+      if (media.format) target.format = media.format;
+      if (media.coverUrl) target.coverUrl = media.coverUrl;
+    } else {
+      target.altTitles = [...new Set([...target.altTitles, media.title, ...media.altTitles])].filter(
+        (t) => t !== target.title,
+      );
+    }
     target.adult = Boolean(target.adult || media.adult);
     providerIds.set(target, new Map([...(providerIds.get(target) ?? ids(target)), ...ids(media)]));
-    target.altTitles = [...new Set([...target.altTitles, media.title, ...media.altTitles])].filter(
-      (t) => t !== target.title,
-    );
     target.providers = [...new Set([...target.providers, ...media.providers])];
     for (const source of media.sources)
       if (
@@ -136,6 +241,7 @@ export function deduplicate(input: UnifiedMedia[]): UnifiedMedia[] {
       'anilistId',
       'mangadexId',
       'mangaUpdatesId',
+      'kavitaSeriesId',
       'coverUrl',
       'bannerUrl',
       'synopsis',
@@ -152,6 +258,7 @@ export function deduplicate(input: UnifiedMedia[]): UnifiedMedia[] {
       'popularity',
     ] as const)
       if (target[key] === null && media[key] !== null) Object.assign(target, { [key]: media[key] });
+    if (target.format === 'NOVEL' && media.format === 'LIGHT_NOVEL') target.format = 'LIGHT_NOVEL';
     target.genres = [...new Set([...target.genres, ...media.genres])];
     if ((media.startDate?.length ?? 0) > (target.startDate?.length ?? 0))
       target.startDate = media.startDate;
@@ -258,37 +365,58 @@ export async function search(
   if (type !== 'ANIME')
     jobs.push({
       provider: 'local',
-      run: async () => [
-        ...listTracked()
-          .map((t) => t.media)
-          .filter(
-            (m) =>
-              (!type || m.type === type) &&
-              [m.title, ...m.altTitles].some((n) =>
-                normalizeTitle(n).includes(normalizeTitle(query)),
-              ),
-          ),
-        ...searchCatalog(query)
-          .filter(() => type !== 'NOVEL')
-          .filter((r) => sourceAllowedById(r.sourceId))
-          .filter((r) => sourceVisible(r.suwayomiMangaId, r.title))
-          .map((r) => ({
-            ...emptyMedia(`suwayomi:${r.suwayomiMangaId}`, r.title, 'MANGA'),
-            format: sourceFormat(r.sourceName),
-            sources: [r],
-            providers: ['local' as const],
-          })),
-        ...indexedSeries()
-          .filter(
-            (s) =>
-              (!type ||
-                (isTextKind({ format: s.kind ?? null, type: 'MANGA' }) ? 'NOVEL' : 'MANGA') ===
-                  type) &&
-              s.names.some((n) => normalizeTitle(n).includes(normalizeTitle(query))),
-          )
-          .slice(0, 100)
-          .map((s) => kavitaMedia(s.seriesId)),
-      ],
+      run: async () => {
+        const tracked = listTracked();
+        const ownedSeries = new Set(
+          tracked.map((t) => t.kavitaSeriesId ?? t.media.kavitaSeriesId).filter(Boolean),
+        );
+        return [
+          ...tracked
+            .map((t) => ({
+              ...t.media,
+              kavitaSeriesId: t.kavitaSeriesId ?? t.media.kavitaSeriesId,
+              sources: t.media.sources.length
+                ? t.media.sources
+                : t.sources.map((s) => ({
+                    sourceId: s.sourceId,
+                    sourceName: s.sourceName,
+                    suwayomiMangaId: s.suwayomiMangaId,
+                    title: t.title,
+                    mangaUrl: '',
+                    thumbnailUrl: null,
+                    lang: '',
+                  })),
+            }))
+            .filter(
+              (m) =>
+                (!type || m.type === type) &&
+                [m.title, ...m.altTitles].some((n) =>
+                  normalizeTitle(n).includes(normalizeTitle(query)),
+                ),
+            ),
+          ...searchCatalog(query)
+            .filter(() => type !== 'NOVEL')
+            .filter((r) => sourceAllowedById(r.sourceId))
+            .filter((r) => sourceVisible(r.suwayomiMangaId, r.title))
+            .map((r) => ({
+              ...emptyMedia(`suwayomi:${r.suwayomiMangaId}`, r.title, 'MANGA'),
+              format: sourceFormat(r.sourceName),
+              sources: [r],
+              providers: ['local' as const],
+            })),
+          ...indexedSeries()
+            .filter(
+              (s) =>
+                !ownedSeries.has(s.seriesId) &&
+                (!type ||
+                  (isTextKind({ format: s.kind ?? null, type: 'MANGA' }) ? 'NOVEL' : 'MANGA') ===
+                    type) &&
+                s.names.some((n) => normalizeTitle(n).includes(normalizeTitle(query))),
+            )
+            .slice(0, 100)
+            .map((s) => kavitaMedia(s.seriesId)),
+        ];
+      },
     });
   const timings: number[] = [];
   const cacheKeys = jobs.map((j) =>

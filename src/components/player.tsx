@@ -54,7 +54,7 @@ const bestStream = (streams: VideoStream[], skip: string[] = []) => {
 /** Automatic tries before the source list is shown (each stream may fail in the browser). */
 const AUTO_TRIES = 4;
 /** A stream that shows no picture within this time is treated as failed (next one tried). */
-const STARTUP_MS = 20_000;
+const STARTUP_MS = 25_000;
 /** Why a stream could not be played, for the message and the playback log. */
 export type StreamError = 'network' | 'decode' | 'unsupported' | 'timeout' | 'hls';
 /** One playback's timings, sent once to the server log (no address, no title). */
@@ -110,17 +110,22 @@ export const streamsPath = (episode: PlayerEpisode, language: string) =>
           }).toString()}`
         : null;
 
-/** Key of an episode's saved position (`anilist:21:3`, `tt0944947:1:2`, `tmdb:550`). */
-export const positionKey = (e: PlayerEpisode) =>
-  e.streamsUrl
-    ? `ext:${e.streamsUrl}`
-    : e.seasonAnilistId
-      ? `anilist:${e.seasonAnilistId}:${e.episode}`
-      : e.imdb && (e.imdb.id || e.imdb.tmdb)
-        ? `${e.imdb.id ?? `tmdb:${e.imdb.tmdb}`}${
-            e.imdb.season !== null ? `:${e.imdb.season}:${e.episode}` : ''
-          }`
-        : null;
+/** Key of an episode's saved position (`anilist:21:3`, `tt0944947:1:2`, `tmdb:550`, `ext:…:1`). */
+export const positionKey = (e: PlayerEpisode) => {
+  if (e.streamsUrl) {
+    if (e.resume?.media.id && /^[\w.:-]+$/.test(e.resume.media.id))
+      return `${e.resume.media.id}:${e.episode}`;
+    const ext = new URL(e.streamsUrl, 'http://x').searchParams.get('ext');
+    return ext && /^[\w.:-]+$/.test(ext) ? `${ext}:${e.episode}` : null;
+  }
+  return e.seasonAnilistId
+    ? `anilist:${e.seasonAnilistId}:${e.episode}`
+    : e.imdb && (e.imdb.id || e.imdb.tmdb)
+      ? `${e.imdb.id ?? `tmdb:${e.imdb.tmdb}`}${
+          e.imdb.season !== null ? `:${e.imdb.season}:${e.episode}` : ''
+        }`
+      : null;
+};
 
 export interface PlayerEpisode {
   /** Work title, e.g. "Jujutsu Kaisen". */
@@ -283,6 +288,9 @@ export function Player({
         <Screen
           key={source.kind === 'jellyfin' ? source.itemId : source.stream.id}
           source={source}
+          streams={shown}
+          tried={tried}
+          onPickStream={(s) => play(s, false)}
           onUnplayable={nextStream}
           failure={
             failedAll
@@ -673,6 +681,9 @@ function Badge({
 
 function Screen({
   source,
+  streams,
+  tried,
+  onPickStream,
   episode,
   onClose,
   onFinished,
@@ -684,6 +695,9 @@ function Screen({
   nextLabel,
 }: {
   source: PlaySource;
+  streams: VideoStream[];
+  tried: string[];
+  onPickStream: (s: VideoStream) => void;
   episode: PlayerEpisode;
   onClose: () => void;
   onFinished: () => void;
@@ -898,21 +912,10 @@ function Screen({
           ...source.subtitles.filter((s) => !source.stream.subtitles.some((x) => x.id === s.id)),
         ]
       : [];
-  const [streamSub, setStreamSub] = useState<string | null | undefined>(undefined);
-  // A VOSTFR-labelled stream sometimes carries no embedded track (or only another
-  // language): fall back to a subtitle extension's track in the interface language.
-  // Dubbed/multi streams keep subtitles off by default.
-  const embeddedInLanguage =
-    source.kind === 'stream' && source.stream.subtitles.some((s) => s.lang === language);
-  const wantsDefaultSubtitle =
-    source.kind === 'stream' &&
-    (!source.stream.preferred || (source.stream.version === 'sub' && !embeddedInLanguage));
-  const streamSubId =
-    streamSub !== undefined
-      ? streamSub
-      : wantsDefaultSubtitle
-        ? (streamSubs.find((s) => s.lang === language)?.id ?? null)
-        : null;
+  // Extensions frequently carry burned-in or embedded subtitles already: keep Bunko's external
+  // subtitle overlay off by default so tracks never double up; users can toggle CC in one click.
+  const [streamSub, setStreamSub] = useState<string | null>(null);
+  const streamSubId = streamSub;
   const shownTrack =
     source.kind === 'jellyfin'
       ? subtitleIndex === null
@@ -1047,11 +1050,9 @@ function Screen({
           maxBufferLength: 30,
           maxMaxBufferLength: 30,
           backBufferLength: Infinity,
-          manifestLoadingTimeOut: 20_000,
-          // hls.js assumes 0.5 Mbit/s before measuring and starts multi-quality playlists at
-          // their lowest variant: assume a home network instead, it steps down if needed.
-          abrEwmaDefaultEstimate: 8_000_000,
-          // Without it hls.js starts on the playlist's first variant, often the smallest.
+          manifestLoadingTimeOut: 25_000,
+          // Start at maximum available quality by default; users can step down while loading.
+          abrEwmaDefaultEstimate: 25_000_000,
           startLevel: -1,
         });
         hls.current = h;
@@ -1081,6 +1082,14 @@ function Screen({
             currentId: h.currentLevel,
           });
         h.on(HlsJs.Events.MANIFEST_PARSED, () => {
+          if (h.levels.length > 1) {
+            const top = h.levels.reduce(
+              (best, l, idx) => (l.height > (h.levels[best]?.height ?? 0) ? idx : best),
+              0,
+            );
+            h.startLevel = top;
+            h.nextLevel = top;
+          }
           if (source.kind === 'stream') syncTracks();
           void el.play().catch(() => undefined);
         });
@@ -1175,8 +1184,9 @@ function Screen({
   };
   useEffect(() => () => clearTimeout(idleTimer.current), []);
 
+  const keyHandler = useRef<(e: KeyboardEvent) => void>(() => undefined);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+    keyHandler.current = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('select,input,textarea')) return;
       const el = video.current;
       if (!el) return;
@@ -1196,9 +1206,12 @@ function Screen({
       else return;
       wake();
     };
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => keyHandler.current(e);
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  });
+  }, []);
 
   /** Ask Jellyfin again from the current position (audio, burned subtitles, quality). */
   const reopen = (change: { audio?: number | null; burn?: number | null; bitrate?: number }) => {
@@ -1273,6 +1286,71 @@ function Screen({
     .filter(Boolean)
     .join(' · ');
   const shown = !idle || !playing || menu;
+  // Offer a one-tap step down in quality while a heavy 4K/1080p stream is loading/buffering.
+  type StepDown =
+    | { kind: 'hls'; levelId: number; label: string }
+    | { kind: 'stream'; stream: VideoStream; label: string }
+    | { kind: 'jellyfin'; bitrate: number; label: string };
+  let stepDown: StepDown | null = null;
+  if (hlsTracks && hlsTracks.levels.length > 1) {
+    const sorted = [...hlsTracks.levels].sort((a, b) => b.height - a.height);
+    const currentHeight =
+      hlsTracks.levels.find((l) => l.id === hlsTracks.currentId)?.height ?? sorted[0].height;
+    const lower = sorted.find((l) => l.height < currentHeight);
+    if (lower)
+      stepDown = {
+        kind: 'hls',
+        levelId: lower.id,
+        label: t('player.lowerQuality', { quality: `${lower.height}p` }),
+      };
+  } else if (source.kind === 'stream') {
+    const currentQ = source.stream.quality ?? 2160;
+    const playable = streams.filter(
+      (s) =>
+        browserPlayable(s) &&
+        s.id !== source.stream.id &&
+        !tried.includes(s.id) &&
+        s.quality !== null &&
+        s.quality < currentQ,
+    );
+    const sameVersion = playable.filter((s) => s.version === source.stream.version);
+    const pool = sameVersion.length ? sameVersion : playable;
+    const nextLower = [...pool].sort((a, b) => (b.quality ?? 0) - (a.quality ?? 0))[0];
+    if (nextLower)
+      stepDown = {
+        kind: 'stream',
+        stream: nextLower,
+        label: t('player.lowerQuality', { quality: `${nextLower.quality}p` }),
+      };
+  } else if (source.kind === 'jellyfin') {
+    const lowerPreset = QUALITY_PRESETS.find((q) => q.bitrate < request.bitrate);
+    if (lowerPreset)
+      stepDown = {
+        kind: 'jellyfin',
+        bitrate: lowerPreset.bitrate,
+        label: t('player.lowerQuality', { quality: lowerPreset.label.split(' · ')[0] }),
+      };
+  }
+  const applyStepDown = (choice: StepDown) => {
+    if (choice.kind === 'hls') {
+      if (hls.current) hls.current.currentLevel = choice.levelId;
+    } else if (choice.kind === 'stream') {
+      onPickStream(choice.stream);
+    } else {
+      saveBitrate(choice.bitrate);
+      setRequest((r) => ({
+        ...r,
+        bitrate: choice.bitrate,
+        startMs: (video.current?.currentTime ?? 0) * 1000,
+      }));
+    }
+  };
+  const loadingQuality =
+    source.kind === 'stream' && source.stream.quality
+      ? source.stream.quality >= 2160
+        ? '4K'
+        : `${source.stream.quality}p`
+      : null;
   return (
     <div
       ref={frame}
@@ -1366,8 +1444,35 @@ function Screen({
       />
 
       {(buffering || (source.kind === 'jellyfin' && !p)) && !error && !failure && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4 p-4">
           <Spinner className="size-10 border-[3px] text-white" />
+          {loadingQuality && (
+            <span className="rounded-full bg-black/55 px-3 py-1 text-xs font-medium text-white/80 backdrop-blur-md">
+              {t('player.loadingQuality', { quality: loadingQuality })}
+            </span>
+          )}
+          {(stepDown || (source.kind === 'stream' && streams.length > 1)) && (
+            <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2">
+              {stepDown && (
+                <button
+                  type="button"
+                  onClick={() => applyStepDown(stepDown)}
+                  className="h-9 rounded-full border border-white/20 bg-black/70 px-4 text-xs font-semibold text-white backdrop-blur-md transition-colors hover:bg-white hover:text-black"
+                >
+                  {stepDown.label}
+                </button>
+              )}
+              {source.kind === 'stream' && streams.length > 1 && (
+                <button
+                  type="button"
+                  onClick={onSources}
+                  className="h-9 rounded-full border border-white/15 bg-black/60 px-4 text-xs font-medium text-white/85 backdrop-blur-md transition-colors hover:bg-white/15 hover:text-white"
+                >
+                  {t('player.otherSource')}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
       {(error ?? failure) && (

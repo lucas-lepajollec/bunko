@@ -366,10 +366,13 @@ export async function bookResource(request: Request, mediaId: string, key: strin
   const { zip, index } = await openEpub(local);
   const entry = target ? zip.getEntry(target) : null;
   if (!target || !entry || entry.isDirectory) throw new AppError('NOT_FOUND', 'Not found', 404);
-  const type =
+  const rawType =
     index.types.get(target) ??
     TYPES[path.posix.extname(target).toLowerCase()] ??
     'application/octet-stream';
+  const type = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(rawType)
+    ? rawType
+    : 'application/octet-stream';
   let bytes: Buffer = entry.getData();
   if (/html|xml|svg/.test(type)) bytes = Buffer.from(stripScripts(bytes.toString('utf8')), 'utf8');
   return new Response(new Uint8Array(bytes), {
@@ -395,6 +398,10 @@ async function wholeFile(request: Request, local: string, name: string) {
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'private, max-age=600',
   };
+  if (size === 0) {
+    headers['Content-Length'] = '0';
+    return new Response(new Uint8Array(0), { status: 200, headers });
+  }
   const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('range') ?? '');
   let start = 0;
   let end = size - 1;

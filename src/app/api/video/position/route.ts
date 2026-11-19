@@ -4,10 +4,10 @@ import { z } from 'zod';
 import { body, json, route } from '@/lib/api';
 import { saveVideoPosition, videoPosition } from '@/lib/video-positions';
 
-/** `anilist:21:3`, `tt0944947:1:2`, `tmdb:1399:1:2`, `tt0111161`… */
+/** `anilist:21:3`, `tt0944947:1:2`, `tmdb:1399:1:2`, `ext:<addon>:<id>:<ep>`… */
 const key = z
   .string()
-  .max(80)
+  .max(820)
   .regex(/^[\w.:-]+$/);
 
 export const GET = route(async (r) => {

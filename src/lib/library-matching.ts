@@ -132,7 +132,12 @@ export function adoptCatalogIdentity(
     )
       return false;
     moveReading(fromId, media.id);
-    const canonical = { ...media, trackedId, kavitaSeriesId: seriesId };
+    const canonical = {
+      ...media,
+      trackedId,
+      kavitaSeriesId: seriesId,
+      ...(current.media.kindOverride ? { kindOverride: current.media.kindOverride } : {}),
+    };
     statement('UPDATE imported_chapters SET media_json=? WHERE tracked_id=?').run(
       JSON.stringify(canonical),
       trackedId,

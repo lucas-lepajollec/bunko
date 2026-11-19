@@ -57,7 +57,11 @@ export function compact(raw: Raw[]): AnimeIds[] {
     .filter((r) => Number.isInteger(r.anilist_id))
     .map((r) => {
       const tmdb =
-        typeof r.themoviedb_id === 'number' ? r.themoviedb_id : (r.themoviedb_id?.tv ?? null);
+        typeof r.themoviedb_id === 'number'
+          ? r.type === 'MOVIE'
+            ? null
+            : r.themoviedb_id
+          : (r.themoviedb_id?.tv ?? null);
       const imdb = Array.isArray(r.imdb_id) ? r.imdb_id[0] : r.imdb_id;
       return {
         anilist: r.anilist_id!,
@@ -153,9 +157,25 @@ const index = () => runtime.__bunkoAnimeIds?.index ?? null;
 export function animeIdsLoaded() {
   return Boolean(runtime.__bunkoAnimeIds);
 }
-/** Loaded already (no wait), else start loading in the background and answer false. */
+/** Loaded already (or hydrated from local disk without waiting for network), else start loading. */
 export function animeIdsReady() {
   if (runtime.__bunkoAnimeIds) return true;
+  if (!process.env.VITEST) {
+    const target = file();
+    try {
+      if (existsSync(target)) {
+        const mtime = statSync(target).mtimeMs;
+        runtime.__bunkoAnimeIds = {
+          index: build(JSON.parse(readFileSync(target, 'utf8')) as AnimeIds[]),
+          loadedAt: mtime,
+        };
+        if (Date.now() - mtime >= MAX_AGE_MS) void ensureAnimeIds();
+        return true;
+      }
+    } catch {
+      /* Corrupt copy: refreshed asynchronously below. */
+    }
+  }
   void ensureAnimeIds();
   return false;
 }
@@ -165,7 +185,7 @@ export function idsOfAnilist(anilistId: number): AnimeIds | null {
 }
 /** AniList entries that share a TMDB show (TMDB often files several AniList seasons as one). */
 export function tmdbEntries(tmdb: number): AnimeIds[] {
-  return index()?.byTmdb.get(tmdb) ?? [];
+  return (index()?.byTmdb.get(tmdb) ?? []).filter((e) => e.type !== 'MOVIE');
 }
 /** AniList entry of a MyAnimeList anime id (imports from MAL-based trackers). */
 export function anilistOfMal(mal: number): number | null {

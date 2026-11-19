@@ -270,7 +270,12 @@ export async function safeFetch(
     response.cancel();
     if (hop >= (options.maxRedirects ?? 5))
       throw new AppError('STREAM_UNREACHABLE', 'Too many redirects', 502);
-    const next = new URL(location, url);
+    let next: URL;
+    try {
+      next = new URL(location, url);
+    } catch {
+      throw new AppError('STREAM_UNREACHABLE', 'Invalid redirect location', 502);
+    }
     if (next.origin !== origin)
       headers = Object.fromEntries(Object.entries(headers).filter(([k]) => !CREDENTIALS.test(k)));
     url = next;

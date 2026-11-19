@@ -15,6 +15,7 @@ import { mediaVisibility, adultKey } from './adult';
 import { tenantState } from './tenant-context';
 import { discoverQuery } from './validation';
 import { getSettings } from './settings';
+import { normalizeTitle } from './media';
 const rankingFailures = tenantState(() => new Set<string>());
 
 export function composeHome(
@@ -99,7 +100,7 @@ function fillHero(home: HomeFeed): HomeFeed {
   if (home.hero.length >= 8) return home;
   const shown = new Set(home.hero.map((r) => r.media.id));
   const fill = (m: (typeof home.top)[number]) => {
-    const tmdb = m.id.startsWith('tmdb:');
+    const tmdb = m.id.startsWith('tmdb');
     return {
       id: `top:${m.id}`,
       media: m,
@@ -246,7 +247,14 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
           new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
         ])
       : [];
-  const topWithExtension = [...(Array.isArray(top) ? top : []), ...extensionAnimeTop];
+  const baseTop = Array.isArray(top) ? top : [];
+  const topTitles = new Set(
+    baseTop.flatMap((m) => [m.title, ...m.altTitles].map((t) => normalizeTitle(t)).filter(Boolean)),
+  );
+  const topWithExtension = [
+    ...baseTop,
+    ...extensionAnimeTop.filter((m) => !topTitles.has(normalizeTitle(m.title))),
+  ];
   const pool = [...reading, ...episodes, ...tmdbWeek, ...extensionWeek].filter(
     (r) => !kind || mediaKind(r.media) === kind,
   );

@@ -171,6 +171,11 @@ export const PATCH = route(async (r) => {
       kavitaSeriesId:
         input.kavitaSeriesId === undefined ? current.kavitaSeriesId : input.kavitaSeriesId,
       kavita: null,
+      ...(media.kindOverride
+        ? {}
+        : current.media.kindOverride
+          ? { kindOverride: current.media.kindOverride }
+          : {}),
     };
   let chosenUrl = input.media || input.offCatalog ? media.coverUrl : current.coverUrl;
   if (input.cover && input.cover !== 'auto') {

@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 — 2026-11-19
+
+- V1 polish, deduplication, player, work linking and security hardening:
+  - Catalog & UI: moved the Planning shortcut beside the Genre filters in Releases view (fixing mobile toolbar wrapping), extended the Ciné scrolled header blur fade slightly below the buttons, renamed the mobile menu link to "Téléchargements" (`nav.downloads`), fixed Planning default universe fallback (`novel`/`book` → `all`) and QuickSearch extension universe + `?q=` reload preservation.
+  - Work grouping & kind overrides: linked films (such as *The Garden of Sinners*) now always display on film sheets and in episodic season switchers when overridden to `anime`/`series`; `POST /api/works/links` awaits the offline anime ID map, supports all catalog providers, and preserves `kindOverride` across franchise normalization, Jellyfin sync, detail refreshes, and catalog relinking.
+  - Video player: disabled Bunko's external subtitle overlay by default on extension streams (avoiding double subtitles while keeping one-click CC selection), prioritized maximum quality by default (`4K` → `1440p` → `1080p` → `720p`, 25 s startup budget), added an interactive "Switch to lower quality" button right on the loading spinner, and fixed saved resume positions for extension catalog videos.
+  - Cross-provider deduplication: eliminated duplicate tracked TV/movie search hits, deduplicated `animation` (AniList + TMDB), detected non-Japanese anime/donghua/aeni via `anime-ids`, matched Western/Japanese/bibliographic author names and explicit edition qualifiers (`(Deluxe Edition)`, `(Light Novel)`, `: A Novel`) without merging spin-offs or sequels, allowed ±1-year release drift, deduplicated same-day multi-ISBN book editions and TMDB multi-episode drops in Planning, and prevented cross-page duplicates in infinite scroll.
+  - Security & i18n audit: enforced `adult`, `services` (including Radarr/qBittorrent/Sonarr folders), and `downloads` (`POST /api/downloads/control`, `GET /api/arr/releases`) permissions consistently, bounded `gunzipSync` decompression on subtitle relays, prevented wrong-password 401s from signing out the UI, seeded `TMDB_API_KEY` into `catalog_settings`, handled 0-byte books and malformed redirects safely, and added all 26 missing `error.*` translations across all 5 languages.
 
 - Faster covers, zero-shift progressive loading and mobile title fit:
   - External covers (AniList, TMDB `w342`, MangaDex…) render directly as native `<img>` so browser

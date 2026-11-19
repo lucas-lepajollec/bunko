@@ -15,7 +15,7 @@ import {
   type ReactNode,
 } from 'react';
 import { SWRConfig, useSWRConfig } from 'swr';
-import type { AuthState, DownloadBatch, Extension } from '@/types/shared';
+import type { AuthState, DownloadBatch, Extension, PublicSettings } from '@/types/shared';
 import { PRODUCT_NAME } from '@/lib/client/brand';
 import { I18nProvider, useI18n } from '@/i18n/I18nProvider';
 import { UI_LANGUAGES, type UiLanguage } from '@/i18n/messages';
@@ -292,10 +292,14 @@ const NAV = [
 ];
 
 function useActivity() {
+  const settings = useApi<PublicSettings>('/api/settings');
   const batches = useApi<DownloadBatch[]>('/api/downloads/batches', {
     refreshInterval: batchesInterval,
   });
-  const extensions = useApi<Extension[]>('/api/extensions', { refreshInterval: 30 * 60_000 });
+  const extensions = useApi<Extension[]>(
+    settings.data?.suwayomiUrl ? '/api/extensions' : null,
+    { refreshInterval: 30 * 60_000 },
+  );
   return {
     active: (batches.data ?? []).filter((b) => b.state !== 'completed' && b.state !== 'error')
       .length,
@@ -373,7 +377,7 @@ function CineHeader() {
       <div
         aria-hidden
         className={cx(
-          'header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-28 transition-opacity duration-300 md:h-40',
+          'header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-32 transition-opacity duration-300 md:h-44',
           solid ? 'opacity-100' : 'opacity-0',
         )}
       />
@@ -613,13 +617,15 @@ function HeaderPanel({
       const caret = Math.max(28, Math.min(width - 28, rawCaret));
       setBox({ left, width, caret });
     };
+    let second = 0;
     const first = requestAnimationFrame(() => {
       place();
-      requestAnimationFrame(() => setGlide(true));
+      second = requestAnimationFrame(() => setGlide(true));
     });
     window.addEventListener('resize', place);
     return () => {
       cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
       window.removeEventListener('resize', place);
     };
   }, [open, headerRef, typesRef, bellRef]);
@@ -791,7 +797,7 @@ function MobileMenu() {
   const links = [
     { href: '/profile', label: t('profile.title'), Icon: UserRound },
     { href: '/lists', label: t('nav.lists'), Icon: ListOrdered },
-    { href: '/downloads', label: t('nav.activity'), badge, Icon: Download },
+    { href: '/downloads', label: t('nav.downloads'), badge, Icon: Download },
     { href: '/sources', label: t('nav.sources'), Icon: Puzzle },
     { href: '/settings', label: t('nav.settings'), Icon: Settings2 },
   ];

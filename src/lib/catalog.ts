@@ -1,4 +1,11 @@
-import { airedSince, naturalEpisode, rollAiring, seasonRef } from './anime-franchise';
+import {
+  airedSince,
+  loadedAnime,
+  naturalEpisode,
+  rollAiring,
+  seasonRef,
+} from './anime-franchise';
+import { firstSeason } from './anime-ids';
 import { KINDS, KIND_IDS, availableKinds, byKindOrder, mixByKind, type Kind } from '@/domain/kinds';
 import {
   clearExtensionCatalogCache,
@@ -69,6 +76,7 @@ import {
   fromAniList,
   fromMangaDex,
   fromMangaUpdates,
+  normalizeTitle,
   type AniMedia,
   type DexManga,
   type UpdatesRecord,
@@ -419,9 +427,13 @@ export async function discoverAniList(
     kind === 'anime' && withExtensions && !filtered
       ? await extensionCatalogPage({ native: 'anime' }, q, page, signal).catch(() => null)
       : null;
+  const nativeItems = data.Page.media.map(fromAniList);
+  const nativeTitles = new Set(
+    nativeItems.flatMap((m) => [m.title, ...m.altTitles].map((t) => normalizeTitle(t)).filter(Boolean)),
+  );
   const items = [
-    ...(raw ? data.Page.media.map(fromAniList) : withTracking(data.Page.media.map(fromAniList))),
-    ...(extension?.items ?? []),
+    ...nativeItems,
+    ...(extension?.items ?? []).filter((m) => !nativeTitles.has(normalizeTitle(m.title))),
   ];
   return {
     ...discoveryStatus(cacheKey, 'anilist'),
@@ -842,7 +854,12 @@ export async function mediaDetail(
       const row = snapshot;
       if (row && (JSON.parse(row.media_json) as UnifiedMedia).id === id) {
         const old = JSON.parse(row.media_json) as UnifiedMedia;
-        const fresh = { ...old, ...detail, sources: old.sources };
+        const fresh = {
+          ...old,
+          ...detail,
+          sources: old.sources,
+          ...(old.kindOverride ? { kindOverride: old.kindOverride } : {}),
+        };
         db()
           .prepare('UPDATE tracked_media SET media_json=?,title=? WHERE id=? AND media_json=?')
           .run(JSON.stringify(fresh), fresh.title, followed.id, row.media_json);
@@ -1011,11 +1028,14 @@ export async function animeAiring(
     })
     .map((r) => {
       const ref = seasonRef(r.media.id);
+      const fallbackRootId = !ref ? firstSeason(r.media.id) : null;
+      const fallbackRoot =
+        fallbackRootId && fallbackRootId !== r.media.id ? loadedAnime(fallbackRootId) : null;
       // "Part 2" episodes read as their season's (S3 · Ep. 14), as everywhere else.
       const natural = ref ? naturalEpisode(r.media.id, r.episode) : null;
       const season = natural?.season ?? ref?.season ?? null;
       return {
-        media: ref ? ref.root : fromAniList(r.media),
+        media: ref ? ref.root : (fallbackRoot ?? fromAniList(r.media)),
         season: season && season > 1 ? season : null,
         episode: natural?.episode ?? r.episode,
         airingAt: new Date(r.airingAt * 1000).toISOString(),

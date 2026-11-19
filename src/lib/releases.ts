@@ -11,7 +11,13 @@ import { withTracking } from './catalog';
 import { accountsDb } from './accounts-store';
 import { catalogSettingsVersion } from './catalog-settings-store';
 import { deduplicate } from './search-engine';
-import { fromAniList, normalizeTitle, type AniMedia } from './media';
+import {
+  canonicalTitle,
+  cleanAuthorName,
+  fromAniList,
+  normalizeTitle,
+  type AniMedia,
+} from './media';
 import { decodeMetadata } from './metadata-cache';
 import { fetchUpdatesReleases, fetchDexReleases } from './release-providers';
 import { AppError, errorCode } from './errors';
@@ -50,11 +56,14 @@ export function mediaResolver(catalog: UnifiedMedia[]) {
     ])
       if (key) ids.set(key, m);
     for (const title of [m.title, ...m.altTitles]) {
-      const key = `${m.type}:${normalizeTitle(title)}`;
-      const old = titles.get(key);
-      if (old === undefined) titles.set(key, m);
-      else if (old && old.id !== m.id && !(old.anilistId && old.anilistId === m.anilistId))
-        titles.set(key, null);
+      for (const normalized of new Set([normalizeTitle(title), canonicalTitle(title)])) {
+        if (!normalized) continue;
+        const key = `${m.type}:${normalized}`;
+        const old = titles.get(key);
+        if (old === undefined) titles.set(key, m);
+        else if (old && old.id !== m.id && !(old.anilistId && old.anilistId === m.anilistId))
+          titles.set(key, null);
+      }
     }
   }
   return (m: UnifiedMedia): UnifiedMedia => {
@@ -63,7 +72,19 @@ export function mediaResolver(catalog: UnifiedMedia[]) {
       (m.anilistId ? ids.get(`anilist:${m.anilistId}`) : undefined) ??
       (m.mangadexId ? ids.get(`mangadex:${m.mangadexId}`) : undefined) ??
       (m.mangaUpdatesId ? ids.get(`mangaupdates:${m.mangaUpdatesId}`) : undefined);
-    const found = direct ?? titles.get(`${m.type}:${normalizeTitle(m.title)}`);
+    let byTitle: UnifiedMedia | undefined;
+    if (!direct) {
+      const hits = new Map<string, UnifiedMedia>();
+      for (const raw of [m.title, ...m.altTitles]) {
+        for (const normalized of new Set([normalizeTitle(raw), canonicalTitle(raw)])) {
+          if (!normalized) continue;
+          const hit = titles.get(`${m.type}:${normalized}`);
+          if (hit) hits.set(hit.id, hit);
+        }
+      }
+      if (hits.size === 1) byTitle = [...hits.values()][0];
+    }
+    const found = direct ?? byTitle;
     if (
       !found ||
       (!direct && m.type === 'NOVEL' && found.format !== m.format) ||
@@ -163,9 +184,31 @@ export function deduplicateReleases(input: ChapterRelease[]): ChapterRelease[] {
     const isVolume = r.unit === 'volume';
     const identifiers = isVolume ? ((raw as EditionRelease).isbns ?? []) : [];
     const isbnKey = identifiers.find((n) => isbnGroups.has(n));
+    // Collapse same-day Hardcover/Paperback/Ebook editions of the same book (different ISBNs)
+    // when both share canonical title + author surname + volume/day.
+    const authorKey = isVolume && m.authors[0]
+      ? cleanAuthorName(m.authors[0])
+          .normalize('NFKD')
+          .replace(/\p{M}/gu, '')
+          .toLowerCase()
+          .split(/[^\p{L}\p{N}]+/u)
+          .filter(Boolean)
+          .sort()
+          .join(' ')
+      : '';
+    const editionAlias =
+      isVolume &&
+      authorKey &&
+      ['googlebooks', 'bnf', 'rakuten'].includes(r.provider)
+        ? `ed:${canonicalTitle(m.title)}:${authorKey}:${r.releasedAt.slice(0, 10)}:${r.volume ?? ''}`
+        : null;
     const workKey = `${series}:${isVolume ? 'volume' : 'chapter'}:${isVolume ? (r.volume ?? `${r.releasedAt.slice(0, 10)}:${r.label.toLowerCase()}`) : (r.chapter ?? r.label.toLowerCase().replace(/\s/g, ''))}`;
-    const key = isbnKey ? isbnGroups.get(isbnKey)! : workKey;
+    const key =
+      (isbnKey ? isbnGroups.get(isbnKey)! : null) ??
+      (editionAlias && isbnGroups.has(editionAlias) ? isbnGroups.get(editionAlias)! : null) ??
+      workKey;
     for (const n of identifiers) isbnGroups.set(n, key);
+    if (editionAlias) isbnGroups.set(editionAlias, key);
     const old = groups.get(key);
     if (!old) {
       groups.set(key, r);

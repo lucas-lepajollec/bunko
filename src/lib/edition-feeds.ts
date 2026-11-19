@@ -198,7 +198,16 @@ export function bnfEditions(xml: string): EditionRelease[] {
       ...emptyMedia(`bnf:${ark}`, title.split(/\s*\/\s*/)[0], f === 'COMIC' ? 'MANGA' : 'NOVEL'),
       format: f,
       providers: ['local'],
-      authors: [...values(record, 'creator'), ...fields('700', 'a')],
+      authors: [...values(record, 'creator'), ...fields('700', 'a')]
+        .map((a) =>
+          a
+            .replace(/\([^)]*\)/g, ' ')
+            .replace(/\b\d{4}\s*[-–]\s*(?:\d{4})?\b/g, ' ')
+            .replace(/\.\s*(?:auteur|author|illustrator|illustrateur|translator|traducteur).*$/i, '')
+            .replace(/\s+/g, ' ')
+            .trim(),
+        )
+        .filter(Boolean),
       genres: subjects,
       webUrl: `https://catalogue.bnf.fr/ark:/12148/${ark}`,
       startDate: date,
