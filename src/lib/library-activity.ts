@@ -7,22 +7,31 @@ import { getSettings } from './settings';
 import { listTracked, listBatches, writeVersion } from './db';
 import { adultScope, visibleTracked } from './adult';
 import { jellyfinImportProgress } from './jellyfin';
+import { runningJobs } from './job-stats';
+import { tenantId } from './tenant-context';
+import { getJobProgress, recentActivityEvents } from './job-runs';
 
 export function libraryActivity(): LibraryActivity {
+  const settings = getSettings();
   const entries = listTracked();
   const visible = visibleTracked(entries);
   const ids = new Set(visible.map((t) => t.id));
   const active = activeSourceMatch();
   const current = active && ids.has(active.id) ? active : null;
   const lastAt = workerValue('last_check_at');
-  // Without Suwayomi nothing is searched: no queue to show.
-  const queued = getSettings().suwayomiUrl
+  // Without Suwayomi nothing is searched: no queue to show. Computed once and reused below.
+  const queued = settings.suwayomiUrl
     ? sourceMatchQueue().filter((t) => ids.has(t.id) && t.id !== current?.id).length
     : 0;
   const batches = listBatches().filter((b) => b.state !== 'completed' && b.state !== 'error');
   const chapters = batches.flatMap((b) => b.chapters);
-  const jellyfin = jellyfinImportProgress();
+  const jellyfinRaw = jellyfinImportProgress();
+  const jellyfin = jellyfinRaw && jellyfinRaw.done < jellyfinRaw.total ? jellyfinRaw : null;
   const translating = activeTranslations();
+  const running = runningJobs(tenantId());
+  const refreshActive = refreshRunning();
+  const refreshDone = Number(workerValue('refresh_done') ?? 0);
+  const refreshTotal = Number(workerValue('refresh_total') ?? 0);
   const tasks: ActivityTask[] = [];
   if (batches.length)
     tasks.push({
@@ -42,34 +51,34 @@ export function libraryActivity(): LibraryActivity {
       total: queued + (current ? 1 : 0),
       detail: current?.title ?? null,
     });
-  if (refreshRunning())
+  if (refreshActive || running.has('update-check'))
     tasks.push({
       id: 'releases',
       kind: 'releases',
       scope: 'reading',
-      done: Number(workerValue('refresh_done') ?? 0),
-      total: Number(workerValue('refresh_total') ?? 0) || null,
+      done: refreshDone,
+      total: refreshTotal || null,
       detail: null,
     });
-  if (jellyfin && jellyfin.done < jellyfin.total)
+  if (jellyfin || running.has('jellyfin'))
     tasks.push({
       id: 'jellyfin',
       kind: 'jellyfin',
       scope: 'video',
-      done: jellyfin.done,
-      total: jellyfin.total,
+      done: jellyfin?.done ?? 0,
+      total: jellyfin?.total ?? null,
       detail: null,
     });
-  if (translating.total)
+  if (translating.total || running.has('translations'))
     tasks.push({
       id: 'translations',
       kind: 'translations',
       scope: 'reading',
       done: translating.done,
-      total: translating.total,
+      total: translating.total || null,
       detail: translating.current,
     });
-  if (kavitaSyncRequested())
+  if (kavitaSyncRequested() || running.has('kavita-index'))
     tasks.push({
       id: 'kavita',
       kind: 'kavita',
@@ -78,11 +87,45 @@ export function libraryActivity(): LibraryActivity {
       total: null,
       detail: null,
     });
+  if (running.has('catalog-linking')) {
+    const p = getJobProgress('catalog-linking');
+    tasks.push({
+      id: 'catalog-linking',
+      kind: 'catalog-linking',
+      scope: 'reading',
+      done: p?.done ?? 0,
+      total: p?.total ?? null,
+      detail: p?.detail ?? null,
+    });
+  }
+  if (running.has('covers')) {
+    const p = getJobProgress('covers');
+    // Only surface cover backfill when it is actually processing works (not a 1 ms no-op check).
+    if (p?.total)
+      tasks.push({
+        id: 'covers',
+        kind: 'covers',
+        scope: 'reading',
+        done: p.done,
+        total: p.total,
+        detail: p.detail,
+      });
+  }
+  if (running.has('release-ingestion'))
+    tasks.push({
+      id: 'release-ingestion',
+      kind: 'release-ingestion',
+      scope: 'reading',
+      done: 0,
+      total: null,
+      detail: null,
+    });
+  const recent = recentActivityEvents();
   return {
     tasks,
+    ...(recent.length ? { recent } : {}),
     revision: writeVersion(),
-    activeDownloads: listBatches().filter((b) => b.state !== 'completed' && b.state !== 'error')
-      .length,
+    activeDownloads: batches.length,
     revisions: {
       content: writeVersion('content'),
       progress: writeVersion('progress'),
@@ -90,21 +133,18 @@ export function libraryActivity(): LibraryActivity {
     },
     // Only the 18+ hidden from a normal account is announced (18+ only mode hides by choice).
     hiddenAdult: adultScope() === 'off' ? entries.length - visible.length : 0,
-    jellyfinImport: (() => {
-      const p = jellyfinImportProgress();
-      return p && p.done < p.total ? p : null;
-    })(),
+    jellyfinImport: jellyfin,
     matching: {
-      queued: sourceMatchQueue().filter((t) => ids.has(t.id) && t.id !== current?.id).length,
+      queued,
       current: current?.title ?? null,
     },
     refresh: {
-      running: refreshRunning(),
-      done: Number(workerValue('refresh_done') ?? 0),
-      total: Number(workerValue('refresh_total') ?? 0),
+      running: refreshActive,
+      done: refreshDone,
+      total: refreshTotal,
       lastAt,
       nextAt: lastAt
-        ? new Date(Date.parse(lastAt) + getSettings().updateIntervalMinutes * 60_000).toISOString()
+        ? new Date(Date.parse(lastAt) + settings.updateIntervalMinutes * 60_000).toISOString()
         : null,
     },
   };

@@ -18,6 +18,7 @@ import type {
 import { SEASONS, formatStartDate } from '@/lib/client/season';
 import { api, useApi, useProgressiveSearch } from '@/lib/client/api';
 import { catalogLoading } from '@/lib/client/catalog-loading';
+import { useStableOrder } from '@/lib/client/stable-order';
 import { choiceLabel, inUniverse, useUniverse, searchTypeOf } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { Page } from '@/components/shell';
@@ -139,7 +140,12 @@ function Catalog() {
     (path: string) => api<ReleasesPage>(path),
     { revalidateFirstPage: false },
   );
-  const releaseItems = (releases.data ?? []).flatMap((p) => p.items);
+  const rawReleaseItems = (releases.data ?? []).flatMap((p) => p.items);
+  const releaseItems = useStableOrder(
+    rawReleaseItems,
+    (r) => r.id,
+    `releases:${kind}:${section ?? ''}:${genre}`,
+  );
   const releasesPending = releases.data?.some((p) => p.pending) ?? false;
   const mutateReleases = releases.mutate;
   useEffect(() => {
@@ -154,7 +160,9 @@ function Catalog() {
   const releasesMore =
     releases.isLoading ||
     (releases.size > 0 && releases.data && typeof releases.data[releases.size - 1] === 'undefined');
-  const items = (pages.data ?? []).flatMap((p) => p.items);
+  const rawItems = (pages.data ?? []).flatMap((p) => p.items);
+  const catalogScope = `catalog:${kind}:${section ?? ''}:${sort}:${genre}:${status}:${year ?? ''}:${season}:${tags.join(',')}:${minScore ?? ''}:${adultOnly ? '1' : '0'}`;
+  const items = useStableOrder(rawItems, (m) => m.id, catalogScope);
   const catalogState = catalogLoading(pages.data, Boolean(pages.error));
   const enriching = catalogState.pending;
   const refreshInterval = catalogState.interval;
@@ -199,7 +207,12 @@ function Catalog() {
   const loadingMore =
     pages.isLoading ||
     (pages.size > 0 && pages.data && typeof pages.data[pages.size - 1] === 'undefined');
-  const searchItems = (searched.data?.results ?? []).filter((m) => inUniverse(kind, m));
+  const rawSearchItems = (searched.data?.results ?? []).filter((m) => inUniverse(kind, m));
+  const searchItems = useStableOrder(
+    rawSearchItems,
+    (m) => m.id,
+    `search:${kind}:${section ?? ''}:${q}`,
+  );
   const dated = sort === 'new' || Boolean(season) || Boolean(year);
 
   const sortSelect =

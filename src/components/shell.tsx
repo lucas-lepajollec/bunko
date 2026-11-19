@@ -606,7 +606,7 @@ function HeaderPanel({
       )?.getBoundingClientRect();
       const frame = headerRef.current?.getBoundingClientRect();
       if (!anchor || !frame) return;
-      const width = Math.min(open === 'types' ? 720 : 420, window.innerWidth - 24);
+      const width = Math.min(open === 'types' ? 720 : 440, window.innerWidth - 24);
       const wanted = open === 'types' ? anchor.left : anchor.right - width;
       const left = Math.max(12, Math.min(wanted, window.innerWidth - 12 - width)) - frame.left;
       setBox({ left, width, caret: anchor.left + anchor.width / 2 - frame.left - left });
@@ -1062,7 +1062,7 @@ export function Page({ children, className }: { children: ReactNode; className?:
   return (
     <main
       className={cx(
-        'mx-auto flex w-full max-w-[1760px] flex-col gap-6 px-4 pt-20 pb-16 md:gap-7 md:px-10 md:pt-32',
+        'mx-auto flex w-full min-w-0 max-w-[1760px] flex-col gap-6 px-4 pt-20 pb-16 md:gap-7 md:px-10 md:pt-32',
         className,
       )}
     >

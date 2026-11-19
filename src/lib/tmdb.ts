@@ -149,7 +149,7 @@ export function fromTmdb(m: TmdbItem, kind: TmdbKind, genres = new Map<number, s
           : 'MOVIE',
     altTitles: original && original !== title ? [original] : [],
     synopsis: m.overview || null,
-    coverUrl: image(m.poster_path, 'w500'),
+    coverUrl: image(m.poster_path, 'w342'),
     bannerUrl: image(m.backdrop_path, 'w1280'),
     year: date ? Number(date.slice(0, 4)) : null,
     startDate: date,

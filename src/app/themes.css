@@ -197,8 +197,8 @@
   color: var(--color-muted);
 }
 :root[data-theme='cine'] .ui-page-title-h {
-  font-size: clamp(56px, 8vw, 110px);
-  line-height: 0.85;
+  font-size: min(clamp(44px, 8vw, 110px), calc((100vw - 2rem) / (var(--title-word, 8) * 0.56)));
+  line-height: 0.88;
 }
 :root[data-theme='cine'] .hero-cine .backdrop-banner {
   height: 100% !important;

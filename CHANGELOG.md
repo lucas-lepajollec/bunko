@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Faster covers, zero-shift progressive loading and mobile title fit:
+  - External covers (AniList, TMDB `w342`, MangaDex…) render directly as native `<img>` so browser
+    memory cache paints them on frame 1; same-origin `/api/...` covers still throttle cold transfers
+    but switch to direct cached `<img>` once seen once (no repeated Blob copies or blank flashes).
+  - Stale complete catalog pages (`discoverAll`) now serve immediately with `pending: false` (30 min
+    fresh window) while rebuilding atomically in the background; on cold loads, late providers append
+    uniformly underneath already-displayed cards instead of re-shuffling the grid under your finger
+    (Catalog, Releases, Search and Home). Client cache also persists single-kind Home, Lists and
+    Planning.
+  - Long single-word page titles (e.g. "Téléchargements", "Herunterladen") and hero titles scale to
+    fit phone widths without horizontal overflow, backed by `overflow-x: clip`.
+  - Windowed progressive library grid: large libraries mount the first 60 works immediately and
+    extend smoothly on scroll without losing full selection or counters.
+  - Activity center, notifications and worker CPU overhaul: heavy periodic maintenance runs
+    sequentially per account (eliminating 5-way CPU/SQLite spikes) and skips redundant second cover
+    passes when nothing changed; manual Covers runs reset the 5-minute cooldown immediately;
+    `libraryActivity()` avoids duplicate queries and reports live progress + a recent event log for
+    all jobs (including Covers, Catalog linking and Release calendar). The Activity menu is rebuilt
+    into three clear tabs (Now, Tasks in 4 plain-language groups with visible descriptions and
+    always-accessible Run buttons, and Log uniting server job results with app toast notifications).
+
 - Ciné is now the default look of Bunko; the original Bunko look remains available in Settings →
   Appearance. Home hero: swipe on touch screens or click-and-drag with the mouse (plus arrow keys)
   to move between featured works, and click the title, details or synopsis to open the work's

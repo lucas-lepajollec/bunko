@@ -56,17 +56,17 @@ it('sleeps 30 seconds when idle, wakes immediately on enqueue/request/identity e
   setWorkerValue('last_check_at', new Date().toISOString());
   startWorker();
   await vi.advanceTimersByTimeAsync(60_000);
-  expect(syncTrackedCovers).toHaveBeenCalledTimes(6); // Two backfill checks at t=0,30,60; no 1-second idle lease timer.
+  expect(syncTrackedCovers).toHaveBeenCalledTimes(3); // One backfill pass at t=0,30,60; no redundant second pass when unchanged.
   expect(vi.getTimerCount()).toBe(1);
   createBatch({ media: emptyMedia('anilist:1', 'Fixture', 'MANGA'), chapterIds: [1] });
   await vi.advanceTimersByTimeAsync(1);
-  expect(syncTrackedCovers).toHaveBeenCalledTimes(8);
+  expect(syncTrackedCovers).toHaveBeenCalledTimes(4);
   wakeWorker(); // same process-global signal emitted by track and identity patches
   await vi.advanceTimersByTimeAsync(1);
-  expect(syncTrackedCovers).toHaveBeenCalledTimes(10);
+  expect(syncTrackedCovers).toHaveBeenCalledTimes(5);
   requestUpdateCheck();
   await vi.advanceTimersByTimeAsync(10);
-  await vi.waitFor(() => expect(syncTrackedCovers).toHaveBeenCalledTimes(13)); // initial/final backfill plus requested refresh
+  await vi.waitFor(() => expect(syncTrackedCovers).toHaveBeenCalledTimes(7)); // maintenance backfill plus requested refresh
   expect(vi.getTimerCount()).toBe(1);
   let release!: () => void;
   vi.mocked(importChapter).mockImplementation(async () => {

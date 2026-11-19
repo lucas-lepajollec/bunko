@@ -86,7 +86,7 @@ export function Cover({
         setFailed({ key, count: attempt + 1 });
         if (attempt + 1 >= candidates.length) onUnavailable?.();
       }}
-      className={cx('book aspect-[2/3] w-full object-cover', className)}
+      className={cx('book bg-raised aspect-[2/3] w-full object-cover', className)}
       style={style}
     />
   );
@@ -135,13 +135,23 @@ export function SectionHeading({
 }
 
 export function PageTitle({ title, aside }: { title: string; aside?: ReactNode }) {
+  const longestWord = Math.max(
+    1,
+    ...title
+      .trim()
+      .split(/\s+/)
+      .map((w) => w.length),
+  );
   return (
-    <div className="ui-page-title flex flex-col gap-1 md:flex-row md:items-baseline md:gap-5">
-      <h1 className="ui-page-title-h font-display text-[40px] leading-none font-extrabold tracking-[-0.04em] md:text-[60px]">
+    <div className="ui-page-title flex min-w-0 flex-col gap-1 md:flex-row md:items-baseline md:gap-5">
+      <h1
+        className="ui-page-title-h font-display max-w-full leading-none font-extrabold tracking-[-0.04em] [overflow-wrap:anywhere] md:text-[60px]"
+        style={{ ['--title-word' as string]: longestWord }}
+      >
         {title}
       </h1>
       {aside && (
-        <span className="ui-page-title-aside text-muted font-serif text-[19px] italic md:text-[26px]">
+        <span className="ui-page-title-aside text-muted min-w-0 font-serif text-[19px] italic md:text-[26px]">
           {aside}
         </span>
       )}

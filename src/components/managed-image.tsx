@@ -4,9 +4,91 @@ import { TransientCoverError, loadCover } from '@/lib/client/cover-loader';
 
 /** Delays before retrying a cover that failed for a temporary reason. */
 const RETRIES = [3_000, 12_000];
+const MAX_WARM = 1000;
 
-/** Same-origin artwork shares a few cancellable transfers; offscreen cards do no work. */
+/**
+ * Same-origin URLs already loaded into the browser's HTTP cache during this session. Once warm, a
+ * plain `<img>` hits the browser disk/memory cache on the very first paint without touching the
+ * HTTP/1 transfer queue or allocating Blob copies.
+ */
+const warmCovers = new Set<string>();
+
+export function markCoverWarm(url: string) {
+  if (warmCovers.has(url)) warmCovers.delete(url);
+  warmCovers.add(url);
+  if (warmCovers.size > MAX_WARM) {
+    const oldest = warmCovers.values().next().value;
+    if (oldest) warmCovers.delete(oldest);
+  }
+}
+
+export function clearWarmCovers() {
+  warmCovers.clear();
+}
+
+export function isCoverWarm(url: string) {
+  return warmCovers.has(url);
+}
+
+/**
+ * External artwork renders natively so the browser's own memory/HTTP cache paints it on frame 1.
+ * Cold same-origin `/api/...` artwork shares a bounded cancellable queue so a big LAN library never
+ * starves JSON or navigation; once loaded once, it switches to the fast native cache path too.
+ */
 export function ManagedImage({
+  src,
+  onLoadError,
+  ...props
+}: Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'onError'> & {
+  src: string;
+  onLoadError?: () => void;
+}) {
+  const local = src.startsWith('/api/');
+  // External CDNs (AniList, TMDB, MangaDex…) and already-warm local covers bypass the JS queue.
+  const direct = !local || warmCovers.has(src);
+  if (direct)
+    return (
+      <DirectImage
+        src={src}
+        local={local}
+        onLoadError={onLoadError}
+        {...props}
+      />
+    );
+  return <QueuedLocalImage src={src} onLoadError={onLoadError} {...props} />;
+}
+
+function DirectImage({
+  src,
+  local,
+  onLoadError,
+  className,
+  ...props
+}: Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'onError'> & {
+  src: string;
+  local: boolean;
+  onLoadError?: () => void;
+}) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- browser HTTP/memory cache paints immediately
+    <img
+      {...props}
+      src={src}
+      alt={props.alt ?? ''}
+      decoding={props.decoding ?? 'async'}
+      referrerPolicy={props.referrerPolicy ?? 'no-referrer'}
+      // Transparent alt colour keeps a broken/loading image from laying out readable fallback text
+      // that would stretch a card, while preserving the accessible name.
+      className={className ? `${className} text-transparent` : 'text-transparent'}
+      onError={() => {
+        if (local) warmCovers.delete(src);
+        onLoadError?.();
+      }}
+    />
+  );
+}
+
+function QueuedLocalImage({
   src,
   onLoadError,
   ...props
@@ -33,7 +115,6 @@ export function ManagedImage({
         urls.current.delete(url);
       }
   }, [loaded]);
-  const local = src.startsWith('/api/');
   const priority = props.fetchPriority === 'high';
   useEffect(() => {
     failure.current = onLoadError;
@@ -49,18 +130,16 @@ export function ManagedImage({
       if (disposed || request || objectUrl) return;
       const transfer = new AbortController();
       request = transfer;
-      const replacement = local
-        ? loadCover(src, transfer.signal).then((blob) => {
-            const url = URL.createObjectURL(blob);
-            if (disposed || transfer.signal.aborted) {
-              URL.revokeObjectURL(url);
-              return '';
-            }
-            urls.current.add(url);
-            return url;
-          })
-        : Promise.resolve(src);
-      void replacement
+      void loadCover(src, transfer.signal)
+        .then((blob) => {
+          const url = URL.createObjectURL(blob);
+          if (disposed || transfer.signal.aborted) {
+            URL.revokeObjectURL(url);
+            return '';
+          }
+          urls.current.add(url);
+          return url;
+        })
         .then(async (url) => {
           if (!url || disposed || transfer.signal.aborted) return;
           const image = new Image();
@@ -74,6 +153,7 @@ export function ManagedImage({
           if (!url || disposed || transfer.signal.aborted) return;
           objectUrl = url;
           displayed.current = url;
+          markCoverWarm(src);
           observer?.disconnect();
           setLoaded(url);
         })
@@ -100,7 +180,7 @@ export function ManagedImage({
                 request = undefined;
               }
             },
-            { rootMargin: '200px' },
+            { rootMargin: '250px' },
           )
         : undefined;
     if (observer && ref.current) observer.observe(ref.current);
@@ -118,14 +198,19 @@ export function ManagedImage({
           ownedUrls.delete(url);
         }
     };
-  }, [src, local, priority]);
+  }, [src, priority]);
   return (
     // eslint-disable-next-line @next/next/no-img-element -- authenticated artwork, browser HTTP cache retained by fetch
     <img
       {...props}
       ref={ref}
       src={loaded || undefined}
-      style={{ ...props.style, visibility: loaded ? props.style?.visibility : 'hidden' }}
+      style={{ ...props.style, opacity: loaded ? (props.style?.opacity ?? 1) : 0 }}
+      className={
+        props.className
+          ? `${props.className} transition-opacity duration-150`
+          : 'transition-opacity duration-150'
+      }
       onError={() => failure.current?.()}
       // Until the picture is there the alternative text stays out: an empty image with a long
       // title would otherwise lay the title out as text and stretch its card (and its row).

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import type { ChapterRelease, DiscoverPage, HomeFeed } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
+import { useStableOrder } from '@/lib/client/stable-order';
 import { ContinueCard, useContinue } from '@/components/reading';
 import { universeAsides, useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -63,7 +64,13 @@ export default function HomePage() {
   // Releases keep arriving while the feed is pending: a shelf comes back as soon as its kind has one.
   const settled = Boolean(feed.data);
   const quiet = settled ? kinds.filter((k) => !feed.data?.latest?.[k]?.length) : [];
-  const shelves = kinds.filter((k) => !quiet.includes(k));
+  const rawShelves = kinds.filter((k) => !quiet.includes(k));
+  const homeScope = `${universe.active}:${universe.section ?? ''}`;
+  // Stabilise hero, top 10 and shelves while the feed finishes loading: late providers append
+  // underneath instead of shifting the work or shelf already under the user's eye.
+  const heroItems = useStableOrder(feed.data?.hero ?? [], (r) => r.id, `hero:${homeScope}`);
+  const topItems = useStableOrder(feed.data?.top ?? [], (m) => m.id, `top:${homeScope}`);
+  const shelves = useStableOrder(rawShelves, (k) => k, `shelves:${homeScope}`);
   const single = universe.active !== 'all' ? universe.active : null;
   const showcase =
     single && (!KIND_DEFS[single].datedReleases || quiet.includes(single)) ? single : null;
@@ -85,8 +92,8 @@ export default function HomePage() {
   return (
     <main className="relative">
       <Hero
-        items={feed.data?.hero ?? []}
-        loading={feed.isLoading || Boolean(feed.data?.pending && !feed.data.hero.length)}
+        items={heroItems}
+        loading={feed.isLoading || Boolean(feed.data?.pending && !heroItems.length)}
         error={feed.error}
         catalogHref={universe.active === 'all' ? '/catalog' : `/catalog?kind=${universe.active}`}
       />
@@ -119,7 +126,7 @@ export default function HomePage() {
           {feed.error ? (
             <ErrorNote error={feed.error} />
           ) : (
-            <TopRow items={feed.data?.top.length ? feed.data.top : undefined} />
+            <TopRow items={topItems.length ? topItems : undefined} />
           )}
         </section>
         {shelves.map((k) => (
@@ -573,11 +580,11 @@ function Hero({
  * break between words within three lines instead of being cut.
  */
 function heroTitleSize(title: string) {
-  const longestWord = Math.max(...title.split(/\s+/).map((w) => w.length));
+  const longestWord = Math.max(1, ...title.trim().split(/\s+/).map((w) => w.length));
   const length = title.length;
   const max = length <= 14 ? 132 : length <= 26 ? 108 : length <= 42 ? 86 : length <= 64 ? 68 : 56;
-  // A long single word must still fit the column (~ 0.5em per letter in Anton).
-  const byWord = Math.floor(1240 / Math.max(longestWord, 1));
+  // A long single word must still fit the column (~ 0.5em per letter in Anton) on desktop and phone.
+  const byWord = Math.floor(1240 / longestWord);
   const desktop = Math.min(max, byWord);
-  return `clamp(40px, ${(desktop / 14.4).toFixed(2)}vw, ${desktop}px)`;
+  return `min(clamp(34px, ${(desktop / 14.4).toFixed(2)}vw, ${desktop}px), calc((100vw - 2rem) / ${(longestWord * 0.56).toFixed(2)}))`;
 }

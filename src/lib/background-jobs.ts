@@ -9,7 +9,8 @@ import { getSettings } from './settings';
 import { statement } from './db';
 import { tenantId } from './tenant-context';
 import { runningJobs } from './job-stats';
-import { lastJobRun } from './job-runs';
+import { getJobProgress, lastJobRun } from './job-runs';
+import { resetCoverBackfill } from './tracked-covers';
 import { workerValue } from './updates';
 import { wakeWorker } from './worker-events';
 import { requestUpdateCheck } from './downloads';
@@ -111,9 +112,14 @@ const JOBS: Definition[] = [
     group: 'bunko',
     applies: () => true,
     next: () => null,
+    pending: () => {
+      const p = getJobProgress('covers');
+      return p?.total ? { done: p.done, total: p.total } : null;
+    },
     run: () => {
-      // A manual run looks at every work again, failures included (their wait is reset).
+      // A manual run looks at every work again, failures included (their wait and cooldown reset).
       statement("DELETE FROM worker_state WHERE key LIKE 'tracked_cover_checked:%'").run();
+      resetCoverBackfill();
       wakeWorker();
     },
   },

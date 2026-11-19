@@ -7,7 +7,7 @@ import { userContext } from './user-context';
 import { eachConcurrent } from './concurrency';
 import { getSettings } from './settings';
 import { withTracking } from './catalog';
-import { listTracked } from './db';
+import { listTracked, writeVersion } from './db';
 import { chapterLabels } from './chapter-labels';
 import { randomUUID } from 'node:crypto';
 import { onAllTenantsWake, wakeWorker, waitForWorker, workerIdleMs } from './worker-events';
@@ -42,7 +42,7 @@ import {
 import { sharedConcurrencyGate } from './concurrency';
 import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
 import { processTranslations, translationsWaiting } from './translations';
-import { jellyfinImportProgress, maybeSyncJellyfin } from './jellyfin';
+import { jellyfinConfigured, jellyfinImportProgress, maybeSyncJellyfin } from './jellyfin';
 import { measured } from './job-stats';
 import { recorded } from './job-runs';
 import { tenantId } from './tenant-context';
@@ -548,24 +548,20 @@ async function workerTickBackground() {
     return task;
   };
   // Each lane is measured (CPU, duration): GET /api/admin/jobs and heavy-run log lines.
-  // Each run is also recorded for the activity panel (last run, failure).
+  // Each run is also recorded for the activity panel (last run, failure, journal).
   const job = <T>(name: string, run: () => Promise<T>) =>
     measured(name, tenantId(), () => recorded(name, run));
-  const covers = background(() =>
-    job('covers', () => syncTrackedCovers(signal, true)).catch(() => {
-      /* Retry after a later wake. */
-    }),
-  );
+  const contentStart = writeVersion('content');
   let matching: ReturnType<typeof background> | undefined;
   let matchingFailed = false;
+  let longMaintenance = false;
   const startMatching = () => {
-    // Keep taking paced batches while other work holds this lease. A finished batch must not
-    // freeze the remaining queue behind a long index/cover refresh. Once those lanes finish,
-    // yield after the current two entries so the scheduler can serve other tenants.
+    // Keep taking paced batches while a long sync holds this lease; once long syncs finish,
+    // yield after the current batch so the scheduler can serve other tenants fairly.
     if (
       matchingFailed ||
       matching?.running ||
-      (matching && !covers.running && !maintenance?.running) ||
+      (matching && !longMaintenance) ||
       // Nothing to search without Suwayomi: no endless "matching" of every manga.
       !getSettings().suwayomiUrl ||
       !sourceMatchQueue().length
@@ -579,24 +575,7 @@ async function workerTickBackground() {
     );
   };
   let maintenance: ReturnType<typeof background> | undefined;
-  // Jellyfin and anime works have their own lane: they never wait behind release checks, and
-  // an unfinished import keeps going every minute while the rest of the cycle runs.
-  const video = background(async () => {
-    // Without anime, the lane still links imported reading works (Kavita) to the catalog.
-    if (!animeEnabled() && ownsLease())
-      await job('catalog-linking', () => linkCatalog(signal)).catch(() => undefined);
-    // Anime work (Jellyfin, season regrouping) only when anime is an enabled kind.
-    while (!signal.aborted && ownsLease() && animeEnabled()) {
-      await job('jellyfin', () => maybeSyncJellyfin(signal)).catch(() => undefined);
-      if (ownsLease())
-        await job('catalog-linking', () => linkCatalog(signal)).catch(() => undefined);
-      const progress = jellyfinImportProgress();
-      if (!progress || progress.done >= progress.total || !maintenance?.running) break;
-      await waitForWorker(60_000, signal);
-    }
-  });
-  // Translations have their own lane too: an upload never waits behind the Kavita index or a
-  // long release check, and running jobs are followed while the rest of the cycle works.
+  // Translations have their own lane: an upload never waits behind Kavita/Jellyfin/update checks.
   let translations: ReturnType<typeof background> | undefined;
   const startTranslations = () => {
     if (translations?.running || !translationsWaiting()) return;
@@ -604,7 +583,7 @@ async function workerTickBackground() {
       while (!signal.aborted && ownsLease()) {
         await job('translations', () => processTranslations(signal)).catch(() => undefined);
         // Keep following jobs only while other lanes hold this tick; the next tick resumes.
-        const busy = covers.running || maintenance?.running || matching?.running;
+        const busy = maintenance?.running || matching?.running;
         if (!busy || !translationsWaiting(60_000)) break;
         await waitForWorker(30_000, signal);
       }
@@ -621,14 +600,40 @@ async function workerTickBackground() {
         await processBatch(batch, signal);
       }
       if (!ownsLease()) return;
+      // Run heavy periodic maintenance sequentially (one job at a time per account) instead of
+      // launching 5 parallel lanes at once, avoiding CPU and SQLite lock spikes on small NAS boxes.
       maintenance ??= background(async () => {
         try {
-          if (kavitaSyncRequested()) await job('kavita-index', () => syncKavitaIndex(signal));
+          if (kavitaSyncRequested()) {
+            longMaintenance = true;
+            await job('kavita-index', () => syncKavitaIndex(signal));
+          }
           // Reading release checks only when a reading kind is enabled (empty = every kind).
-          if (ownsLease() && updateCheckDue() && readingEnabled())
+          // Keep ahead of Jellyfin so manual checks flip checking=1 before any async yield.
+          if (!signal.aborted && ownsLease() && updateCheckDue() && readingEnabled()) {
+            longMaintenance = true;
             await job('update-check', () => runUpdateCheck(createBatch, signal, ownsLease));
+          }
+          if (!signal.aborted && ownsLease() && animeEnabled() && jellyfinConfigured()) {
+            longMaintenance = true;
+            await job('jellyfin', () => maybeSyncJellyfin(signal)).catch(() => undefined);
+          }
+          longMaintenance = false;
+          if (!signal.aborted && ownsLease())
+            await job('catalog-linking', () => linkCatalog(signal)).catch(() => undefined);
+          if (!signal.aborted && ownsLease()) {
+            longMaintenance = true;
+            await job('covers', () => syncTrackedCovers(signal, true)).catch(() => undefined);
+            longMaintenance = false;
+          }
+          // Unfinished Jellyfin import continues one more pass when maintenance was long.
+          const progress = animeEnabled() && jellyfinConfigured() ? jellyfinImportProgress() : null;
+          if (!signal.aborted && ownsLease() && progress && progress.done < progress.total)
+            await job('jellyfin', () => maybeSyncJellyfin(signal)).catch(() => undefined);
         } catch (error) {
           maintenanceError = error;
+        } finally {
+          longMaintenance = false;
         }
       });
       // Check again before sleeping: maintenance can enqueue automatic lots itself.
@@ -642,11 +647,10 @@ async function workerTickBackground() {
       // A source request can arrive after an empty initial queue, during slow maintenance/transfers.
       startMatching();
       startTranslations();
-      let pending = [matching, covers, video, maintenance, translations, finalCovers].filter(
-        (task) => task?.running,
-      );
+      let pending = [matching, maintenance, translations, finalCovers].filter((task) => task?.running);
       if (!pending.length) {
-        if (finalCovers) break;
+        // Only run a follow-up cover pass if this tick actually added/modified tracked content.
+        if (finalCovers || writeVersion('content') === contentStart) break;
         finalCovers = background(() =>
           job('covers', () => syncTrackedCovers(signal, true)).catch((error) => {
             maintenanceError ??= error;
@@ -660,15 +664,13 @@ async function workerTickBackground() {
       );
     } while (!signal.aborted);
     await matching?.promise;
-    await covers.promise;
-    await video.promise;
+    await maintenance?.promise;
     await translations?.promise;
+    await finalCovers?.promise;
     if (maintenanceError) throw maintenanceError;
   } finally {
     controller.abort();
     await matching?.promise;
-    await covers.promise;
-    await video.promise;
     await maintenance?.promise;
     await translations?.promise;
     await finalCovers?.promise;

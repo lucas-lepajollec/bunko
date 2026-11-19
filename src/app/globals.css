@@ -66,11 +66,21 @@ html {
   scrollbar-color: var(--scrollbar) transparent;
   /* Same side margins on every page: short pages keep the scrollbar's room, nothing shifts. */
   scrollbar-gutter: stable;
+  /* Clip stray wide children without breaking position: sticky. */
+  overflow-x: clip;
 }
 
 body {
   min-height: 100dvh;
   background: var(--color-bg);
+  overflow-x: clip;
+}
+
+/* Long single-word page titles (e.g. "Téléchargements", "Herunterladen") scale cleanly on phones. */
+@media (max-width: 767px) {
+  .ui-page-title-h {
+    font-size: min(40px, calc((100vw - 2rem) / (var(--title-word, 8) * 0.62)));
+  }
 }
 
 ::selection {

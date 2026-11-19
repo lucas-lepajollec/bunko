@@ -15,6 +15,9 @@ const runtime = globalThis as typeof globalThis & {
 };
 const loads = (runtime.__bunkoDiscoverLoads ??= new Map<string, Promise<void>>());
 
+const FRESH_MS = 30 * 60_000;
+const DEGRADED_MS = 30_000;
+
 /** Provider pages retain every item; round-robin order does not invent a common popularity score. */
 export async function discoverAll(
   key: string,
@@ -25,7 +28,13 @@ export async function discoverAll(
   const hit = storedMetadata<State>(key)?.value;
   const degraded =
     hit && (hit.failures.length || Object.values(hit.pages).some((p) => p.warnings?.length));
-  const fresh = hit && Date.now() - hit.at < (degraded ? 30_000 : 10 * 60_000);
+  const fresh = hit && Date.now() - hit.at < (degraded ? DEGRADED_MS : FRESH_MS);
+  const completeHit = Boolean(
+    hit &&
+      !hit.pending &&
+      !degraded &&
+      Object.values(hit.pages).some((p) => p.items.length > 0),
+  );
   const pendingKey = `${dataDir()}:${key}`;
   const response = (state: State): DiscoverPage => {
     if (
@@ -62,6 +71,42 @@ export async function discoverAll(
     };
   };
   if (fresh && !hit.pending) return response(hit);
+  // Stale complete snapshot: serve it immediately with `pending: false` (no polling, no mid-screen
+  // re-shuffling) while rebuilding the replacement in a staging copy and swapping atomically once
+  // every provider finishes.
+  if (completeHit && hit) {
+    if (!loads.has(pendingKey)) {
+      const staged: State = {
+        pages: { ...hit.pages },
+        failures: [],
+        pending: false,
+        at: Date.now(),
+      };
+      const job = Promise.all(
+        Object.entries(providers).map(async ([name, load]) => {
+          try {
+            const loaded = await load();
+            if (loaded.items.length || !staged.pages[name]?.items.length) staged.pages[name] = loaded;
+          } catch {
+            staged.failures.push(name);
+          }
+        }),
+      )
+        .then(() => {
+          staged.pending = Object.values(staged.pages).some((p) => p.pending);
+          if (!tenantSignal().aborted && Object.values(staged.pages).some((p) => p.items.length))
+            saveMetadata(key, staged);
+        })
+        .catch(() => {
+          /* Revoked tenant: do not publish another result. */
+        })
+        .finally(() => {
+          loads.delete(pendingKey);
+        });
+      loads.set(pendingKey, job);
+    }
+    return response(hit);
+  }
   let first!: () => void;
   const ready = new Promise<void>((resolve) => {
     first = resolve;
