@@ -6,7 +6,6 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { formatStartDate } from '@/lib/client/season';
 import { Cover, PosterSkeletons, cx, useMediaMeta } from './ui';
 import { WorkMarks } from './work-marks';
-import { useLook } from '@/lib/client/theme';
 
 export function PosterCard({
   media,
@@ -37,14 +36,18 @@ export function PosterCard({
           className="transition-transform duration-300 group-hover:-translate-y-1"
         />
         {/* Ciné shows the year and score on the poster when it is pointed at (themes.css). */}
-        <span aria-hidden className="poster-chip">
-          {[
-            media.year,
-            media.score ? `★ ${n(media.score / 10, { maximumFractionDigits: 1 })}` : null,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-        </span>
+        {(media.year || media.score) && (
+          <span aria-hidden className="poster-chip">
+            {media.year}
+            {media.year && media.score ? ' · ' : ''}
+            {media.score ? (
+              <>
+                <span className="text-star">★</span>{' '}
+                {n(media.score / 10, { maximumFractionDigits: 1 })}
+              </>
+            ) : null}
+          </span>
+        )}
         {badge}
         <WorkMarks
           mark={media.mine}
@@ -136,7 +139,7 @@ export function ScrollRow({ children, label }: { children: ReactNode; label?: st
         role={label ? 'region' : undefined}
         aria-label={label}
         onScroll={update}
-        className="no-scrollbar -my-2 flex snap-x scroll-px-4 gap-3.5 overflow-x-auto scroll-smooth px-4 py-2 motion-reduce:scroll-auto md:scroll-px-0 md:gap-6 md:px-0"
+        className="no-scrollbar -my-2 flex snap-x scroll-px-4 gap-3.5 overflow-x-auto overflow-y-hidden scroll-smooth px-4 py-2 motion-reduce:scroll-auto md:scroll-px-0 md:gap-6 md:px-0"
         style={{
           maskImage: `linear-gradient(to right, ${edges.start ? 'black' : 'transparent'}, black ${edges.start ? '0px' : '16px'}, black calc(100% - ${edges.end ? '0px' : '16px'}), ${edges.end ? 'black' : 'transparent'})`,
         }}
@@ -180,53 +183,7 @@ export function Row({
 }
 
 export function TopRow({ items }: { items: UnifiedMedia[] | undefined }) {
-  const look = useLook();
-  const meta = useMediaMeta();
   const top = (items ?? []).slice(0, 10);
-  if (look === 'aurore' || look === 'edition')
-    return (
-      <ScrollRow>
-        {top.map((m, i) => (
-          <MediaLink
-            key={m.id}
-            media={m}
-            className="group flex w-[120px] shrink-0 snap-start flex-col gap-2 md:w-[164px]"
-          >
-            {look === 'edition' && (
-              <span
-                aria-hidden
-                className="font-display text-[44px] leading-[0.8] text-(--tone) md:text-[54px]"
-              >
-                {i + 1}
-              </span>
-            )}
-            <span className="relative block">
-              <Cover
-                src={m.coverUrl}
-                priority={i < 5}
-                alt={m.title}
-                className="transition-transform duration-300 group-hover:-translate-y-1"
-              />
-              {look === 'aurore' && (
-                <span
-                  aria-hidden
-                  className="absolute top-2.5 left-2.5 flex h-[26px] min-w-[26px] items-center justify-center rounded-full bg-black/45 px-2 text-[13px] font-bold text-white backdrop-blur-md"
-                >
-                  {i + 1}
-                </span>
-              )}
-            </span>
-            <span className="poster-title truncate text-[13px] font-medium" title={m.title}>
-              {m.title}
-            </span>
-            {look === 'edition' && (
-              <span className="poster-meta text-muted -mt-1 truncate text-xs">{meta(m)}</span>
-            )}
-          </MediaLink>
-        ))}
-        {!items && <PosterSkeletons count={7} className="w-[120px] shrink-0 md:w-[164px]" />}
-      </ScrollRow>
-    );
   return (
     <ScrollRow>
       {top.map((m, i) => (

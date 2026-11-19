@@ -16,16 +16,6 @@ const PREVIEW: Record<ThemeId, { display: string; style: React.CSSProperties; ra
     style: { textTransform: 'uppercase', letterSpacing: '0.01em' },
     radius: 10,
   },
-  aurore: {
-    display: "'Inter Variable', sans-serif",
-    style: { fontWeight: 700, letterSpacing: '-0.04em' },
-    radius: 10,
-  },
-  edition: {
-    display: "'Fraunces Variable', Georgia, serif",
-    style: { fontStyle: 'italic', fontWeight: 360, letterSpacing: '-0.03em' },
-    radius: 0,
-  },
 };
 
 /** Réglages → Apparence: the interface theme and its colour, for this device. */

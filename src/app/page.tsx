@@ -10,10 +10,8 @@ import { universeAsides, useUniverse } from '@/lib/client/universe';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LoadNotice } from '@/components/load-notice';
 import { Backdrop } from '@/components/backdrop';
-import { ManagedImage } from '@/components/managed-image';
 import { Info } from 'lucide-react';
 import { useLook } from '@/lib/client/theme';
-import { useAmbient } from '@/lib/client/ambient';
 import { Row, ScrollRow, TopRow } from '@/components/media';
 import { ReleaseRow, useChapterLabel } from '@/components/releases';
 import { useRelativeTime } from '@/components/time';
@@ -283,7 +281,11 @@ function Hero({
     : `/catalog?view=chapters${m.type === 'ANIME' ? '&kind=anime' : ''}`;
   const releasesLabel = r.featured ? t('home.allShelf') : t('home.allReleases');
   const facts = [
-    m.score ? `★ ${n(m.score / 10, { maximumFractionDigits: 1 })}` : null,
+    m.score ? (
+      <span key="score">
+        <span className="text-star">★</span> {n(m.score / 10, { maximumFractionDigits: 1 })}
+      </span>
+    ) : null,
     m.year,
     m.genres.slice(0, 2).join(', ') || null,
   ].filter(Boolean);
@@ -295,10 +297,10 @@ function Hero({
     onFocus: () => setPaused(true),
     onBlur: () => setPaused(false),
   };
-  // One button per featured title, shaped by the theme (covers, bars or numbers).
-  const pick = (shape: 'bar' | 'number', className?: string) =>
+  // Ciné: one bar per featured title.
+  const pick = (className?: string) =>
     items.length > 1 && (
-      <div className={cx('flex items-center', shape === 'bar' ? 'gap-2' : 'gap-4', className)}>
+      <div className={cx('flex items-center gap-2', className)}>
         {items.map((item, i) => (
           <button
             key={item.id}
@@ -307,22 +309,10 @@ function Hero({
             aria-current={i === current}
             onClick={() => setIndex(i)}
             className={cx(
-              'transition-[width,background-color,color] duration-300',
-              shape === 'bar'
-                ? cx(
-                    'h-1 rounded-full',
-                    i === current ? 'w-11 bg-white' : 'w-5 bg-white/35 hover:bg-white/60',
-                  )
-                : cx(
-                    'font-serif text-[15px] italic',
-                    i === current
-                      ? 'text-(--tone) underline underline-offset-4'
-                      : 'text-muted hover:text-fg',
-                  ),
+              'h-1 rounded-full transition-[width,background-color] duration-300',
+              i === current ? 'w-11 bg-white' : 'w-5 bg-white/35 hover:bg-white/60',
             )}
-          >
-            {shape === 'number' ? String(i + 1).padStart(2, '0') : null}
-          </button>
+          />
         ))}
       </div>
     );
@@ -331,7 +321,7 @@ function Hero({
     return (
       <section
         {...carousel}
-        className="relative h-[600px] md:h-[min(780px,92vh)]"
+        className="hero-cine relative h-[600px] md:h-[min(780px,92vh)]"
         style={{ ['--accent' as string]: m.color ?? '#e2dbd0' }}
       >
         <Backdrop
@@ -341,11 +331,15 @@ function Hero({
           color={m.color}
           className="h-[calc(100%+80px)]"
         />
-        <div className="absolute inset-x-4 bottom-12 flex max-w-[640px] flex-col gap-4 md:bottom-[90px] md:left-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] md:gap-5">
+        <div className="absolute inset-x-4 bottom-12 flex md:max-w-[min(900px,72vw)] flex-col gap-4 md:bottom-[90px] md:left-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] md:gap-5">
           <span className="text-mid text-[11px] tracking-[0.16em] uppercase md:text-xs">
             {kicker}
           </span>
-          <h1 className="font-display line-clamp-2 text-[52px] leading-[0.86] [overflow-wrap:anywhere] md:text-[clamp(72px,7.5vw,132px)]">
+          {/* Whole words only, lines balanced; long titles get a smaller size, not a cut. */}
+          <h1
+            className="font-display line-clamp-3 leading-[0.88] [text-wrap:balance] break-normal hyphens-none"
+            style={{ fontSize: heroTitleSize(m.title) }}
+          >
             {m.title}
           </h1>
           <span className="text-mid flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px]">
@@ -357,24 +351,24 @@ function Hero({
             ))}
           </span>
           {m.synopsis && (
-            <p className="text-soft line-clamp-3 hidden text-[17px] leading-relaxed md:block">
+            <p className="text-soft line-clamp-3 hidden max-w-[640px] text-[17px] leading-relaxed md:block">
               {firstSentence(m.synopsis)}
             </p>
           )}
           <div className="mt-2 flex items-center gap-3">
             <MediaLink
               media={m}
-              className="inline-flex h-14 items-center gap-2.5 rounded-full bg-white px-8 text-[15px] font-bold tracking-[0.04em] text-[#070b10] uppercase transition-opacity hover:opacity-90"
+              className="inline-flex h-12 shrink-0 items-center gap-2 rounded-full bg-white px-5 text-[14px] font-bold tracking-[0.04em] whitespace-nowrap text-[#070b10] uppercase transition-opacity hover:opacity-90 md:h-14 md:gap-2.5 md:px-8 md:text-[15px]"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                 <path d="M7 4v16l13-8Z" />
               </svg>
               {label(r)}
             </MediaLink>
-            <span className="flex h-14 items-center rounded-full border border-white/20 bg-white/[0.08] backdrop-blur-xl">
+            <span className="flex h-12 min-w-0 items-center rounded-full border border-white/20 bg-white/[0.08] backdrop-blur-xl md:h-14">
               <Link
                 href={releasesHref}
-                className="flex h-full items-center px-5 text-[15px] hover:text-white"
+                className="flex h-full items-center truncate px-4 text-[14px] whitespace-nowrap hover:text-white md:px-5 md:text-[15px]"
               >
                 {releasesLabel}
               </Link>
@@ -382,103 +376,15 @@ function Hero({
               <MediaLink
                 media={m}
                 aria-label={t('home.openSheet')}
-                className="flex h-full w-14 items-center justify-center hover:text-white"
+                className="flex h-full w-12 shrink-0 items-center justify-center hover:text-white md:w-14"
               >
                 <Info className="size-5" aria-hidden />
               </MediaLink>
             </span>
           </div>
         </div>
-        {pick(
-          'bar',
-          'absolute right-[max(1rem,calc((100%-1760px)/2+2.5rem))] bottom-6 md:bottom-[100px]',
-        )}
+        {pick('absolute right-[max(1rem,calc((100%-1760px)/2+2.5rem))] bottom-6 md:bottom-[100px]')}
       </section>
-    );
-
-  if (look === 'aurore')
-    return (
-      <div className="relative mx-auto max-w-[1760px] px-4 pt-20 pb-10 md:px-10 md:pt-28 md:pb-14">
-        <section
-          {...carousel}
-          className="relative h-[460px] overflow-hidden rounded-[28px] shadow-[0_40px_80px_rgba(0,0,0,0.35)] md:h-[560px]"
-          style={{ ['--accent' as string]: m.color ?? '#e2dbd0' }}
-        >
-          <AuroreArt media={m} />
-          <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(0,0,0,0.78)_0%,rgba(0,0,0,0)_60%)]" />
-          {pick('bar', 'absolute top-5 right-6')}
-          <div className="absolute inset-x-5 bottom-6 flex flex-col gap-5 md:inset-x-12 md:bottom-11 md:flex-row md:items-end md:gap-8">
-            <div className="flex min-w-0 flex-1 flex-col gap-2.5 text-white">
-              <span className="text-[12px] font-semibold tracking-[0.08em] text-white/75 uppercase">
-                {kicker}
-              </span>
-              <h1 className="font-display line-clamp-2 text-[38px] leading-[0.95] tracking-[-0.04em] [overflow-wrap:anywhere] md:text-[72px]">
-                {m.title}
-              </h1>
-              <span className="text-[15px] text-white/80">{[label(r), ...facts].join(' · ')}</span>
-            </div>
-            <div className="flex gap-2.5">
-              <MediaLink
-                media={m}
-                className="inline-flex h-[52px] flex-1 items-center justify-center gap-2 rounded-[14px] bg-white px-6 text-[15px] font-semibold text-[#1a1410] hover:opacity-90 md:flex-none"
-              >
-                {t('home.openSheet')}
-              </MediaLink>
-              <Link
-                href={releasesHref}
-                className="inline-flex h-[52px] items-center justify-center rounded-[14px] bg-white/[0.18] px-5 text-[15px] text-white backdrop-blur-xl hover:bg-white/[0.26]"
-              >
-                {releasesLabel}
-              </Link>
-            </div>
-          </div>
-        </section>
-      </div>
-    );
-
-  if (look === 'edition')
-    return (
-      <div className="mx-auto max-w-[1760px] px-4 pt-[92px] md:px-10 md:pt-[120px]">
-        <section
-          {...carousel}
-          className="border-fg grid gap-6 border-b pb-10 md:grid-cols-12 md:items-end md:gap-8 md:pb-14"
-        >
-          <figure className="m-0 flex flex-col gap-2.5 md:order-2 md:col-span-7">
-            <EditionPlate media={m} />
-            <figcaption className="text-muted flex justify-between gap-4 text-[11px] tracking-[0.1em] uppercase">
-              <span className="truncate">{[m.title, m.year].filter(Boolean).join(' · ')}</span>
-              {pick('number')}
-            </figcaption>
-          </figure>
-          <div className="flex min-w-0 flex-col gap-4 md:order-1 md:col-span-5 md:gap-5">
-            <span className="text-[11px] tracking-[0.16em] text-(--tone) uppercase md:text-xs">
-              {kicker}
-            </span>
-            <h1 className="font-display line-clamp-3 text-[52px] leading-[0.88] tracking-[-0.04em] [overflow-wrap:anywhere] md:text-[clamp(72px,7vw,120px)]">
-              {m.title}
-            </h1>
-            {m.synopsis && (
-              <p className="text-mid line-clamp-4 font-serif text-[18px] leading-normal md:text-[20px]">
-                {firstSentence(m.synopsis)}
-              </p>
-            )}
-            <div className="mt-1 flex flex-wrap items-center gap-x-6 gap-y-3">
-              <MediaLink
-                media={m}
-                className="bg-fg text-bg inline-flex h-[50px] items-center px-6 text-[14px] tracking-[0.06em] hover:opacity-90"
-              >
-                {label(r)} — {t('home.openSheet')}
-              </MediaLink>
-              <Link
-                href={releasesHref}
-                className="border-fg border-b font-serif text-[18px] italic"
-              >
-                {releasesLabel} →
-              </Link>
-            </div>
-          </div>
-        </section>
-      </div>
     );
 
   return (
@@ -560,53 +466,16 @@ function Hero({
   );
 }
 
-/** Aurore's hero card: the wide artwork, or the cover blurred behind itself. */
-function AuroreArt({ media }: { media: ChapterRelease['media'] }) {
-  useAmbient(media.bannerUrl ?? media.coverUrl);
-  if (media.bannerUrl)
-    return (
-      <ManagedImage
-        src={media.bannerUrl}
-        alt=""
-        referrerPolicy="no-referrer"
-        className="absolute inset-0 size-full object-cover object-[center_35%]"
-      />
-    );
-  return (
-    <>
-      {media.coverUrl && (
-        <ManagedImage
-          src={media.coverUrl}
-          alt=""
-          referrerPolicy="no-referrer"
-          className="absolute inset-0 size-full scale-125 object-cover opacity-70 blur-2xl"
-        />
-      )}
-      {media.coverUrl && (
-        <Cover
-          src={media.coverUrl}
-          alt=""
-          className="absolute top-8 right-8 hidden w-[180px] rounded-[14px] md:block"
-        />
-      )}
-    </>
-  );
-}
-
-/** Édition's plate: the wide artwork printed in the page, or the cover on a mount. */
-function EditionPlate({ media }: { media: ChapterRelease['media'] }) {
-  if (media.bannerUrl)
-    return (
-      <ManagedImage
-        src={media.bannerUrl}
-        alt={media.title}
-        referrerPolicy="no-referrer"
-        className="h-[220px] w-full object-cover object-[center_30%] saturate-[0.85] md:h-[440px]"
-      />
-    );
-  return (
-    <span className="bg-raised flex h-[260px] items-center justify-center md:h-[440px]">
-      <Cover src={media.coverUrl} alt={media.title} className="w-[130px] md:w-[220px]" />
-    </span>
-  );
+/**
+ * Ciné hero title size from its length: short titles fill the hero, long ones shrink so they
+ * break between words within three lines instead of being cut.
+ */
+function heroTitleSize(title: string) {
+  const longestWord = Math.max(...title.split(/\s+/).map((w) => w.length));
+  const length = title.length;
+  const max = length <= 14 ? 132 : length <= 26 ? 108 : length <= 42 ? 86 : length <= 64 ? 68 : 56;
+  // A long single word must still fit the column (~ 0.5em per letter in Anton).
+  const byWord = Math.floor(1240 / Math.max(longestWord, 1));
+  const desktop = Math.min(max, byWord);
+  return `clamp(40px, ${(desktop / 14.4).toFixed(2)}vw, ${desktop}px)`;
 }

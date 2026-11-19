@@ -7,6 +7,8 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { inUniverse, useUniverse, searchTypeOf } from '@/lib/client/universe';
 import { Cover, Skeleton, cx, useMediaMeta } from './ui';
 import { LoadNotice } from './load-notice';
+import { ArrowLeft, X } from 'lucide-react';
+import { useLook } from '@/lib/client/theme';
 
 export const OPEN_SEARCH_EVENT = 'bunko:open-search';
 /** Pages whose own content the search field filters. */
@@ -28,14 +30,22 @@ function useDebounced(value: string, ms: number) {
  * Instant catalog search without leaving the page. Results open title sheets; the footer leads to
  * the full catalog results or to the live search inside installed extensions.
  */
-export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
+export function QuickSearch({
+  variant,
+  onClose,
+}: {
+  /** `bar`: the Ciné navigation turned into a search field (desktop), closed with `onClose`. */
+  variant: 'inline' | 'overlay' | 'bar';
+  onClose?: () => void;
+}) {
   const { t } = useI18n();
   const meta = useMediaMeta();
   const router = useRouter();
   const preview = useMediaPreview();
   const pathname = usePathname();
+  const look = useLook();
   const [text, setText] = useState('');
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(variant === 'bar');
   const [active, setActive] = useState(-1);
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -73,9 +83,13 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
   const show = open && text.trim().length >= 2;
 
   useEffect(() => {
+    // Ciné opens its navigation bar from tablets up; the default look its inline field on wide
+    // screens. Smaller screens get the full-screen overlay.
+    const wide = look === 'cine' ? '(min-width: 768px)' : '(min-width: 1280px)';
     const onOpen = () => {
-      if (variant === 'overlay' && window.matchMedia('(min-width: 1280px)').matches) return;
-      if (variant === 'inline' && !window.matchMedia('(min-width: 1280px)').matches) return;
+      if (variant === 'bar') return;
+      if (variant === 'overlay' && window.matchMedia(wide).matches) return;
+      if (variant === 'inline' && !window.matchMedia(wide).matches) return;
       setOpen(true);
       // The inline field is always mounted: focus now so the first typed key is not lost.
       if (input.current) input.current.focus();
@@ -83,9 +97,13 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
     };
     window.addEventListener(OPEN_SEARCH_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_SEARCH_EVENT, onOpen);
+  }, [variant, look]);
+  // The bar takes the keyboard as soon as it opens.
+  useEffect(() => {
+    if (variant === 'bar') input.current?.focus();
   }, [variant]);
   useEffect(() => {
-    if (variant !== 'inline' || !open) return;
+    if ((variant !== 'inline' && variant !== 'bar') || !open) return;
     const onDown = (e: MouseEvent) => {
       if (!root.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -116,6 +134,7 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
     if (e.key === 'Escape') {
       setOpen(false);
       input.current?.blur();
+      onClose?.();
     } else if (e.key === 'ArrowDown' && show) {
       e.preventDefault();
       setActive((a) => (a + 1) % total);
@@ -142,7 +161,9 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
         'flex flex-col overflow-hidden',
         variant === 'inline'
           ? 'ui-panel border-line absolute top-[50px] right-0 w-[440px] rounded-2xl border bg-panel shadow-[0_24px_60px_rgba(0,0,0,0.55)]'
-          : 'mt-3',
+          : variant === 'bar'
+            ? 'ui-panel border-line absolute top-[calc(100%+12px)] left-1/2 w-[min(560px,calc(100vw-48px))] -translate-x-1/2 rounded-[22px] border bg-panel'
+            : 'mt-3',
       )}
     >
       {scope ? (
@@ -266,6 +287,52 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
     </div>
   );
 
+  if (variant === 'bar')
+    return (
+      <div ref={root} className="relative flex h-full min-w-0 flex-1 items-center gap-1">
+        <button
+          type="button"
+          aria-label={t('common.back')}
+          title={t('common.back')}
+          onClick={() => onClose?.()}
+          className="flex size-10 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/[0.1]"
+        >
+          <ArrowLeft className="size-[18px]" aria-hidden />
+        </button>
+        <input
+          ref={input}
+          type="search"
+          role="combobox"
+          aria-expanded={Boolean(show)}
+          aria-controls="quick-bar"
+          aria-label={t('nav.search')}
+          placeholder={t(scope ? `search.filter.${scope}` : 'search.placeholderShort')}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setActive(-1);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKey}
+          className="placeholder:text-mid h-full min-w-0 flex-1 bg-transparent px-1 text-[15px] text-white outline-none focus-visible:outline-none"
+        />
+        {text && (
+          <button
+            type="button"
+            aria-label={t('common.clear')}
+            onClick={() => {
+              setText('');
+              input.current?.focus();
+            }}
+            className="text-muted flex size-9 shrink-0 items-center justify-center rounded-full hover:text-white"
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        )}
+        {panel}
+      </div>
+    );
   if (variant === 'inline')
     return (
       <div ref={root} className="relative mr-2 hidden xl:block">
@@ -279,7 +346,10 @@ export function QuickSearch({ variant }: { variant: 'inline' | 'overlay' }) {
       role="dialog"
       aria-modal="true"
       aria-label={t('nav.search')}
-      className="bg-bg fixed inset-0 z-50 flex flex-col px-4 pt-4 xl:hidden"
+      className={cx(
+        'bg-bg fixed inset-0 z-50 flex flex-col px-4 pt-4',
+        look === 'cine' ? 'md:hidden' : 'xl:hidden',
+      )}
     >
       <div className="flex items-center gap-2">
         <div className="flex-1">{field}</div>

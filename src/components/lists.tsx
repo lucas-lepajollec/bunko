@@ -74,16 +74,7 @@ export function listMeta(t: T, n: (v: number) => string, list: WorkList, count: 
     .join(' · ');
 }
 
-export function ListCard({
-  list,
-  entries,
-  index = 0,
-}: {
-  list: WorkList;
-  entries: TrackedMedia[];
-  /** Position in the grid (Édition numbers its lists). */
-  index?: number;
-}) {
+export function ListCard({ list, entries }: { list: WorkList; entries: TrackedMedia[] }) {
   const { t, n } = useI18n();
   const look = useLook();
   const works = listWorks(list, entries);
@@ -129,45 +120,6 @@ export function ListCard({
         {meta}
       </Link>
     );
-  if (look === 'aurore')
-    return (
-      <Link
-        href={`/lists/${list.id}`}
-        className="ui-panel group flex min-w-0 flex-col gap-3 rounded-[24px] border p-3.5 transition-transform hover:-translate-y-0.5"
-      >
-        <span className="grid grid-cols-4 gap-1.5">
-          {[0, 1, 2, 3].map((i) => cover(i, 'rounded-[10px]'))}
-        </span>
-        <span className="flex flex-col gap-1.5 px-1">
-          {name}
-          {meta}
-        </span>
-      </Link>
-    );
-  if (look === 'edition')
-    return (
-      <Link
-        href={`/lists/${list.id}`}
-        className="border-line group grid min-w-0 grid-cols-[48px_minmax(0,1fr)] gap-4 border-b py-6 md:grid-cols-[60px_minmax(0,1fr)]"
-      >
-        <span className="font-display text-[40px] leading-none text-(--tone)">{index + 1}</span>
-        <span className="flex min-w-0 flex-col gap-3">
-          <span className="truncate font-serif text-[24px] font-semibold group-hover:underline md:text-[26px]">
-            {listName(t, list)}
-          </span>
-          <span className="text-muted text-[11px] tracking-[0.14em] uppercase">
-            {listMeta(t, n, list, works.length)}
-          </span>
-          <span className="flex gap-2">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <span key={i} className="w-[46px] shrink-0">
-                {cover(i)}
-              </span>
-            ))}
-          </span>
-        </span>
-      </Link>
-    );
   return (
     <Link href={`/lists/${list.id}`} className="group flex min-w-0 flex-col gap-2.5">
       <span className="grid grid-cols-4 gap-[3px] overflow-hidden rounded-xl bg-white/[0.04] transition-opacity group-hover:opacity-90">
@@ -184,17 +136,13 @@ export function ListsGrid({ lists, entries }: { lists: WorkList[]; entries: Trac
   return (
     <div
       className={cx(
-        look === 'edition'
-          ? 'border-fg grid border-t md:grid-cols-2 md:gap-x-14'
-          : look === 'cine'
-            ? 'grid gap-x-6 gap-y-9 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'
-            : look === 'aurore'
-              ? 'grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-              : 'grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
+        look === 'cine'
+          ? 'grid gap-x-6 gap-y-9 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'
+          : 'grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
       )}
     >
-      {lists.map((list, i) => (
-        <ListCard key={list.id} list={list} entries={entries} index={i} />
+      {lists.map((list) => (
+        <ListCard key={list.id} list={list} entries={entries} />
       ))}
     </div>
   );

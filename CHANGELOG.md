@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Two looks only: Bunko (default) and Ciné; Aurore and Édition are retired (a device that used
+  them goes back to Bunko). Ciné reworked: a centred header (brand and type on the left, the
+  navigation in a floating pill, tools grouped on the right, everything the same height); search
+  opens inside the navigation with a back button (Ctrl+K too); a new type menu with an icon per
+  kind; a richer cinema background; hero titles sized to break between words, never cut; resume
+  cards as covers (books have no episode stills); white highlights and yellow ratings; library
+  titles under the posters again (no badge overlap); planning with the works' covers; profile with
+  more room and "see all" for what is in progress (same height, then it scrolls); the work sheet
+  keeps Bunko's own structure. The catalog keeps its views on the right (with Planning beside the
+  releases) and the filters on the left. The activity menu is restructured and now holds the
+  release checks (last/next check, automatic fetching, "check now") that were on the library's
+  "New" tab; two redundant library sentences are gone. No more vertical scroll inside the top 10.
+
 - Themes now change the layout too, not only the look, with every feature kept. Ciné: full-height
   artwork hero with a poster headline, a play button and a grouped glass pill, search inside the
   floating navigation, landscape resume cards, outlined top-10 numerals, year and score on hover,

@@ -361,16 +361,7 @@ export function EpisodeList({
         {refreshButton}
       </div>
       {/* A grid of episode cards; a few rows show, the rest scrolls inside the panel. */}
-      <ul
-        className={cx(
-          'grid max-h-[620px] overflow-y-auto pr-1',
-          look === 'edition'
-            ? 'grid-cols-1 pt-1'
-            : look === 'cine'
-              ? 'grid-cols-1 gap-4 pt-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'
-              : 'grid-cols-2 gap-3 pt-4 sm:grid-cols-3 xl:grid-cols-4',
-        )}
-      >
+      <ul className="grid max-h-[620px] grid-cols-2 gap-3 overflow-y-auto pt-4 pr-1 sm:grid-cols-3 xl:grid-cols-4">
         {rows.slice(0, limit).map((e) => {
           const absolute = offset + e.number;
           const seen = absolute <= read || played.has(e.number);
@@ -386,57 +377,6 @@ export function EpisodeList({
                 : seen
                   ? t('episodes.watched')
                   : t('episodes.aired');
-          if (look === 'edition')
-            return (
-              <li
-                key={e.number}
-                className="border-line group col-span-full grid grid-cols-[44px_minmax(0,1fr)_auto_40px] items-baseline gap-3 border-b py-3 md:grid-cols-[56px_minmax(0,1fr)_160px_44px] md:gap-4"
-              >
-                <span className="font-display text-[20px] text-(--tone)">{n(e.number)}</span>
-                <button
-                  type="button"
-                  disabled={upcoming}
-                  onClick={() => setPlaying({ season: index, episode: e.number })}
-                  aria-label={t('player.playEpisode', { n: n(e.number) })}
-                  className={cx(
-                    'min-w-0 truncate text-left font-serif text-[18px] enabled:hover:underline disabled:cursor-default md:text-[19px]',
-                    seen && 'text-muted',
-                  )}
-                >
-                  {e.title ??
-                    (film ? t('episodes.film') : t('episodes.number', { n: n(e.number) }))}
-                </button>
-                <span
-                  className={cx(
-                    'truncate text-right text-[11px] tracking-[0.1em] uppercase',
-                    inJellyfin && !seen ? 'text-fg' : 'text-muted',
-                  )}
-                >
-                  {state}
-                </span>
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={seen}
-                  aria-disabled={!entry || busy || upcoming}
-                  onClick={() => {
-                    if (!entry || busy || upcoming) return;
-                    onWatched(seen ? (absolute > 1 ? absolute - 1 : null) : absolute);
-                  }}
-                  aria-label={t('episodes.markWatched', { n: n(e.number) })}
-                  title={t('episodes.markWatched', { n: n(e.number) })}
-                  className={cx(
-                    'flex size-7 items-center justify-center self-center justify-self-end border',
-                    seen
-                      ? 'bg-fg text-bg border-fg'
-                      : 'border-line-strong text-transparent hover:text-muted',
-                    upcoming && 'invisible',
-                  )}
-                >
-                  <Check size={14} strokeWidth={2.75} aria-hidden />
-                </button>
-              </li>
-            );
           return (
             <li key={e.number} className="group flex min-w-0 flex-col gap-2">
               <div className="relative overflow-hidden rounded-xl bg-white/[0.06]">
