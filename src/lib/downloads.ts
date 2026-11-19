@@ -42,7 +42,7 @@ import {
 import { sharedConcurrencyGate } from './concurrency';
 import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
 import { processTranslations, translationsWaiting } from './translations';
-import { jellyfinImportProgress, maybeSyncJellyfin } from './jellyfin';
+import { jellyfinConfigured, jellyfinImportProgress, maybeSyncJellyfin } from './jellyfin';
 import { measured } from './job-stats';
 import { recorded } from './job-runs';
 import { tenantId } from './tenant-context';
@@ -608,22 +608,26 @@ async function workerTickBackground() {
             longMaintenance = true;
             await job('kavita-index', () => syncKavitaIndex(signal));
           }
-          if (!signal.aborted && ownsLease() && animeEnabled()) {
-            longMaintenance = true;
-            await job('jellyfin', () => maybeSyncJellyfin(signal)).catch(() => undefined);
-          }
           // Reading release checks only when a reading kind is enabled (empty = every kind).
+          // Keep ahead of Jellyfin so manual checks flip checking=1 before any async yield.
           if (!signal.aborted && ownsLease() && updateCheckDue() && readingEnabled()) {
             longMaintenance = true;
             await job('update-check', () => runUpdateCheck(createBatch, signal, ownsLease));
           }
+          if (!signal.aborted && ownsLease() && animeEnabled() && jellyfinConfigured()) {
+            longMaintenance = true;
+            await job('jellyfin', () => maybeSyncJellyfin(signal)).catch(() => undefined);
+          }
           longMaintenance = false;
           if (!signal.aborted && ownsLease())
             await job('catalog-linking', () => linkCatalog(signal)).catch(() => undefined);
-          if (!signal.aborted && ownsLease())
+          if (!signal.aborted && ownsLease()) {
+            longMaintenance = true;
             await job('covers', () => syncTrackedCovers(signal, true)).catch(() => undefined);
+            longMaintenance = false;
+          }
           // Unfinished Jellyfin import continues one more pass when maintenance was long.
-          const progress = animeEnabled() ? jellyfinImportProgress() : null;
+          const progress = animeEnabled() && jellyfinConfigured() ? jellyfinImportProgress() : null;
           if (!signal.aborted && ownsLease() && progress && progress.done < progress.total)
             await job('jellyfin', () => maybeSyncJellyfin(signal)).catch(() => undefined);
         } catch (error) {

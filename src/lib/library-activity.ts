@@ -120,9 +120,10 @@ export function libraryActivity(): LibraryActivity {
       total: null,
       detail: null,
     });
+  const recent = recentActivityEvents();
   return {
     tasks,
-    recent: recentActivityEvents(),
+    ...(recent.length ? { recent } : {}),
     revision: writeVersion(),
     activeDownloads: batches.length,
     revisions: {
