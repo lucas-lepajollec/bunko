@@ -1,10 +1,4 @@
-import {
-  airedSince,
-  loadedAnime,
-  naturalEpisode,
-  rollAiring,
-  seasonRef,
-} from './anime-franchise';
+import { airedSince, loadedAnime, naturalEpisode, rollAiring, seasonRef } from './anime-franchise';
 import { firstSeason } from './anime-ids';
 import { KINDS, KIND_IDS, availableKinds, byKindOrder, mixByKind, type Kind } from '@/domain/kinds';
 import {
@@ -120,6 +114,10 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
         type: t?.media.type ?? m.type,
         // The user's kind for a followed work follows it everywhere (cards, sheet, menus).
         ...(t?.media.kindOverride ? { kindOverride: t.media.kindOverride } : {}),
+        // A work made from a server item and filed under an extension's section keeps it.
+        ...(t?.media.extensionSection && !m.extensionSection
+          ? { extensionSection: t.media.extensionSection }
+          : {}),
         adult: Boolean(m.adult || t?.media.adult),
         // Repair already cached/tracked Metron series without waiting for their metadata TTL.
         coverUrl:
@@ -429,7 +427,9 @@ export async function discoverAniList(
       : null;
   const nativeItems = data.Page.media.map(fromAniList);
   const nativeTitles = new Set(
-    nativeItems.flatMap((m) => [m.title, ...m.altTitles].map((t) => normalizeTitle(t)).filter(Boolean)),
+    nativeItems.flatMap((m) =>
+      [m.title, ...m.altTitles].map((t) => normalizeTitle(t)).filter(Boolean),
+    ),
   );
   const items = [
     ...nativeItems,
@@ -797,6 +797,7 @@ function enrichDetail(detail: MediaDetail): MediaDetail {
     adult: tracked.adult,
     adultOverride: tracked.adultOverride,
     kindOverride: tracked.kindOverride,
+    ...(tracked.extensionSection ? { extensionSection: tracked.extensionSection } : {}),
     coverUrl: tracked.coverUrl,
     trackedId: tracked.trackedId,
     kavitaSeriesId: tracked.kavitaSeriesId,
@@ -1088,20 +1089,18 @@ export async function animeFilmReleases(
       m.startDate <= toDay,
   );
   return mapped
-    .map(
-      (media): import('@/types/shared').ChapterRelease => ({
-        id: `anilist-film:${media.id}`,
-        media,
-        chapter: null,
-        volume: null,
-        unit: 'film',
-        label: '',
-        group: null,
-        releasedAt: media.startDate!,
-        hasTime: false,
-        provider: 'anilist',
-        trackedId: media.trackedId ?? null,
-      }),
-    )
+    .map((media): import('@/types/shared').ChapterRelease => ({
+      id: `anilist-film:${media.id}`,
+      media,
+      chapter: null,
+      volume: null,
+      unit: 'film',
+      label: '',
+      group: null,
+      releasedAt: media.startDate!,
+      hasTime: false,
+      provider: 'anilist',
+      trackedId: media.trackedId ?? null,
+    }))
     .sort((a, b) => b.releasedAt.localeCompare(a.releasedAt));
 }

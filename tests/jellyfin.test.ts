@@ -303,3 +303,90 @@ it('keeps episodes Jellyfin could not number, in release order, for links "in or
   expect(presence).toMatchObject({ ownedCount: 3, playedCount: 1, absolute: true });
   expect(presence!.bySeason[0].episodeIds).toEqual({ 1: 'c1', 2: 'c2', 3: 'c3' });
 });
+
+it('links episodes one by one, by hand, over any numbering', async () => {
+  const followed = track({ media: anime(6, 'Picked By Hand'), status: 'PLANNING' });
+  await jellyfin.syncJellyfinIndex();
+  const media = getTracked(followed.id)!.media;
+  // Episode 1 of the work is the third film, episode 2 the first, episode 3 has none.
+  const presence = jellyfin.jellyfinPresence(media, {
+    seriesId: 'C',
+    season: 1,
+    episodes: { '1': 'c3', '2': 'c1', '3': null, '4': 'missing-item' },
+  });
+  expect(presence).toMatchObject({ absolute: true, manual: true, ownedCount: 2, playedCount: 1 });
+  expect(presence!.bySeason[0]).toMatchObject({
+    owned: [1, 2],
+    played: [2],
+    episodeIds: { 1: 'c3', 2: 'c1' },
+  });
+  expect(jellyfin.jellyfinItems('C').map((i) => [i.id, i.n, i.name])).toEqual([
+    ['c1', 1, 'Chapter 1'],
+    ['c2', 2, 'Chapter 2'],
+    ['c3', 3, 'Chapter 3'],
+  ]);
+});
+
+it('lists what no work is linked to, ignores it, and makes it a work of its own', async () => {
+  const { unlinkedItems, setUnlinkedIgnored, createSheet } = await import('@/lib/unlinked');
+  track({ media: anime(1, 'Fixture Quest'), status: 'PLANNING' });
+  await jellyfin.syncJellyfinIndex();
+  const ids = () =>
+    unlinkedItems()
+      .filter((i) => i.integration === 'jellyfin' && !i.ignored)
+      .map((i) => i.id)
+      .sort();
+  // A is linked to the followed work; the rest wait in the inbox.
+  expect(ids()).not.toContain('A');
+  expect(ids()).toContain('C');
+  expect(unlinkedItems().find((i) => i.id === 'C')).toMatchObject({ kind: 'series', count: 3 });
+  setUnlinkedIgnored('jellyfin', 'C', true);
+  expect(ids()).not.toContain('C');
+  expect(unlinkedItems().find((i) => i.id === 'C')?.ignored).toBe(true);
+  setUnlinkedIgnored('jellyfin', 'C', false);
+  const entry = createSheet({
+    integration: 'jellyfin',
+    id: 'C',
+    kind: 'anime',
+    title: 'Chapters Kept As Anime',
+    year: 2007,
+    section: null,
+  });
+  expect(entry).toMatchObject({ title: 'Chapters Kept As Anime', type: 'ANIME' });
+  expect(entry.media).toMatchObject({ id: 'jellyfin:C', kindOverride: 'anime', year: 2007 });
+  expect(entry.jellyfinLink).toMatchObject({ seriesId: 'C' });
+  expect(ids()).not.toContain('C');
+  // A reading kind cannot hold a video item; an extension kind needs its section.
+  expect(() =>
+    createSheet({
+      integration: 'jellyfin',
+      id: 'D',
+      kind: 'manga',
+      title: 'x',
+      year: null,
+      section: null,
+    }),
+  ).toThrow();
+  expect(() =>
+    createSheet({
+      integration: 'jellyfin',
+      id: 'D',
+      kind: 'extension',
+      title: 'x',
+      year: null,
+      section: null,
+    }),
+  ).toThrow();
+  const extension = createSheet({
+    integration: 'jellyfin',
+    id: 'D',
+    kind: 'extension',
+    title: 'Mapped Show',
+    year: null,
+    section: { id: 'videos', name: 'Videos' },
+  });
+  expect(extension.media).toMatchObject({
+    kindOverride: 'extension',
+    extensionSection: { id: 'videos', name: 'Videos' },
+  });
+});

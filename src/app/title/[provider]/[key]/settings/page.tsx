@@ -119,13 +119,11 @@ function WorkSettings({ media }: { media: MediaDetail }) {
   const label = (s: Section) =>
     s === 'general'
       ? t('settings.work.general')
-      : s === 'kavita'
-        ? 'Kavita'
-        : s === 'jellyfin'
-          ? 'Jellyfin'
-          : s === 'cover'
-            ? t('match.tab.images')
-            : t(`match.${s}`);
+      : s === 'kavita' || s === 'jellyfin'
+        ? t('settings.work.links')
+        : s === 'cover'
+          ? t('match.tab.images')
+          : t(`match.${s}`);
   const go = (s: Section) => {
     setSave(null);
     router.replace(`${mediaHref(media.id)}/settings${s === 'general' ? '' : `?s=${s}`}`, {

@@ -879,7 +879,42 @@ export type SettingsPatch = Partial<Settings>;
  * Jellyfin, a series numbered differently).
  */
 export type JellyfinLink =
-  { seriesId: string; season: number; order?: 'seasons' | 'absolute' } | 'none';
+  | {
+      seriesId: string;
+      season: number;
+      order?: 'seasons' | 'absolute';
+      /**
+       * Chosen by hand, episode by episode: the work's episode (absolute number, from 1) → the
+       * Jellyfin item that holds it (`null`: none). When set, it replaces `order` entirely.
+       */
+      episodes?: Record<string, string | null>;
+    }
+  | 'none';
+/** One video item of a Jellyfin series (episode, or the film itself), for linking by hand. */
+export interface JellyfinItem {
+  id: string;
+  /** Jellyfin season (0 = specials) and episode number; numbers Jellyfin lacked are given in order. */
+  season: number;
+  n: number;
+  name: string | null;
+  played: boolean;
+}
+/** Something an integration holds that no work of the library is linked to. */
+export interface UnlinkedItem {
+  integration: 'jellyfin' | 'kavita';
+  /** The item's id in that integration (Jellyfin series/film id, Kavita series id). */
+  id: string;
+  name: string;
+  year: number | null;
+  /** Library it lives in. */
+  library: string;
+  /** Episodes, files or chapters it holds. */
+  count: number;
+  coverUrl: string | null;
+  /** The kind it most likely is (from its library), preselected when a sheet is created. */
+  kind: Exclude<DiscoverKind, 'all'>;
+  ignored: boolean;
+}
 /** What Jellyfin holds for an anime (owned and watched episodes of the linked season). */
 export interface JellyfinPresence {
   seriesId: string;
@@ -990,6 +1025,8 @@ export interface TrackedMedia {
   coverChoice: CoverChoice;
   /** Identity of the entry: a catalog work, or off-catalog (known only from Kavita or a source). */
   identity: 'catalog' | 'off-catalog';
+  /** Kept off the catalog on purpose (a work made from a server item, or unlinked by hand). */
+  keptOffCatalog?: true;
   /** Other covers to try, in automatic order, when `coverUrl` fails to load (empty for a manual choice). */
   coverFallbacks: string[];
   /** Bunko's cover is pushed to Kavita for this work (user choice, default true). */

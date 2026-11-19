@@ -909,14 +909,14 @@ function Title({
           // Same width and margins as the sheet's other sections.
           <section className="relative mx-auto w-full max-w-[1760px] px-4 pb-16 md:px-10">
             <Notice
-              title={t('title.offCatalogTitle')}
+              title={entry.keptOffCatalog ? t('title.ownWorkTitle') : t('title.offCatalogTitle')}
               action={
                 <Link href={settingsHref('catalog')} className={smallButton}>
                   {t('title.offCatalogAction')}
                 </Link>
               }
             >
-              {t('title.offCatalogBody')}
+              {entry.keptOffCatalog ? t('title.ownWorkBody') : t('title.offCatalogBody')}
             </Notice>
           </section>
         )}

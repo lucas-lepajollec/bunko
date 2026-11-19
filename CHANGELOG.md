@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Links, down to the episode: a work's settings has one **Links** section. For video works it
+  shows the Jellyfin series or film holding the work, then a table matching every episode,
+  film or part of the work to a Jellyfin item. The table is prefilled by season, in order or by
+  title, and each row can be chosen by hand (`jellyfinLink.episodes`). Rows show automatic,
+  by-hand or missing links and the watched state.
+- **Library → Unlinked** (replaces *In Kavita*) lists what Jellyfin and Kavita hold that no work
+  is linked to. Each item can be followed as found (Kavita), linked to a catalog work (then
+  fine-tuned in its Links), made a work of its own of any kind (extension sections included,
+  title and year chosen, watched or read state from the server, kept off automatic catalog
+  linking), or ignored. Integration logos name each service.
+
 ## 1.0.0 — 2026-11-19
 
 - V1 polish, deduplication, player, work linking and security hardening:
