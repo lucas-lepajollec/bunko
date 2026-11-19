@@ -420,10 +420,11 @@ function Catalog() {
       ) : (
         <>
           <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-6 md:gap-y-9 xl:grid-cols-8">
-            {(q ? searchItems : items).map((m) => (
+            {(q ? searchItems : items).map((m, index) => (
               <PosterCard
                 key={m.id}
                 media={m}
+                priority={index < 12}
                 subtitle={dated ? formatStartDate(m.startDate, locale) : undefined}
               />
             ))}

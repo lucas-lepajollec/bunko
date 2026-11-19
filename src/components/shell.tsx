@@ -609,7 +609,9 @@ function HeaderPanel({
       const width = Math.min(open === 'types' ? 720 : 440, window.innerWidth - 24);
       const wanted = open === 'types' ? anchor.left : anchor.right - width;
       const left = Math.max(12, Math.min(wanted, window.innerWidth - 12 - width)) - frame.left;
-      setBox({ left, width, caret: anchor.left + anchor.width / 2 - frame.left - left });
+      const rawCaret = anchor.left + anchor.width / 2 - frame.left - left;
+      const caret = Math.max(28, Math.min(width - 28, rawCaret));
+      setBox({ left, width, caret });
     };
     const first = requestAnimationFrame(() => {
       place();
@@ -641,14 +643,28 @@ function HeaderPanel({
       )}
       style={{ left: box.left, width: box.width, height: height || undefined }}
     >
-      <span
+      <svg
         aria-hidden
+        width="14"
+        height="7"
+        viewBox="0 0 14 7"
         className={cx(
-          'bg-panel absolute -top-[7px] size-3.5 rotate-45 rounded-[3px] border-t border-l border-white/10',
+          'pointer-events-none absolute -top-[7px] block',
           glide && 'transition-[left] duration-[260ms] ease-[cubic-bezier(0.2,0.9,0.3,1)]',
         )}
         style={{ left: box.caret - 7 }}
-      />
+      >
+        <path
+          d="M0 7 L6.2 0.8 Q7 0 7.8 0.8 L14 7 Z"
+          fill="color-mix(in oklab, var(--color-panel) 96%, transparent)"
+        />
+        <path
+          d="M0.5 7 L6.2 1.3 Q7 0.5 7.8 1.3 L13.5 7"
+          fill="none"
+          stroke="rgba(255,255,255,0.1)"
+          strokeWidth="1"
+        />
+      </svg>
       <div className="overflow-hidden rounded-[24px]" style={{ height: height || undefined }}>
         <div
           ref={content}

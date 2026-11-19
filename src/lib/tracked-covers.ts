@@ -297,7 +297,7 @@ export async function syncTrackedCovers(parentSignal?: AbortSignal, backfillOnly
         /* Persisted choices retry next cycle. */
       } finally {
         const last = checked.get(t.id);
-        const resolved = getTracked(t.id)?.coverUrl?.startsWith('/api/covers/');
+        const resolved = Boolean(storedCover(t.id));
         statement('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)').run(
           `tracked_cover_checked:${t.id}`,
           JSON.stringify({

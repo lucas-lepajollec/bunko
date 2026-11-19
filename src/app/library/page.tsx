@@ -126,6 +126,9 @@ const ALL_KINDS: Kind[] = ['all', ...KIND_IDS];
 function ofKind(e: TrackedMedia, kind: Kind) {
   return kind === 'all' || kindOfMedia(e.media) === kind;
 }
+const PROGRESS_REFRESH_COOLDOWN_MS = 120_000;
+let lastProgressRefreshAt = 0;
+
 export default function LibraryPage() {
   return (
     <Suspense>
@@ -139,11 +142,16 @@ function Library() {
   const look = useLook();
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const { mutate: mutateList } = library;
-  const [refreshing, setRefreshing] = useState(true);
+  const [refreshing, setRefreshing] = useState(
+    () => Date.now() - lastProgressRefreshAt >= PROGRESS_REFRESH_COOLDOWN_MS,
+  );
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [matchingBusy, setMatchingBusy] = useState(false);
   useEffect(() => {
-    // Reading progress comes from Kavita; refresh it once per visit without blanking the shelf.
+    // Reading progress comes from Kavita; respect the server's 2-minute refresh budget on the
+    // client too so bouncing back to /library does not serialize the whole library twice.
+    if (Date.now() - lastProgressRefreshAt < PROGRESS_REFRESH_COOLDOWN_MS) return;
+    lastProgressRefreshAt = Date.now();
     const controller = new AbortController();
     api<TrackedMedia[]>('/api/tracked?refresh=progress', { signal: controller.signal })
       .then((fresh) => mutateList(fresh, { revalidate: false }))
@@ -564,7 +572,7 @@ function Library() {
           )}
           <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] md:gap-y-9 xl:grid-cols-7">
             {!library.data && !library.error && <PosterSkeletons count={14} />}
-            {visibleShown.map((e) => {
+            {visibleShown.map((e, index) => {
               const meta = (
                 <>
                   {e.type === 'ANIME' ? (
@@ -600,6 +608,7 @@ function Library() {
                       src={e.coverUrl ?? e.media.coverUrl}
                       fallbacks={e.coverFallbacks}
                       alt={e.title}
+                      priority={index < 12}
                       className="transition-transform duration-300 group-hover:-translate-y-1"
                     />
                     {e.type === 'MANGA' && e.sourceMatch !== 'linked' && (

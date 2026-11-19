@@ -2,8 +2,8 @@ import { lookup as dnsLookup, type LookupAddress } from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
 import { BlockList, isIP, type LookupFunction } from 'node:net';
-import { Readable } from 'node:stream';
 import { AppError } from './errors';
+import { safeWebStream } from './safe-stream';
 
 /**
  * Requests to addresses chosen by third parties (video extensions: manifests, stream lists,
@@ -217,7 +217,7 @@ function once(url: URL, options: SafeFetchOptions): Promise<SafeResponse> {
           status: response.statusCode ?? 502,
           headers,
           url: url.toString(),
-          body: Readable.toWeb(response) as ReadableStream<Uint8Array>,
+          body: safeWebStream(response),
           cancel: () => response.destroy(),
         });
       },

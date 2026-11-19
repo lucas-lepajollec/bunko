@@ -178,11 +178,26 @@ function tracked(body: ReadableStream<Uint8Array>, release: () => void) {
         const part = await reader.read();
         if (part.done) {
           release();
-          controller.close();
-        } else controller.enqueue(part.value);
+          try {
+            controller.close();
+          } catch {
+            /* Stream already closed by client disconnect. */
+          }
+        } else {
+          try {
+            controller.enqueue(part.value);
+          } catch {
+            release();
+            void reader.cancel().catch(() => undefined);
+          }
+        }
       } catch (error) {
         release();
-        controller.error(error);
+        try {
+          controller.error(error);
+        } catch {
+          /* Stream already closed by client disconnect. */
+        }
       }
     },
     cancel(reason) {

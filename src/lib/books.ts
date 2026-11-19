@@ -3,12 +3,12 @@ import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { Readable } from 'node:stream';
 import type { BookFile, BookManifest, BookProgressUpdate, BookTocEntry } from '@/types/shared';
 import { listTracked, statement } from './db';
 import { AppError } from './errors';
 import { assertReadable, localKavitaFile, seriesFiles, type SeriesFile } from './kavita-files';
 import { matchKavita } from './kavita-index';
+import { safeWebStream } from './safe-stream';
 import { tenantState } from './tenant-context';
 
 /**
@@ -408,7 +408,7 @@ async function wholeFile(request: Request, local: string, name: string) {
   headers['Content-Length'] = String(end - start + 1);
   const stream = createReadStream(local, { start, end });
   request.signal.addEventListener('abort', () => stream.destroy(), { once: true });
-  return new Response(Readable.toWeb(stream) as ReadableStream, {
+  return new Response(safeWebStream(stream), {
     status: range && (range[1] || range[2]) ? 206 : 200,
     headers,
   });

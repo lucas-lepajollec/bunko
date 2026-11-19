@@ -5,35 +5,75 @@ import { TransientCoverError, loadCover } from '@/lib/client/cover-loader';
 /** Delays before retrying a cover that failed for a temporary reason. */
 const RETRIES = [3_000, 12_000];
 const MAX_WARM = 1000;
+const WARM_STORAGE_KEY = 'bunko:warm-covers:v1';
 
 /**
- * Same-origin URLs already loaded into the browser's HTTP cache during this session. Once warm, a
- * plain `<img>` hits the browser disk/memory cache on the very first paint without touching the
- * HTTP/1 transfer queue or allocating Blob copies.
+ * Same-origin proxy URLs already loaded into the browser's HTTP cache during this session. Once
+ * warm, a plain `<img>` hits the browser disk/memory cache on frame 1 without touching the JS
+ * transfer queue or allocating Blob copies. Persisted in sessionStorage so reloads stay instant.
  */
 const warmCovers = new Set<string>();
+let warmLoaded = false;
+
+function ensureWarmLoaded() {
+  if (warmLoaded) return;
+  warmLoaded = true;
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = window.sessionStorage.getItem(WARM_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed))
+      for (const item of parsed) if (typeof item === 'string') warmCovers.add(item);
+  } catch {
+    /* Storage unavailable or private browsing. */
+  }
+}
+
+function persistWarm() {
+  if (typeof window === 'undefined') return;
+  try {
+    const recent = [...warmCovers].slice(-500);
+    window.sessionStorage.setItem(WARM_STORAGE_KEY, JSON.stringify(recent));
+  } catch {
+    /* Quota or storage unavailable. */
+  }
+}
 
 export function markCoverWarm(url: string) {
+  ensureWarmLoaded();
   if (warmCovers.has(url)) warmCovers.delete(url);
   warmCovers.add(url);
   if (warmCovers.size > MAX_WARM) {
     const oldest = warmCovers.values().next().value;
     if (oldest) warmCovers.delete(oldest);
   }
+  persistWarm();
 }
 
 export function clearWarmCovers() {
   warmCovers.clear();
+  warmLoaded = true;
+  if (typeof window !== 'undefined') {
+    try {
+      window.sessionStorage.removeItem(WARM_STORAGE_KEY);
+    } catch {
+      /* Ignore. */
+    }
+  }
 }
 
 export function isCoverWarm(url: string) {
+  ensureWarmLoaded();
   return warmCovers.has(url);
 }
 
 /**
- * External artwork renders natively so the browser's own memory/HTTP cache paints it on frame 1.
- * Cold same-origin `/api/...` artwork shares a bounded cancellable queue so a big LAN library never
- * starves JSON or navigation; once loaded once, it switches to the fast native cache path too.
+ * External artwork and immutable local stored covers (`/api/covers/…`, served straight from disk
+ * with `max-age=31536000, immutable`) render natively so the browser's own memory/disk HTTP cache
+ * paints them on frame 1 without any JS queue or Blob copy. Cold proxy routes (`/api/kavita/…`,
+ * `/api/jellyfin/…`, `/api/suwayomi/…`) share a bounded cancellable queue so slow upstreams never
+ * starve JSON or navigation; once loaded once, they switch to the fast native cache path too.
  */
 export function ManagedImage({
   src,
@@ -44,13 +84,13 @@ export function ManagedImage({
   onLoadError?: () => void;
 }) {
   const local = src.startsWith('/api/');
-  // External CDNs (AniList, TMDB, MangaDex…) and already-warm local covers bypass the JS queue.
-  const direct = !local || warmCovers.has(src);
+  const stored = src.startsWith('/api/covers/');
+  const direct = !local || stored || isCoverWarm(src);
   if (direct)
     return (
       <DirectImage
         src={src}
-        local={local}
+        local={local && !stored}
         onLoadError={onLoadError}
         {...props}
       />
