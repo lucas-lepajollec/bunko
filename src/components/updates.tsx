@@ -1,5 +1,4 @@
 'use client';
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { isVideoKind } from '@/domain/kinds';
 import { isFilm, workProgress } from '@/domain/progress';
@@ -9,7 +8,6 @@ import type {
   ChapterRelease,
   ChaptersResponse,
   EpisodeRange,
-  PublicSettings,
   ReleasesPage,
   TrackedMedia,
   UpdatesFeed,
@@ -19,7 +17,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { MediaLink } from './media-link';
 import { LoadNotice } from './load-notice';
 import { useRelativeTime } from './time';
-import { InfoBubble, toast } from './notify';
+import { toast } from './notify';
 import { isMissing, preferredVariant } from './chapters';
 import { Select } from './select';
 import { useViewState } from '@/lib/client/view-state';
@@ -165,7 +163,6 @@ export function LibraryNews({ kind, entries }: { kind: DiscoverKind; entries: Tr
   const feed = useApi<UpdatesFeed>('/api/updates', {
     refreshInterval: (data) => (data?.checking ? 1500 : 60_000),
   });
-  const settings = useApi<PublicSettings>('/api/settings');
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const [sort, setSort] = useViewState<NewsSort>('newsSort', 'recent', NEWS_SORTS);
   const pages = useSWRInfinite<ReleasesPage>(
@@ -267,44 +264,6 @@ export function LibraryNews({ kind, entries }: { kind: DiscoverKind; entries: Tr
   return (
     <div className="flex flex-col gap-5">
       <div className="text-muted flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
-        {feed.data?.checking ? (
-          <span className="flex items-center gap-2">
-            <Spinner />
-            {t('updates.checking')}
-          </span>
-        ) : (
-          <span>
-            {t('updates.checkSentence', {
-              last: relative(feed.data?.lastCheckAt ?? null),
-              next: relative(feed.data?.nextCheckAt ?? null),
-            })}
-          </span>
-        )}
-        <InfoBubble label={t('updates.auto')}>
-          {t('updates.autoInfo', {
-            auto: feed.data?.autoCount ?? 0,
-            total: feed.data?.trackedCount ?? 0,
-            n: settings.data?.updateIntervalMinutes ?? 15,
-          })}{' '}
-          <Link href="/settings#suwayomi" className="underline">
-            {t('updates.edit')}
-          </Link>
-        </InfoBubble>
-        <button
-          type="button"
-          disabled={feed.data?.checking}
-          className={smallButton}
-          onClick={async () => {
-            try {
-              await send('/api/updates/check', 'POST');
-              await Promise.all([feed.mutate(), library.mutate()]);
-            } catch (error) {
-              toast({ tone: 'bad', text: errorText(t, error) });
-            }
-          }}
-        >
-          {t('updates.checkNow')}
-        </button>
         <div className="ml-auto flex items-center gap-2 text-sm">
           <Select
             label={t('catalog.sort')}
@@ -339,7 +298,9 @@ export function LibraryNews({ kind, entries }: { kind: DiscoverKind; entries: Tr
                   {n(x.cards.length)}
                 </span>
               </h2>
-              <p className="text-muted text-sm">{t(`news.sectionHint.${x.id}`)}</p>
+              {x.id !== 'continue' && (
+                <p className="text-muted text-sm">{t(`news.sectionHint.${x.id}`)}</p>
+              )}
             </div>
             <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] md:gap-y-9 xl:grid-cols-7">
               {x.cards.map((c) => {

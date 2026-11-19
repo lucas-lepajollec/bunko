@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useUniverse } from '@/lib/client/universe';
 import { useNotices } from '@/lib/client/notices';
 import { useSWRConfig } from 'swr';
-import type { ActivityTask, BackgroundJob, LibraryActivity } from '@/types/shared';
+import type { BackgroundJob, LibraryActivity, PublicSettings, UpdatesFeed } from '@/types/shared';
 import Link from 'next/link';
 import {
   send,
@@ -16,10 +16,10 @@ import {
   progressViewKey,
 } from '@/lib/client/api';
 import { Play } from 'lucide-react';
-import { toast } from './notify';
+import { InfoBubble, toast } from './notify';
 import { useI18n } from '@/i18n/I18nProvider';
 import { useRelativeTime } from './time';
-import { Spinner, cx, errorText } from './ui';
+import { Spinner, cx, errorText, smallButton } from './ui';
 
 const busy = (a: LibraryActivity | undefined) =>
   Boolean(a?.tasks?.length) ||
@@ -73,7 +73,7 @@ export function useLibraryActivity({ sync = false }: { sync?: boolean } = {}) {
  * results. The bell spins while something runs and shows a dot for warnings; pages stay quiet.
  */
 export function ActivityCenter() {
-  const { t, n } = useI18n();
+  const { t } = useI18n();
   const universe = useUniverse();
   const a = useLibraryActivity({ sync: true });
   const notices = useNotices();
@@ -108,8 +108,6 @@ export function ActivityCenter() {
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
-  const percent = (task: ActivityTask) =>
-    task.total ? Math.min(100, Math.round((task.done / task.total) * 100)) : null;
   return (
     <div ref={root} className="relative">
       <button
@@ -146,76 +144,147 @@ export function ActivityCenter() {
         <div
           role="dialog"
           aria-label={t('notices.label')}
-          className="ui-panel border-line fixed inset-x-3 top-[68px] z-50 flex max-h-[calc(100dvh-68px-7rem-env(safe-area-inset-bottom))] touch-pan-y flex-col gap-3 overflow-y-auto overscroll-contain rounded-2xl *:shrink-0 md:max-h-[min(70vh,calc(100dvh-96px))] border bg-panel/97 p-4 text-sm shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl md:absolute md:inset-x-auto md:top-full md:right-0 md:mt-2 md:w-[360px]"
+          className="ui-panel border-line fixed inset-x-3 top-[68px] z-50 flex max-h-[calc(100dvh-68px-7rem-env(safe-area-inset-bottom))] touch-pan-y flex-col overflow-hidden rounded-[22px] border bg-panel text-sm shadow-[0_24px_60px_rgba(0,0,0,0.55)] md:absolute md:inset-x-auto md:top-full md:right-0 md:mt-3 md:max-h-[min(76vh,calc(100dvh-110px))] md:w-[400px]"
         >
-          <span className="font-display text-lg font-bold">{t('notices.title')}</span>
-          {tasks.map((task) => {
-            const p = percent(task);
-            return (
-              <div key={task.id} className="flex flex-col gap-1.5">
-                <span className="flex items-baseline justify-between gap-3">
-                  <span className="font-medium">{t(`activity.task.${task.kind}`)}</span>
-                  <span className="text-mid shrink-0 text-xs tabular-nums">
-                    {p !== null
-                      ? `${p} % · ${n(Math.floor(task.done))}/${n(task.total!)}`
-                      : task.total
-                        ? n(task.total)
-                        : ''}
-                  </span>
-                </span>
-                {task.detail && <span className="text-muted truncate text-xs">{task.detail}</span>}
-                <span className="h-1 overflow-hidden rounded-full bg-white/10">
-                  <span
-                    className={cx(
-                      'bg-fg block h-full rounded-full transition-[width] duration-500',
-                      p === null && 'w-1/3 animate-pulse',
-                    )}
-                    style={p !== null ? { width: `${Math.max(3, p)}%` } : undefined}
-                  />
-                </span>
-              </div>
-            );
-          })}
-          {notices
-            .filter((x) => x.task && x.pending)
-            .map((x, i) => {
-              const task = x.task!;
-              const p = task.total
-                ? Math.min(100, Math.round((task.done / task.total) * 100))
-                : null;
-              return (
-                <div key={`page-${i}`} className="flex flex-col gap-1.5">
-                  <span className="flex items-baseline justify-between gap-3">
-                    <span className="font-medium">{task.label}</span>
-                    {p !== null && (
-                      <span className="text-mid shrink-0 text-xs tabular-nums">
-                        {p} % · {n(task.done)}/{n(task.total!)}
-                      </span>
-                    )}
-                  </span>
-                  <span className="h-1 overflow-hidden rounded-full bg-white/10">
-                    <span
-                      className={cx(
-                        'bg-fg block h-full rounded-full transition-[width] duration-500',
-                        p === null && 'w-1/3 animate-pulse',
-                      )}
-                      style={p !== null ? { width: `${Math.max(3, p)}%` } : undefined}
-                    />
-                  </span>
-                </div>
-              );
-            })}
-          {notices.some((x) => x.pending && !x.task) && (
-            <span className="text-mid flex items-center gap-2">
-              <Spinner /> {t('loading.more')}
+          {/* What is happening now, in one line; the details below scroll. */}
+          <div className="border-line flex items-center gap-3 border-b px-4 py-3.5">
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-[16px] font-semibold">{t('notices.title')}</span>
+              <span
+                className={cx(
+                  'flex items-center gap-1.5 text-xs leading-snug',
+                  partial && !busy ? 'text-warn' : 'text-muted',
+                )}
+              >
+                {busy && <Spinner className="size-2.5 border-[1.5px]" />}
+                {busy ? t('loading.more') : partial ? t('loading.partial') : t('notices.idle')}
+              </span>
             </span>
-          )}
-          {partial && <span className="text-warn">{t('loading.partial')}</span>}
-          {!busy && !partial && <span className="text-mid">{t('notices.idle')}</span>}
-          <BackgroundJobs />
+          </div>
+          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain p-4 *:shrink-0">
+            {tasks.length + notices.filter((x) => x.task && x.pending).length > 0 && (
+              <section className="flex flex-col gap-2">
+                {tasks.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    label={t(`activity.task.${task.kind}`)}
+                    detail={task.detail}
+                    done={task.done}
+                    total={task.total}
+                  />
+                ))}
+                {notices
+                  .filter((x) => x.task && x.pending)
+                  .map((x, i) => (
+                    <TaskRow
+                      key={`page-${i}`}
+                      label={x.task!.label}
+                      done={x.task!.done}
+                      total={x.task!.total}
+                    />
+                  ))}
+              </section>
+            )}
+            <ReleaseChecks />
+            <BackgroundJobs />
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+/** One running task: name, how far, and a bar (pulsing while its size is unknown). */
+function TaskRow({
+  label,
+  detail,
+  done,
+  total,
+}: {
+  label: string;
+  detail?: string | null;
+  done: number;
+  total?: number | null;
+}) {
+  const { n } = useI18n();
+  const p = total ? Math.min(100, Math.round((done / total) * 100)) : null;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-[14px] bg-white/[0.05] px-3 py-2.5">
+      <span className="flex items-baseline justify-between gap-3">
+        <span className="truncate font-medium">{label}</span>
+        <span className="text-mid shrink-0 text-xs tabular-nums">
+          {p !== null ? `${p} % · ${n(Math.floor(done))}/${n(total!)}` : total ? n(total) : ''}
+        </span>
+      </span>
+      {detail && <span className="text-muted truncate text-xs">{detail}</span>}
+      <span className="h-1 overflow-hidden rounded-full bg-white/10">
+        <span
+          className={cx(
+            'bg-fg block h-full rounded-full transition-[width] duration-500',
+            p === null && 'w-1/3 animate-pulse',
+          )}
+          style={p !== null ? { width: `${Math.max(3, p)}%` } : undefined}
+        />
+      </span>
+    </div>
+  );
+}
+
+/**
+ * New chapters and episodes: when the sources were last checked, when they are next, how many
+ * works fetch by themselves, and a way to check now. (Formerly on the library's "New" tab.)
+ */
+function ReleaseChecks() {
+  const { t } = useI18n();
+  const relative = useRelativeTime();
+  const { mutate } = useSWRConfig();
+  const feed = useApi<UpdatesFeed>('/api/updates', {
+    refreshInterval: (data) => (data?.checking ? 1500 : 60_000),
+  });
+  const settings = useApi<PublicSettings>('/api/settings');
+  if (!feed.data) return null;
+  return (
+    <section className="flex items-center gap-3 rounded-[14px] bg-white/[0.05] px-3 py-2.5">
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex items-center gap-2 font-medium">
+          {t('library.updates')}
+          <InfoBubble label={t('updates.auto')}>
+            {t('updates.autoInfo', {
+              auto: feed.data.autoCount ?? 0,
+              total: feed.data.trackedCount ?? 0,
+              n: settings.data?.updateIntervalMinutes ?? 15,
+            })}{' '}
+            <Link href="/settings#suwayomi" className="underline">
+              {t('updates.edit')}
+            </Link>
+          </InfoBubble>
+        </span>
+        <span className="text-muted flex items-center gap-1.5 text-xs">
+          {feed.data.checking && <Spinner className="size-2.5 border-[1.5px]" />}
+          {feed.data.checking
+            ? t('updates.checking')
+            : t('updates.checkSentence', {
+                last: relative(feed.data.lastCheckAt ?? null),
+                next: relative(feed.data.nextCheckAt ?? null),
+              })}
+        </span>
+      </span>
+      <button
+        type="button"
+        disabled={feed.data.checking}
+        className={cx(smallButton, 'shrink-0')}
+        onClick={async () => {
+          try {
+            await send('/api/updates/check', 'POST');
+            await Promise.all([feed.mutate(), mutate('/api/tracked')]);
+          } catch (error) {
+            toast({ tone: 'bad', text: errorText(t, error) });
+          }
+        }}
+      >
+        {t('updates.checkNow')}
+      </button>
+    </section>
   );
 }
 
@@ -251,8 +320,8 @@ function BackgroundJobs() {
     }
   };
   return (
-    <div className="border-line flex flex-col gap-1 border-t pt-3">
-      <span className="text-muted mb-1 text-xs font-medium tracking-[0.06em] uppercase">
+    <div className="flex flex-col gap-1">
+      <span className="text-muted mb-1 px-1 text-[11px] font-semibold tracking-[0.12em] uppercase">
         {t('jobs.title')}
       </span>
       {jobs.data.map((job, i) => {
@@ -276,11 +345,14 @@ function BackgroundJobs() {
         return (
           <Fragment key={job.id}>
             {header && (
-              <span className="text-mid mt-2 text-xs font-semibold first:mt-0">
+              <span className="text-mid mt-3 px-1 text-xs font-semibold first:mt-0">
                 {t(`jobs.group.${job.group}`)}
               </span>
             )}
-            <div className="flex min-h-11 items-center gap-3" title={t(`jobs.desc.${job.id}`)}>
+            <div
+              className="flex min-h-11 items-center gap-3 rounded-[12px] px-1 hover:bg-white/[0.04]"
+              title={t(`jobs.desc.${job.id}`)}
+            >
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate" aria-description={t(`jobs.desc.${job.id}`)}>
                   {name}

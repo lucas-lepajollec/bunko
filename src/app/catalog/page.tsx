@@ -5,6 +5,7 @@ import { Suspense, useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import useSWRInfinite from 'swr/infinite';
 import Link from 'next/link';
+import { CalendarDays } from 'lucide-react';
 import type {
   PublicSettings,
   DiscoverKind,
@@ -267,51 +268,61 @@ function Catalog() {
           {/* View, sort and filters share one row while they fit; otherwise the filters (sort
               first) take their own row, which scrolls sideways on phones. */}
           <div className="toolbar-row flex flex-col gap-2.5 md:flex-row md:flex-wrap md:items-center md:gap-2">
-            <div
-              className="toolbar-seg flex shrink-0 self-start rounded-full bg-white/[0.06] p-0.5 text-sm md:self-auto"
-              role="group"
-              aria-label={t('catalog.view')}
-            >
-              {(
-                [
-                  ['catalog', t('catalog.viewCatalog')],
+            {/* Filters (sort first) on the left; the views, and the planning beside the
+                releases, on the right. Phones keep the views on top. */}
+            <div className="flex items-center gap-2 self-start md:order-last md:ml-auto md:self-auto">
+              {view === 'chapters' && !q && (
+                <Link href="/planning" className={cx(smallButton, 'h-9 md:order-first')}>
+                  <CalendarDays className="size-4" aria-hidden />
+                  {t('nav.planning')}
+                </Link>
+              )}
+              <div
+                className="toolbar-seg flex shrink-0 self-start rounded-full bg-white/[0.06] p-0.5 text-sm md:self-auto"
+                role="group"
+                aria-label={t('catalog.view')}
+              >
+                {(
                   [
-                    'chapters',
-                    t(
-                      kind === 'all'
-                        ? universe.enabled.some(isVideoKind)
-                          ? 'catalog.viewReleases'
-                          : 'catalog.viewChapters'
-                        : KIND_DEFS[kind].unit === 'episode'
-                          ? 'catalog.viewEpisodes'
-                          : KIND_DEFS[kind].unit === 'film'
-                            ? 'catalog.viewFilms'
-                            : 'catalog.viewChapters',
-                    ),
-                  ],
-                  ['new', t('catalog.viewNew')],
-                ] as const
-              )
-                // Series and films have no release feed yet: catalog and newest only.
+                    ['catalog', t('catalog.viewCatalog')],
+                    [
+                      'chapters',
+                      t(
+                        kind === 'all'
+                          ? universe.enabled.some(isVideoKind)
+                            ? 'catalog.viewReleases'
+                            : 'catalog.viewChapters'
+                          : KIND_DEFS[kind].unit === 'episode'
+                            ? 'catalog.viewEpisodes'
+                            : KIND_DEFS[kind].unit === 'film'
+                              ? 'catalog.viewFilms'
+                              : 'catalog.viewChapters',
+                      ),
+                    ],
+                    ['new', t('catalog.viewNew')],
+                  ] as const
+                )
+                  // Series and films have no release feed yet: catalog and newest only.
 
-                .map(([v, label]) => (
-                  <button
-                    key={v}
-                    type="button"
-                    aria-pressed={view === v}
-                    onClick={() =>
-                      v === 'chapters'
-                        ? set('view', 'chapters', { sort: '' })
-                        : set('sort', v === 'new' ? 'new' : '', { view: '' })
-                    }
-                    className={cx(
-                      'h-8 rounded-full px-3 whitespace-nowrap',
-                      view === v ? 'bg-fg text-bg font-semibold' : 'text-mid hover:text-white',
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
+                  .map(([v, label]) => (
+                    <button
+                      key={v}
+                      type="button"
+                      aria-pressed={view === v}
+                      onClick={() =>
+                        v === 'chapters'
+                          ? set('view', 'chapters', { sort: '' })
+                          : set('sort', v === 'new' ? 'new' : '', { view: '' })
+                      }
+                      className={cx(
+                        'h-8 rounded-full px-3 whitespace-nowrap',
+                        view === v ? 'bg-fg text-bg font-semibold' : 'text-mid hover:text-white',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+              </div>
             </div>
             {!tmdbKind || settings.data?.catalogs?.configured.tmdb ? (
               <CatalogFilterBar
@@ -357,9 +368,6 @@ function Catalog() {
       />
       {view === 'chapters' && !q ? (
         <>
-          <Link href="/planning" className={cx(smallButton, 'self-start')}>
-            {t('catalog.openPlanning')} →
-          </Link>
           {releases.error && <ErrorNote error={releases.error} />}
           <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-6 md:gap-y-9 xl:grid-cols-8">
             {releaseItems.map((r) => (

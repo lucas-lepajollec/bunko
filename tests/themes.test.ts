@@ -14,11 +14,12 @@ describe('interface themes', () => {
     });
     expect(normalizeTheme({ theme: 'cine', tone: 'lin' })).toEqual({
       theme: 'cine',
-      tone: 'glacier',
+      tone: 'night',
     });
+    // Retired themes fall back to the default look.
     expect(normalizeTheme({ theme: 'edition', tone: 'lin' })).toEqual({
-      theme: 'edition',
-      tone: 'lin',
+      theme: 'bunko',
+      tone: 'default',
     });
   });
 
@@ -36,13 +37,13 @@ describe('interface themes', () => {
   });
 
   it('applies a stored choice before the first paint', () => {
-    const storage = new Map([['bunko.theme', JSON.stringify({ theme: 'aurore', tone: 'rose' })]]);
+    const storage = new Map([['bunko.theme', JSON.stringify({ theme: 'cine', tone: 'night' })]]);
     const root = { dataset: {} as Record<string, string>, style: {} as Record<string, string> };
     new Function('localStorage', 'document', THEME_BOOT_SCRIPT)(
       { getItem: (k: string) => storage.get(k) ?? null },
       { documentElement: root },
     );
-    expect(root.dataset).toEqual({ theme: 'aurore', tone: 'rose' });
+    expect(root.dataset).toEqual({ theme: 'cine', tone: 'night' });
     expect(root.style.colorScheme).toBe('dark');
   });
 

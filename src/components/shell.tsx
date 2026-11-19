@@ -295,11 +295,7 @@ function isActive(pathname: string, href: string) {
   return href === '/' ? pathname === '/' : pathname.startsWith(href);
 }
 
-function Header() {
-  const { t } = useI18n();
-  const look = useLook();
-  const pathname = usePathname();
-  const activity = useActivity();
+function useScrolled() {
   const [solid, setSolid] = useState(false);
   useEffect(() => {
     const onScroll = () => setSolid(window.scrollY > 24);
@@ -307,6 +303,153 @@ function Header() {
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+  return solid;
+}
+
+function Header() {
+  const look = useLook();
+  return look === 'cine' ? <CineHeader /> : <DefaultHeader />;
+}
+
+/**
+ * Ciné: brand and type on the left, the navigation centred in a floating pill (search opens in
+ * place of the links, with a way back), the tools grouped on the right.
+ */
+function CineHeader() {
+  const { t } = useI18n();
+  const pathname = usePathname();
+  const activity = useActivity();
+  const solid = useScrolled();
+  const [searching, setSearching] = useState(false);
+  // Leaving the page closes the search.
+  const [lastPath, setLastPath] = useState(pathname);
+  if (lastPath !== pathname) {
+    setLastPath(pathname);
+    setSearching(false);
+  }
+  useEffect(() => {
+    // Ctrl+K and the other "search" entry points open the bar on tablets and up.
+    const onOpen = () => window.matchMedia('(min-width: 768px)').matches && setSearching(true);
+    window.addEventListener(OPEN_SEARCH_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_SEARCH_EVENT, onOpen);
+  }, []);
+  const pill = 'h-[50px] rounded-full border border-white/12 bg-white/[0.07] backdrop-blur-xl';
+  const tool =
+    'relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.1]';
+  return (
+    <header
+      data-solid={solid}
+      className={cx(
+        'app-header fixed inset-x-0 top-0 z-40 grid h-16 grid-cols-[1fr_auto] items-center gap-4 px-4 transition-[background-color,backdrop-filter] duration-300 md:h-24 md:grid-cols-[1fr_auto_1fr] md:px-[max(2.5rem,calc((100%-1760px)/2+2.5rem))]',
+        !solid && 'bg-gradient-to-b from-black/50 to-transparent',
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-4 lg:gap-5">
+        <Link href="/" className="app-brand flex shrink-0 items-center gap-2.5 text-white">
+          <Logo size={30} />
+          <span className="font-display text-[26px] leading-none md:text-[30px]">
+            {PRODUCT_NAME}
+          </span>
+        </Link>
+        <UniverseMenu />
+      </div>
+      <nav
+        aria-label={t('nav.label')}
+        className={cx(
+          pill,
+          'hidden items-center gap-0.5 p-1 text-[14px] md:flex lg:text-[15px]',
+          searching && 'w-[min(640px,calc(100vw-560px))] min-w-[380px]',
+        )}
+      >
+        {searching ? (
+          <QuickSearch variant="bar" onClose={() => setSearching(false)} />
+        ) : (
+          <>
+            {NAV.map((n) => (
+              <Link
+                key={n.href}
+                href={n.href}
+                aria-current={isActive(pathname, n.href) ? 'page' : undefined}
+                className={cx(
+                  'rounded-full px-3.5 py-2.5 transition-colors lg:px-4',
+                  isActive(pathname, n.href)
+                    ? 'bg-white font-bold text-[#070b10]'
+                    : 'text-mid hover:text-white',
+                )}
+              >
+                {t(n.key)}
+              </Link>
+            ))}
+            <span aria-hidden className="mx-1 h-6 w-px bg-white/20" />
+            <button
+              type="button"
+              aria-label={t('nav.search')}
+              title={`${t('nav.search')} · Ctrl K`}
+              onClick={() => setSearching(true)}
+              className="flex size-10 items-center justify-center rounded-full text-white hover:bg-white/[0.1]"
+            >
+              <SearchIcon size={18} />
+            </button>
+          </>
+        )}
+      </nav>
+      <div className="flex items-center justify-self-end md:h-[50px] md:rounded-full md:border md:border-white/12 md:bg-white/[0.07] md:px-1 md:backdrop-blur-xl">
+        <ActivityCenter />
+        <button
+          type="button"
+          aria-label={t('nav.search')}
+          onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
+          className={cx(tool, 'md:hidden')}
+        >
+          <SearchIcon size={20} />
+        </button>
+        <IconLink
+          href="/downloads"
+          label={
+            activity.active
+              ? t('nav.downloadsActive', { count: activity.active })
+              : t('nav.downloads')
+          }
+          className="hidden md:flex"
+        >
+          <DownloadIcon />
+          {activity.active > 0 && (
+            <span className="bg-fg text-bg absolute top-1.5 right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold">
+              {activity.active}
+            </span>
+          )}
+        </IconLink>
+        <IconLink
+          href="/sources"
+          label={
+            activity.updates
+              ? t('nav.sourcesUpdates', { count: activity.updates })
+              : t('nav.sources')
+          }
+          className="hidden md:flex"
+        >
+          <PuzzleIcon />
+          {activity.updates > 0 && (
+            <span className="bg-warn absolute top-2.5 right-2.5 size-2 rounded-full" />
+          )}
+        </IconLink>
+        <IconLink href="/profile" label={t('profile.title')} className="hidden md:flex">
+          <UserRound className="size-[19px]" aria-hidden />
+        </IconLink>
+        <IconLink href="/settings" label={t('nav.settings')} className="hidden md:flex">
+          <SlidersIcon />
+        </IconLink>
+        <MobileMenu />
+      </div>
+    </header>
+  );
+}
+
+function DefaultHeader() {
+  const { t } = useI18n();
+  const pathname = usePathname();
+  const activity = useActivity();
+  const solid = useScrolled();
   return (
     <header
       data-solid={solid}
@@ -341,32 +484,15 @@ function Header() {
             {t(n.key)}
           </Link>
         ))}
-        {/* Ciné: search lives in the floating navigation, as a streaming app's would. */}
-        {look === 'cine' && (
-          <>
-            <span aria-hidden className="mx-1 h-6 w-px bg-white/20" />
-            <button
-              type="button"
-              aria-label={t('nav.search')}
-              onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
-              className="flex size-9 items-center justify-center rounded-full text-white hover:bg-white/[0.1]"
-            >
-              <SearchIcon size={18} />
-            </button>
-          </>
-        )}
       </nav>
-      <div className="app-tools ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-1">
         <ActivityCenter />
-        {look !== 'cine' && <QuickSearch variant="inline" />}
+        <QuickSearch variant="inline" />
         <button
           type="button"
           aria-label={t('nav.search')}
           onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
-          className={cx(
-            'relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08]',
-            look === 'cine' ? 'md:hidden' : 'xl:hidden',
-          )}
+          className="relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08] xl:hidden"
         >
           <SearchIcon size={20} />
         </button>

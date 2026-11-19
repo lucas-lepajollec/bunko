@@ -5,9 +5,7 @@
  */
 export const THEMES = [
   { id: 'bunko', tones: ['default'], light: false },
-  { id: 'cine', tones: ['glacier', 'braise', 'jade'], light: false },
-  { id: 'aurore', tones: ['ambre', 'ocean', 'rose'], light: false },
-  { id: 'edition', tones: ['creme', 'craie', 'lin'], light: true },
+  { id: 'cine', tones: ['night'], light: false },
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]['id'];
@@ -19,15 +17,7 @@ export interface ThemeChoice {
 /** Swatches shown in the picker: background, then accent. Mirrors the tokens in globals.css. */
 export const TONE_SWATCHES: Record<string, [string, string]> = {
   default: ['#0b0a09', '#e2dbd0'],
-  glacier: ['#070b10', '#8fd3ff'],
-  braise: ['#0f0907', '#ffb54d'],
-  jade: ['#060f0c', '#5be3a8'],
-  ambre: ['#1a1410', '#ffcf8a'],
-  ocean: ['#0b1420', '#9fd8ff'],
-  rose: ['#1c1016', '#ffb3c8'],
-  creme: ['#f4f1ea', '#c8361f'],
-  craie: ['#eef1f4', '#1f4fd1'],
-  lin: ['#efe8da', '#2f6b4a'],
+  night: ['#070b10', '#ffffff'],
 };
 
 export const THEME_KEY = 'bunko.theme';

@@ -7,6 +7,44 @@ import { isVideoKind } from '@/domain/kinds';
 import { useI18n } from '@/i18n/I18nProvider';
 import { announceMenu, onMenuOpened } from './select';
 import { cx } from './ui';
+import { useLook } from '@/lib/client/theme';
+import {
+  BookMarked,
+  BookOpen,
+  BookText,
+  Check,
+  ChevronDown,
+  Clapperboard,
+  Film,
+  Globe,
+  LayoutGrid,
+  Library,
+  MessageSquareText,
+  MonitorPlay,
+  Puzzle,
+  ScrollText,
+  Smartphone,
+  Tv,
+  type LucideIcon,
+} from 'lucide-react';
+
+/** One icon per kind, for the Ciné type menu. */
+const KIND_ICONS: Record<string, LucideIcon> = {
+  all: LayoutGrid,
+  manga: BookOpen,
+  manhwa: Smartphone,
+  manhua: ScrollText,
+  comic: MessageSquareText,
+  lightnovel: BookMarked,
+  webnovel: Globe,
+  novel: BookText,
+  book: Library,
+  anime: Tv,
+  series: MonitorPlay,
+  movies: Clapperboard,
+  animation: Film,
+  extension: Puzzle,
+};
 
 /** The current universe's name: the extension section shown, else the kind. */
 function activeLabel(t: (k: string) => string, universe: ReturnType<typeof useUniverse>) {
@@ -19,6 +57,7 @@ const isActive = (universe: ReturnType<typeof useUniverse>, c: UniverseChoice) =
 /** Desktop header: the current universe, opening on click (like any menu) to switch. */
 export function UniverseMenu() {
   const { t } = useI18n();
+  const look = useLook();
   const universe = useUniverse();
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -47,6 +86,108 @@ export function UniverseMenu() {
   const video = universe.enabled.filter(isVideo);
   if (reading.length + video.length + (universe.allowAll ? 1 : 0) < 2 && !universe.adultAllowed)
     return null;
+  if (look === 'cine') {
+    const row = (c: UniverseChoice) => {
+      const on = isActive(universe, c);
+      const Icon = KIND_ICONS[c.kind] ?? Puzzle;
+      return (
+        <button
+          key={`${c.kind}:${c.section ?? ''}`}
+          type="button"
+          role="menuitemradio"
+          aria-checked={on}
+          onClick={() => {
+            setOpen(false);
+            void universe.set(c.kind, c.section);
+          }}
+          className={cx(
+            'flex items-center gap-3 rounded-[14px] px-2.5 py-2 text-left transition-colors',
+            on ? 'bg-white/[0.09]' : 'hover:bg-white/[0.05]',
+          )}
+        >
+          <span
+            className={cx(
+              'flex size-9 shrink-0 items-center justify-center rounded-[10px]',
+              on ? 'bg-white text-[#070b10]' : 'text-mid bg-white/[0.06]',
+            )}
+          >
+            <Icon className="size-[18px]" aria-hidden />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span
+              className={cx('truncate text-[14px]', on ? 'font-semibold text-white' : 'text-fg')}
+            >
+              {choiceLabel(t, c)}
+            </span>
+            <span className="text-muted truncate text-[12px]">{t(`universe.desc.${c.kind}`)}</span>
+          </span>
+          {on && <Check className="size-4 shrink-0" aria-hidden />}
+        </button>
+      );
+    };
+    const group = (label: string, choices: UniverseChoice[]) => (
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-muted px-2.5 pt-1 pb-1.5 text-[11px] font-semibold tracking-[0.14em] uppercase">
+          {label}
+        </span>
+        {choices.map(row)}
+      </div>
+    );
+    return (
+      <div ref={root} className="relative hidden md:block">
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => (open ? setOpen(false) : show())}
+          className={cx(
+            'flex h-[50px] items-center gap-2 rounded-full border px-5 text-[15px] backdrop-blur-xl transition-colors',
+            open
+              ? 'border-white/25 bg-white/[0.14] text-white'
+              : 'text-mid border-white/12 bg-white/[0.07] hover:text-white',
+          )}
+        >
+          {activeLabel(t, universe)}
+          {universe.adultMode && <span className="text-warn text-[11px] font-semibold">18+</span>}
+          <ChevronDown
+            className={cx('size-4 transition-transform duration-200', open && 'rotate-180')}
+            aria-hidden
+          />
+        </button>
+        <div
+          role="menu"
+          aria-label={t('universe.label')}
+          aria-hidden={!open}
+          className={cx(
+            'ui-panel absolute top-full left-0 z-50 mt-3 flex w-[600px] max-w-[calc(100vw-48px)] flex-col gap-2 rounded-[24px] border p-2.5 transition-[opacity,transform] duration-200',
+            open
+              ? 'translate-y-0 opacity-100'
+              : 'pointer-events-none invisible -translate-y-1 opacity-0',
+          )}
+        >
+          {universe.allowAll && row({ kind: 'all', section: null, name: null })}
+          <div
+            className={cx(
+              'grid gap-2 border-t border-white/[0.08] pt-2',
+              video.length > 0 && 'grid-cols-2',
+            )}
+          >
+            {group(t('universe.groupReading'), universe.choices(reading))}
+            {video.length > 0 && group(t('universe.groupVideo'), universe.choices(video))}
+          </div>
+          {universe.adultAllowed && (
+            <AdultSwitch
+              on={universe.adultMode}
+              onChange={(next) => {
+                setOpen(false);
+                void universe.setAdultMode(next);
+              }}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
   const item = (c: UniverseChoice, tall = false) => {
     const on = isActive(universe, c);
     return (

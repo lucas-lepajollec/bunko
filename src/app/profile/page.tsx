@@ -2,9 +2,9 @@
 import { useLook } from '@/lib/client/theme';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Suspense, useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
-import type { AuthState, TrackedMedia, WorkList } from '@/types/shared';
+import type { AuthState, ContinueItem, TrackedMedia, WorkList } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { universeAsides, useUniverse } from '@/lib/client/universe';
 import { useViewState } from '@/lib/client/view-state';
@@ -54,7 +54,7 @@ export default function ProfilePage() {
   // The profile's subtitle says reading, watching or both.
   const recent = universeAsides(universe.active, universe.enabled).recent;
   return (
-    <Page className="pb-16">
+    <Page className={cx('pb-16', look === 'cine' && 'gap-14 md:gap-20')}>
       {look === 'bunko' ? (
         <>
           <PageTitle title={t('profile.title')} aside={auth.data?.username} />
@@ -80,30 +80,14 @@ export default function ProfilePage() {
         </>
       ) : (
         // Themes: a member card — initial, name, what is followed, then the same shortcuts.
-        <section
-          className={cx(
-            'flex flex-col gap-5 md:flex-row md:items-center md:gap-7',
-            look === 'edition' && 'border-fg border-b pb-7',
-            look === 'aurore' && 'ui-panel rounded-[28px] border p-5 md:p-7',
-          )}
-        >
+        <section className="flex flex-col gap-5 md:flex-row md:items-center md:gap-7">
           <span
             aria-hidden
-            className={cx(
-              'font-display flex size-20 shrink-0 items-center justify-center text-[38px] uppercase md:size-28 md:text-[52px]',
-              look === 'edition'
-                ? 'border-fg border text-(--tone)'
-                : 'text-on-bright rounded-full bg-(--tone)',
-            )}
+            className="font-display flex size-20 shrink-0 items-center justify-center rounded-full bg-white text-[38px] text-[#070b10] uppercase md:size-28 md:text-[52px]"
           >
             {(auth.data?.username ?? '·').slice(0, 1)}
           </span>
           <span className="flex min-w-0 flex-col gap-1.5">
-            {look === 'edition' && (
-              <span className="text-[11px] tracking-[0.16em] text-(--tone) uppercase">
-                {t('profile.title')}
-              </span>
-            )}
             <h1 className="font-display truncate text-[44px] leading-[0.9] md:text-[72px]">
               {auth.data?.username ?? t('profile.title')}
             </h1>
@@ -138,11 +122,7 @@ export default function ProfilePage() {
         {resume.data && !resume.shown.length && (
           <Empty title={t('profile.empty')}>{t('profile.emptyBody')}</Empty>
         )}
-        <div className={cx('grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4', scrollBox)}>
-          {resume.shown.map((item) => (
-            <ContinueCard key={item.media.id} item={item} className="w-full md:w-full" />
-          ))}
-        </div>
+        <ResumeGrid items={resume.shown} />
       </section>
       <Favorites list={favoritesList} entries={entries} loading={!library.data || !lists.data} />
       <Suspense>
@@ -173,6 +153,51 @@ export default function ProfilePage() {
         />
       </section>
     </Page>
+  );
+}
+
+/**
+ * Everything in progress: the first rows, then "see all" turns the grid into a box of the same
+ * height that scrolls (nothing below moves), as the rankings do.
+ */
+function ResumeGrid({ items }: { items: ContinueItem[] }) {
+  const { t, n } = useI18n();
+  const look = useLook();
+  const [all, setAll] = useState(false);
+  const [height, setHeight] = useState<number | null>(null);
+  const grid = useRef<HTMLDivElement>(null);
+  const first = look === 'cine' ? 12 : 8;
+  const shown = all ? items : items.slice(0, first);
+  return (
+    <>
+      <div
+        ref={grid}
+        style={all && height ? { maxHeight: height } : undefined}
+        className={cx(
+          'grid',
+          look === 'cine'
+            ? 'grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-6 xl:grid-cols-8'
+            : 'gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+          all && 'overflow-y-auto overscroll-contain pr-1',
+        )}
+      >
+        {shown.map((item) => (
+          <ContinueCard key={item.media.id} item={item} className="w-full md:w-full" />
+        ))}
+      </div>
+      {items.length > first && (
+        <button
+          type="button"
+          className={cx(smallButton, 'self-start')}
+          onClick={() => {
+            if (!all) setHeight(grid.current?.offsetHeight ?? null);
+            setAll(!all);
+          }}
+        >
+          {all ? t('profile.resumeLess') : t('tops.all', { count: n(items.length) })}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -259,9 +284,7 @@ function Favorites({
                 'font-display leading-none tabular-nums',
                 look === 'cine'
                   ? 'top-numeral absolute bottom-[38px] left-[-4%] text-[110px] md:text-[150px]'
-                  : look === 'edition'
-                    ? 'text-[36px] text-(--tone) md:text-[44px]'
-                    : 'text-mid text-2xl font-extrabold tracking-[-0.04em] md:text-3xl',
+                  : 'text-mid text-2xl font-extrabold tracking-[-0.04em] md:text-3xl',
               )}
             >
               {n(i + 1)}
