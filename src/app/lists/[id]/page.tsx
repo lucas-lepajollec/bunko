@@ -159,7 +159,7 @@ export default function ListPage() {
       <BackLink tier={tier} />
       <div className="-mt-2 flex flex-col gap-2">
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <h1 className="font-display text-[40px] leading-[0.95] font-extrabold tracking-[-0.04em] md:text-[56px]">
+          <h1 className="font-display max-w-full text-[36px] leading-[0.95] font-extrabold tracking-[-0.04em] [overflow-wrap:anywhere] md:text-[56px]">
             {listName(t, list)}
           </h1>
           <span className="text-muted font-serif text-[17px] italic md:text-[22px]">
