@@ -2,7 +2,7 @@
 import { KIND_IDS, KINDS as KIND_DEFS, byKindOrder, type Kind } from '@/domain/kinds';
 import { MediaLink } from '@/components/media-link';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ChapterRelease, DiscoverPage, HomeFeed } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { ContinueCard, useContinue } from '@/components/reading';
@@ -239,11 +239,14 @@ function Hero({
   const { n } = useI18n();
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
+  const drag = useRef<{ id: number; x: number; y: number; locked: 'x' | 'y' | null } | null>(null);
+  const suppressClick = useRef(false);
   useEffect(() => {
     if (paused || items.length < 2) return;
-    const id = setInterval(() => setIndex((i) => (i + 1) % items.length), 9000);
-    return () => clearInterval(id);
-  }, [items.length, paused]);
+    const id = setTimeout(() => setIndex((i) => (i + 1) % items.length), 9000);
+    return () => clearTimeout(id);
+  }, [items.length, paused, index]);
   const r = items[index % Math.max(items.length, 1)];
   // No title has wide artwork (books, novels): the covers line up under the text and the book
   // stands alone on the right, instead of sitting on top of the cover strip.
@@ -270,6 +273,7 @@ function Hero({
     );
   const m = r.media;
   const current = index % items.length;
+  const step = (delta: 1 | -1) => setIndex((i) => (i + delta + items.length) % items.length);
   const kicker =
     r.provider === 'tmdb' || r.featured
       ? t('home.trendingKicker', { meta: meta(m) })
@@ -289,14 +293,75 @@ function Hero({
     m.year,
     m.genres.slice(0, 2).join(', ') || null,
   ].filter(Boolean);
+  // Swipe on touch screens and click-and-drag on desktop both slide to the next/previous work.
+  const finishDrag = (e: React.PointerEvent<HTMLElement>, commit: boolean) => {
+    const state = drag.current;
+    if (!state || state.id !== e.pointerId) return;
+    drag.current = null;
+    setDragOffset(0);
+    if (e.pointerType !== 'mouse' || !e.currentTarget.matches(':hover')) setPaused(false);
+    if (state.locked === 'x') {
+      const dx = e.clientX - state.x;
+      if (commit && Math.abs(dx) >= 44) step(dx < 0 ? 1 : -1);
+      setTimeout(() => {
+        suppressClick.current = false;
+      }, 0);
+    }
+  };
   const carousel = {
-    'aria-roledescription': 'carousel',
+    'aria-roledescription': 'carousel' as const,
     'aria-label': t('home.featuredReleases'),
     onMouseEnter: () => setPaused(true),
     onMouseLeave: () => setPaused(false),
     onFocus: () => setPaused(true),
     onBlur: () => setPaused(false),
+    onDragStart: (e: React.DragEvent) => e.preventDefault(),
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      if (items.length < 2) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if ((e.target as HTMLElement).closest('button')) return;
+      drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, locked: null };
+      suppressClick.current = false;
+      setPaused(true);
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+      const state = drag.current;
+      if (!state || state.id !== e.pointerId) return;
+      const dx = e.clientX - state.x;
+      const dy = e.clientY - state.y;
+      if (!state.locked) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if (Math.abs(dy) > Math.abs(dx)) {
+          state.locked = 'y';
+          return;
+        }
+        state.locked = 'x';
+        suppressClick.current = true;
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          /* Pointer may already be released on fast flicks. */
+        }
+      }
+      if (state.locked === 'x') setDragOffset(Math.max(-72, Math.min(72, dx * 0.45)));
+    },
+    onPointerUp: (e: React.PointerEvent<HTMLElement>) => finishDrag(e, true),
+    onPointerCancel: (e: React.PointerEvent<HTMLElement>) => finishDrag(e, false),
+    onClickCapture: (e: React.MouseEvent<HTMLElement>) => {
+      if (!suppressClick.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      suppressClick.current = false;
+    },
+    onKeyDown: (e: React.KeyboardEvent<HTMLElement>) => {
+      if (items.length < 2) return;
+      if (e.key === 'ArrowRight') step(1);
+      else if (e.key === 'ArrowLeft') step(-1);
+    },
   };
+  const dragStyle = dragOffset
+    ? { transform: `translateX(${dragOffset}px)` }
+    : undefined;
   // Ciné: one bar per featured title.
   const pick = (className?: string) =>
     items.length > 1 && (
@@ -321,7 +386,10 @@ function Hero({
     return (
       <section
         {...carousel}
-        className="hero-cine relative h-[600px] md:h-[min(780px,92vh)]"
+        className={cx(
+          'hero-cine relative h-[600px] touch-pan-y select-none md:h-[min(780px,92vh)]',
+          items.length > 1 && 'cursor-grab active:cursor-grabbing',
+        )}
         style={{ ['--accent' as string]: m.color ?? '#e2dbd0' }}
       >
         <Backdrop
@@ -331,33 +399,46 @@ function Hero({
           color={m.color}
           className="h-[calc(100%+80px)]"
         />
-        <div className="absolute inset-x-4 bottom-12 flex md:max-w-[min(900px,72vw)] flex-col gap-4 md:bottom-[90px] md:left-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] md:gap-5">
-          <span className="text-mid text-[11px] tracking-[0.16em] uppercase md:text-xs">
-            {kicker}
-          </span>
-          {/* Whole words only, lines balanced; long titles get a smaller size, not a cut. */}
-          <h1
-            className="font-display line-clamp-3 leading-[0.88] [text-wrap:balance] break-normal hyphens-none"
-            style={{ fontSize: heroTitleSize(m.title) }}
-          >
-            {m.title}
-          </h1>
-          <span className="text-mid flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px]">
-            {facts.map((f, i) => (
-              <span key={i} className="flex items-center gap-3">
-                {i > 0 && <span className="opacity-50">·</span>}
-                {f}
-              </span>
-            ))}
-          </span>
-          {m.synopsis && (
-            <p className="text-soft line-clamp-3 hidden max-w-[640px] text-[17px] leading-relaxed md:block">
-              {firstSentence(m.synopsis)}
-            </p>
+        <div
+          style={dragStyle}
+          className={cx(
+            'absolute inset-x-4 bottom-12 flex flex-col gap-4 md:bottom-[90px] md:left-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] md:max-w-[min(900px,72vw)] md:gap-5',
+            !dragOffset && 'transition-transform duration-200',
           )}
+        >
+          <MediaLink
+            media={m}
+            draggable={false}
+            className="group/hero flex flex-col gap-4 md:gap-5"
+          >
+            <span className="text-mid text-[11px] tracking-[0.16em] uppercase md:text-xs">
+              {kicker}
+            </span>
+            {/* Whole words only, lines balanced; long titles get a smaller size, not a cut. */}
+            <h1
+              className="font-display line-clamp-3 leading-[0.88] [text-wrap:balance] break-normal hyphens-none transition-opacity group-hover/hero:opacity-85"
+              style={{ fontSize: heroTitleSize(m.title) }}
+            >
+              {m.title}
+            </h1>
+            <span className="text-mid flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px]">
+              {facts.map((f, i) => (
+                <span key={i} className="flex items-center gap-3">
+                  {i > 0 && <span className="opacity-50">·</span>}
+                  {f}
+                </span>
+              ))}
+            </span>
+            {m.synopsis && (
+              <p className="text-soft line-clamp-3 hidden max-w-[640px] text-[17px] leading-relaxed md:block">
+                {firstSentence(m.synopsis)}
+              </p>
+            )}
+          </MediaLink>
           <div className="mt-2 flex items-center gap-3">
             <MediaLink
               media={m}
+              draggable={false}
               className="inline-flex h-12 shrink-0 items-center gap-2 rounded-full bg-white px-5 text-[14px] font-bold tracking-[0.04em] whitespace-nowrap text-[#070b10] uppercase transition-opacity hover:opacity-90 md:h-14 md:gap-2.5 md:px-8 md:text-[15px]"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -365,9 +446,10 @@ function Hero({
               </svg>
               {label(r)}
             </MediaLink>
-            <span className="flex h-12 min-w-0 items-center rounded-full border border-white/20 bg-white/[0.08] backdrop-blur-xl md:h-14">
+            <span className="flex h-12 min-w-0 items-center rounded-full border border-white/20 bg-[#0e141b]/85 md:h-14 md:bg-white/[0.08] md:backdrop-blur-xl">
               <Link
                 href={releasesHref}
+                draggable={false}
                 className="flex h-full items-center truncate px-4 text-[14px] whitespace-nowrap hover:text-white md:px-5 md:text-[15px]"
               >
                 {releasesLabel}
@@ -375,6 +457,7 @@ function Hero({
               <span aria-hidden className="h-6 w-px bg-white/20" />
               <MediaLink
                 media={m}
+                draggable={false}
                 aria-label={t('home.openSheet')}
                 className="flex h-full w-12 shrink-0 items-center justify-center hover:text-white md:w-14"
               >
@@ -390,7 +473,10 @@ function Hero({
   return (
     <section
       {...carousel}
-      className="relative h-[520px] md:h-[640px]"
+      className={cx(
+        'relative h-[520px] touch-pan-y select-none md:h-[640px]',
+        items.length > 1 && 'cursor-grab active:cursor-grabbing',
+      )}
       style={{ ['--accent' as string]: m.color ?? '#e2dbd0' }}
     >
       <Backdrop
@@ -403,27 +489,43 @@ function Hero({
       {/* Books, novels and web novels have no wide artwork: the cover itself takes the stage, as
           a book standing in the light of its own colours, above the other titles. */}
       {!m.bannerUrl && m.coverUrl && <BookStage key={m.id} src={m.coverUrl} shelf={shelf} />}
-      <div className="absolute inset-x-4 bottom-8 flex flex-col gap-3 md:inset-x-auto md:top-[150px] md:bottom-auto md:left-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] md:w-[680px] md:gap-[18px]">
-        <div className="text-soft flex flex-wrap items-center gap-3 text-[11px] tracking-[0.16em] uppercase md:text-xs">
-          <span className="h-[3px] w-6 rounded-full" style={{ background: 'var(--accent)' }} />
-          {kicker}
-        </div>
-        <h1 className="font-display line-clamp-2 text-[38px] leading-[0.92] font-extrabold tracking-[-0.045em] [overflow-wrap:anywhere] md:text-[72px]">
-          {m.title}
-        </h1>
-        <p className="font-display text-[22px] font-bold md:text-[30px]">
-          {label(r)}
-          {r.group && (
-            <span className="text-soft ml-3 font-serif text-[17px] font-normal italic md:text-[22px]">
-              {r.group}
-            </span>
-          )}
-        </p>
+      <div
+        style={dragStyle}
+        className={cx(
+          'absolute inset-x-4 bottom-8 flex flex-col gap-3 md:inset-x-auto md:top-[150px] md:bottom-auto md:left-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] md:w-[680px] md:gap-[18px]',
+          !dragOffset && 'transition-transform duration-200',
+        )}
+      >
+        <MediaLink
+          media={m}
+          draggable={false}
+          className="group/hero flex flex-col gap-3 md:gap-[18px]"
+        >
+          <div className="text-soft flex flex-wrap items-center gap-3 text-[11px] tracking-[0.16em] uppercase md:text-xs">
+            <span className="h-[3px] w-6 rounded-full" style={{ background: 'var(--accent)' }} />
+            {kicker}
+          </div>
+          <h1 className="font-display line-clamp-2 text-[38px] leading-[0.92] font-extrabold tracking-[-0.045em] [overflow-wrap:anywhere] transition-opacity group-hover/hero:opacity-85 md:text-[72px]">
+            {m.title}
+          </h1>
+          <p className="font-display text-[22px] font-bold md:text-[30px]">
+            {label(r)}
+            {r.group && (
+              <span className="text-soft ml-3 font-serif text-[17px] font-normal italic md:text-[22px]">
+                {r.group}
+              </span>
+            )}
+          </p>
+        </MediaLink>
         <div className="mt-2 flex gap-3">
-          <MediaLink media={m} className={cx(primaryButton, 'flex-1 md:flex-none')}>
+          <MediaLink
+            media={m}
+            draggable={false}
+            className={cx(primaryButton, 'flex-1 md:flex-none')}
+          >
             {t('home.openSheet')}
           </MediaLink>
-          <Link href={releasesHref} className={cx(ghostButton, 'flex-1 md:flex-none')}>
+          <Link href={releasesHref} draggable={false} className={cx(ghostButton, 'flex-1 md:flex-none')}>
             {releasesLabel}
           </Link>
         </div>

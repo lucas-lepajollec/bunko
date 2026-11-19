@@ -1,11 +1,18 @@
 'use client';
 import { useSyncExternalStore } from 'react';
-import { THEME_KEY, THEMES, normalizeTheme, type ThemeChoice, type ThemeId } from '@/lib/themes';
+import {
+  DEFAULT_THEME,
+  THEME_KEY,
+  THEMES,
+  normalizeTheme,
+  type ThemeChoice,
+  type ThemeId,
+} from '@/lib/themes';
 
 export { THEMES, TONE_SWATCHES, type ThemeChoice, type ThemeId } from '@/lib/themes';
 
 const KEY = THEME_KEY;
-const DEFAULT: ThemeChoice = { theme: 'bunko', tone: 'default' };
+const DEFAULT: ThemeChoice = DEFAULT_THEME;
 
 const listeners = new Set<() => void>();
 let current: ThemeChoice | null = null;

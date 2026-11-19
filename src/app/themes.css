@@ -145,31 +145,35 @@
 .poster-chip {
   display: none;
 }
-:root[data-theme='cine'] .poster-chip:not(:empty) {
-  display: block;
-  position: absolute;
-  left: 50%;
-  bottom: 10px;
-  translate: -50% 4px;
-  white-space: nowrap;
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid rgb(255 255 255 / 0.18);
-  background: rgb(7 11 16 / 0.7);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  color: #fff;
-  font-size: 12px;
-  opacity: 0;
-  transition:
-    opacity 180ms,
-    translate 180ms;
-  pointer-events: none;
-}
-:root[data-theme='cine'] .poster:hover .poster-chip,
-:root[data-theme='cine'] .poster:focus-visible .poster-chip {
-  opacity: 1;
-  translate: -50% 0;
+/* Hover-only chip: never mounted as a backdrop-filter layer on touch phones (dozens of invisible
+   blurred layers stall mobile compositing when sheets open or pages change). */
+@media (hover: hover) and (pointer: fine) {
+  :root[data-theme='cine'] .poster-chip:not(:empty) {
+    display: block;
+    position: absolute;
+    left: 50%;
+    bottom: 10px;
+    translate: -50% 4px;
+    white-space: nowrap;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid rgb(255 255 255 / 0.18);
+    background: rgb(7 11 16 / 0.78);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    color: #fff;
+    font-size: 12px;
+    opacity: 0;
+    transition:
+      opacity 180ms,
+      translate 180ms;
+    pointer-events: none;
+  }
+  :root[data-theme='cine'] .poster:hover .poster-chip,
+  :root[data-theme='cine'] .poster:focus-visible .poster-chip {
+    opacity: 1;
+    translate: -50% 0;
+  }
 }
 :root[data-theme='cine'] .poster-title {
   font-size: 15px;
@@ -397,9 +401,21 @@
   cursor: default;
 }
 
-/* Phones: menus, sheets and overlays are opaque instead of blurring what is behind them; a live
-   blur under a moving sheet is the costliest thing a phone can draw. */
+/* Phones: menus, sheets, overlays and ambient avoid live GPU blur filters; a full-viewport blurred
+   layer behind sheets and page transitions is the costliest thing a phone compositor can draw. */
 @media (max-width: 767px) {
+  :root[data-theme='cine'] .ambient img {
+    display: none;
+  }
+  :root[data-theme='cine'] .ambient::after {
+    background:
+      radial-gradient(
+        ellipse 85% 50% at 50% 0%,
+        color-mix(in oklab, var(--ambient-color, #7ba4cc) 22%, transparent),
+        transparent 72%
+      ),
+      linear-gradient(180deg, transparent 45%, rgb(7 11 16 / 0.65) 100%);
+  }
   .header-fade {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;

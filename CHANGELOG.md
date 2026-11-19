@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Ciné is now the default look of Bunko; the original Bunko look remains available in Settings →
+  Appearance. Home hero: swipe on touch screens or click-and-drag with the mouse (plus arrow keys)
+  to move between featured works, and click the title, details or synopsis to open the work's
+  sheet. Fixed Ciné mobile delays after opening the type or activity menus: the type menu no longer
+  fires parallel `/api/discover` requests for every empty kind on open (reusing library and cached
+  home/catalog covers and deferring cover mounting until the sheet has painted), closed Ciné header
+  panels unmount cleanly so background job polling stops, hover-only poster chips and mobile blurs
+  (ambient image filter, card badges, hero pills) stay off on phones, and `SlidingHighlight` no
+  longer observes itself during transitions.
+
 - Faster on phones, in both looks. Number, date and relative-time formatters are built once per
   locale and options instead of for every card (they were the hottest function when a page
   opened). The planning builds only the day shown on phones instead of the whole week (the worst

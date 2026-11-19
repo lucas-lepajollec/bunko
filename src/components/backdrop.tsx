@@ -42,8 +42,8 @@ export function Backdrop({
   // Themes that tint the whole page with the current artwork follow this one.
   const ambient = src ?? mobileImage ?? ambientArt;
   useEffect(() => {
-    if (ambient) setAmbient(ambient);
-  }, [ambient]);
+    if (ambient) setAmbient(ambient, color);
+  }, [ambient, color]);
   return (
     <div
       aria-hidden

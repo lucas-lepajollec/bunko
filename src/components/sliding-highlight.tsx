@@ -41,10 +41,20 @@ export function SlidingHighlight({ variant = 'pill' }: { variant?: 'pill' | 'lin
     };
     measure();
     const frame = requestAnimationFrame(() => setReady(true));
-    const resize = new ResizeObserver(measure);
+    let pending = 0;
+    const schedule = () => {
+      if (pending) return;
+      pending = requestAnimationFrame(() => {
+        pending = 0;
+        measure();
+      });
+    };
+    const resize = new ResizeObserver(schedule);
     resize.observe(host);
-    for (const child of host.children) resize.observe(child);
-    const changes = new MutationObserver(measure);
+    // Never observe the highlight itself: its own width transition would otherwise trigger layout
+    // reads on every animation frame.
+    for (const child of host.children) if (child !== ref.current) resize.observe(child);
+    const changes = new MutationObserver(schedule);
     changes.observe(host, {
       subtree: true,
       childList: true,
@@ -53,6 +63,7 @@ export function SlidingHighlight({ variant = 'pill' }: { variant?: 'pill' | 'lin
     });
     return () => {
       cancelAnimationFrame(frame);
+      if (pending) cancelAnimationFrame(pending);
       resize.disconnect();
       changes.disconnect();
       delete host.dataset.sliderHost;

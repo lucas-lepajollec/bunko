@@ -11,13 +11,15 @@ export const metadata: Metadata = {
   description: 'Discover, download and follow manga, webtoons and light novels into Kavita.',
 };
 
-export const viewport: Viewport = { themeColor: '#0b0a09', colorScheme: 'dark' };
+export const viewport: Viewport = { themeColor: '#070b10', colorScheme: 'dark' };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // The theme is applied to <html> before hydration by the boot script, hence the warning opt-out.
     <html
       lang="en"
+      data-theme="cine"
+      data-tone="night"
       className={`${GeistSans.variable} ${GeistMono.variable}`}
       suppressHydrationWarning
     >

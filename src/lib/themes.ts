@@ -4,8 +4,8 @@
  * The choice belongs to the device, like the interface language.
  */
 export const THEMES = [
-  { id: 'bunko', tones: ['default'], light: false },
   { id: 'cine', tones: ['night'], light: false },
+  { id: 'bunko', tones: ['default'], light: false },
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]['id'];
@@ -16,27 +16,27 @@ export interface ThemeChoice {
 
 /** Swatches shown in the picker: background, then accent. Mirrors the tokens in globals.css. */
 export const TONE_SWATCHES: Record<string, [string, string]> = {
-  default: ['#0b0a09', '#e2dbd0'],
   night: ['#070b10', '#ffffff'],
+  default: ['#0b0a09', '#e2dbd0'],
 };
 
 export const THEME_KEY = 'bunko.theme';
-const DEFAULT: ThemeChoice = { theme: 'bunko', tone: 'default' };
+export const DEFAULT_THEME: ThemeChoice = { theme: 'cine', tone: 'night' };
 
 export function normalizeTheme(value: unknown): ThemeChoice {
   const v = (value ?? {}) as Partial<ThemeChoice>;
   const theme = THEMES.find((t) => t.id === v.theme);
-  if (!theme) return DEFAULT;
+  if (!theme) return DEFAULT_THEME;
   const tones: readonly string[] = theme.tones;
   return { theme: theme.id, tone: tones.includes(v.tone ?? '') ? v.tone! : tones[0] };
 }
 
 /**
- * Runs before the first paint (inline in the document head) so a page never flashes the default
+ * Runs before the first paint (inline in the document head) so a page never flashes the other
  * look. Kept dependency-free and in sync with `normalizeTheme` / `applyTheme`.
  */
 export const THEME_BOOT_SCRIPT = `(function(){try{var c=JSON.parse(localStorage.getItem('${THEME_KEY}')||'null');var T=${JSON.stringify(
   Object.fromEntries(THEMES.map((t) => [t.id, t.tones])),
-)};if(!c||!T[c.theme])return;var tone=T[c.theme].indexOf(c.tone)>=0?c.tone:T[c.theme][0];var d=document.documentElement;d.dataset.theme=c.theme;d.dataset.tone=tone;d.style.colorScheme=${JSON.stringify(
+)};var S=${JSON.stringify(
   Object.fromEntries(THEMES.map((t) => [t.id, t.light ? 'light' : 'dark'])),
-)}[c.theme];}catch(e){}})();`;
+)};var id=c&&T[c.theme]?c.theme:'${DEFAULT_THEME.theme}';var tone=c&&T[id].indexOf(c.tone)>=0?c.tone:T[id][0];var d=document.documentElement;if(id==='bunko'){delete d.dataset.theme;delete d.dataset.tone;}else{d.dataset.theme=id;d.dataset.tone=tone;}d.style.colorScheme=S[id];}catch(e){}})();`;

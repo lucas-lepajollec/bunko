@@ -1,17 +1,15 @@
 'use client';
 import * as Dialog from '@radix-ui/react-dialog';
-import { useEffect, useId, useRef, useState } from 'react';
-import type { DiscoverKind } from '@/types/shared';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useSWRConfig } from 'swr';
+import type { DiscoverKind, DiscoverPage, HomeFeed, TrackedMedia } from '@/types/shared';
 import { choiceLabel, useUniverse, type UniverseChoice } from '@/lib/client/universe';
-import { isVideoKind } from '@/domain/kinds';
+import { isVideoKind, kindOfMedia } from '@/domain/kinds';
 import { useI18n } from '@/i18n/I18nProvider';
 import { announceMenu, onMenuOpened } from './select';
-import { cx } from './ui';
-import type { DiscoverPage, TrackedMedia } from '@/types/shared';
+import { Cover, cx } from './ui';
 import { useApi } from '@/lib/client/api';
-import { kindOfMedia } from '@/domain/kinds';
 import { Check, Puzzle } from 'lucide-react';
-import { Cover } from './ui';
 import { useLook } from '@/lib/client/theme';
 import { SlidingHighlight } from './sliding-highlight';
 
@@ -290,35 +288,89 @@ export function UniverseTab() {
 }
 
 /**
- * Ciné: the type menu as poster tiles. Each kind shows a cover from the library and how many works
- * are followed; tabs narrow to reading or video; 18+ is a switch at the top. Shown in the header's
- * shared panel (CineHeader).
+ * Ciné: the type menu as poster tiles. Each kind shows a cover from the library (or already-cached
+ * home/catalog data — never triggering a storm of catalog requests on menu open) and how many works
+ * are followed; tabs narrow to reading or video; 18+ is a switch at the top.
  */
 export function TypesPanel({ onDone }: { onDone: () => void }) {
   const { t, n } = useI18n();
   const universe = useUniverse();
-  const library = useApi<TrackedMedia[]>('/api/tracked');
+  const { cache } = useSWRConfig();
+  // Use the cached library immediately without re-fetching it every time the menu opens.
+  const library = useApi<TrackedMedia[]>('/api/tracked', {
+    revalidateIfStale: false,
+    dedupingInterval: 60_000,
+  });
   const [tab, setTab] = useState<'all' | 'reading' | 'video'>('all');
-  if (!universe.ready) return null;
+  // Let the sheet paint and start sliding before mounting up to a dozen decorative covers.
+  const [showCovers, setShowCovers] = useState(false);
+  useEffect(() => {
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => setShowCovers(true));
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
+  }, []);
   // What the library holds per kind: how many works, and the one that stands for it — a favorite,
   // else the best rated, else the one read or watched last.
-  const byKind = new Map<string, { count: number; best: TrackedMedia }>();
-  const rank = (e: TrackedMedia) =>
-    [e.favorite ? 1 : 0, e.rating ?? -1, Date.parse(e.lastReadAt ?? e.createdAt) || 0] as const;
-  const better = (a: TrackedMedia, b: TrackedMedia) => {
-    const [x, y] = [rank(a), rank(b)];
-    return x[0] !== y[0] ? x[0] > y[0] : x[1] !== y[1] ? x[1] > y[1] : x[2] > y[2];
-  };
-  for (const e of library.data ?? []) {
-    if (!(e.coverUrl ?? e.media.coverUrl)) continue;
-    const k = kindOfMedia(e.media);
-    const known = byKind.get(k);
-    if (!known) byKind.set(k, { count: 1, best: e });
-    else {
-      known.count++;
-      if (better(e, known.best)) known.best = e;
+  const byKind = useMemo(() => {
+    const map = new Map<string, { count: number; best: TrackedMedia; rank: [number, number, number] }>();
+    const rankOf = (e: TrackedMedia): [number, number, number] => [
+      e.favorite ? 1 : 0,
+      e.rating ?? -1,
+      Date.parse(e.lastReadAt ?? e.createdAt) || 0,
+    ];
+    for (const e of library.data ?? []) {
+      if (!(e.coverUrl ?? e.media.coverUrl)) continue;
+      const k = kindOfMedia(e.media);
+      const rank = rankOf(e);
+      const known = map.get(k);
+      if (!known) map.set(k, { count: 1, best: e, rank });
+      else {
+        known.count++;
+        const better =
+          rank[0] !== known.rank[0]
+            ? rank[0] > known.rank[0]
+            : rank[1] !== known.rank[1]
+              ? rank[1] > known.rank[1]
+              : rank[2] > known.rank[2];
+        if (better) {
+          known.best = e;
+          known.rank = rank;
+        }
+      }
     }
-  }
+    return map;
+  }, [library.data]);
+  // Fallback covers strictly from already-cached home/discover responses: zero network cost.
+  const cachedCovers = useMemo(() => {
+    const map = new Map<string, string>();
+    const home = cache.get('/api/home')?.data as HomeFeed | undefined;
+    if (home) {
+      for (const [k, list] of Object.entries(home.latest ?? {})) {
+        const cover = list.find((r) => r.media.coverUrl)?.media.coverUrl;
+        if (cover) map.set(k, cover);
+      }
+      for (const m of [...(home.top ?? []), ...(home.hero ?? []).map((r) => r.media)]) {
+        if (!m.coverUrl) continue;
+        const k = kindOfMedia(m);
+        if (!map.has(k)) map.set(k, m.coverUrl);
+      }
+    }
+    for (const k of universe.enabled) {
+      if (map.has(k) || k === 'extension') continue;
+      const page =
+        (cache.get(`/api/discover?kind=${k}&sort=popular`)?.data as DiscoverPage | undefined) ??
+        (cache.get(`/api/discover?kind=${k}&sort=trending`)?.data as DiscoverPage | undefined);
+      const cover = page?.items.find((m) => m.coverUrl)?.coverUrl;
+      if (cover) map.set(k, cover);
+    }
+    return map;
+  }, [cache, universe.enabled]);
+  if (!universe.ready) return null;
   const reading = universe.enabled.filter((k) => !isVideoKind(k));
   const video = universe.enabled.filter(isVideoKind);
   const pick = (c: UniverseChoice) => {
@@ -327,13 +379,17 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
   };
   const tile = (c: UniverseChoice) => {
     const info = byKind.get(c.kind);
+    const cover =
+      (info ? (info.best.coverUrl ?? info.best.media.coverUrl) : null) ??
+      cachedCovers.get(c.kind) ??
+      null;
     return (
       <KindTile
         key={`${c.kind}:${c.section ?? ''}`}
         choice={c}
         on={isActive(universe, c)}
         count={info?.count ?? 0}
-        cover={info ? (info.best.coverUrl ?? info.best.media.coverUrl) : null}
+        cover={showCovers ? cover : null}
         onPick={() => pick(c)}
       />
     );
@@ -341,11 +397,12 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
   const all = { kind: 'all' as const, section: null, name: null };
   const total = library.data?.length ?? 0;
   // "Everything": the work that stands for each kind, in the user's order.
-  const mosaic = universe.order
-    .map((k) => byKind.get(k)?.best)
-    .filter((e): e is TrackedMedia => Boolean(e))
-    .map((e) => e.coverUrl ?? e.media.coverUrl)
-    .slice(0, 6);
+  const mosaic = showCovers
+    ? universe.order
+        .map((k) => byKind.get(k)?.best?.coverUrl ?? byKind.get(k)?.best?.media.coverUrl ?? cachedCovers.get(k))
+        .filter((src): src is string => Boolean(src))
+        .slice(0, 6)
+    : [];
   return (
     <div role="menu" aria-label={t('universe.label')} className="flex flex-col gap-1 p-3.5">
       {/* Phones: the 18+ switch takes its own line under the tabs. */}
@@ -465,10 +522,7 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
   );
 }
 
-/**
- * One kind in the type menu: the cover of the library work that stands for it, or (nothing of
- * that kind followed yet) the most popular work of the kind in the catalog.
- */
+/** One kind in the type menu: cover from library or cached feeds, zero extra network calls. */
 function KindTile({
   choice,
   on,
@@ -483,11 +537,6 @@ function KindTile({
   onPick: () => void;
 }) {
   const { t, n } = useI18n();
-  const popular = useApi<DiscoverPage>(
-    !cover && choice.kind !== 'extension' ? `/api/discover?kind=${choice.kind}&sort=popular` : null,
-    { revalidateOnFocus: false, shouldRetryOnError: false },
-  );
-  const src = cover ?? popular.data?.items.find((m) => m.coverUrl)?.coverUrl ?? null;
   return (
     <button
       type="button"
@@ -501,9 +550,9 @@ function KindTile({
           : 'bg-white/[0.05] hover:bg-white/[0.09]',
       )}
     >
-      {src ? (
+      {cover ? (
         <Cover
-          src={src}
+          src={cover}
           alt=""
           className="absolute -top-2 -right-3.5 w-[62px] rotate-[8deg] !rounded-[8px] opacity-95 shadow-[-6px_8px_20px_rgba(0,0,0,0.5)] transition-transform duration-300 group-hover:rotate-[4deg]"
         />

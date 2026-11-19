@@ -7,7 +7,7 @@ import { cx } from './ui';
 
 /** Round glass bubble shared by every mark. */
 const bubble =
-  'flex items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-white/15 backdrop-blur-md';
+  'flex items-center justify-center rounded-full bg-black/75 text-white ring-1 ring-white/15 md:bg-black/60 md:backdrop-blur-md';
 /** Literal classes per size (Tailwind only generates classes written out in full). */
 const SIZES = {
   sm: {
@@ -96,7 +96,7 @@ export function WorkMarks({
             s.dot,
             seen === 'done'
               ? 'bg-white text-black shadow-[0_2px_8px_rgba(0,0,0,0.45)]'
-              : 'bg-black/60 text-white backdrop-blur-md',
+              : 'bg-black/75 text-white md:bg-black/60 md:backdrop-blur-md',
           )}
         >
           {seen === 'done' ? (
