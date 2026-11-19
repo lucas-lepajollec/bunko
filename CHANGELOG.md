@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Ciné polish: each kind in the type menu shows the library work that stands for it (a favorite,
+  else the best rated, else the last read or watched), or the kind's most popular catalog work
+  when nothing of it is followed; "Everything" shows those covers. Phones get the same type menu.
+  The search results open under the navigation at its full width, opaque, in the menus' style.
+  Settings fields are quiet glass wells and check boxes are switches. Phone sheets (menu, types)
+  slide up and back down, their overlay fading along.
+
 - Ciné menus and player, from validated mock-ups. The header's type menu and activity menu share
   one panel that slides and reshapes from one to the other (content fades in, a caret follows the
   button); the type menu shows each kind as a tile with a cover and the count of followed works,

@@ -98,7 +98,7 @@ export default function SettingsPage() {
   const keep = (s: Settings) => settings.mutate(s, { revalidate: false });
   const current = open ?? visible[0];
   return (
-    <Page className="pb-20 md:grid md:grid-cols-[240px_minmax(0,1fr)] md:gap-16">
+    <Page className="settings-page pb-20 md:grid md:grid-cols-[240px_minmax(0,1fr)] md:gap-16">
       <nav
         aria-label={t('settings.sections')}
         className={cx(
