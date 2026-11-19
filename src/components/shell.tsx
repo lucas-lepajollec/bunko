@@ -781,9 +781,9 @@ function MobileMenu() {
         )}
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px]" />
+        <Dialog.Overlay className="sheet-overlay fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px]" />
         {/* A sheet from the bottom, as on phones' own menus: reachable with the thumb. */}
-        <Dialog.Content className="ui-panel fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] flex-col gap-4 overflow-y-auto rounded-t-[28px] bg-panel px-4 pt-2.5 pb-[max(env(safe-area-inset-bottom),16px)] outline-none">
+        <Dialog.Content className="ui-panel sheet-mobile fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] flex-col gap-4 overflow-y-auto rounded-t-[28px] bg-panel px-4 pt-2.5 pb-[max(env(safe-area-inset-bottom),16px)] outline-none">
           <span aria-hidden className="mx-auto h-1 w-9 rounded-full bg-white/20" />
           <div className="flex items-center gap-3 px-1">
             <span

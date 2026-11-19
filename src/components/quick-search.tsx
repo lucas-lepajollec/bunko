@@ -162,7 +162,7 @@ export function QuickSearch({
         variant === 'inline'
           ? 'ui-panel border-line absolute top-[50px] right-0 w-[440px] rounded-2xl border bg-panel shadow-[0_24px_60px_rgba(0,0,0,0.55)]'
           : variant === 'bar'
-            ? 'ui-panel border-line absolute top-[calc(100%+12px)] left-1/2 w-[min(560px,calc(100vw-48px))] -translate-x-1/2 rounded-[22px] border bg-panel'
+            ? 'header-panel-in border-line absolute top-[calc(100%+14px)] -right-[5px] -left-[5px] max-h-[min(70vh,calc(100dvh-140px))] overflow-y-auto overscroll-contain rounded-[24px] border bg-[#0e141b] py-1.5 shadow-[0_30px_80px_rgba(0,0,0,0.55)]'
             : 'mt-3',
       )}
     >
@@ -196,6 +196,7 @@ export function QuickSearch({
                 onClick={() => go(mediaHref(m.id))}
                 className={cx(
                   'flex items-center gap-3 px-4 py-2 text-left',
+                  variant === 'bar' && 'mx-1.5 rounded-[14px] px-2.5',
                   active === i && 'bg-white/[0.07]',
                 )}
               >
@@ -227,6 +228,7 @@ export function QuickSearch({
             onClick={() => go(a.href)}
             className={cx(
               'flex items-center gap-3 px-4 py-2.5 text-left text-sm',
+              variant === 'bar' && 'mx-1.5 rounded-[14px] px-2.5',
               active === items.length + i ? 'bg-white/[0.07] text-white' : 'text-mid',
             )}
           >

@@ -7,11 +7,12 @@ import { isVideoKind } from '@/domain/kinds';
 import { useI18n } from '@/i18n/I18nProvider';
 import { announceMenu, onMenuOpened } from './select';
 import { cx } from './ui';
-import type { TrackedMedia } from '@/types/shared';
+import type { DiscoverPage, TrackedMedia } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
 import { kindOfMedia } from '@/domain/kinds';
 import { Check, Puzzle } from 'lucide-react';
 import { Cover } from './ui';
+import { useLook } from '@/lib/client/theme';
 
 /** The current universe's name: the extension section shown, else the kind. */
 export function activeLabel(t: (k: string) => string, universe: ReturnType<typeof useUniverse>) {
@@ -206,6 +207,7 @@ function AdultSwitch({ on, onChange }: { on: boolean; onChange: (next: boolean) 
 /** Phone bottom bar: the universe as a tab that opens a sheet of choices. */
 export function UniverseTab() {
   const { t } = useI18n();
+  const look = useLook();
   const universe = useUniverse();
   const [open, setOpen] = useState(false);
   if (!universe.ready) return null;
@@ -235,8 +237,8 @@ export function UniverseTab() {
         <span className="max-w-full truncate">{activeLabel(t, universe)}</span>
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Content className="ui-panel bg-bg border-line fixed inset-x-0 bottom-0 z-50 flex flex-col gap-2 rounded-t-3xl border-t p-4 pb-[max(env(safe-area-inset-bottom),16px)] outline-none">
+        <Dialog.Overlay className="sheet-overlay fixed inset-0 z-50 bg-black/70" />
+        <Dialog.Content className="ui-panel sheet-mobile bg-bg border-line fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col gap-2 overflow-y-auto rounded-t-[28px] border-t p-4 pb-[max(env(safe-area-inset-bottom),16px)] outline-none">
           <span aria-hidden className="mb-1 h-1 w-10 self-center rounded-full bg-white/25" />
           <Dialog.Title className="font-display text-[22px] font-extrabold tracking-[-0.03em]">
             {t('universe.label')}
@@ -244,33 +246,41 @@ export function UniverseTab() {
           <Dialog.Description className="text-muted text-sm">
             {t('universe.hint')}
           </Dialog.Description>
-          <div className="mt-1 grid grid-cols-2 gap-2">
-            {options.map((c) => (
-              <button
-                key={`${c.kind}:${c.section ?? ''}`}
-                type="button"
-                aria-pressed={isActive(universe, c)}
-                onClick={() => {
-                  setOpen(false);
-                  void universe.set(c.kind, c.section);
-                }}
-                className={cx(
-                  'h-12 rounded-2xl px-4 text-left text-[15px]',
-                  isActive(universe, c) ? 'bg-fg text-bg font-semibold' : 'bg-white/[0.06]',
-                )}
-              >
-                {choiceLabel(t, c)}
-              </button>
-            ))}
-          </div>
-          {universe.adultAllowed && (
-            <AdultSwitch
-              on={universe.adultMode}
-              onChange={(next) => {
-                setOpen(false);
-                void universe.setAdultMode(next);
-              }}
-            />
+          {look === 'cine' ? (
+            <div className="-mx-3.5 -mb-3">
+              <TypesPanel onDone={() => setOpen(false)} />
+            </div>
+          ) : (
+            <>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                {options.map((c) => (
+                  <button
+                    key={`${c.kind}:${c.section ?? ''}`}
+                    type="button"
+                    aria-pressed={isActive(universe, c)}
+                    onClick={() => {
+                      setOpen(false);
+                      void universe.set(c.kind, c.section);
+                    }}
+                    className={cx(
+                      'h-12 rounded-2xl px-4 text-left text-[15px]',
+                      isActive(universe, c) ? 'bg-fg text-bg font-semibold' : 'bg-white/[0.06]',
+                    )}
+                  >
+                    {choiceLabel(t, c)}
+                  </button>
+                ))}
+              </div>
+              {universe.adultAllowed && (
+                <AdultSwitch
+                  on={universe.adultMode}
+                  onChange={(next) => {
+                    setOpen(false);
+                    void universe.setAdultMode(next);
+                  }}
+                />
+              )}
+            </>
           )}
         </Dialog.Content>
       </Dialog.Portal>
@@ -289,13 +299,24 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const [tab, setTab] = useState<'all' | 'reading' | 'video'>('all');
   if (!universe.ready) return null;
-  // What the library holds per kind: a count and the latest cover.
-  const byKind = new Map<string, { count: number; cover: string | null }>();
+  // What the library holds per kind: how many works, and the one that stands for it — a favorite,
+  // else the best rated, else the one read or watched last.
+  const byKind = new Map<string, { count: number; best: TrackedMedia }>();
+  const rank = (e: TrackedMedia) =>
+    [e.favorite ? 1 : 0, e.rating ?? -1, Date.parse(e.lastReadAt ?? e.createdAt) || 0] as const;
+  const better = (a: TrackedMedia, b: TrackedMedia) => {
+    const [x, y] = [rank(a), rank(b)];
+    return x[0] !== y[0] ? x[0] > y[0] : x[1] !== y[1] ? x[1] > y[1] : x[2] > y[2];
+  };
   for (const e of library.data ?? []) {
+    if (!(e.coverUrl ?? e.media.coverUrl)) continue;
     const k = kindOfMedia(e.media);
     const known = byKind.get(k);
-    if (known) known.count++;
-    else byKind.set(k, { count: 1, cover: e.coverUrl ?? e.media.coverUrl });
+    if (!known) byKind.set(k, { count: 1, best: e });
+    else {
+      known.count++;
+      if (better(e, known.best)) known.best = e;
+    }
   }
   const reading = universe.enabled.filter((k) => !isVideoKind(k));
   const video = universe.enabled.filter(isVideoKind);
@@ -304,48 +325,25 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
     void universe.set(c.kind, c.section);
   };
   const tile = (c: UniverseChoice) => {
-    const on = isActive(universe, c);
     const info = byKind.get(c.kind);
     return (
-      <button
+      <KindTile
         key={`${c.kind}:${c.section ?? ''}`}
-        type="button"
-        role="menuitemradio"
-        aria-checked={on}
-        onClick={() => pick(c)}
-        className={cx(
-          'group relative flex h-[84px] flex-col justify-end gap-0.5 overflow-hidden rounded-[16px] p-3 text-left transition-[background-color,box-shadow] duration-200',
-          on
-            ? 'bg-white/[0.14] shadow-[inset_0_0_0_1.5px_#fff]'
-            : 'bg-white/[0.05] hover:bg-white/[0.09]',
-        )}
-      >
-        {info?.cover ? (
-          <Cover
-            src={info.cover}
-            alt=""
-            className="absolute -top-2 -right-3.5 w-[62px] rotate-[8deg] !rounded-[8px] opacity-95 shadow-[-6px_8px_20px_rgba(0,0,0,0.5)] transition-transform duration-300 group-hover:rotate-[4deg]"
-          />
-        ) : (
-          c.kind === 'extension' && (
-            <Puzzle className="text-muted absolute top-3 right-3 size-5" aria-hidden />
-          )
-        )}
-        <span className="relative flex items-center gap-1.5 pr-10 text-[14px] font-bold">
-          <span className="truncate">{choiceLabel(t, c)}</span>
-          {on && <Check className="size-3.5 shrink-0" strokeWidth={3} aria-hidden />}
-        </span>
-        <span className="text-muted relative truncate pr-10 text-[11.5px]">
-          {info ? t('universe.followed', { count: n(info.count) }) : t(`universe.desc.${c.kind}`)}
-        </span>
-      </button>
+        choice={c}
+        on={isActive(universe, c)}
+        count={info?.count ?? 0}
+        cover={info ? (info.best.coverUrl ?? info.best.media.coverUrl) : null}
+        onPick={() => pick(c)}
+      />
     );
   };
   const all = { kind: 'all' as const, section: null, name: null };
   const total = library.data?.length ?? 0;
-  const mosaic = (library.data ?? [])
+  // "Everything": the work that stands for each kind, in the user's order.
+  const mosaic = universe.order
+    .map((k) => byKind.get(k)?.best)
+    .filter((e): e is TrackedMedia => Boolean(e))
     .map((e) => e.coverUrl ?? e.media.coverUrl)
-    .filter(Boolean)
     .slice(0, 6);
   return (
     <div role="menu" aria-label={t('universe.label')} className="flex flex-col gap-1 p-3.5">
@@ -415,7 +413,11 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
             isActive(universe, all) && 'shadow-[inset_0_0_0_1.5px_#fff]',
           )}
         >
-          <span aria-hidden className="absolute inset-0 grid grid-cols-6">
+          <span
+            aria-hidden
+            className="absolute inset-0 grid bg-[linear-gradient(120deg,#1b2733,#0e141b)]"
+            style={{ gridTemplateColumns: `repeat(${Math.max(mosaic.length, 1)}, minmax(0, 1fr))` }}
+          >
             {mosaic.map((src, i) => (
               <Cover key={i} src={src} alt="" className="!aspect-auto size-full !rounded-none" />
             ))}
@@ -457,5 +459,63 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * One kind in the type menu: the cover of the library work that stands for it, or (nothing of
+ * that kind followed yet) the most popular work of the kind in the catalog.
+ */
+function KindTile({
+  choice,
+  on,
+  count,
+  cover,
+  onPick,
+}: {
+  choice: UniverseChoice;
+  on: boolean;
+  count: number;
+  cover: string | null;
+  onPick: () => void;
+}) {
+  const { t, n } = useI18n();
+  const popular = useApi<DiscoverPage>(
+    !cover && choice.kind !== 'extension' ? `/api/discover?kind=${choice.kind}&sort=popular` : null,
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  );
+  const src = cover ?? popular.data?.items.find((m) => m.coverUrl)?.coverUrl ?? null;
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={on}
+      onClick={onPick}
+      className={cx(
+        'group relative flex h-[84px] flex-col justify-end gap-0.5 overflow-hidden rounded-[16px] p-3 text-left transition-[background-color,box-shadow] duration-200',
+        on
+          ? 'bg-white/[0.14] shadow-[inset_0_0_0_1.5px_#fff]'
+          : 'bg-white/[0.05] hover:bg-white/[0.09]',
+      )}
+    >
+      {src ? (
+        <Cover
+          src={src}
+          alt=""
+          className="absolute -top-2 -right-3.5 w-[62px] rotate-[8deg] !rounded-[8px] opacity-95 shadow-[-6px_8px_20px_rgba(0,0,0,0.5)] transition-transform duration-300 group-hover:rotate-[4deg]"
+        />
+      ) : (
+        choice.kind === 'extension' && (
+          <Puzzle className="text-muted absolute top-3 right-3 size-5" aria-hidden />
+        )
+      )}
+      <span className="relative flex items-center gap-1.5 pr-10 text-[14px] font-bold">
+        <span className="truncate">{choiceLabel(t, choice)}</span>
+        {on && <Check className="size-3.5 shrink-0" strokeWidth={3} aria-hidden />}
+      </span>
+      <span className="text-muted relative truncate pr-10 text-[11.5px]">
+        {count ? t('universe.followed', { count: n(count) }) : t(`universe.desc.${choice.kind}`)}
+      </span>
+    </button>
   );
 }
