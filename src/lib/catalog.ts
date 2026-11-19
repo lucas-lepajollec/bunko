@@ -1,3 +1,4 @@
+import { keepInfo } from './work-info';
 import { airedSince, loadedAnime, naturalEpisode, rollAiring, seasonRef } from './anime-franchise';
 import { firstSeason } from './anime-ids';
 import { KINDS, KIND_IDS, availableKinds, byKindOrder, mixByKind, type Kind } from '@/domain/kinds';
@@ -855,12 +856,16 @@ export async function mediaDetail(
       const row = snapshot;
       if (row && (JSON.parse(row.media_json) as UnifiedMedia).id === id) {
         const old = JSON.parse(row.media_json) as UnifiedMedia;
-        const fresh = {
-          ...old,
-          ...detail,
-          sources: old.sources,
-          ...(old.kindOverride ? { kindOverride: old.kindOverride } : {}),
-        };
+        // A work of one's own keeps the facts it took from its catalog work.
+        const fresh = keepInfo(
+          {
+            ...old,
+            ...detail,
+            sources: old.sources,
+            ...(old.kindOverride ? { kindOverride: old.kindOverride } : {}),
+          },
+          old,
+        );
         db()
           .prepare('UPDATE tracked_media SET media_json=?,title=? WHERE id=? AND media_json=?')
           .run(JSON.stringify(fresh), fresh.title, followed.id, row.media_json);

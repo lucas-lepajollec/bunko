@@ -43,6 +43,12 @@ export interface UnifiedMedia {
   kindOverride?: Exclude<DiscoverKind, 'all'>;
   /** A work from an extension's own catalog: the section that extension declared for it. */
   extensionSection?: ExtensionSectionRef;
+  /**
+   * A work of one's own (made from a server item) that takes its facts from a catalog work:
+   * synopsis, artwork, genres, score, recommendations and universe, while its identity, episodes
+   * or chapters and server links stay its own.
+   */
+  metadataFrom?: { id: string; title: string };
   id: string;
   type: MediaType;
   title: string;

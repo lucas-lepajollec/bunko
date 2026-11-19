@@ -106,6 +106,11 @@ export const PATCH = route(async (r) => {
   const input = await body(r, trackPatch);
   if (input.autoDownload) requirePermission('downloads');
   requireFollowed(input.id);
+  // A work of one's own takes (or stops taking) its facts from a catalog work: nothing else.
+  if (input.metadataFrom !== undefined) {
+    const { linkWorkInfo } = await import('@/lib/work-info');
+    return json(await linkWorkInfo(input.id, input.metadataFrom, r.signal));
+  }
   // Personal marks (like, score, kind) change nothing else: no identity or source work.
   const marks = ['favorite', 'rating', 'kindOverride'] as const;
   if (

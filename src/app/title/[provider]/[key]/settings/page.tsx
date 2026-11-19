@@ -229,6 +229,7 @@ function WorkSettings({ media }: { media: MediaDetail }) {
                   router.replace(`${mediaHref(u.media.id)}/settings?s=catalog`);
                 })
               }
+              onInfo={(metadataFrom) => run(() => patch({ metadataFrom }))}
               onDetach={() =>
                 run(async () => {
                   const u = await patch({ offCatalog: true });

@@ -1407,6 +1407,14 @@ const en: Dictionary = {
   'kavitaLinks.to': 'To',
   'kavitaLinks.state.none': 'Left out',
   'kavitaLinks.empty': 'Kavita lists no chapter or volume for this series yet.',
+  'match.infoFrom': 'Facts, recommendations and universe from “{title}”.',
+  'match.infoStop': 'Use its own again',
+  'match.mode.info': 'Take its facts',
+  'match.modeHint.info':
+    'Synopsis, artwork, recommendations and universe from the catalog; your episodes, chapters and server links stay.',
+  'match.mode.replace': 'Become that work',
+  'match.modeHint.replace':
+    'The catalog work replaces this one, with its own episodes or chapters.',
   'kavita.refresh': 'Refresh from Kavita',
   'kavita.refreshChanged': 'Kavita’s files are up to date in Bunko.',
   'kavita.refreshSame':
@@ -3438,6 +3446,14 @@ const fr: Dictionary = {
   'kavitaLinks.to': 'À',
   'kavitaLinks.state.none': 'Écarté',
   'kavitaLinks.empty': 'Kavita ne liste encore aucun chapitre ni tome pour cette série.',
+  'match.infoFrom': 'Infos, recos et univers de « {title} ».',
+  'match.infoStop': 'Revenir aux siennes',
+  'match.mode.info': 'Prendre ses infos',
+  'match.modeHint.info':
+    'Résumé, affiches, recos et univers du catalogue ; tes épisodes, chapitres et liaisons serveur restent.',
+  'match.mode.replace': 'Devenir cette œuvre',
+  'match.modeHint.replace':
+    'L’œuvre du catalogue remplace celle-ci, avec ses propres épisodes ou chapitres.',
   'kavita.refresh': 'Actualiser depuis Kavita',
   'kavita.refreshChanged': 'Les fichiers de Kavita sont à jour dans Bunko.',
   'kavita.refreshSame':
@@ -5465,6 +5481,14 @@ const es: Dictionary = {
   'kavitaLinks.to': 'Hasta',
   'kavitaLinks.state.none': 'Descartado',
   'kavitaLinks.empty': 'Kavita aún no lista capítulos ni tomos de esta serie.',
+  'match.infoFrom': 'Datos, recomendaciones y universo de «{title}».',
+  'match.infoStop': 'Volver a las suyas',
+  'match.mode.info': 'Tomar sus datos',
+  'match.modeHint.info':
+    'Sinopsis, imágenes, recomendaciones y universo del catálogo; tus episodios, capítulos y enlaces se mantienen.',
+  'match.mode.replace': 'Convertirse en esa obra',
+  'match.modeHint.replace':
+    'La obra del catálogo reemplaza a esta, con sus propios episodios o capítulos.',
   'kavita.refresh': 'Actualizar desde Kavita',
   'kavita.refreshChanged': 'Los archivos de Kavita están al día en Bunko.',
   'kavita.refreshSame':
@@ -7500,6 +7524,13 @@ const de: Dictionary = {
   'kavitaLinks.to': 'Bis',
   'kavitaLinks.state.none': 'Ausgelassen',
   'kavitaLinks.empty': 'Kavita listet für diese Serie noch keine Kapitel oder Bände.',
+  'match.infoFrom': 'Infos, Empfehlungen und Universum von „{title}“.',
+  'match.infoStop': 'Wieder eigene nutzen',
+  'match.mode.info': 'Infos übernehmen',
+  'match.modeHint.info':
+    'Inhalt, Bilder, Empfehlungen und Universum aus dem Katalog; deine Folgen, Kapitel und Server-Verknüpfungen bleiben.',
+  'match.mode.replace': 'Zu diesem Werk werden',
+  'match.modeHint.replace': 'Das Katalogwerk ersetzt dieses, mit eigenen Folgen oder Kapiteln.',
   'kavita.refresh': 'Aus Kavita aktualisieren',
   'kavita.refreshChanged': 'Die Kavita-Dateien sind in Bunko aktuell.',
   'kavita.refreshSame':
@@ -9528,6 +9559,14 @@ const it: Dictionary = {
   'kavitaLinks.to': 'A',
   'kavitaLinks.state.none': 'Escluso',
   'kavitaLinks.empty': 'Kavita non elenca ancora capitoli o volumi per questa serie.',
+  'match.infoFrom': 'Informazioni, consigli e universo di «{title}».',
+  'match.infoStop': 'Torna alle sue',
+  'match.mode.info': 'Prendi le informazioni',
+  'match.modeHint.info':
+    'Trama, immagini, consigli e universo dal catalogo; i tuoi episodi, capitoli e collegamenti restano.',
+  'match.mode.replace': 'Diventare quell’opera',
+  'match.modeHint.replace':
+    'L’opera del catalogo sostituisce questa, con i propri episodi o capitoli.',
   'kavita.refresh': 'Aggiorna da Kavita',
   'kavita.refreshChanged': 'I file di Kavita sono aggiornati in Bunko.',
   'kavita.refreshSame':

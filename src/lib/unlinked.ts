@@ -109,7 +109,8 @@ export function sheetMedia(
     type: def.mediaType,
     // Reading kinds carry their format (a manga series filed as a novel becomes one).
     format: def.family === 'reading' ? (def.formats[0] ?? base.format) : base.format,
-    kindOverride: kind,
+    // Only a kind other than the item's own is an override (no "Anime · Anime").
+    ...(kindOfMedia(base) === kind && kind !== 'extension' ? {} : { kindOverride: kind }),
     ...(kind === 'extension' && section ? { extensionSection: section } : {}),
     title,
     year: year ?? base.year,
