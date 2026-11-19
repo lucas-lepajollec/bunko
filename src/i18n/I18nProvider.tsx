@@ -1,4 +1,5 @@
 'use client';
+import { numberFormat } from '@/lib/intl';
 import {
   createContext,
   useContext,
@@ -35,7 +36,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       setLanguage,
       t: (key, variables) =>
         interpolate(messages[language][key] ?? messages.en[key] ?? key, variables),
-      n: (value, options) => new Intl.NumberFormat(locale, options).format(value),
+      n: (value, options) => numberFormat(locale, options).format(value),
     };
   }, [language, setLanguage]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

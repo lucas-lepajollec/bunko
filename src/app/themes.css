@@ -69,15 +69,24 @@
   overflow: hidden;
   pointer-events: none;
 }
+/* Blurred at a tenth of its size then scaled up: the same look as a 110px blur at full size, for a
+   hundredth of the work (it no longer slows menus opening on phones). */
 .ambient img {
   position: absolute;
-  inset: -10%;
-  width: 120%;
-  height: 120%;
+  top: -10%;
+  left: -10%;
+  width: 12%;
+  height: 12%;
   object-fit: cover;
-  filter: blur(110px) saturate(1.9) brightness(0.6);
+  transform: scale(10);
+  transform-origin: top left;
+  filter: blur(11px) saturate(1.9) brightness(0.6);
   opacity: 0.62;
   transition: opacity 600ms ease;
+  will-change: transform;
+}
+:root[data-theme='cine'] .ambient {
+  contain: strict;
 }
 /* A cinema veil: light from the top, edges in shadow, the colour kept faint. */
 .ambient::after {
@@ -386,4 +395,27 @@
 :root[data-theme='cine'] .settings-page input[type='checkbox']:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* Phones: menus, sheets and overlays are opaque instead of blurring what is behind them; a live
+   blur under a moving sheet is the costliest thing a phone can draw. */
+@media (max-width: 767px) {
+  .header-fade {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  :root[data-theme='cine'] .ui-panel {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--color-panel);
+  }
+  .sheet-overlay {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  :root[data-theme='cine'] .app-tabbar {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: color-mix(in oklab, var(--color-bg) 96%, transparent);
+  }
 }

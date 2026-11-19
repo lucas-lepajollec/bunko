@@ -1,3 +1,4 @@
+import { numberFormat } from '@/lib/intl';
 import type { LibraryMark, TrackedMedia } from '@/types/shared';
 import { workProgress } from './progress';
 
@@ -45,5 +46,5 @@ export const roundRating = (value: number) => Math.round(value * 10) / 10;
 
 /** "8.3" / "8,3" in the reader's locale, whole scores without decimals. */
 export function formatRating(rating: number, locale: string) {
-  return rating.toLocaleString(locale, { maximumFractionDigits: 1 });
+  return numberFormat(locale, { maximumFractionDigits: 1 }).format(rating);
 }

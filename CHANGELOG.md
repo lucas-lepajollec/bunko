@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Faster on phones, in both looks. Number, date and relative-time formatters are built once per
+  locale and options instead of for every card (they were the hottest function when a page
+  opened). The planning builds only the day shown on phones instead of the whole week (the worst
+  frozen frame on a slowed phone went from about 0.6 s to 0.17 s). Ciné: the page background is
+  blurred at a tenth of its size then scaled up (same look, far less drawing), and on phones
+  menus, sheets, overlays and the tab bar no longer blur what is behind them. The 18+ switch of
+  the type menu takes its own line on phones instead of overflowing sideways.
+
 - Ciné polish: each kind in the type menu shows the library work that stands for it (a favorite,
   else the best rated, else the last read or watched), or the kind's most popular catalog work
   when nothing of it is followed; "Everything" shows those covers. Phones get the same type menu.

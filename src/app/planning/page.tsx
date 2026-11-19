@@ -3,7 +3,7 @@ import { SlidingHighlight } from '@/components/sliding-highlight';
 import { useLook } from '@/lib/client/theme';
 import { KIND_IDS, KINDS as KINDS_DEF } from '@/domain/kinds';
 import { MediaLink } from '@/components/media-link';
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useMemo, useState, useSyncExternalStore } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useViewState } from '@/lib/client/view-state';
 import type { DiscoverKind, PlanningItem, PlanningWeek } from '@/types/shared';
@@ -37,9 +37,22 @@ export default function PlanningPage() {
 
 const fold = (value: string) => value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
 
+/** The week shows all its days from this width; below, one day at a time. */
+const WIDE = '(min-width: 1024px)';
+const subscribeWide = (onChange: () => void) => {
+  const query = window.matchMedia(WIDE);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+};
+
 function Planning() {
   const { t, locale } = useI18n();
   const look = useLook();
+  const wide = useSyncExternalStore(
+    subscribeWide,
+    () => window.matchMedia(WIDE).matches,
+    () => true,
+  );
   // The header search filters the week (`?q=`, written by the search field).
   const filterText = fold((useSearchParams().get('q') ?? '').trim());
   const today = isoDay(new Date());
@@ -230,7 +243,9 @@ function Planning() {
                   {/* Loading and partial results are in the activity panel. */}
                   {plan.data?.pending ? '' : t('planning.empty')}
                 </p>
-              ) : (
+              ) : !wide && selected !== d.date ? null : (
+                // Phones show one day: the others are not built at all (a week is hundreds of
+                // covers).
                 <ul className="flex flex-col gap-1">
                   {d.items.map((item, i) => (
                     <PlanningRow key={`${item.media.id}:${item.chapter}:${i}`} item={item} />
