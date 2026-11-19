@@ -257,6 +257,7 @@ function WorkSettings({ media }: { media: MediaDetail }) {
               media={media}
               onPick={(id) => run(() => patch({ kavitaSeriesId: id }))}
               onCoverSync={(kavitaCoverSync) => run(() => patch({ kavitaCoverSync }))}
+              onMap={(kavitaMap) => run(() => patch({ kavitaMap }))}
             />
           ) : (
             <CoverTab

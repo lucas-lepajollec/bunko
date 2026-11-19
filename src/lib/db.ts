@@ -15,6 +15,7 @@ import { getSettings, decrypt } from './settings';
 import { sourceServerKey, sourceConnectionKey } from './source-server';
 import { migrateV14 } from './source-ledger-migration';
 import { projectStock, type StockImport, stockContext } from './owned-stock';
+import { applyKavitaMap, parseKavitaMap } from './kavita-map';
 import { env } from './env';
 import { kavitaLibraryClassification } from './library-kinds';
 import { tenantId, tenantPath, tenantState } from './tenant-context';
@@ -212,6 +213,7 @@ export function db(): Database.Database {
     migrateV28(connection);
     migrateV29(connection);
     migrateV30(connection);
+    migrateV31(connection);
     // Heal any self-referential work_links rows that could hide a root work from the library.
     connection.exec('DELETE FROM work_links WHERE member = root');
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
@@ -845,7 +847,11 @@ function snapshotTracked(id?: number) {
       const sources = JSON.parse(String(r.sources_json)) as TrackedMedia['sources'];
       const sourceStatus = sourceStatuses(id, sources, rawMedia, links.get(id) ?? []);
       const coverChoice = JSON.parse(String(r.cover_choice_json)) as CoverChoice;
-      const kavita = match(rawMedia, r.kavita_series_id as number | null);
+      const kavitaMap = parseKavitaMap(r.kavita_map);
+      const kavita = applyKavitaMap(
+        match(rawMedia, r.kavita_series_id as number | null),
+        kavitaMap,
+      );
       const identity =
         r.off_catalog || /^(kavita|suwayomi|local|jellyfin):/.test(rawMedia.id)
           ? 'off-catalog'
@@ -983,6 +989,7 @@ function snapshotTracked(id?: number) {
         coverChoice,
         kavitaCoverSync: Boolean(r.kavita_cover_sync),
         jellyfinLink: r.jellyfin_link ? JSON.parse(String(r.jellyfin_link)) : null,
+        ...(kavitaMap ? { kavitaMap } : {}),
         kavitaCover:
           !r.kavita_cover_sync || !kavita || !coverUrl
             ? { state: 'none', error: null }
@@ -1633,6 +1640,18 @@ export function migrateV30(database: Database.Database) {
     // Recreates the favorites triggers (its tables exist, its version is passed).
     migrateV28(database);
     database.pragma('user_version=30');
+  })();
+}
+/** Kavita entries linked by hand to chapters or volumes of a work (`tracked_media.kavita_map`). */
+export function migrateV31(database: Database.Database) {
+  database.transaction(() => {
+    if (Number(database.pragma('user_version', { simple: true })) >= 31) return;
+    const columns = database.prepare('PRAGMA table_info(tracked_media)').all() as {
+      name: string;
+    }[];
+    if (!columns.some((c) => c.name === 'kavita_map'))
+      database.exec('ALTER TABLE tracked_media ADD COLUMN kavita_map TEXT');
+    database.pragma('user_version=31');
   })();
 }
 /** Parts of a catalog sheet that a followed work never stores. */

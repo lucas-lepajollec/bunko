@@ -7,6 +7,10 @@
   film or part of the work to a Jellyfin item. The table is prefilled by season, in order or by
   title, and each row can be chosen by hand (`jellyfinLink.episodes`). Rows show automatic,
   by-hand or missing links and the watched state.
+- Reading works get the same Links section for Kavita. A table lists each file of the series
+  (chapter or volume, with its file name) and what it holds of the work: as Kavita numbers it,
+  a range of volumes or chapters chosen by hand (an omnibus holding volumes 4–6), or nothing of
+  the work. Owned volumes and chapters, counts and the reader follow (`kavitaMap`, schema v31).
 - **Library → Unlinked** (replaces *In Kavita*) lists what Jellyfin and Kavita hold that no work
   is linked to. Each item can be followed as found (Kavita), linked to a catalog work (then
   fine-tuned in its Links), made a work of its own of any kind (extension sections included,

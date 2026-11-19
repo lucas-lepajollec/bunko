@@ -890,6 +890,23 @@ export type JellyfinLink =
       episodes?: Record<string, string | null>;
     }
   | 'none';
+/**
+ * What one entry of a Kavita series holds, chosen by hand: a range of chapters or volumes of the
+ * work (`null`: nothing of the work). Keys: `c:<number>` for a chapter entry, `v:<number>` for a
+ * volume entry, as Kavita numbers them.
+ */
+export type KavitaEntryLink = { unit: 'chapter' | 'volume'; from: number; to: number } | null;
+export type KavitaMap = Record<string, KavitaEntryLink>;
+/** One entry of a Kavita series (a chapter or a volume, with its file), for linking by hand. */
+export interface KavitaEntry {
+  key: string;
+  unit: 'chapter' | 'volume';
+  number: number;
+  /** Volume the chapter belongs to, as Kavita reads it. */
+  volume: number | null;
+  /** File name (no folder), when Kavita reported one. */
+  file: string | null;
+}
 /** One video item of a Jellyfin series (episode, or the film itself), for linking by hand. */
 export interface JellyfinItem {
   id: string;
@@ -955,6 +972,8 @@ export interface JellyfinSeriesSummary {
 export interface TrackedMedia {
   id: number;
   jellyfinLink?: JellyfinLink | null;
+  /** Kavita entries linked by hand to chapters or volumes of the work (absent: as Kavita numbers them). */
+  kavitaMap?: KavitaMap | null;
   /** A Kavita series holds this work's files (even a single book with no chapter numbers). */
   inKavita?: boolean;
   /** Episodes (or the film) the Jellyfin library holds for this work; absent outside video. */

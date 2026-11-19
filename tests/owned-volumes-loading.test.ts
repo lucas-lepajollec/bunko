@@ -445,3 +445,23 @@ it('propagates pending and failed release refreshes through feeds and cached pla
   expect(planning({})).toMatchObject({ pending: false, partial: true });
   expect(await homeFeed()).toMatchObject({ pending: false, partial: true });
 });
+
+it('counts Kavita files linked by hand as the chapters or volumes chosen, everywhere', async () => {
+  const t = inventory();
+  // File 1 holds volumes 1–3 (an omnibus), file 2 holds nothing of the work.
+  await patch(t.id, {
+    kavitaMap: { 'c:1': { unit: 'volume', from: 1, to: 3 }, 'c:2': null },
+  });
+  const entry = getTracked(t.id)!;
+  expect(entry.kavitaMap).toMatchObject({ 'c:2': null });
+  expect(entry.ownedVolumes).toEqual([1, 2, 3]);
+  expect(entry.ownedChapterCount).toBe(11);
+  const stock = ownedStock(entry.media);
+  expect(stock.volumes).toEqual([1, 2, 3]);
+  expect(stock.chapters.map((c) => c.number)).toEqual(numbers.slice(2));
+  // Back to Kavita's numbering.
+  await patch(t.id, { kavitaMap: null });
+  const reset = getTracked(t.id)!;
+  expect(reset.kavitaMap).toBeUndefined();
+  expect(reset.ownedChapterCount).toBe(13);
+});
