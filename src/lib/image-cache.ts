@@ -2,7 +2,6 @@ import { sourceServerKey } from './source-server';
 import { tenantState } from './tenant-context';
 import { createHash, randomUUID } from 'node:crypto';
 import {
-  createReadStream,
   readSync,
   openSync,
   closeSync,
@@ -14,7 +13,6 @@ import { mkdir, open, rename, unlink, readdir, stat } from 'node:fs/promises';
 import { setImmediate as yieldIO } from 'node:timers/promises';
 import { tenantSignal } from './tenant-lifecycle';
 import path from 'node:path';
-import { Readable } from 'node:stream';
 import { statement, dataDir } from './db';
 import { getSettings } from './settings';
 import { boundedBuffer } from './chapter-pages';
@@ -370,13 +368,22 @@ export async function cachedImageResponse(
     .some((tag) => tag.trim() === '*' || tag.trim().replace(/^W\//, '') === header.etag);
   if (matches) return new Response(null, { status: 304, headers });
   try {
-    const fd = openSync(filename(digest), 'r');
-    return new Response(
-      Readable.toWeb(
-        createReadStream(filename(digest), { fd, autoClose: true, start: header.start }),
-      ) as ReadableStream<Uint8Array>,
-      { headers },
-    );
+    const file = await open(filename(digest), 'r');
+    try {
+      const length = Math.max(0, header.size - header.start);
+      const body = Buffer.allocUnsafe(length);
+      let offset = 0;
+      while (offset < length) {
+        const { bytesRead } = await file.read(body, offset, length - offset, header.start + offset);
+        if (bytesRead <= 0) break;
+        offset += bytesRead;
+      }
+      return new Response(new Uint8Array(body.subarray(0, offset)), {
+        headers: { ...headers, 'Content-Length': String(offset) },
+      });
+    } finally {
+      await file.close();
+    }
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
     return imageResponse(request, await cachedImage(key, load));

@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
-  createReadStream,
   mkdirSync,
   openSync,
   closeSync,
@@ -11,7 +10,7 @@ import {
   existsSync,
   readFileSync,
 } from 'node:fs';
-import { Readable } from 'node:stream';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { dataDir, db, statement } from './db';
 import type { CachedImage } from './image-cache';
@@ -122,7 +121,7 @@ export function storeCover(
     remove(temporary);
   }
 }
-export function storedCoverResponse(request: Request, id: number) {
+export async function storedCoverResponse(request: Request, id: number) {
   const cover = storedCover(id);
   const version = new URL(request.url).searchParams.get('v');
   if (!cover || (version !== null && version !== cover.hash))
@@ -144,17 +143,14 @@ export function storedCoverResponse(request: Request, id: number) {
       .some((tag) => tag.trim() === '*' || tag.trim().replace(/^W\//, '') === etag)
   )
     return new Response(null, { status: 304, headers });
-  let fd: number;
+  let bytes: Buffer;
   try {
-    fd = openSync(filename(cover), 'r');
+    bytes = await readFile(filename(cover));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
     throw new AppError('NOT_FOUND', 'Cover not found', 404);
   }
-  return new Response(
-    Readable.toWeb(
-      createReadStream(filename(cover), { fd, autoClose: true }),
-    ) as ReadableStream<Uint8Array>,
-    { headers },
-  );
+  return new Response(new Uint8Array(bytes), {
+    headers: { ...headers, 'Content-Length': String(bytes.byteLength) },
+  });
 }

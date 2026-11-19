@@ -3,9 +3,11 @@ import { readFileSync } from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import type { DiscoverPage } from '@/types/shared';
 import { mergeStableKeys } from '@/lib/client/stable-order';
 import { clearWarmCovers, isCoverWarm, markCoverWarm } from '@/components/managed-image';
+import { safeWebStream } from '@/lib/safe-stream';
 
 const folder = mkdtempSync(path.join(tmpdir(), 'bunko-stable-order-'));
 process.env.BUNKO_DATA_DIR = folder;
@@ -131,5 +133,26 @@ describe('atomic stale-while-revalidate in discoverAll', () => {
     });
 
     vi.useRealTimers();
+  });
+});
+
+describe('safeWebStream disconnect resilience', () => {
+  it('ignores late Node stream chunks and close events after client cancellation', async () => {
+    const source = new Readable({ read() {} });
+    const web = safeWebStream(source);
+    const reader = web.getReader();
+
+    source.push(Buffer.from('hello'));
+    const first = await reader.read();
+    expect(Buffer.from(first.value!).toString()).toBe('hello');
+
+    await reader.cancel();
+    // Late data/end emissions after client cancel must not throw ERR_INVALID_STATE.
+    expect(() => {
+      source.emit('data', Buffer.from('late'));
+      source.emit('end');
+      source.emit('close');
+    }).not.toThrow();
+    expect(source.destroyed).toBe(true);
   });
 });
