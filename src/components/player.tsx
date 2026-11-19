@@ -1,10 +1,20 @@
 'use client';
 import type Hls from 'hls.js';
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import {
+  Fragment,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import { preload } from 'swr';
 import type {
   ContinueMedia,
   PlaybackInfo,
+  VideoAddon,
   VideoStream,
   VideoStreams,
   VideoSubtitle,
@@ -267,7 +277,7 @@ export function Player({
       role="dialog"
       aria-modal
       aria-label={`${episode.title} · ${episode.label}`}
-      className="theme-lock fixed inset-0 z-[70] bg-black text-white"
+      className="theme-lock player-root fixed inset-0 z-[70] bg-black text-white"
     >
       {source && (
         <Screen
@@ -276,10 +286,14 @@ export function Player({
           onUnplayable={nextStream}
           failure={
             failedAll
-              ? `${t('player.failedAll', { count: tried.length })} ${t(`player.reason.${failedAll}`)}`
+              ? {
+                  title: t('player.failedAll', { count: tried.length }),
+                  reason: t(`player.reason.${failedAll}`),
+                }
               : null
           }
           metrics={metrics}
+          nextLabel={next?.label}
           episode={episode}
           onClose={onClose}
           onFinished={finishing}
@@ -287,149 +301,373 @@ export function Player({
           onSources={() => setPicking(true)}
         />
       )}
-      {(picking || !source) && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 p-2 backdrop-blur-sm sm:p-4">
-          {/* Never taller than the player (an inline player on a phone is short): the list
-              scrolls inside the panel, the header stays. */}
-          <div className="border-line flex max-h-full min-h-0 w-full max-w-xl flex-col gap-2 overflow-hidden rounded-2xl border bg-panel p-3 sm:gap-3 sm:rounded-3xl sm:p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex min-w-0 flex-col">
-                <span className="font-display truncate text-xl font-bold">{episode.title}</span>
-                <span className="text-mid text-sm">{episode.label}</span>
-              </div>
+      {!source && streams.isLoading ? (
+        <SearchingScreen episode={episode} onClose={onClose} />
+      ) : (
+        (picking || !source) && (
+          <div className="absolute inset-0 z-10 overflow-hidden">
+            {source ? (
               <button
                 type="button"
-                onClick={() => (source ? setPicking(false) : onClose())}
                 aria-label={t('common.close')}
-                className="text-mid flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-            {list.length > 0 && (
-              <p className="text-muted -mt-1 px-1 text-xs">{t('player.versionsEstimated')}</p>
+                onClick={() => setPicking(false)}
+                className="anim-overlay absolute inset-0 bg-black/45"
+                data-state="open"
+              />
+            ) : (
+              <Artwork episode={episode} />
             )}
-            <ul className="-mx-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain px-1">
-              {episode.jellyfinItemId && (
-                <SourceRow
-                  title="Jellyfin"
-                  detail={t('player.fromLibrary')}
-                  active={source?.kind === 'jellyfin'}
-                  onClick={() => {
-                    setSource({ kind: 'jellyfin', itemId: episode.jellyfinItemId! });
-                    setPicking(false);
-                  }}
-                />
-              )}
-              {streams.isLoading && (
-                <li className="text-mid flex items-center gap-2 px-3 py-3 text-sm">
-                  <Spinner /> {t('player.searching')}
-                </li>
-              )}
-              {shown.map((s) => {
-                const playable = browserPlayable(s);
-                return (
-                  <SourceRow
-                    key={s.id}
-                    title={s.name}
-                    detail={s.title}
-                    badges={[
-                      t(`player.version.${s.version ?? 'unknown'}`),
-                      s.quality ? (s.quality >= 2160 ? '4K' : `${s.quality}p`) : null,
-                      tried.includes(s.id) ? t('player.failedShort') : null,
-                    ]}
-                    disabled={!playable && !s.externalUrl}
-                    note={
-                      playable
-                        ? s.webReady
-                          ? null
-                          : t('player.mayNotPlay')
-                        : s.kind === 'torrent'
-                          ? t('player.torrent')
-                          : t('player.external')
-                    }
-                    active={source?.kind === 'stream' && source.stream.id === s.id}
-                    onClick={() => {
-                      if (playable) play(s, false);
-                      else if (s.externalUrl) window.open(s.externalUrl, '_blank', 'noopener');
-                    }}
-                  />
-                );
-              })}
-              {torrents.length > 0 && !showTorrents && (
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => setShowTorrents(true)}
-                    className="text-mid flex w-full flex-col gap-0.5 rounded-2xl px-3 py-2.5 text-left text-sm hover:bg-white/[0.06]"
-                  >
-                    <span>{t('player.torrentsHidden', { count: torrents.length })}</span>
-                    <span className="text-muted text-xs">{t('player.torrentsHint')}</span>
-                  </button>
-                </li>
-              )}
-              {!streams.isLoading && !episode.jellyfinItemId && !streams.data?.streams.length && (
-                <li className="text-mid px-3 py-4 text-sm leading-relaxed">
-                  {episode.seasonAnilistId || episode.imdb || episode.streamsUrl
-                    ? t('player.noStreams')
-                    : t('player.noIds')}
-                </li>
-              )}
-            </ul>
+            <SourceSheet
+              episode={episode}
+              loading={streams.isLoading}
+              streams={shown}
+              torrents={showTorrents ? 0 : torrents.length}
+              onShowTorrents={() => setShowTorrents(true)}
+              hasIds={Boolean(episode.seasonAnilistId || episode.imdb || episode.streamsUrl)}
+              tried={tried}
+              current={source}
+              best={bestStream(list)?.id ?? null}
+              onClose={() => (source ? setPicking(false) : onClose())}
+              onJellyfin={() => {
+                setSource({ kind: 'jellyfin', itemId: episode.jellyfinItemId! });
+                setPicking(false);
+              }}
+              onPick={(s) => {
+                if (browserPlayable(s)) play(s, false);
+                else if (s.externalUrl) window.open(s.externalUrl, '_blank', 'noopener');
+              }}
+            />
           </div>
-        </div>
+        )
       )}
     </div>
   );
 }
 
-function SourceRow({
-  title,
-  detail,
-  badges,
-  note,
-  active,
-  disabled,
-  onClick,
-}: {
-  title: string;
-  detail: string;
-  badges?: (string | null)[];
-  note?: string | null;
-  active?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
+/** While the extensions are asked for this episode: the work, and each extension being asked. */
+function SearchingScreen({ episode, onClose }: { episode: PlayerEpisode; onClose: () => void }) {
+  const { t } = useI18n();
+  const addons = useApi<VideoAddon[]>('/api/video/addons');
+  const askable = (addons.data ?? []).filter((a) => a.resources.includes('stream') && !a.error);
+  const cover = episode.resume?.media.coverUrl ?? null;
   return (
-    <li>
+    <div className="absolute inset-0 z-10 flex items-center justify-center overflow-hidden p-4">
+      <Artwork episode={episode} />
       <button
         type="button"
-        disabled={disabled}
-        onClick={onClick}
-        className={cx(
-          'flex w-full flex-col gap-0.5 rounded-2xl px-3 py-2.5 text-left transition-colors disabled:opacity-40',
-          active ? 'bg-white/[0.1]' : 'hover:bg-white/[0.06]',
-        )}
+        onClick={onClose}
+        aria-label={t('player.back')}
+        className="absolute top-4 left-4 flex size-11 items-center justify-center rounded-full bg-white/[0.12] backdrop-blur-md hover:bg-white/[0.2] md:top-6 md:left-6"
       >
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] font-medium">
-          <span className="min-w-0 break-words">{title}</span>
-          {badges
-            ?.filter((b): b is string => Boolean(b))
-            .map((b) => (
-              <span
-                key={b}
-                className="shrink-0 rounded-full bg-white/[0.1] px-2 py-0.5 text-[11px] font-semibold"
-              >
-                {b}
-              </span>
-            ))}
-        </span>
-        {detail && (
-          <span className="text-muted line-clamp-2 text-xs whitespace-pre-line">{detail}</span>
-        )}
-        {note && <span className="text-warn text-xs">{note}</span>}
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden
+        >
+          <path d="m15 18-6-6 6-6" />
+        </svg>
       </button>
-    </li>
+      <div className="anim-rise relative flex w-full max-w-[520px] flex-col items-center gap-5 text-center">
+        {cover && (
+          // eslint-disable-next-line @next/next/no-img-element -- the work's cover, already cached
+          <img
+            src={cover}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="w-[104px] rounded-[14px] object-cover shadow-[0_24px_60px_rgba(0,0,0,0.6)] md:w-[120px]"
+          />
+        )}
+        <span className="flex flex-col gap-1">
+          <span className="font-display text-[30px] leading-none font-bold md:text-[40px]">
+            {episode.title}
+          </span>
+          <span className="text-[15px] text-white/75">{episode.label}</span>
+        </span>
+        <div className="flex w-full flex-col gap-1.5 rounded-[20px] border border-white/10 bg-[#0e141b]/85 p-3.5 text-left backdrop-blur-2xl">
+          <span className="flex items-center gap-2.5 px-1 pb-1.5 text-sm">
+            <Spinner className="size-4" />
+            {t('player.searching')}
+          </span>
+          {askable.map((a) => (
+            <span
+              key={a.id}
+              className="flex items-center gap-3 rounded-[12px] bg-white/[0.04] px-3 py-2 text-[13.5px]"
+            >
+              <span aria-hidden className="size-2 shrink-0 animate-pulse rounded-full bg-white" />
+              <span className="flex-1 truncate">{a.name ?? a.host}</span>
+              <span className="text-xs text-white/55">{t('player.asking')}</span>
+            </span>
+          ))}
+        </div>
+        <span className="text-[12.5px] text-white/55">{t('player.startsAlone')}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The sources of an episode in a side panel (a sheet from the bottom on phones): the library copy
+ * first, quick filters, then the streams grouped by version with their quality, the advised one
+ * marked and the failed ones faded.
+ */
+function SourceSheet({
+  episode,
+  loading,
+  streams,
+  torrents,
+  onShowTorrents,
+  hasIds,
+  tried,
+  current,
+  best,
+  onClose,
+  onJellyfin,
+  onPick,
+}: {
+  episode: PlayerEpisode;
+  loading: boolean;
+  streams: VideoStream[];
+  torrents: number;
+  onShowTorrents: () => void;
+  hasIds: boolean;
+  tried: string[];
+  current: PlaySource | null;
+  best: string | null;
+  onClose: () => void;
+  onJellyfin: () => void;
+  onPick: (s: VideoStream) => void;
+}) {
+  const { t, n } = useI18n();
+  const [filter, setFilter] = useState<string>('all');
+  const versions = [...new Set(streams.map((s) => s.version ?? 'unknown'))];
+  const hd = streams.some((s) => (s.quality ?? 0) >= 1080);
+  const filters = [
+    'all',
+    ...versions,
+    ...(hd && streams.some((s) => (s.quality ?? 0) < 1080) ? ['hd'] : []),
+  ];
+  const kept = streams.filter((s) =>
+    filter === 'all'
+      ? true
+      : filter === 'hd'
+        ? (s.quality ?? 0) >= 1080
+        : (s.version ?? 'unknown') === filter,
+  );
+  // The advised stream's version first, then in the order the extensions gave.
+  const order = [
+    ...new Set([
+      streams.find((s) => s.id === best)?.version ?? 'unknown',
+      ...kept.map((s) => s.version ?? 'unknown'),
+    ]),
+  ];
+  const groups = order
+    .map((v) => ({ v, items: kept.filter((s) => (s.version ?? 'unknown') === v) }))
+    .filter((g) => g.items.length);
+  return (
+    <div
+      role="dialog"
+      aria-label={t('player.sources')}
+      className="sheet-in absolute inset-x-0 bottom-0 flex max-h-[78%] flex-col overflow-hidden rounded-t-[28px] border border-white/10 bg-[#0e141b]/95 shadow-[0_30px_80px_rgba(0,0,0,0.6)] backdrop-blur-2xl md:inset-y-5 md:right-5 md:left-auto md:max-h-none md:w-[460px] md:rounded-[26px]"
+    >
+      <span
+        aria-hidden
+        className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-white/25 md:hidden"
+      />
+      <div className="flex items-start gap-3 px-5 pt-4 pb-3 md:pt-5">
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="text-[11px] font-semibold tracking-[0.14em] text-white/55 uppercase">
+            {t('player.sources')}
+          </span>
+          <span className="mt-1 truncate text-[19px] font-bold">
+            {episode.title} · {episode.label}
+          </span>
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('common.close')}
+          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/[0.08] hover:bg-white/[0.14]"
+        >
+          ✕
+        </button>
+      </div>
+      {filters.length > 2 && (
+        <div className="no-scrollbar flex shrink-0 gap-1.5 overflow-x-auto px-5 pb-3">
+          {filters.map((f) => (
+            <button
+              key={f}
+              type="button"
+              aria-pressed={filter === f}
+              onClick={() => setFilter(f)}
+              className={cx(
+                'h-8 shrink-0 rounded-full px-3.5 text-[13px] transition-colors',
+                filter === f
+                  ? 'bg-white font-bold text-black'
+                  : 'bg-white/[0.07] text-white/80 hover:bg-white/[0.12]',
+              )}
+            >
+              {f === 'all'
+                ? t('player.filterAll')
+                : f === 'hd'
+                  ? '1080p+'
+                  : t(`player.version.${f}`)}
+            </button>
+          ))}
+        </div>
+      )}
+      <ul className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain px-3 pb-3">
+        {episode.jellyfinItemId && (
+          <li>
+            <button
+              type="button"
+              onClick={onJellyfin}
+              className={cx(
+                'flex w-full items-center gap-3 rounded-[16px] p-3 text-left transition-colors',
+                current?.kind === 'jellyfin'
+                  ? 'border border-white/25 bg-white/[0.1]'
+                  : 'bg-white/[0.05] hover:bg-white/[0.09]',
+              )}
+            >
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-[12px] bg-white text-black">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden
+                >
+                  <path d="M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2Z" />
+                </svg>
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="flex items-center gap-2 text-[15px] font-bold">
+                  Jellyfin
+                  {current?.kind === 'jellyfin' && <Badge strong>{t('player.playing')}</Badge>}
+                </span>
+                <span className="truncate text-xs text-white/55">{t('player.fromLibrary')}</span>
+              </span>
+            </button>
+          </li>
+        )}
+        {loading && (
+          <li className="flex items-center gap-2.5 px-3 py-3 text-sm text-white/75">
+            <Spinner /> {t('player.searching')}
+          </li>
+        )}
+        {groups.map((g) => (
+          <Fragment key={g.v}>
+            <li className="px-2 pt-2.5 pb-0.5 text-[11px] font-semibold tracking-[0.14em] text-white/55 uppercase">
+              {t(`player.version.${g.v}`)} · {n(g.items.length)}
+            </li>
+            {g.items.map((s) => {
+              const playable = browserPlayable(s);
+              const failed = tried.includes(s.id);
+              const active = current?.kind === 'stream' && current.stream.id === s.id;
+              const note = !playable
+                ? t(s.kind === 'torrent' ? 'player.torrent' : 'player.external')
+                : s.webReady
+                  ? null
+                  : t('player.mayNotPlay');
+              return (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    disabled={!playable && !s.externalUrl}
+                    onClick={() => onPick(s)}
+                    className={cx(
+                      'flex w-full items-center gap-3 rounded-[16px] p-3 text-left transition-colors disabled:opacity-40',
+                      active
+                        ? 'border border-white/25 bg-white/[0.1]'
+                        : failed
+                          ? 'opacity-45 hover:opacity-70'
+                          : 'bg-white/[0.04] hover:bg-white/[0.09]',
+                    )}
+                  >
+                    <span
+                      className={cx(
+                        'flex h-10 w-[54px] shrink-0 items-center justify-center rounded-[12px] text-[13px] font-extrabold',
+                        (s.quality ?? 0) >= 2160 ? 'bg-white text-black' : 'bg-white/[0.1]',
+                      )}
+                    >
+                      {s.quality ? (s.quality >= 2160 ? '4K' : `${s.quality}p`) : '—'}
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="flex flex-wrap items-center gap-1.5 text-[14.5px] font-semibold">
+                        <span className="min-w-0 truncate">{s.name}</span>
+                        {s.id === best && !failed && (
+                          <Badge tone="ok">{t('player.recommended')}</Badge>
+                        )}
+                        {active && <Badge strong>{t('player.playing')}</Badge>}
+                        {failed && <Badge>{t('player.failedShort')}</Badge>}
+                      </span>
+                      {s.title && (
+                        <span className="line-clamp-2 text-xs whitespace-pre-line text-white/55">
+                          {s.title}
+                        </span>
+                      )}
+                      {note && <span className="text-xs text-[#fbbf24]">{note}</span>}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </Fragment>
+        ))}
+        {torrents > 0 && (
+          <li>
+            <button
+              type="button"
+              onClick={onShowTorrents}
+              className="flex w-full flex-col gap-0.5 rounded-[16px] border border-dashed border-white/15 px-3 py-2.5 text-left text-sm text-white/80 hover:bg-white/[0.05]"
+            >
+              <span>{t('player.torrentsHidden', { count: torrents })}</span>
+              <span className="text-xs text-white/55">{t('player.torrentsHint')}</span>
+            </button>
+          </li>
+        )}
+        {!loading && !episode.jellyfinItemId && !streams.length && !torrents && (
+          <li className="px-3 py-4 text-sm leading-relaxed text-white/75">
+            {hasIds ? t('player.noStreams') : t('player.noIds')}
+          </li>
+        )}
+      </ul>
+      {streams.length > 0 && (
+        <p className="border-t border-white/[0.08] px-5 py-3 text-[11.5px] text-white/50">
+          {t('player.versionsEstimated')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Badge({
+  children,
+  strong,
+  tone,
+}: {
+  children: React.ReactNode;
+  strong?: boolean;
+  tone?: 'ok';
+}) {
+  return (
+    <span
+      className={cx(
+        'inline-flex h-[22px] shrink-0 items-center rounded-full px-2 text-[11px] font-bold',
+        strong
+          ? 'bg-white text-black'
+          : tone === 'ok'
+            ? 'bg-[#34d399]/18 text-[#6ee7b7]'
+            : 'bg-white/[0.1] text-white/85',
+      )}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -443,6 +681,7 @@ function Screen({
   onUnplayable,
   failure,
   metrics,
+  nextLabel,
 }: {
   source: PlaySource;
   episode: PlayerEpisode;
@@ -452,9 +691,11 @@ function Screen({
   onSources: () => void;
   /** Every way to load this stream failed: true when the player moved on to another one. */
   onUnplayable?: (type: StreamError) => boolean;
-  /** Every automatic try failed: the message to show. */
-  failure?: string | null;
+  /** Every automatic try failed: what happened and why. */
+  failure?: { title: string; reason: string } | null;
   metrics?: RefObject<PlaybackMetrics>;
+  /** The next episode's label ("Ép. 7") for its button. */
+  nextLabel?: string | null;
 }) {
   const { t, language } = useI18n();
   const video = useRef<HTMLVideoElement>(null);
@@ -478,6 +719,10 @@ function Screen({
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [menu, setMenu] = useState(false);
+  // Settings: the list of choices, or one choice opened in place (its label).
+  const [settingsView, setSettingsView] = useState<string | null>(null);
+  // How far the browser has loaded, for the timeline.
+  const [buffered, setBuffered] = useState(0);
   const [idle, setIdle] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Picture enhancement (in this browser, on its GPU): follows the settings unless the menu
@@ -968,6 +1213,65 @@ function Screen({
       }).catch(() => undefined);
     setRequest((r) => ({ ...r, ...change, startMs }));
   };
+  /** Jellyfin subtitles: text ones switch in place, image ones are burned in (a new stream). */
+  const pickJellyfinSub = (v: string) => {
+    if (!p) return;
+    const next = v === 'off' ? null : Number(v);
+    const burned = request.burn != null;
+    const willBurn = p.subtitles.some((s) => s.index === next && !s.text);
+    setSubtitle(next);
+    if (willBurn) reopen({ burn: next });
+    else if (burned) reopen({ burn: null });
+  };
+  // Subtitles on or off in one click (the interface language first), whatever their origin.
+  const jellyfinSubs = source.kind === 'jellyfin' ? (p?.subtitles ?? []) : [];
+  const hlsSubs = hlsTracks?.subtitles ?? [];
+  const captionsFrom = jellyfinSubs.length
+    ? 'jellyfin'
+    : streamSubs.length
+      ? 'stream'
+      : hlsSubs.length
+        ? 'hls'
+        : null;
+  const captionsOn =
+    captionsFrom === 'jellyfin'
+      ? subtitleIndex !== null
+      : captionsFrom === 'stream'
+        ? streamSubId != null
+        : captionsFrom === 'hls' && hlsTracks?.subtitleId !== -1;
+  const captionsLabel =
+    captionsFrom === 'jellyfin'
+      ? (jellyfinSubs.find((s) => s.index === subtitleIndex)?.label ?? '')
+      : captionsFrom === 'stream'
+        ? languageName(streamSubs.find((s) => s.id === streamSubId)?.lang ?? null)
+        : (hlsSubs.find((s) => s.id === hlsTracks?.subtitleId)?.name ?? '');
+  const toggleCaptions = () => {
+    if (captionsFrom === 'jellyfin') {
+      const first =
+        jellyfinSubs.find((s) => s.text && s.language?.startsWith(language)) ??
+        jellyfinSubs.find((s) => s.text) ??
+        jellyfinSubs[0];
+      pickJellyfinSub(captionsOn ? 'off' : String(first.index));
+    } else if (captionsFrom === 'stream') {
+      const first = streamSubs.find((s) => s.lang === language) ?? streamSubs[0];
+      setStreamSub(captionsOn ? null : first.id);
+    } else if (captionsFrom === 'hls' && hls.current)
+      hls.current.subtitleTrack = captionsOn ? -1 : hlsSubs[0].id;
+  };
+  // Where the picture comes from, in the top bar (opens the sources).
+  const sourceLabel = [
+    source.kind === 'jellyfin' ? 'Jellyfin' : source.stream.name,
+    decoded
+      ? `${decoded.height}p`
+      : source.kind === 'stream' && source.stream.quality
+        ? `${source.stream.quality}p`
+        : null,
+    source.kind === 'jellyfin' && p
+      ? t(p.playMethod === 'direct' ? 'player.directShort' : 'player.transcodingShort')
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const shown = !idle || !playing || menu;
   return (
     <div
@@ -1005,6 +1309,12 @@ function Screen({
           }
         }}
         onCanPlay={() => setBuffering(false)}
+        onProgress={(e) => {
+          const el = e.currentTarget;
+          for (let i = 0; i < el.buffered.length; i++)
+            if (el.buffered.start(i) <= el.currentTime && el.currentTime <= el.buffered.end(i))
+              setBuffered(el.buffered.end(i));
+        }}
         onDurationChange={(e) => setDuration(e.currentTarget.duration)}
         onVolumeChange={(e) => {
           setVolume(e.currentTarget.volume);
@@ -1057,23 +1367,53 @@ function Screen({
 
       {(buffering || (source.kind === 'jellyfin' && !p)) && !error && !failure && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <Spinner className="size-8 text-white" />
+          <Spinner className="size-10 border-[3px] text-white" />
         </div>
       )}
       {(error ?? failure) && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
-          <p className="max-w-md text-lg">{error ?? failure}</p>
-          <button
-            type="button"
-            onClick={onSources}
-            className="h-11 rounded-full bg-white px-5 font-semibold text-black"
-          >
-            {t('player.otherSource')}
-          </button>
+        <div className="absolute inset-0 flex items-center justify-center overflow-hidden p-6">
+          <Artwork episode={episode} />
+          <div className="relative flex max-w-lg flex-col items-center gap-4 text-center">
+            <span className="flex size-16 items-center justify-center rounded-full bg-[#f87171]/15 text-[#f87171]">
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                aria-hidden
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 8v5M12 16.5v.5" />
+              </svg>
+            </span>
+            <p className="text-[21px] leading-snug font-bold">{error ?? failure?.title}</p>
+            {!error && failure?.reason && (
+              <p className="text-[15px] text-white/75">{failure.reason}</p>
+            )}
+            <div className="mt-2 flex flex-wrap justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={onSources}
+                className="h-12 rounded-full bg-white px-6 font-semibold text-black"
+              >
+                {t('player.otherSource')}
+              </button>
+              <button
+                type="button"
+                onClick={close}
+                className="h-12 rounded-full border border-white/15 bg-white/[0.08] px-6 backdrop-blur-xl hover:bg-white/[0.14]"
+              >
+                {t('player.backToSheet')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Top: back and what is playing. */}
+      {/* Top: back, what is playing, and where it comes from. */}
       <div
         className={cx(
           'absolute inset-x-0 top-0 flex items-center gap-3 bg-gradient-to-b from-black/80 to-transparent p-4 pb-16 transition-opacity duration-300 md:p-6',
@@ -1084,7 +1424,7 @@ function Screen({
           type="button"
           onClick={close}
           aria-label={t('player.back')}
-          className="flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-white/[0.12]"
+          className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white/[0.12] backdrop-blur-md hover:bg-white/[0.2]"
         >
           <svg
             width="20"
@@ -1099,46 +1439,103 @@ function Screen({
           </svg>
         </button>
         <div className="flex min-w-0 flex-col">
-          <span className="truncate text-[15px] font-semibold md:text-lg">{episode.title}</span>
+          <span className="font-display truncate text-[17px] leading-tight font-bold md:text-[22px]">
+            {episode.title}
+          </span>
           <span className="truncate text-sm text-white/70">
             {episode.label}
             {p?.title && p.title !== episode.label ? ` · ${p.title}` : ''}
           </span>
         </div>
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={onSources}
+          title={t('player.sources')}
+          className="hidden h-11 shrink-0 items-center gap-2 rounded-full border border-white/12 bg-white/[0.08] px-4 text-[13px] backdrop-blur-xl hover:bg-white/[0.14] sm:flex"
+        >
+          <span
+            aria-hidden
+            className={cx(
+              'size-2 rounded-full',
+              error || failure ? 'bg-[#f87171]' : 'bg-[#34d399]',
+            )}
+          />
+          {sourceLabel}
+        </button>
+      </div>
+
+      {/* Centre: back 10 s, play, forward 10 s. */}
+      <div
+        className={cx(
+          'pointer-events-none absolute inset-0 flex items-center justify-center gap-10 transition-opacity duration-300 md:gap-14',
+          shown && !error && !failure && !buffering ? 'opacity-100' : 'opacity-0',
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => seekBy(-10)}
+          aria-label={t('player.back10')}
+          className={cx(
+            'flex size-14 items-center justify-center rounded-full bg-black/45 text-xs font-bold ring-1 ring-white/15 backdrop-blur-md hover:bg-black/60 md:size-16',
+            shown && 'pointer-events-auto',
+          )}
+        >
+          −10
+        </button>
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={playing ? t('player.pause') : t('player.play')}
+          className={cx(
+            'flex size-20 items-center justify-center rounded-full bg-white/95 text-black transition-transform hover:scale-105 md:size-[88px]',
+            shown && 'pointer-events-auto',
+          )}
+        >
+          <svg width="30" height="30" viewBox="0 0 24 24" aria-hidden>
+            {playing ? (
+              <path d="M7 5h3v14H7zM14 5h3v14h-3z" fill="currentColor" />
+            ) : (
+              <path d="M8 4.5v15l12-7.5Z" fill="currentColor" />
+            )}
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={() => seekBy(10)}
+          aria-label={t('player.forward10')}
+          className={cx(
+            'flex size-14 items-center justify-center rounded-full bg-black/45 text-xs font-bold ring-1 ring-white/15 backdrop-blur-md hover:bg-black/60 md:size-16',
+            shown && 'pointer-events-auto',
+          )}
+        >
+          +10
+        </button>
       </div>
 
       {/* Bottom: timeline and controls. */}
       <div
         className={cx(
-          'absolute inset-x-0 bottom-0 flex flex-col gap-2 bg-gradient-to-t from-black/85 to-transparent px-4 pt-16 pb-[max(env(safe-area-inset-bottom),16px)] transition-opacity duration-300 md:px-6',
+          'absolute inset-x-0 bottom-0 flex flex-col gap-2.5 bg-gradient-to-t from-black/90 to-transparent px-4 pt-20 pb-[max(env(safe-area-inset-bottom),16px)] transition-opacity duration-300 md:px-8 md:pb-7',
           shown ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
       >
-        <input
-          type="range"
-          min={0}
-          max={duration || 0}
-          step={1}
-          value={Math.min(time, duration || 0)}
-          aria-label={t('player.position')}
-          onChange={(e) => {
-            if (video.current) video.current.currentTime = Number(e.target.value);
+        <Timeline
+          time={time}
+          duration={duration}
+          buffered={buffered}
+          label={t('player.position')}
+          onSeek={(seconds) => {
+            if (video.current) video.current.currentTime = seconds;
           }}
-          className="h-1.5 w-full cursor-pointer accent-white"
         />
-        <div className="flex items-center gap-1 md:gap-2">
+        <div className="flex items-center gap-1 md:gap-1.5">
           <CtrlButton label={playing ? t('player.pause') : t('player.play')} onClick={toggle}>
             {playing ? (
               <path d="M7 5h3v14H7zM14 5h3v14h-3z" fill="currentColor" />
             ) : (
               <path d="M7 4v16l13-8Z" fill="currentColor" />
             )}
-          </CtrlButton>
-          <CtrlButton label={t('player.back10')} onClick={() => seekBy(-10)}>
-            <path d="M11 6 5 12l6 6M19 6l-6 6 6 6" />
-          </CtrlButton>
-          <CtrlButton label={t('player.forward10')} onClick={() => seekBy(10)}>
-            <path d="m13 6 6 6-6 6M5 6l6 6-6 6" />
           </CtrlButton>
           <CtrlButton
             label={muted ? t('player.unmute') : t('player.mute')}
@@ -1162,167 +1559,209 @@ function Screen({
               video.current.volume = Number(e.target.value);
               video.current.muted = false;
             }}
-            className="hidden w-24 accent-white md:block"
+            className="hidden h-1 w-24 cursor-pointer accent-white md:block"
           />
-          <span className="ml-1 text-xs text-white/80 tabular-nums md:text-sm">
-            {clock(time)} / {clock(duration)}
+          <span className="ml-2 text-xs text-white/90 tabular-nums md:text-sm">
+            {clock(time)} <span className="text-white/50">/ {clock(duration)}</span>
           </span>
           <span className="flex-1" />
+          {captionsFrom && (
+            <button
+              type="button"
+              aria-pressed={captionsOn}
+              onClick={toggleCaptions}
+              title={t('player.subtitles')}
+              className="flex h-10 shrink-0 items-center gap-2 rounded-full border border-white/12 bg-white/[0.08] px-2 pr-3.5 text-[13px] backdrop-blur-xl hover:bg-white/[0.14] md:h-11"
+            >
+              <span
+                className={cx(
+                  'rounded-full px-1.5 py-0.5 text-[10.5px] font-extrabold',
+                  captionsOn ? 'bg-white text-black' : 'bg-white/[0.15] text-white/70',
+                )}
+              >
+                CC
+              </span>
+              <span className="hidden max-w-[120px] truncate sm:inline">
+                {captionsOn ? captionsLabel : t('player.off')}
+              </span>
+            </button>
+          )}
           <CtrlButton label={t('player.sources')} onClick={onSources}>
             <path d="M4 6h16M4 12h16M4 18h10" />
           </CtrlButton>
           <div className="relative">
-            <CtrlButton label={t('player.settings')} onClick={() => setMenu((m) => !m)}>
+            <CtrlButton
+              label={t('player.settings')}
+              onClick={() => {
+                setSettingsView(null);
+                setMenu((m) => !m);
+              }}
+              className={menu ? 'bg-white/[0.16]' : undefined}
+            >
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
             </CtrlButton>
             {menu && (
-              <div className="border-line absolute right-0 bottom-14 flex max-h-[60vh] w-72 flex-col gap-3 overflow-y-auto rounded-2xl border bg-panel/95 p-3 text-sm shadow-2xl backdrop-blur-xl">
-                {source.kind === 'jellyfin' && p ? (
-                  <>
-                    <Choice
-                      label={t('player.audio')}
-                      value={String(audioIndex ?? '')}
-                      options={p.audio.map((a) => ({ value: String(a.index), label: a.label }))}
-                      onChange={(v) => reopen({ audio: Number(v) })}
-                    />
-                    <Choice
-                      label={t('player.subtitles')}
-                      value={subtitleIndex === null ? 'off' : String(subtitleIndex)}
-                      options={[
-                        { value: 'off', label: t('player.off') },
-                        ...p.subtitles.map((s) => ({ value: String(s.index), label: s.label })),
-                      ]}
-                      onChange={(v) => {
-                        const next = v === 'off' ? null : Number(v);
-                        const burned = request.burn != null;
-                        const willBurn = p.subtitles.some((s) => s.index === next && !s.text);
-                        setSubtitle(next);
-                        // Image subtitles are drawn into the video by Jellyfin: a new stream.
-                        if (willBurn) reopen({ burn: next });
-                        else if (burned) reopen({ burn: null });
-                      }}
-                    />
-                    <Choice
-                      label={t('player.quality')}
-                      value={String(request.bitrate)}
-                      options={QUALITY_PRESETS.map((q) => ({
-                        value: String(q.bitrate),
-                        label: q.label === 'max' ? t('player.original') : q.label,
-                      }))}
-                      onChange={(v) => {
-                        saveBitrate(Number(v));
-                        reopen({ bitrate: Number(v) });
-                      }}
-                    />
-                    <span className="text-muted px-1 text-xs">
-                      {p.playMethod === 'direct' ? t('player.direct') : t('player.transcoding')}
+              <div className="anim-pop border-line absolute right-0 bottom-14 flex max-h-[min(70vh,520px)] w-[min(340px,calc(100vw-32px))] flex-col overflow-y-auto overscroll-contain rounded-[22px] border bg-[#0e141b]/95 p-2 text-sm shadow-[0_30px_80px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
+                <SettingsNav.Provider value={{ view: settingsView, open: setSettingsView }}>
+                  {settingsView === null && (
+                    <span className="px-3 pt-2.5 pb-1.5 text-[11px] font-semibold tracking-[0.14em] text-white/55 uppercase">
+                      {t('player.settingsTitle')}
                     </span>
-                  </>
-                ) : (hlsTracks &&
-                    (hlsTracks.audio.length > 1 ||
-                      hlsTracks.subtitles.length ||
-                      hlsTracks.levels.length > 1)) ||
-                  streamSubs.length ? (
-                  <>
-                    {hlsTracks && hlsTracks.levels.length > 1 && (
-                      <Choice
-                        label={t('player.quality')}
-                        value={String(hlsTracks.levelId)}
-                        options={[
-                          {
-                            value: '-1',
-                            label:
-                              hlsTracks.levelId === -1 && hlsTracks.levels[hlsTracks.currentId]
-                                ? t('player.autoAt', {
-                                    height: hlsTracks.levels[hlsTracks.currentId].height,
-                                  })
-                                : t('player.auto'),
-                          },
-                          ...[...hlsTracks.levels]
-                            .sort((a, b) => b.height - a.height || b.bitrate - a.bitrate)
-                            .map((l) => ({
-                              value: String(l.id),
-                              label: `${l.height}p · ${(l.bitrate / 1e6).toFixed(1)} Mb/s`,
-                            })),
-                        ]}
-                        onChange={(v) => {
-                          // A chosen variant stays; "Auto" lets hls.js adapt again.
-                          if (hls.current) hls.current.currentLevel = Number(v);
-                        }}
-                      />
-                    )}
-                    {streamSubs.length > 0 && (
-                      <Choice
-                        label={t('player.subtitles')}
-                        value={streamSubId ?? 'off'}
-                        options={[
-                          { value: 'off', label: t('player.off') },
-                          ...streamSubs.map((s) => ({
-                            value: s.id,
-                            label: `${languageName(s.lang)} · ${s.source}`,
-                          })),
-                        ]}
-                        onChange={(v) => setStreamSub(v === 'off' ? null : v)}
-                      />
-                    )}
-                    {hlsTracks && hlsTracks.audio.length > 1 && (
+                  )}
+                  {source.kind === 'jellyfin' && p ? (
+                    <>
                       <Choice
                         label={t('player.audio')}
-                        value={String(hlsTracks.audioId)}
-                        options={hlsTracks.audio.map((a) => ({
-                          value: String(a.id),
-                          label: a.name,
-                        }))}
-                        onChange={(v) => {
-                          if (hls.current) hls.current.audioTrack = Number(v);
-                        }}
+                        value={String(audioIndex ?? '')}
+                        options={p.audio.map((a) => ({ value: String(a.index), label: a.label }))}
+                        onChange={(v) => reopen({ audio: Number(v) })}
                       />
-                    )}
-                    {hlsTracks && hlsTracks.subtitles.length > 0 && (
                       <Choice
                         label={t('player.subtitles')}
-                        value={String(hlsTracks.subtitleId)}
+                        value={subtitleIndex === null ? 'off' : String(subtitleIndex)}
                         options={[
-                          { value: '-1', label: t('player.off') },
-                          ...hlsTracks.subtitles.map((s) => ({
-                            value: String(s.id),
-                            label: s.name,
-                          })),
+                          { value: 'off', label: t('player.off') },
+                          ...p.subtitles.map((s) => ({ value: String(s.index), label: s.label })),
                         ]}
+                        onChange={pickJellyfinSub}
+                      />
+                      <Choice
+                        label={t('player.quality')}
+                        value={String(request.bitrate)}
+                        options={QUALITY_PRESETS.map((q) => ({
+                          value: String(q.bitrate),
+                          label: q.label === 'max' ? t('player.original') : q.label,
+                        }))}
                         onChange={(v) => {
-                          if (hls.current) hls.current.subtitleTrack = Number(v);
+                          saveBitrate(Number(v));
+                          reopen({ bitrate: Number(v) });
                         }}
                       />
-                    )}
-                  </>
-                ) : null}
-                <Choice
-                  label={t('enhance.title')}
-                  value={enhanceChoice}
-                  options={[
-                    { value: 'settings', label: t('enhance.followSettings') },
-                    { value: 'off', label: t('enhance.off') },
-                    ...[...LADDER[picture], ...LEVELS.filter((l) => !LADDER[picture].includes(l))]
-                      .filter((l) => !needsFloat(l) || enhance?.caps?.floatTargets !== false)
-                      .map((l) => ({ value: l, label: t(`enhance.level.${l}`) })),
-                  ]}
-                  onChange={(v) => setEnhanceChoice(v as EnhanceChoice)}
-                />
-                <EnhanceStatus state={enhance} />
-                {decoded && (
-                  <span className="text-muted px-1 text-xs tabular-nums">
-                    {t('player.decoded', { width: decoded.width, height: decoded.height })}
-                  </span>
-                )}
+                      <span className="text-muted px-1 text-xs">
+                        {p.playMethod === 'direct' ? t('player.direct') : t('player.transcoding')}
+                      </span>
+                    </>
+                  ) : (hlsTracks &&
+                      (hlsTracks.audio.length > 1 ||
+                        hlsTracks.subtitles.length ||
+                        hlsTracks.levels.length > 1)) ||
+                    streamSubs.length ? (
+                    <>
+                      {hlsTracks && hlsTracks.levels.length > 1 && (
+                        <Choice
+                          label={t('player.quality')}
+                          value={String(hlsTracks.levelId)}
+                          options={[
+                            {
+                              value: '-1',
+                              label:
+                                hlsTracks.levelId === -1 && hlsTracks.levels[hlsTracks.currentId]
+                                  ? t('player.autoAt', {
+                                      height: hlsTracks.levels[hlsTracks.currentId].height,
+                                    })
+                                  : t('player.auto'),
+                            },
+                            ...[...hlsTracks.levels]
+                              .sort((a, b) => b.height - a.height || b.bitrate - a.bitrate)
+                              .map((l) => ({
+                                value: String(l.id),
+                                label: `${l.height}p · ${(l.bitrate / 1e6).toFixed(1)} Mb/s`,
+                              })),
+                          ]}
+                          onChange={(v) => {
+                            // A chosen variant stays; "Auto" lets hls.js adapt again.
+                            if (hls.current) hls.current.currentLevel = Number(v);
+                          }}
+                        />
+                      )}
+                      {streamSubs.length > 0 && (
+                        <Choice
+                          label={t('player.subtitles')}
+                          value={streamSubId ?? 'off'}
+                          options={[
+                            { value: 'off', label: t('player.off') },
+                            ...streamSubs.map((s) => ({
+                              value: s.id,
+                              label: `${languageName(s.lang)} · ${s.source}`,
+                            })),
+                          ]}
+                          onChange={(v) => setStreamSub(v === 'off' ? null : v)}
+                        />
+                      )}
+                      {hlsTracks && hlsTracks.audio.length > 1 && (
+                        <Choice
+                          label={t('player.audio')}
+                          value={String(hlsTracks.audioId)}
+                          options={hlsTracks.audio.map((a) => ({
+                            value: String(a.id),
+                            label: a.name,
+                          }))}
+                          onChange={(v) => {
+                            if (hls.current) hls.current.audioTrack = Number(v);
+                          }}
+                        />
+                      )}
+                      {hlsTracks && hlsTracks.subtitles.length > 0 && (
+                        <Choice
+                          label={t('player.subtitles')}
+                          value={String(hlsTracks.subtitleId)}
+                          options={[
+                            { value: '-1', label: t('player.off') },
+                            ...hlsTracks.subtitles.map((s) => ({
+                              value: String(s.id),
+                              label: s.name,
+                            })),
+                          ]}
+                          onChange={(v) => {
+                            if (hls.current) hls.current.subtitleTrack = Number(v);
+                          }}
+                        />
+                      )}
+                    </>
+                  ) : null}
+                  <Choice
+                    label={t('enhance.title')}
+                    value={enhanceChoice}
+                    options={[
+                      { value: 'settings', label: t('enhance.followSettings') },
+                      { value: 'off', label: t('enhance.off') },
+                      ...[...LADDER[picture], ...LEVELS.filter((l) => !LADDER[picture].includes(l))]
+                        .filter((l) => !needsFloat(l) || enhance?.caps?.floatTargets !== false)
+                        .map((l) => ({ value: l, label: t(`enhance.level.${l}`) })),
+                    ]}
+                    onChange={(v) => setEnhanceChoice(v as EnhanceChoice)}
+                  />
+                  {settingsView === null && (
+                    <div className="mx-1 mt-1.5 flex flex-col gap-1 rounded-[14px] bg-white/[0.04] px-3 py-2.5 text-xs leading-relaxed text-white/60">
+                      <EnhanceStatus state={enhance} />
+                      {decoded && (
+                        <span className="tabular-nums">
+                          {t('player.decoded', { width: decoded.width, height: decoded.height })}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </SettingsNav.Provider>
               </div>
             )}
           </div>
           {onNext && (
-            <CtrlButton label={t('player.next')} onClick={onNext}>
-              <path d="M6 5v14l10-7Z" fill="currentColor" />
-              <path d="M18 5v14" />
-            </CtrlButton>
+            <button
+              type="button"
+              onClick={onNext}
+              aria-label={t('player.next')}
+              title={t('player.next')}
+              className="flex h-10 shrink-0 items-center gap-2 rounded-full border border-white/12 bg-white/[0.08] pr-1.5 pl-3.5 text-[13px] backdrop-blur-xl hover:bg-white/[0.14] md:h-11"
+            >
+              <span className="hidden sm:inline">{nextLabel ?? t('player.next')}</span>
+              <span className="flex size-7 items-center justify-center rounded-full bg-white text-black md:size-8">
+                <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden>
+                  <path d="M6 5v14l10-7Z" fill="currentColor" />
+                  <path d="M18 5v14" stroke="currentColor" strokeWidth="2.5" />
+                </svg>
+              </span>
+            </button>
           )}
           <CtrlButton label={t('player.fullscreen')} onClick={fullscreen}>
             <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
@@ -1410,6 +1849,16 @@ function CtrlButton({
   );
 }
 
+/** Settings: which choice is open in place (its label), or none (the list). */
+const SettingsNav = createContext<{ view: string | null; open: (label: string | null) => void }>({
+  view: null,
+  open: () => undefined,
+});
+
+/**
+ * One setting: in the list, a row with its current value; opened, its options in the same panel
+ * with a way back.
+ */
 function Choice({
   label,
   value,
@@ -1421,24 +1870,166 @@ function Choice({
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
 }) {
+  const { t } = useI18n();
+  const nav = useContext(SettingsNav);
   if (!options.length) return null;
+  const current = options.find((o) => o.value === value)?.label ?? '';
+  if (nav.view === null)
+    return (
+      <button
+        type="button"
+        onClick={() => nav.open(label)}
+        className="flex min-h-12 items-center gap-3 rounded-[14px] px-3 text-left hover:bg-white/[0.07]"
+      >
+        <span className="flex-1 text-[14.5px]">{label}</span>
+        <span className="max-w-[45%] truncate text-[13px] text-white/60">{current}</span>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className="shrink-0 opacity-50"
+          aria-hidden
+        >
+          <path d="m9 6 6 6-6 6" />
+        </svg>
+      </button>
+    );
+  if (nav.view !== label) return null;
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-muted px-1 text-[11px] tracking-[0.14em] uppercase">{label}</span>
+    <div className="anim-rise flex flex-col gap-0.5">
+      <button
+        type="button"
+        onClick={() => nav.open(null)}
+        className="flex items-center gap-2.5 rounded-[14px] px-2 py-2 text-left hover:bg-white/[0.06]"
+      >
+        <span
+          className="flex size-8 items-center justify-center rounded-full bg-white/[0.08]"
+          aria-hidden
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </span>
+        <span className="text-[15px] font-bold">{label}</span>
+        <span className="sr-only">{t('player.back')}</span>
+      </button>
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
-          onClick={() => onChange(o.value)}
+          onClick={() => {
+            onChange(o.value);
+            nav.open(null);
+          }}
           className={cx(
-            'flex items-center justify-between rounded-xl px-2.5 py-2 text-left',
-            o.value === value ? 'bg-white/[0.1] font-semibold' : 'hover:bg-white/[0.06]',
+            'flex min-h-11 items-center gap-3 rounded-[14px] px-3 text-left',
+            o.value === value ? 'bg-white/[0.1]' : 'hover:bg-white/[0.06]',
           )}
         >
+          <span
+            aria-hidden
+            className={cx(
+              'size-[18px] shrink-0 rounded-full',
+              o.value === value
+                ? 'bg-white shadow-[inset_0_0_0_5px_#0e141b]'
+                : 'border-2 border-white/30',
+            )}
+          />
           <span className="truncate">{o.label}</span>
-          {o.value === value && <span aria-hidden>✓</span>}
         </button>
       ))}
     </div>
+  );
+}
+
+/**
+ * The timeline: what is loaded, what is played, and the time under the pointer. A native range
+ * input stays on top for the keyboard and screen readers.
+ */
+function Timeline({
+  time,
+  duration,
+  buffered,
+  label,
+  onSeek,
+}: {
+  time: number;
+  duration: number;
+  buffered: number;
+  label: string;
+  onSeek: (seconds: number) => void;
+}) {
+  const [hover, setHover] = useState<number | null>(null);
+  const share = (x: number) => (duration ? Math.min(100, (x / duration) * 100) : 0);
+  return (
+    <div
+      className="group relative flex h-6 items-center"
+      onPointerMove={(e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        setHover(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)));
+      }}
+      onPointerLeave={() => setHover(null)}
+    >
+      <span className="absolute inset-x-0 h-[5px] rounded-full bg-white/20 transition-[height] group-hover:h-[7px]" />
+      <span
+        className="absolute left-0 h-[5px] rounded-full bg-white/35 transition-[height] group-hover:h-[7px]"
+        style={{ width: `${share(buffered)}%` }}
+      />
+      <span
+        className="absolute left-0 h-[5px] rounded-full bg-white transition-[height] group-hover:h-[7px]"
+        style={{ width: `${share(time)}%` }}
+      />
+      <span
+        className="absolute size-4 -translate-x-1/2 rounded-full bg-white shadow-[0_0_0_6px_rgba(255,255,255,0.18)] transition-transform group-hover:scale-110"
+        style={{ left: `${share(time)}%` }}
+      />
+      {hover !== null && duration > 0 && (
+        <span
+          className="pointer-events-none absolute bottom-7 -translate-x-1/2 rounded-[10px] border border-white/10 bg-[#0e141b]/95 px-2.5 py-1 text-xs font-bold tabular-nums shadow-lg"
+          style={{ left: `${hover * 100}%` }}
+        >
+          {clock(hover * duration)}
+        </span>
+      )}
+      <input
+        type="range"
+        min={0}
+        max={duration || 0}
+        step={1}
+        value={Math.min(time, duration || 0)}
+        aria-label={label}
+        onChange={(e) => onSeek(Number(e.target.value))}
+        className="absolute inset-0 w-full cursor-pointer opacity-0"
+      />
+    </div>
+  );
+}
+
+/** The work's artwork, blurred and dimmed, behind loading and error screens. */
+function Artwork({ episode }: { episode: PlayerEpisode }) {
+  const src = episode.resume?.media.bannerUrl ?? episode.resume?.media.coverUrl ?? null;
+  return (
+    <>
+      {src && (
+        // eslint-disable-next-line @next/next/no-img-element -- decorative, already cached
+        <img
+          src={src}
+          alt=""
+          referrerPolicy="no-referrer"
+          className="absolute inset-0 size-full scale-110 object-cover opacity-50 blur-[40px] brightness-[0.55] saturate-[1.3]"
+        />
+      )}
+      <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0)_0%,rgba(0,0,0,0.75)_100%)]" />
+    </>
   );
 }

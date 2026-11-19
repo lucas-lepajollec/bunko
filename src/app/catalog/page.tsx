@@ -1,4 +1,5 @@
 'use client';
+import { SlidingHighlight } from '@/components/sliding-highlight';
 import { KIND_IDS, KINDS as KIND_DEFS, isVideoKind } from '@/domain/kinds';
 import { Select } from '@/components/select';
 import { Suspense, useEffect } from 'react';
@@ -226,11 +227,12 @@ function Catalog() {
       {/* Same calm toolbar as the library: formats, then one row with view, filters and sort. */}
       <div
         className={cx(
-          'toolbar-kinds no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0',
+          'toolbar-kinds no-scrollbar relative -mx-4 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0',
         )}
         role="group"
         aria-label={t('catalog.kind')}
       >
+        <SlidingHighlight />
         {universe.choices(['all', ...universe.enabled] as DiscoverKind[]).map((c) => {
           const on = kind === c.kind && (c.kind !== 'extension' || section === c.section);
           return (
@@ -278,10 +280,11 @@ function Catalog() {
                 </Link>
               )}
               <div
-                className="toolbar-seg flex shrink-0 self-start rounded-full bg-white/[0.06] p-0.5 text-sm md:self-auto"
+                className="toolbar-seg relative flex shrink-0 self-start rounded-full bg-white/[0.06] p-0.5 text-sm md:self-auto"
                 role="group"
                 aria-label={t('catalog.view')}
               >
+                <SlidingHighlight />
                 {(
                   [
                     ['catalog', t('catalog.viewCatalog')],

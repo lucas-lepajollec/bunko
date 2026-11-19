@@ -1,4 +1,5 @@
 'use client';
+import { SlidingHighlight } from '@/components/sliding-highlight';
 import {
   KIND_IDS,
   byKindOrder,
@@ -341,10 +342,11 @@ function Library() {
       />
       {shownShelf !== 'kavita' && (
         <div
-          className="toolbar-kinds no-scrollbar -mx-4 -mb-2 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0"
+          className="toolbar-kinds no-scrollbar relative -mx-4 -mb-2 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0"
           role="group"
           aria-label={t('catalog.kind')}
         >
+          <SlidingHighlight />
           {[
             'all',
             ...byKindOrder(

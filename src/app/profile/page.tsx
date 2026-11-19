@@ -1,4 +1,5 @@
 'use client';
+import { SlidingHighlight } from '@/components/sliding-highlight';
 import { useLook } from '@/lib/client/theme';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -250,7 +251,8 @@ function Favorites({
         </Empty>
       )}
       {kinds.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1 text-sm">
+        <div className="relative flex flex-wrap items-center gap-1 text-sm">
+          <SlidingHighlight />
           {kinds.map((k) => (
             <button
               key={k}

@@ -7,47 +7,14 @@ import { isVideoKind } from '@/domain/kinds';
 import { useI18n } from '@/i18n/I18nProvider';
 import { announceMenu, onMenuOpened } from './select';
 import { cx } from './ui';
-import { useLook } from '@/lib/client/theme';
-import {
-  BookMarked,
-  BookOpen,
-  BookText,
-  Check,
-  ChevronDown,
-  Clapperboard,
-  Film,
-  Globe,
-  LayoutGrid,
-  Library,
-  MessageSquareText,
-  MonitorPlay,
-  Puzzle,
-  ScrollText,
-  Smartphone,
-  Tv,
-  type LucideIcon,
-} from 'lucide-react';
-
-/** One icon per kind, for the Ciné type menu. */
-const KIND_ICONS: Record<string, LucideIcon> = {
-  all: LayoutGrid,
-  manga: BookOpen,
-  manhwa: Smartphone,
-  manhua: ScrollText,
-  comic: MessageSquareText,
-  lightnovel: BookMarked,
-  webnovel: Globe,
-  novel: BookText,
-  book: Library,
-  anime: Tv,
-  series: MonitorPlay,
-  movies: Clapperboard,
-  animation: Film,
-  extension: Puzzle,
-};
+import type { TrackedMedia } from '@/types/shared';
+import { useApi } from '@/lib/client/api';
+import { kindOfMedia } from '@/domain/kinds';
+import { Check, Puzzle } from 'lucide-react';
+import { Cover } from './ui';
 
 /** The current universe's name: the extension section shown, else the kind. */
-function activeLabel(t: (k: string) => string, universe: ReturnType<typeof useUniverse>) {
+export function activeLabel(t: (k: string) => string, universe: ReturnType<typeof useUniverse>) {
   const name = universe.sections.find((s) => s.id === universe.section)?.name ?? null;
   return choiceLabel(t, { kind: universe.active, section: universe.section, name });
 }
@@ -57,7 +24,6 @@ const isActive = (universe: ReturnType<typeof useUniverse>, c: UniverseChoice) =
 /** Desktop header: the current universe, opening on click (like any menu) to switch. */
 export function UniverseMenu() {
   const { t } = useI18n();
-  const look = useLook();
   const universe = useUniverse();
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -86,108 +52,6 @@ export function UniverseMenu() {
   const video = universe.enabled.filter(isVideo);
   if (reading.length + video.length + (universe.allowAll ? 1 : 0) < 2 && !universe.adultAllowed)
     return null;
-  if (look === 'cine') {
-    const row = (c: UniverseChoice) => {
-      const on = isActive(universe, c);
-      const Icon = KIND_ICONS[c.kind] ?? Puzzle;
-      return (
-        <button
-          key={`${c.kind}:${c.section ?? ''}`}
-          type="button"
-          role="menuitemradio"
-          aria-checked={on}
-          onClick={() => {
-            setOpen(false);
-            void universe.set(c.kind, c.section);
-          }}
-          className={cx(
-            'flex items-center gap-3 rounded-[14px] px-2.5 py-2 text-left transition-colors',
-            on ? 'bg-white/[0.09]' : 'hover:bg-white/[0.05]',
-          )}
-        >
-          <span
-            className={cx(
-              'flex size-9 shrink-0 items-center justify-center rounded-[10px]',
-              on ? 'bg-white text-[#070b10]' : 'text-mid bg-white/[0.06]',
-            )}
-          >
-            <Icon className="size-[18px]" aria-hidden />
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span
-              className={cx('truncate text-[14px]', on ? 'font-semibold text-white' : 'text-fg')}
-            >
-              {choiceLabel(t, c)}
-            </span>
-            <span className="text-muted truncate text-[12px]">{t(`universe.desc.${c.kind}`)}</span>
-          </span>
-          {on && <Check className="size-4 shrink-0" aria-hidden />}
-        </button>
-      );
-    };
-    const group = (label: string, choices: UniverseChoice[]) => (
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-muted px-2.5 pt-1 pb-1.5 text-[11px] font-semibold tracking-[0.14em] uppercase">
-          {label}
-        </span>
-        {choices.map(row)}
-      </div>
-    );
-    return (
-      <div ref={root} className="relative hidden md:block">
-        <button
-          type="button"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          onClick={() => (open ? setOpen(false) : show())}
-          className={cx(
-            'flex h-[50px] items-center gap-2 rounded-full border px-5 text-[15px] backdrop-blur-xl transition-colors',
-            open
-              ? 'border-white/25 bg-white/[0.14] text-white'
-              : 'text-mid border-white/12 bg-white/[0.07] hover:text-white',
-          )}
-        >
-          {activeLabel(t, universe)}
-          {universe.adultMode && <span className="text-warn text-[11px] font-semibold">18+</span>}
-          <ChevronDown
-            className={cx('size-4 transition-transform duration-200', open && 'rotate-180')}
-            aria-hidden
-          />
-        </button>
-        <div
-          role="menu"
-          aria-label={t('universe.label')}
-          aria-hidden={!open}
-          className={cx(
-            'ui-panel absolute top-full left-0 z-50 mt-3 flex w-[600px] max-w-[calc(100vw-48px)] flex-col gap-2 rounded-[24px] border p-2.5 transition-[opacity,transform] duration-200',
-            open
-              ? 'translate-y-0 opacity-100'
-              : 'pointer-events-none invisible -translate-y-1 opacity-0',
-          )}
-        >
-          {universe.allowAll && row({ kind: 'all', section: null, name: null })}
-          <div
-            className={cx(
-              'grid gap-2 border-t border-white/[0.08] pt-2',
-              video.length > 0 && 'grid-cols-2',
-            )}
-          >
-            {group(t('universe.groupReading'), universe.choices(reading))}
-            {video.length > 0 && group(t('universe.groupVideo'), universe.choices(video))}
-          </div>
-          {universe.adultAllowed && (
-            <AdultSwitch
-              on={universe.adultMode}
-              onChange={(next) => {
-                setOpen(false);
-                void universe.setAdultMode(next);
-              }}
-            />
-          )}
-        </div>
-      </div>
-    );
-  }
   const item = (c: UniverseChoice, tall = false) => {
     const on = isActive(universe, c);
     return (
@@ -411,5 +275,187 @@ export function UniverseTab() {
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+/**
+ * Ciné: the type menu as poster tiles. Each kind shows a cover from the library and how many works
+ * are followed; tabs narrow to reading or video; 18+ is a switch at the top. Shown in the header's
+ * shared panel (CineHeader).
+ */
+export function TypesPanel({ onDone }: { onDone: () => void }) {
+  const { t, n } = useI18n();
+  const universe = useUniverse();
+  const library = useApi<TrackedMedia[]>('/api/tracked');
+  const [tab, setTab] = useState<'all' | 'reading' | 'video'>('all');
+  if (!universe.ready) return null;
+  // What the library holds per kind: a count and the latest cover.
+  const byKind = new Map<string, { count: number; cover: string | null }>();
+  for (const e of library.data ?? []) {
+    const k = kindOfMedia(e.media);
+    const known = byKind.get(k);
+    if (known) known.count++;
+    else byKind.set(k, { count: 1, cover: e.coverUrl ?? e.media.coverUrl });
+  }
+  const reading = universe.enabled.filter((k) => !isVideoKind(k));
+  const video = universe.enabled.filter(isVideoKind);
+  const pick = (c: UniverseChoice) => {
+    onDone();
+    void universe.set(c.kind, c.section);
+  };
+  const tile = (c: UniverseChoice) => {
+    const on = isActive(universe, c);
+    const info = byKind.get(c.kind);
+    return (
+      <button
+        key={`${c.kind}:${c.section ?? ''}`}
+        type="button"
+        role="menuitemradio"
+        aria-checked={on}
+        onClick={() => pick(c)}
+        className={cx(
+          'group relative flex h-[84px] flex-col justify-end gap-0.5 overflow-hidden rounded-[16px] p-3 text-left transition-[background-color,box-shadow] duration-200',
+          on
+            ? 'bg-white/[0.14] shadow-[inset_0_0_0_1.5px_#fff]'
+            : 'bg-white/[0.05] hover:bg-white/[0.09]',
+        )}
+      >
+        {info?.cover ? (
+          <Cover
+            src={info.cover}
+            alt=""
+            className="absolute -top-2 -right-3.5 w-[62px] rotate-[8deg] !rounded-[8px] opacity-95 shadow-[-6px_8px_20px_rgba(0,0,0,0.5)] transition-transform duration-300 group-hover:rotate-[4deg]"
+          />
+        ) : (
+          c.kind === 'extension' && (
+            <Puzzle className="text-muted absolute top-3 right-3 size-5" aria-hidden />
+          )
+        )}
+        <span className="relative flex items-center gap-1.5 pr-10 text-[14px] font-bold">
+          <span className="truncate">{choiceLabel(t, c)}</span>
+          {on && <Check className="size-3.5 shrink-0" strokeWidth={3} aria-hidden />}
+        </span>
+        <span className="text-muted relative truncate pr-10 text-[11.5px]">
+          {info ? t('universe.followed', { count: n(info.count) }) : t(`universe.desc.${c.kind}`)}
+        </span>
+      </button>
+    );
+  };
+  const all = { kind: 'all' as const, section: null, name: null };
+  const total = library.data?.length ?? 0;
+  const mosaic = (library.data ?? [])
+    .map((e) => e.coverUrl ?? e.media.coverUrl)
+    .filter(Boolean)
+    .slice(0, 6);
+  return (
+    <div role="menu" aria-label={t('universe.label')} className="flex flex-col gap-1 p-3.5">
+      <div className="flex items-center gap-3 px-1 pb-2.5">
+        <span className="flex gap-0.5 rounded-full bg-white/[0.06] p-[3px] text-[13px]">
+          {(['all', 'reading', 'video'] as const)
+            .filter((x) => x !== 'video' || video.length > 0)
+            .map((x) => (
+              <button
+                key={x}
+                type="button"
+                aria-pressed={tab === x}
+                onClick={() => setTab(x)}
+                className={cx(
+                  'h-8 rounded-full px-3.5 transition-colors',
+                  tab === x ? 'bg-white font-bold text-[#070b10]' : 'text-mid hover:text-white',
+                )}
+              >
+                {t(
+                  x === 'all'
+                    ? 'universe.groupAll'
+                    : x === 'reading'
+                      ? 'universe.groupReading'
+                      : 'universe.groupVideo',
+                )}
+              </button>
+            ))}
+        </span>
+        <span className="flex-1" />
+        {universe.adultAllowed && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={universe.adultMode}
+            onClick={() => {
+              onDone();
+              void universe.setAdultMode(!universe.adultMode);
+            }}
+            className="text-mid flex items-center gap-2.5 text-[13px] hover:text-white"
+          >
+            {t('universe.adultMode')}
+            <span
+              aria-hidden
+              className={cx(
+                'relative h-[22px] w-9 shrink-0 rounded-full transition-colors',
+                universe.adultMode ? 'bg-[#c2410c]' : 'bg-white/[0.16]',
+              )}
+            >
+              <span
+                className={cx(
+                  'absolute top-0.5 size-[18px] rounded-full bg-white transition-[left]',
+                  universe.adultMode ? 'left-4' : 'left-0.5',
+                )}
+              />
+            </span>
+          </button>
+        )}
+      </div>
+      {universe.allowAll && tab === 'all' && (
+        <button
+          type="button"
+          role="menuitemradio"
+          aria-checked={isActive(universe, all)}
+          onClick={() => pick(all)}
+          className={cx(
+            'relative mb-2 flex h-[84px] items-end overflow-hidden rounded-[18px] px-4 py-3.5 text-left',
+            isActive(universe, all) && 'shadow-[inset_0_0_0_1.5px_#fff]',
+          )}
+        >
+          <span aria-hidden className="absolute inset-0 grid grid-cols-6">
+            {mosaic.map((src, i) => (
+              <Cover key={i} src={src} alt="" className="!aspect-auto size-full !rounded-none" />
+            ))}
+          </span>
+          <span
+            aria-hidden
+            className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,11,16,0.92)_0%,rgba(7,11,16,0.55)_60%,rgba(7,11,16,0.25)_100%)]"
+          />
+          <span className="relative flex flex-col">
+            <span className="font-display flex items-center gap-2 text-[26px] leading-none">
+              {choiceLabel(t, all)}
+              {isActive(universe, all) && <Check className="size-4" strokeWidth={3} aria-hidden />}
+            </span>
+            <span className="text-mid text-[12.5px]">
+              {t('universe.desc.all')}
+              {total ? ` · ${t('universe.followed', { count: n(total) })}` : ''}
+            </span>
+          </span>
+        </button>
+      )}
+      {tab !== 'video' && reading.length > 0 && (
+        <>
+          <span className="text-muted px-1 pt-1.5 pb-2 text-[11px] font-semibold tracking-[0.14em] uppercase">
+            {t('universe.groupReading')}
+          </span>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {universe.choices(reading).map(tile)}
+          </div>
+        </>
+      )}
+      {tab !== 'reading' && video.length > 0 && (
+        <>
+          <span className="text-muted px-1 pt-3.5 pb-2 text-[11px] font-semibold tracking-[0.14em] uppercase">
+            {t('universe.groupVideo')}
+          </span>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {universe.choices(video).map(tile)}
+          </div>
+        </>
+      )}
+    </div>
   );
 }

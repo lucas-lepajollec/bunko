@@ -91,10 +91,24 @@
 }
 
 /* ───────────────────────── Header ───────────────────────── */
-:root[data-theme='cine'] .app-header[data-solid='true'] {
-  background: color-mix(in oklab, var(--color-bg) 72%, transparent);
-  -webkit-backdrop-filter: blur(24px) saturate(1.3);
-  backdrop-filter: blur(24px) saturate(1.3);
+/* Scrolled: blur and shade that fade out downwards, with no edge. */
+.header-fade {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-bg) 80%, transparent) 0%,
+    color-mix(in oklab, var(--color-bg) 45%, transparent) 55%,
+    transparent 100%
+  );
+  -webkit-backdrop-filter: blur(22px) saturate(1.3);
+  backdrop-filter: blur(22px) saturate(1.3);
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    #000 0%,
+    #000 40%,
+    rgb(0 0 0 / 0.5) 70%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(180deg, #000 0%, #000 40%, rgb(0 0 0 / 0.5) 70%, transparent 100%);
 }
 :root[data-theme='cine'] .app-tabbar {
   background: color-mix(in oklab, var(--color-bg) 82%, transparent);
@@ -202,4 +216,86 @@
   --radius-3xl: 1.5rem;
   color-scheme: dark;
   color: var(--color-fg);
+}
+
+/* Sliding highlight (SlidingHighlight): the active button shows the moving pill underneath. */
+:root[data-theme='cine'] [data-slider-host] > :not([data-slider]) {
+  position: relative;
+  z-index: 1;
+}
+:root[data-theme='cine']
+  [data-slider-host='pill']
+  :is([aria-pressed='true'], [aria-current='page'], [aria-selected='true']):not([data-slider]) {
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--color-bg) !important;
+}
+:root[data-theme='cine'] [data-slider-host] :is(button, a):not([data-slider]) {
+  transition: color 200ms ease;
+}
+:root[data-theme='cine']
+  [data-slider-host='line']
+  :is([aria-pressed='true'], [aria-current='page'], [aria-selected='true']):not([data-slider]) {
+  border-color: transparent !important;
+}
+
+/* Ciné header panel: grows from the button, fades out, its content fades in on every switch. */
+@keyframes header-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+}
+@keyframes header-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.header-panel-in {
+  transform-origin: top center;
+  animation: header-panel-in 180ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.header-panel-out {
+  transform: translateY(-4px) scale(0.98);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 0s linear 140ms !important;
+}
+.header-panel-content {
+  animation: header-content-in 200ms ease both;
+}
+
+/* Player: the source panel slides in (from the right on wide screens, from below on phones). */
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+@keyframes sheet-left {
+  from {
+    transform: translateX(32px);
+    opacity: 0;
+  }
+}
+.sheet-in {
+  animation: sheet-up 240ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@media (min-width: 768px) {
+  .sheet-in {
+    animation-name: sheet-left;
+  }
+}
+/* Ciné type in the player titles. */
+:root[data-theme='cine'] .player-root {
+  --font-display: 'Anton', 'DM Sans Variable', sans-serif;
+  --font-sans: 'DM Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
+}
+:root[data-theme='cine'] .player-root .font-display {
+  font-weight: 400 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
 }

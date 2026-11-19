@@ -1,4 +1,5 @@
 'use client';
+import { SlidingHighlight } from '@/components/sliding-highlight';
 import { useLook } from '@/lib/client/theme';
 import { KIND_IDS, KINDS as KINDS_DEF } from '@/domain/kinds';
 import { MediaLink } from '@/components/media-link';
@@ -95,11 +96,12 @@ function Planning() {
       <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
         <div
           className={cx(
-            'no-scrollbar -mx-4 flex max-w-[calc(100%+2rem)] min-w-0 gap-2 overflow-x-auto px-4 md:mx-0 md:max-w-full md:px-0',
+            'no-scrollbar relative -mx-4 flex max-w-[calc(100%+2rem)] min-w-0 gap-2 overflow-x-auto px-4 md:mx-0 md:max-w-full md:px-0',
           )}
           role="group"
           aria-label={t('catalog.kind')}
         >
+          <SlidingHighlight />
           {(['all', ...universe.enabled.filter((k) => KINDS.includes(k))] as DiscoverKind[]).map(
             (k) => (
               <Pill
