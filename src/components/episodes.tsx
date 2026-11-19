@@ -118,7 +118,11 @@ export function EpisodeList({
   );
   // Seen follows the status and the real length of all seasons/linked films (never clamped to 1).
   const read = entry
-    ? seenUpTo(entry, entry.progress?.read, Math.max(workProgress(entry).total ?? 0, totalParts) || null)
+    ? seenUpTo(
+        entry,
+        entry.progress?.read,
+        Math.max(workProgress(entry).total ?? 0, totalParts) || null,
+      )
     : 0;
   const resume = Math.max(
     0,
@@ -130,7 +134,7 @@ export function EpisodeList({
     (video.focus && video.focus > 1 && video.focus <= seasons.length ? video.focus - 1 : resume);
   const season = seasons[index] ?? seasons[0];
   const offset = offsets[index] ?? 0;
-  const inJf = jellyfinSeason(season, jellyfin);
+  const inJf = jellyfinSeason(season, jellyfin, offsets[index] ?? 0);
   const played = new Set(inJf?.played ?? []);
   const owned = new Set(inJf?.owned ?? []);
   const watchedHere = Math.min(Math.max(0, read - offset), season.list.length);
@@ -155,7 +159,7 @@ export function EpisodeList({
   })();
   const episodeFor = (at: { season: number; episode: number }): PlayerEpisode => {
     const s = seasons[at.season];
-    const jf = jellyfinSeason(s, jellyfin);
+    const jf = jellyfinSeason(s, jellyfin, offsets[at.season] ?? 0);
     // Generic extension catalog work: its own streams endpoint replaces id-based lookups.
     const extension = media?.id.startsWith('ext:') ?? false;
     const partFilm = isPartFilm(s);
@@ -183,8 +187,7 @@ export function EpisodeList({
             ? {
                 id: video.ids.imdb ?? null,
                 tmdb: video.ids.tmdb ?? null,
-                season:
-                  partFilm || video.ids.kind === 'movie' ? null : (s.tmdbSeason ?? s.number),
+                season: partFilm || video.ids.kind === 'movie' ? null : (s.tmdbSeason ?? s.number),
               }
             : null,
       ...(extension && media
@@ -274,10 +277,10 @@ export function EpisodeList({
   if (isPartFilm(season) && season.list.length <= 1) {
     const released = (season.aired ?? 1) >= 1;
     const absolute = offset + 1;
-    const seen = absolute <= read || played.has(1);
-    const jf = jellyfinSeason(season, jellyfin) ?? jellyfin?.bySeason[0];
-    const image =
-      season.list[0]?.thumbnail ?? season.bannerUrl ?? season.coverUrl ?? artwork;
+    // Followed: Bunko's marks decide (Jellyfin's are brought in by the sync); else Jellyfin's.
+    const seen = entry ? absolute <= read : played.has(1);
+    const jf = jellyfinSeason(season, jellyfin, offset) ?? jellyfin?.bySeason[0];
+    const image = season.list[0]?.thumbnail ?? season.bannerUrl ?? season.coverUrl ?? artwork;
     const meta = [
       season.year ? String(season.year) : null,
       season.duration ? t('episodes.duration', { n: n(season.duration) }) : null,
@@ -318,6 +321,13 @@ export function EpisodeList({
                 </span>
               )}
             </button>
+            <WatchMark
+              seen={seen}
+              hidden={!released}
+              disabled={busy}
+              label={t(seen ? 'episodes.watchedFilm' : 'episodes.markFilm')}
+              onToggle={() => onWatched(seen ? (absolute > 1 ? absolute - 1 : null) : absolute)}
+            />
             {seen && (
               <span
                 className={cx(
@@ -343,7 +353,8 @@ export function EpisodeList({
           </button>
         )}
         <div className="flex flex-wrap items-center gap-3">
-          {entry && released && (
+          {/* No still to carry the corner mark: the same mark as a button. */}
+          {!image && released && (
             <button
               type="button"
               disabled={busy}
@@ -430,7 +441,7 @@ export function EpisodeList({
       <ul className="grid max-h-[620px] grid-cols-2 gap-3 overflow-y-auto pt-4 pr-1 sm:grid-cols-3 xl:grid-cols-4">
         {rows.slice(0, limit).map((e) => {
           const absolute = offset + e.number;
-          const seen = absolute <= read || played.has(e.number);
+          const seen = entry ? absolute <= read : played.has(e.number);
           const inJellyfin = owned.has(e.number);
           const upcoming = e.number > aired;
           const state =
@@ -492,37 +503,13 @@ export function EpisodeList({
                     </span>
                   )}
                 </button>
-                {/* A large target in the corner that never lets a tap through to "play" below
-                    (a disabled button would): the round mark inside stays small. */}
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={seen}
-                  aria-disabled={!entry || busy || upcoming}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (!entry || busy || upcoming) return;
-                    onWatched(seen ? (absolute > 1 ? absolute - 1 : null) : absolute);
-                  }}
-                  aria-label={t('episodes.markWatched', { n: n(e.number) })}
-                  title={t('episodes.markWatched', { n: n(e.number) })}
-                  className={cx(
-                    'group/mark absolute top-0 left-0 z-10 flex size-14 items-start justify-start p-2',
-                    upcoming && 'hidden',
-                  )}
-                >
-                  <span
-                    className={cx(
-                      'flex size-8 items-center justify-center rounded-full transition-[background-color,color,opacity]',
-                      seen
-                        ? 'bg-fg text-bg'
-                        : 'bg-black/55 text-white/75 opacity-0 ring-1 ring-white/35 backdrop-blur-sm group-hover:opacity-100 group-hover/mark:bg-black/75 group-hover/mark:text-white group-focus-visible/mark:opacity-100 [@media(hover:none)]:opacity-100',
-                    )}
-                  >
-                    <Check size={16} strokeWidth={2.75} aria-hidden />
-                  </span>
-                </button>
+                <WatchMark
+                  seen={seen}
+                  hidden={upcoming}
+                  disabled={busy}
+                  label={t('episodes.markWatched', { n: n(e.number) })}
+                  onToggle={() => onWatched(seen ? (absolute > 1 ? absolute - 1 : null) : absolute)}
+                />
                 {/* Ciné: the episode number large on its still. */}
                 {look === 'cine' && (
                   <span
@@ -573,7 +560,54 @@ export function EpisodeList({
           </li>
         )}
       </ul>
-      {!entry && <p className="text-muted pt-3 text-sm">{t('episodes.followFirst')}</p>}
     </div>
+  );
+}
+
+/**
+ * "Watched" on an episode or a film: a round mark in the corner of its still, filled once seen,
+ * shown on hover otherwise (always on touch screens). A large target that never lets a tap
+ * through to "play" below. A work not followed yet is followed by the first mark.
+ */
+function WatchMark({
+  seen,
+  hidden,
+  disabled,
+  label,
+  onToggle,
+}: {
+  seen: boolean;
+  hidden?: boolean;
+  disabled?: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  if (hidden) return null;
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={seen}
+      aria-disabled={disabled}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (!disabled) onToggle();
+      }}
+      aria-label={label}
+      title={label}
+      className="group/mark absolute top-0 left-0 z-10 flex size-14 items-start justify-start p-2"
+    >
+      <span
+        className={cx(
+          'flex size-8 items-center justify-center rounded-full transition-[background-color,color,opacity,transform] duration-200 group-active/mark:scale-90',
+          seen
+            ? 'bg-fg text-bg'
+            : 'bg-black/55 text-white/75 opacity-0 ring-1 ring-white/35 backdrop-blur-sm group-hover:opacity-100 group-hover/mark:bg-black/75 group-hover/mark:text-white group-focus-visible/mark:opacity-100 [@media(hover:none)]:opacity-100',
+        )}
+      >
+        <Check size={16} strokeWidth={2.75} aria-hidden />
+      </span>
+    </button>
   );
 }

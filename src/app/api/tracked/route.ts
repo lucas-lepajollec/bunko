@@ -48,7 +48,8 @@ export const GET = route(async (r) => {
     entries.map((e) => {
       const root =
         links.get(e.media.id) ?? (e.anilistId ? links.get(`anilist:${e.anilistId}`) : undefined);
-      const self = root === e.media.id || (e.anilistId != null && root === `anilist:${e.anilistId}`);
+      const self =
+        root === e.media.id || (e.anilistId != null && root === `anilist:${e.anilistId}`);
       return root && !self && followed.has(root) ? { ...e, partOf: root } : e;
     }),
   );
@@ -347,6 +348,17 @@ export const PATCH = route(async (r) => {
     throw error;
   }
   wakeWorker();
+  // Watched marks go to Jellyfin too (played up to the mark, not played after it).
+  if (input.read !== undefined) {
+    const saved = getTracked(input.id);
+    // In the background: a long run of episodes is many calls; the answer does not wait.
+    if (saved?.type === 'ANIME')
+      void import('@/lib/jellyfin')
+        .then((m) => m.syncWatchedToJellyfin(saved.media, saved.jellyfinLink, input.read ?? null))
+        .catch(() => {
+          /* Jellyfin unreachable: Bunko keeps the mark; the next change tries again. */
+        });
+  }
   await syncTrackedCover(
     input.id,
     undefined,

@@ -440,6 +440,30 @@ export function jellyfinPresence(
   const match = matchJellyfin(media, link);
   if (!match) return null;
   const base = getSettings().jellyfinUrl.replace(/\/+$/, '');
+  // Linked "in order": every episode of the series (specials last) numbered one after another.
+  if (link && link !== 'none' && link.order === 'absolute') {
+    const numbers = seasonNumbers(match.series);
+    const ordered = [...numbers.filter((n) => n >= 1), ...numbers.filter((n) => n < 1)].flatMap(
+      (season) => [...(match.series.seasons[String(season)] ?? [])].sort((a, b) => a.n - b.n),
+    );
+    const flat = ordered.map((e, i) => ({ ...e, n: i + 1 }));
+    const season = {
+      season: 0,
+      owned: flat.map((e) => e.n),
+      played: flat.filter((e) => e.played).map((e) => e.n),
+      episodeIds: Object.fromEntries(flat.map((e) => [e.n, e.id])),
+    };
+    return {
+      seriesId: match.series.id,
+      name: match.series.name,
+      bySeason: [season],
+      ownedCount: season.owned.length,
+      playedCount: season.played.length,
+      url: `${base}/web/#/details?id=${match.series.id}`,
+      manual: true,
+      absolute: true,
+    };
+  }
   const bySeason = seasonNumbers(match.series).map((season) => {
     const episodes = match.series.seasons[String(season)] ?? [];
     return {
@@ -468,8 +492,9 @@ export function watchedInWork(presence: JellyfinPresence, seasons?: AnimeSeason[
   if (seasons?.length) {
     let watched = 0;
     for (const s of seasons) {
-      const jf = jellyfinSeason(s, presence);
-      if (jf?.played.length) watched = seasonStart(seasons, s.number) + Math.max(...jf.played);
+      const start = seasonStart(seasons, s.number);
+      const jf = jellyfinSeason(s, presence, start);
+      if (jf?.played.length) watched = start + Math.max(...jf.played);
     }
     return watched;
   }
@@ -840,4 +865,75 @@ export function disconnectJellyfin(removeImported: boolean) {
   updateSettings({ jellyfinUrl: '', jellyfinApiKey: '', jellyfinUser: '', jellyfinLibraries: {} });
   statement("DELETE FROM worker_state WHERE key LIKE 'jellyfin_imported:%'").run();
   return { removed: removed.length };
+}
+
+/**
+ * The episodes of a work that Jellyfin holds, by their number in the whole work (1, 2, … across
+ * seasons and parts): item id and whether Jellyfin counts them watched.
+ */
+export function jellyfinEpisodesOfWork(
+  presence: JellyfinPresence,
+  seasons?: AnimeSeason[] | null,
+): Map<number, { id: string; played: boolean }> {
+  const out = new Map<number, { id: string; played: boolean }>();
+  if (seasons?.length) {
+    for (const s of seasons) {
+      const start = seasonStart(seasons, s.number);
+      const jf = jellyfinSeason(s, presence, start);
+      if (!jf) continue;
+      for (const [n, id] of Object.entries(jf.episodeIds))
+        out.set(start + Number(n), { id, played: jf.played.includes(Number(n)) });
+    }
+    return out;
+  }
+  // Seasons unknown (series and films from TMDB): Jellyfin's own seasons one after another.
+  let offset = 0;
+  for (const s of presence.bySeason.filter((x) => presence.absolute || x.season >= 1)) {
+    for (const n of s.owned)
+      out.set(offset + n, { id: s.episodeIds[n], played: s.played.includes(n) });
+    offset += Math.max(0, ...s.owned);
+  }
+  return out;
+}
+
+/**
+ * What is marked watched in Bunko goes to Jellyfin too: episodes up to `watched` are played,
+ * later ones are not. Without it, unmarking an episode Jellyfin counts as played would come
+ * back at the next sync. The index is updated in place so the change shows at once.
+ */
+export async function syncWatchedToJellyfin(
+  media: UnifiedMedia,
+  link: JellyfinLink | null | undefined,
+  watched: number | null,
+  signal?: AbortSignal,
+) {
+  if (!jellyfinConfigured() || media.type !== 'ANIME') return;
+  const presence = jellyfinPresence(media, link);
+  if (!presence) return;
+  const seasons = media.anilistId ? knownSeasons(media.anilistId) : null;
+  const changes = [...jellyfinEpisodesOfWork(presence, seasons)]
+    .filter(([n, e]) => e.id && e.played !== n <= (watched ?? 0))
+    .slice(0, 500);
+  if (!changes.length) return;
+  const uid = await userId(signal);
+  const series = jellyfinIndex().byId.get(presence.seriesId);
+  for (const [n, e] of changes) {
+    const played = n <= (watched ?? 0);
+    const paths = [`/UserPlayedItems/${e.id}?userId=${uid}`, `/Users/${uid}/PlayedItems/${e.id}`];
+    for (const path of paths) {
+      try {
+        await jellyfin(path, signal, 10_000, { method: played ? 'POST' : 'DELETE' });
+        break;
+      } catch {
+        /* Older Jellyfin: the other form. */
+      }
+    }
+    for (const list of Object.values(series?.seasons ?? {}))
+      for (const episode of list) if (episode.id === e.id) episode.played = played;
+  }
+  if (series)
+    statement('UPDATE jellyfin_series SET payload=? WHERE series_id=?').run(
+      JSON.stringify(series),
+      series.id,
+    );
 }

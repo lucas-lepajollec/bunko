@@ -872,8 +872,14 @@ export const catalogSettingKeys = [
 ] as const satisfies readonly (keyof Settings)[];
 export type CatalogSetting = (typeof catalogSettingKeys)[number];
 export type SettingsPatch = Partial<Settings>;
-/** A work's manual Jellyfin link: a series (and season), or `none` to keep it unlinked. */
-export type JellyfinLink = { seriesId: string; season: number } | 'none';
+/**
+ * A work's manual Jellyfin link: a series (and season), or `none` to keep it unlinked. `order`
+ * says how episodes match: by season numbers (default), or every episode of the work in order
+ * against every episode of the series in order (a work of films or parts kept as one series in
+ * Jellyfin, a series numbered differently).
+ */
+export type JellyfinLink =
+  { seriesId: string; season: number; order?: 'seasons' | 'absolute' } | 'none';
 /** What Jellyfin holds for an anime (owned and watched episodes of the linked season). */
 export interface JellyfinPresence {
   seriesId: string;
@@ -891,6 +897,8 @@ export interface JellyfinPresence {
   playedCount: number;
   url: string;
   manual: boolean;
+  /** Linked "in order": one list (season 0) numbered across the whole series. */
+  absolute?: boolean;
 }
 /** What a Jellyfin library holds for Bunko (anime now; series and films in later phases). */
 export type JellyfinRole = 'anime' | 'series' | 'movies' | 'animation' | 'ignore';

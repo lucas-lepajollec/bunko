@@ -33,10 +33,10 @@ export function toast(t: Omit<ToastNotice, 'id' | 'at'>) {
   const entry: ToastNotice = { ...t, id, at: new Date().toISOString() };
   // One message per text: repeating an action does not stack identical toasts.
   toasts = [...toasts.filter((x) => x.text !== t.text), entry].slice(-3);
-  history = [entry, ...history.filter((x) => x.text !== t.text || Date.now() - Date.parse(x.at) > 5000)].slice(
-    0,
-    MAX_HISTORY,
-  );
+  history = [
+    entry,
+    ...history.filter((x) => x.text !== t.text || Date.now() - Date.parse(x.at) > 5000),
+  ].slice(0, MAX_HISTORY);
   emit();
   window.setTimeout(() => dismiss(id), t.tone === 'bad' ? 7000 : 4000);
 }

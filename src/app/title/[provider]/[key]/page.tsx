@@ -365,7 +365,25 @@ function Title({
   const watchQueue = useRef<Promise<unknown>>(Promise.resolve());
   const watchPending = useRef(0);
   function setWatched(watched: number | null) {
-    if (!entry) return;
+    // Not followed yet: the first watched mark follows the work, then keeps the mark.
+    if (!entry) {
+      if (watched === null) return;
+      watchPending.current++;
+      watchQueue.current = watchQueue.current
+        .then(async () => {
+          const added = await send<TrackedMedia>('/api/tracked', 'POST', {
+            media,
+            status: 'READING',
+            sources,
+          });
+          await send('/api/tracked', 'PATCH', { id: added.id, read: watched });
+        })
+        .catch((e) => toast({ tone: 'bad', text: errorText(t, e) }))
+        .finally(() => {
+          if (--watchPending.current === 0) void library.mutate();
+        });
+      return;
+    }
     const id = entry.id;
     void library.mutate(
       (list) =>

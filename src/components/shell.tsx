@@ -296,10 +296,9 @@ function useActivity() {
   const batches = useApi<DownloadBatch[]>('/api/downloads/batches', {
     refreshInterval: batchesInterval,
   });
-  const extensions = useApi<Extension[]>(
-    settings.data?.suwayomiUrl ? '/api/extensions' : null,
-    { refreshInterval: 30 * 60_000 },
-  );
+  const extensions = useApi<Extension[]>(settings.data?.suwayomiUrl ? '/api/extensions' : null, {
+    refreshInterval: 30 * 60_000,
+  });
   return {
     active: (batches.data ?? []).filter((b) => b.state !== 'completed' && b.state !== 'error')
       .length,
@@ -377,10 +376,14 @@ function CineHeader() {
       <div
         aria-hidden
         className={cx(
-          'header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-36 transition-opacity duration-500 ease-out md:h-48',
+          'header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-40 transition-opacity duration-500 ease-out md:h-64',
           solid ? 'opacity-100' : 'opacity-0',
         )}
-      />
+      >
+        <span />
+        <span />
+        <span />
+      </div>
       <div
         aria-hidden
         className={cx(
