@@ -53,6 +53,18 @@ const episodes = [
   })),
   { Id: 'b1e1', SeriesId: 'B', ParentIndexNumber: 1, IndexNumber: 1, UserData: { Played: true } },
 ];
+// Series C: films filed freely, Jellyfin could not number them ("unknown" episodes).
+const unnumbered = [
+  { Id: 'c3', SeriesId: 'C', Name: 'Chapter 3', PremiereDate: '2008-05-01', UserData: {} },
+  {
+    Id: 'c1',
+    SeriesId: 'C',
+    Name: 'Chapter 1',
+    PremiereDate: '2007-12-01',
+    UserData: { Played: true },
+  },
+  { Id: 'c2', SeriesId: 'C', Name: 'Chapter 2', PremiereDate: '2007-12-29', UserData: {} },
+];
 let auth = '';
 const server: Server = createServer((req, res) => {
   auth = String(req.headers['x-emby-token'] ?? '');
@@ -98,7 +110,7 @@ const server: Server = createServer((req, res) => {
               ? [{ Id: 'C', Name: 'Office Drama', ProductionYear: 2005, ProviderIds: {} }]
               : [],
       });
-    return send({ Items: parent === 'L1' ? episodes : [] });
+    return send({ Items: parent === 'L1' ? episodes : parent === 'L2' ? unnumbered : [] });
   }
   res.writeHead(404);
   res.end();
@@ -277,4 +289,17 @@ it('imports Jellyfin anime into the account that connected it only', async () =>
     expect(listTracked()).toEqual([]);
     expect(jellyfin.jellyfinImportedIds()).toEqual([]);
   });
+});
+
+it('keeps episodes Jellyfin could not number, in release order, for links "in order"', async () => {
+  const followed = track({ media: anime(5, 'Unrelated'), status: 'PLANNING' });
+  await jellyfin.syncJellyfinIndex();
+  const media = getTracked(followed.id)!.media;
+  const presence = jellyfin.jellyfinPresence(media, {
+    seriesId: 'C',
+    season: 1,
+    order: 'absolute',
+  });
+  expect(presence).toMatchObject({ ownedCount: 3, playedCount: 1, absolute: true });
+  expect(presence!.bySeason[0].episodeIds).toEqual({ 1: 'c1', 2: 'c2', 3: 'c3' });
 });
