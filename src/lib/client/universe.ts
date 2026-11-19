@@ -71,8 +71,18 @@ export function useUniverse() {
     if (url.href !== window.location.href) window.history.replaceState(null, '', url);
     await mutate('/api/settings', { ...data, ...patch }, { revalidate: false });
     await send('/api/settings', 'PATCH', patch);
-    // Every page reloads for the new universe (only what it needs).
-    await mutate((key) => typeof key === 'string' && key.startsWith('/api/'));
+    // Every content view reloads for the new universe without revalidating session/status polls.
+    await mutate(
+      (key) =>
+        typeof key === 'string' &&
+        key.startsWith('/api/') &&
+        key !== '/api/auth' &&
+        key !== '/api/settings' &&
+        key !== '/api/extensions' &&
+        key !== '/api/downloads/batches' &&
+        key !== '/api/jobs' &&
+        key !== '/api/library/activity',
+    );
   }
   const tmdb = Boolean(data?.catalogs?.configured.tmdb);
   // 18+ allowed in the settings: the kinds menu can switch the whole interface to 18+ only.

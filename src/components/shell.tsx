@@ -39,7 +39,7 @@ import {
   X,
 } from 'lucide-react';
 import { clearPersistentCache, persistentCache } from '@/lib/client/cache';
-import { getAmbient, subscribeAmbient } from '@/lib/client/ambient';
+import { getAmbient, getAmbientColor, subscribeAmbient } from '@/lib/client/ambient';
 import { useUniverse } from '@/lib/client/universe';
 import { applyTheme, getTheme, useLook } from '@/lib/client/theme';
 
@@ -113,12 +113,20 @@ function AuthGate({ children }: { children: ReactNode }) {
 /** The current artwork, blurred behind the page; only themes that use it show it (themes.css). */
 function Ambient() {
   const src = useSyncExternalStore(subscribeAmbient, getAmbient, () => null);
-  if (!src) return null;
+  const color = useSyncExternalStore(subscribeAmbient, getAmbientColor, () => null);
+  if (!src && !color) return null;
   return (
-    <div aria-hidden className="ambient">
-      {/* A plain image: it sits behind the page, where the cover loader's visibility checks never fire. */}
-      {/* eslint-disable-next-line @next/next/no-img-element -- decorative, already in the browser cache */}
-      <img key={src} src={src} alt="" referrerPolicy="no-referrer" decoding="async" />
+    <div
+      aria-hidden
+      className="ambient"
+      style={color ? ({ ['--ambient-color' as string]: color } as React.CSSProperties) : undefined}
+    >
+      {/* A plain image: it sits behind the page, where the cover loader's visibility checks never fire.
+          Hidden on phones (themes.css) where a pure CSS gradient avoids GPU blur stalls. */}
+      {src && (
+        /* eslint-disable-next-line @next/next/no-img-element -- decorative, already in the browser cache */
+        <img src={src} alt="" referrerPolicy="no-referrer" decoding="async" />
+      )}
     </div>
   );
 }
@@ -576,9 +584,15 @@ function HeaderPanel({
   panelRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const content = useRef<HTMLDivElement>(null);
-  // The last menu stays inside while the panel closes, so it fades out with its content.
+  // The last menu stays inside briefly while the panel fades out, then unmounts so background
+  // polling (jobs, updates) and observers stop completely once closed.
   const [shown, setShown] = useState<HeaderMenu | null>(open);
   if (open && open !== shown) setShown(open);
+  useEffect(() => {
+    if (open || !shown) return;
+    const timer = setTimeout(() => setShown(null), 160);
+    return () => clearTimeout(timer);
+  }, [open, shown]);
   const [box, setBox] = useState<{ left: number; width: number; caret: number } | null>(null);
   const [height, setHeight] = useState(0);
   // Geometry moves smoothly between menus, but appears in place when the panel opens.

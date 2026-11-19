@@ -207,7 +207,7 @@ function Planning() {
                 'min-w-0 flex-col lg:flex',
                 look === 'cine'
                   ? cx(
-                      'gap-3 rounded-[18px] border p-2.5 backdrop-blur-xl lg:min-h-[420px]',
+                      'gap-3 rounded-[18px] border p-2.5 md:backdrop-blur-xl lg:min-h-[420px]',
                       d.date === today
                         ? 'border-white/30 bg-white/[0.12]'
                         : 'border-white/[0.08] bg-white/[0.04]',

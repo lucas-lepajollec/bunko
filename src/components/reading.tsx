@@ -133,7 +133,7 @@ export function ContinueCard({ item, className }: { item: ContinueItem; classNam
               className="transition-transform duration-300 group-hover:scale-[1.03]"
             />
             <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.75))]" />
-            <span className="absolute bottom-3 left-2.5 max-w-[calc(100%-20px)] truncate rounded-full bg-black/60 px-2.5 py-1 text-[12px] font-semibold text-white backdrop-blur-md">
+            <span className="absolute bottom-3 left-2.5 max-w-[calc(100%-20px)] truncate rounded-full bg-black/75 px-2.5 py-1 text-[12px] font-semibold text-white md:bg-black/60 md:backdrop-blur-md">
               {label}
             </span>
             {bar('absolute inset-x-0 bottom-0 h-1', 'bg-white/20', '#fff')}
