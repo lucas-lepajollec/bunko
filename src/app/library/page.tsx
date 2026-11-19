@@ -16,13 +16,8 @@ import { useLook } from '@/lib/client/theme';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useUniverse } from '@/lib/client/universe';
-import type {
-  KavitaSeriesSummary,
-  LibraryActivity,
-  PublicSettings,
-  TrackedMedia,
-} from '@/types/shared';
-import { KavitaUnmatched } from '@/components/kavita';
+import type { UnlinkedItem, LibraryActivity, PublicSettings, TrackedMedia } from '@/types/shared';
+import { UnlinkedInbox } from '@/components/unlinked';
 import { SelectionBar, SelectionMark } from '@/components/library-selection';
 import { LibraryNews, hasNews } from '@/components/updates';
 import { WorkMarks } from '@/components/work-marks';
@@ -52,7 +47,7 @@ import {
 } from '@/components/ui';
 
 type Shelf = 'READING' | 'CAUGHT_UP' | 'PLANNING' | 'PAUSED' | 'COMPLETED' | 'DROPPED';
-type View = 'all' | 'owned' | 'updates' | 'kavita';
+type View = 'all' | 'owned' | 'updates' | 'unlinked' | 'kavita';
 type Kind = 'all' | RegistryKind;
 type Sort =
   | 'news'
@@ -69,7 +64,7 @@ type Sort =
 type Filter =
   '' | Shelf | 'seen' | 'unseen' | 'unowned' | 'rated' | 'unrated' | 'adult' | 'notAdult';
 const SHELVES: Shelf[] = ['READING', 'CAUGHT_UP', 'PLANNING', 'PAUSED', 'COMPLETED', 'DROPPED'];
-const VIEWS: View[] = ['all', 'owned', 'updates', 'kavita'];
+const VIEWS: View[] = ['all', 'owned', 'updates', 'unlinked', 'kavita'];
 const SORTS: Sort[] = [
   'news',
   'recent',
@@ -178,7 +173,8 @@ function Library() {
     legacyUnowned ? 'unowned' : '',
     FILTERS,
   );
-  const unmatched = useApi<KavitaSeriesSummary[]>('/api/kavita/series?unmatched=1');
+  const unlinked = useApi<UnlinkedItem[]>('/api/unlinked');
+  const unlinkedCount = (unlinked.data ?? []).filter((i) => !i.ignored).length;
   // The library keeps every kind one tap away, but opens on the current universe.
   const universe = useUniverse();
   const [chosenKind, setChosenKind] = useViewState<Kind | ''>('kind', '', ['', ...ALL_KINDS]);
@@ -188,8 +184,8 @@ function Library() {
   const video = isVideoKind(kind);
   const vt = (key: string, vars?: Record<string, string | number>) =>
     video && t(`${key}.video`) !== `${key}.video` ? t(`${key}.video`, vars) : t(key, vars);
-  // Kavita series to import belong to reading kinds; every other tab applies to all kinds.
-  const shownShelf: View = video && shelf === 'kavita' ? 'all' : shelf;
+  // The old "In Kavita" tab is now the inbox of every integration.
+  const shownShelf: View = shelf === 'kavita' ? 'unlinked' : shelf;
   // Newest release / air date first by default, for every kind.
   // The last sort picked becomes the default (kept with the account, on every device).
   const settings = useApi<PublicSettings>('/api/settings');
@@ -349,10 +345,10 @@ function Library() {
         pending={
           refreshing ||
           (!library.data && library.isLoading) ||
-          (shownShelf === 'kavita' && unmatched.isLoading)
+          (shownShelf === 'unlinked' && unlinked.isLoading)
         }
         partial={Boolean(
-          refreshFailed || library.error || (shownShelf === 'kavita' && unmatched.error),
+          refreshFailed || library.error || (shownShelf === 'unlinked' && unlinked.error),
         )}
       />
       {(activity.data?.hiddenAdult ?? 0) > 0 && (
@@ -375,19 +371,19 @@ function Library() {
             label: t('library.updates'),
             count: newsCount || undefined,
           },
-          // Kavita series waiting to be followed: reading kinds only.
-          ...(!video && unmatched.data?.length
+          // What the integrations hold that no work is linked to.
+          ...(unlinked.data?.length || shownShelf === 'unlinked'
             ? [
                 {
-                  id: 'kavita' as View,
-                  label: t('library.inKavita'),
-                  count: unmatched.data.length,
+                  id: 'unlinked' as View,
+                  label: t('library.unlinked'),
+                  count: unlinkedCount || undefined,
                 },
               ]
             : []),
         ]}
       />
-      {shownShelf !== 'kavita' && (
+      {shownShelf !== 'unlinked' && (
         <ScrollStrip
           role="group"
           aria-label={t('catalog.kind')}
@@ -426,10 +422,10 @@ function Library() {
       )}
       {shownShelf === 'updates' ? (
         <LibraryNews kind={kind} entries={ofKindNow} />
-      ) : shownShelf === 'kavita' ? (
-        <KavitaUnmatched
-          series={unmatched.data}
-          onTracked={() => Promise.all([unmatched.mutate(), library.mutate()])}
+      ) : shownShelf === 'unlinked' ? (
+        <UnlinkedInbox
+          items={unlinked.data}
+          onChanged={() => Promise.all([unlinked.mutate(), library.mutate()])}
         />
       ) : (
         <>
@@ -738,19 +734,19 @@ function VideoMeta({ entry: e }: { entry: TrackedMedia }) {
           ...(m.year ? [{ text: String(m.year) }] : []),
         ]
       : [
-        read > 0
-          ? {
-              text: total
-                ? t('library.watchedOf', { n: n(read), total: n(total) })
-                : t('library.watchedN', { n: n(read) }),
-              strong: true,
-            }
-          : { text: total ? t('library.episodesN', { n: n(total) }) : t('library.notStarted') },
-        ...(e.jellyfinOwned
-          ? [{ text: t('library.ownedEpisodes', { n: n(e.jellyfinOwned) }) }]
-          : []),
-        ...(airing ? [{ text: t('library.airing') }] : []),
-      ];
+          read > 0
+            ? {
+                text: total
+                  ? t('library.watchedOf', { n: n(read), total: n(total) })
+                  : t('library.watchedN', { n: n(read) }),
+                strong: true,
+              }
+            : { text: total ? t('library.episodesN', { n: n(total) }) : t('library.notStarted') },
+          ...(e.jellyfinOwned
+            ? [{ text: t('library.ownedEpisodes', { n: n(e.jellyfinOwned) }) }]
+            : []),
+          ...(airing ? [{ text: t('library.airing') }] : []),
+        ];
   return (
     <span className="text-muted -mt-1 hidden truncate text-xs md:block">
       {parts.map((p, i) => (

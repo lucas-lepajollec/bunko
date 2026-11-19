@@ -1000,6 +1000,7 @@ function snapshotTracked(id?: number) {
         sourceMatch: sources.length ? 'linked' : 'queued',
         sourceStatus,
         identity,
+        ...(r.off_catalog ? { keptOffCatalog: true } : {}),
         kavitaSeriesId: r.kavita_series_id as number | null,
         autoDownload: Boolean(r.auto_download),
         favorite: Boolean(r.favorite),

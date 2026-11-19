@@ -92,7 +92,7 @@ Open `http://<your-host>:2512`. On first start you choose a username and a passw
 
 Then, in **Settings → Kavita libraries**, pick the library folder that receives each format (manga, manhwa & webtoons, manhua, novels). Your Suwayomi extensions are listed under **Sources**: choose which ones join global search, open a title and pick chapters.
 
-Bunko also indexes what Kavita already holds: titles you own show an _In Kavita_ badge, owned chapters are never downloaded again, and existing series can be followed from **Library → In Kavita**.
+Bunko also indexes what Kavita already holds: titles you own show an _In Kavita_ badge, owned chapters are never downloaded again, and existing series can be followed from **Library → Unlinked**, the inbox of everything your servers (Kavita, Jellyfin) hold that no work is linked to: link an item to a catalog work, or make it a work of its own of any kind.
 
 > **Good to know.** Bunko asks Suwayomi only for the chapter pages, then builds each CBZ itself, named the way Kavita expects (`Series [bunko-…]/Series Ch. 0012.cbz` for new works) with embedded metadata. Suwayomi's own download folder and settings are left untouched, and the two containers do not need to share a volume.
 

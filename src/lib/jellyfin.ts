@@ -6,6 +6,7 @@ import type {
   MediaDetail,
   JellyfinLibrary,
   JellyfinRole,
+  JellyfinItem,
   JellyfinLink,
   JellyfinPresence,
   JellyfinSeriesSummary,
@@ -22,16 +23,18 @@ import { tenantSignal } from './tenant-lifecycle';
 import { tenantState } from './tenant-context';
 
 /** One Jellyfin series as indexed: names, provider ids and its episodes by season. */
-interface IndexedJellyfinSeries {
+export interface IndexedJellyfinSeries {
   id: string;
   name: string;
   names: string[];
   year: number | null;
   /** Role of the Jellyfin library the series lives in. */
   role: JellyfinRole;
+  /** Name of that library (indexes from before this field: absent). */
+  library?: string;
   providerIds: Record<string, string>;
   /** season → episodes (number, item id, played by the chosen user). */
-  seasons: Record<string, { n: number; id: string; played: boolean }[]>;
+  seasons: Record<string, { n: number; id: string; played: boolean; name?: string }[]>;
 }
 const SYNC_EVERY_MS = 15 * 60_000;
 const IMPORTS_PER_SYNC = 10;
@@ -209,7 +212,10 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
       })
       .passthrough(),
   );
-  const series: (z.infer<typeof seriesSchema>[number] & { role: JellyfinRole })[] = [];
+  const series: (z.infer<typeof seriesSchema>[number] & {
+    role: JellyfinRole;
+    library: string;
+  })[] = [];
   const episodes: z.infer<typeof episodeSchema> = [];
   for (const library of libraries) {
     if (library.role === 'movies' || library.role === 'animation') {
@@ -222,12 +228,13 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
         ),
       );
       for (const f of films) {
-        series.push({ ...f, role: library.role });
+        series.push({ ...f, role: library.role, library: library.name });
         episodes.push({
           Id: f.Id,
           SeriesId: f.Id,
           ParentIndexNumber: 1,
           IndexNumber: 1,
+          Name: f.Name,
           UserData: f.UserData ?? null,
         });
       }
@@ -240,7 +247,7 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
         signal,
       ),
     );
-    series.push(...found.map((s) => ({ ...s, role: library.role })));
+    series.push(...found.map((s) => ({ ...s, role: library.role, library: library.name })));
     episodes.push(
       ...episodeSchema.parse(
         await allItems(
@@ -269,6 +276,7 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
       n: e.IndexNumber,
       id: e.Id,
       played: Boolean(e.UserData?.Played),
+      ...(e.Name ? { name: e.Name } : {}),
     });
     bySeries.set(e.SeriesId, seasons);
   }
@@ -285,7 +293,12 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
         }),
     );
     for (const e of sorted)
-      known.push({ n: ++next, id: e.Id, played: Boolean(e.UserData?.Played) });
+      known.push({
+        n: ++next,
+        id: e.Id,
+        played: Boolean(e.UserData?.Played),
+        ...(e.Name ? { name: e.Name } : {}),
+      });
     bySeries.set(seriesId, seasons);
   }
   signal?.throwIfAborted();
@@ -299,6 +312,7 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
         names: [...new Set([s.Name, s.OriginalTitle, s.SortName].filter((n): n is string => !!n))],
         year: s.ProductionYear ?? null,
         role: s.role,
+        library: s.library,
         providerIds: Object.fromEntries(
           Object.entries(s.ProviderIds ?? {}).filter((e): e is [string, string] => Boolean(e[1])),
         ),
@@ -392,12 +406,37 @@ function jellyfinIndex(): JellyfinIndex {
 function indexed(): IndexedJellyfinSeries[] {
   return jellyfinIndex().rows;
 }
+/** Every indexed series and film (for the inbox of items no work is linked to). */
+export const jellyfinIndexedSeries = (): readonly IndexedJellyfinSeries[] => indexed();
 /** "Title Season 2", "Title 2nd Season", "Title Part 2"… → base title and season number. */
 export function seasonOf(title: string): { base: string; season: number | null } {
   const m =
     title.match(/^(.*?)[\s:-]*(?:season|saison|temporada|staffel|stagione)\s*(\d+)\b/i) ??
     title.match(/^(.*?)[\s:-]*(\d+)(?:st|nd|rd|th)\s+season\b/i);
   return m ? { base: m[1].trim(), season: Number(m[2]) } : { base: title, season: null };
+}
+/** Every episode of a series in watching order: seasons from 1 up, specials (season 0) last. */
+function orderedItems(series: IndexedJellyfinSeries) {
+  const numbers = Object.keys(series.seasons)
+    .map(Number)
+    .sort((a, b) => a - b);
+  return [...numbers.filter((n) => n >= 1), ...numbers.filter((n) => n < 1)].flatMap((season) =>
+    [...(series.seasons[String(season)] ?? [])]
+      .sort((a, b) => a.n - b.n)
+      .map((e) => ({ ...e, season })),
+  );
+}
+/** The items of an indexed series, for linking a work's episodes one by one. */
+export function jellyfinItems(seriesId: string): JellyfinItem[] {
+  const series = jellyfinIndex().byId.get(seriesId);
+  if (!series) throw new AppError('NOT_FOUND', 'Jellyfin series is not indexed', 404);
+  return orderedItems(series).map((e) => ({
+    id: e.id,
+    season: e.season,
+    n: e.n,
+    name: e.name ?? null,
+    played: e.played,
+  }));
 }
 const seasonNumbers = (s: IndexedJellyfinSeries) =>
   Object.keys(s.seasons)
@@ -468,13 +507,23 @@ export function jellyfinPresence(
   const match = matchJellyfin(media, link);
   if (!match) return null;
   const base = getSettings().jellyfinUrl.replace(/\/+$/, '');
-  // Linked "in order": every episode of the series (specials last) numbered one after another.
-  if (link && link !== 'none' && link.order === 'absolute') {
-    const numbers = seasonNumbers(match.series);
-    const ordered = [...numbers.filter((n) => n >= 1), ...numbers.filter((n) => n < 1)].flatMap(
-      (season) => [...(match.series.seasons[String(season)] ?? [])].sort((a, b) => a.n - b.n),
-    );
-    const flat = ordered.map((e, i) => ({ ...e, n: i + 1 }));
+  // Linked by hand episode by episode, or "in order": one list numbered like the work's
+  // episodes (absolute numbers), every season of the series one after another.
+  if (link && link !== 'none' && (link.episodes || link.order === 'absolute')) {
+    let flat: { n: number; id: string; played: boolean }[];
+    if (link.episodes) {
+      const items = new Map(
+        Object.values(match.series.seasons)
+          .flat()
+          .map((e) => [e.id, e]),
+      );
+      flat = Object.entries(link.episodes)
+        .flatMap(([n, id]) => {
+          const e = id ? items.get(id) : undefined;
+          return e ? [{ ...e, n: Number(n) }] : [];
+        })
+        .sort((a, b) => a.n - b.n);
+    } else flat = orderedItems(match.series).map((e, i) => ({ ...e, n: i + 1 }));
     const season = {
       season: 0,
       owned: flat.map((e) => e.n),
@@ -590,7 +639,7 @@ export function jellyfinMedia(seriesId: string): MediaDetail {
       nextEpisode: null,
       list: Array.from({ length: count }, (_, i) => ({
         number: i + 1,
-        title: null,
+        title: s.seasons[String(number)]?.find((e) => e.n === i + 1)?.name ?? null,
         thumbnail: null,
       })),
     };
@@ -626,7 +675,7 @@ export function resetJellyfinProgress() {
   progressState().key = '';
   if (jellyfinConfigured()) applyJellyfinProgress();
 }
-function applyJellyfinProgress() {
+export function applyJellyfinProgress() {
   // Nothing new in Jellyfin's index nor in the library: the watched counts are already applied.
   const key = `${jellyfinIndex().stamp}:${writeVersion('linkage')}`;
   if (progressState().key === key) return;
@@ -805,9 +854,15 @@ export async function importJellyfinAnime(signal?: AbortSignal) {
  */
 export async function upgradeOffCatalogWorks(signal?: AbortSignal, budget = 20) {
   const series = new Map(indexed().map((s) => [s.id, s]));
+  // Kept off-catalog by hand (or made a sheet of its own): never replaced.
+  const kept = new Set(
+    (statement('SELECT id FROM tracked_media WHERE off_catalog=1').all() as { id: number }[]).map(
+      (r) => r.id,
+    ),
+  );
   for (const t of listTracked()) {
     if (signal?.aborted || budget <= 0) return;
-    if (!t.media.id.startsWith('jellyfin:')) continue;
+    if (!t.media.id.startsWith('jellyfin:') || kept.has(t.id)) continue;
     const s = series.get(t.media.id.slice('jellyfin:'.length));
     if (!s) continue;
     let work: UnifiedMedia | null = null;
