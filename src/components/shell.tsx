@@ -375,10 +375,8 @@ function CineHeader() {
           before that, a light shade for the artwork. */}
       <div
         aria-hidden
-        className={cx(
-          'header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-[86px] transition-opacity duration-300 ease-out md:h-32',
-          solid ? 'opacity-100' : 'opacity-0',
-        )}
+        data-on={solid}
+        className="header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-[86px] md:h-32"
       >
         <span />
         <span />

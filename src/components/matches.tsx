@@ -234,14 +234,20 @@ export function CatalogTab({
   media,
   onPick,
   onDetach,
+  onInfo,
 }: {
   entry: TrackedMedia;
   media: MediaDetail;
   onPick: (m: Parameters<Parameters<typeof CatalogPicker>[0]['onPick']>[0]) => void;
   onDetach: () => void;
+  /** A work kept off the catalog takes its facts from a catalog work (`null`: stops). */
+  onInfo: (id: string | null) => void;
 }) {
   const { t } = useI18n();
   const off = entry.identity === 'off-catalog';
+  const info = entry.media.metadataFrom;
+  // Off the catalog, picking a work takes its facts by default (episodes and links stay).
+  const [mode, setMode] = useState<'info' | 'replace'>('info');
   return (
     <div className="flex flex-col gap-4">
       <Current
@@ -272,10 +278,46 @@ export function CatalogTab({
           {t('match.detach')}
         </button>
       )}
+      {off && info && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-white/[0.05] p-3 text-sm">
+          <span className="min-w-0 flex-1">{t('match.infoFrom', { title: info.title })}</span>
+          <button type="button" className={smallButton} onClick={() => onInfo(null)}>
+            {t('match.infoStop')}
+          </button>
+        </div>
+      )}
+      {off && (
+        <div
+          role="radiogroup"
+          aria-label={t('match.attachCatalog')}
+          className="grid gap-2 sm:grid-cols-2"
+        >
+          {(['info', 'replace'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={mode === m}
+              onClick={() => setMode(m)}
+              className={cx(
+                'flex flex-col gap-0.5 rounded-2xl border p-3 text-left transition-colors',
+                mode === m ? 'border-fg bg-white/[0.06]' : 'border-line hover:bg-white/[0.04]',
+              )}
+            >
+              <span className="text-sm font-semibold">{t(`match.mode.${m}`)}</span>
+              <span className="text-muted text-xs leading-snug">{t(`match.modeHint.${m}`)}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <span className="text-muted mt-2 text-xs tracking-[0.14em] uppercase">
         {off ? t('match.attachCatalog') : t('match.changeWork')}
       </span>
-      <CatalogPicker initial={entry.title} onPick={onPick} kind={kindOf(media)} />
+      <CatalogPicker
+        initial={info?.title ?? entry.title}
+        onPick={(m) => (off && mode === 'info' ? onInfo(m.id) : onPick(m))}
+        kind={kindOf(media)}
+      />
       {workIdOf(media) && <WorkParts root={workIdOf(media)!} kind={kindOf(media)} />}
     </div>
   );

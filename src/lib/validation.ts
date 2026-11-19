@@ -426,6 +426,8 @@ export const trackPatch = z
       .optional(),
     /** Set progress by hand (episodes watched for anime); may go back. */
     read: z.number().min(0).max(100_000).nullable().optional(),
+    /** A work of one's own takes its facts from this catalog work (`null`: its own again). */
+    metadataFrom: mediaId.nullable().optional(),
     /** Kavita entries linked by hand (`null`: every entry as Kavita numbers it). */
     kavitaMap: z
       .record(

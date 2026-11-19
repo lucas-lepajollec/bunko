@@ -8,6 +8,7 @@ import { jellyfinPresence } from '@/lib/jellyfin';
 import { linkedRoot, seasonRef } from '@/lib/anime-franchise';
 import { animeIdsLoaded, firstSeason, idsOfAnilist } from '@/lib/anime-ids';
 import { emptyMedia } from '@/lib/media';
+import { withLiveInfo } from '@/lib/work-info';
 export const GET = route(async (r) => {
   const id = mediaId.parse(new URL(r.url).searchParams.get('id'));
   // A later season already known to belong to a work: open the work right away.
@@ -32,7 +33,13 @@ export const GET = route(async (r) => {
         pending: true,
       });
   }
-  const detail = await mediaDetail(id, r.signal, true);
+  const own = await mediaDetail(id, r.signal, true);
+  // A work of one's own taking its facts from a catalog work shows that work's
+  // recommendations and universe (its own episodes and links stay).
+  const from = own.metadataFrom?.id;
+  const detail = from
+    ? withLiveInfo(own, await mediaDetail(from, r.signal, true).catch(() => null))
+    : own;
   if (detail.type !== 'ANIME') return json(detail);
   // Anime: what the Jellyfin library holds for it (local index, no network).
   const tracked = trackedForMedia(detail, listTracked());
