@@ -1,5 +1,6 @@
 'use client';
 import { SlidingHighlight } from '@/components/sliding-highlight';
+import { ScrollStrip } from '@/components/scroll-strip';
 import { KIND_IDS, KINDS as KIND_DEFS, isVideoKind } from '@/domain/kinds';
 import { Select } from '@/components/select';
 import { Suspense, useEffect, useMemo } from 'react';
@@ -290,12 +291,11 @@ function Catalog() {
         }
       />
       {/* Same calm toolbar as the library: formats, then one row with view, filters and sort. */}
-      <div
-        className={cx(
-          'toolbar-kinds no-scrollbar relative -mx-4 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0',
-        )}
+      <ScrollStrip
         role="group"
         aria-label={t('catalog.kind')}
+        wrapperClassName="-mx-4 md:mx-0"
+        className="toolbar-kinds gap-1 px-4 text-sm md:flex-wrap md:px-0"
       >
         <SlidingHighlight />
         {universe.choices(['all', ...universe.enabled] as DiscoverKind[]).map((c) => {
@@ -316,7 +316,7 @@ function Catalog() {
             </button>
           );
         })}
-      </div>
+      </ScrollStrip>
       {q ? (
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <Link href={`/search?q=${encodeURIComponent(q)}`} className={smallButton}>

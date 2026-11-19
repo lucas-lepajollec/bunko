@@ -161,6 +161,9 @@ export function seasonFacts(m: AniNode, number: number, before = 0): AnimeSeason
   return {
     number,
     anilistId: m.id,
+    isFilm: m.format === 'MOVIE',
+    coverUrl: media.coverUrl,
+    bannerUrl: media.bannerUrl,
     title: media.title,
     year: media.year,
     status: m.status ?? null,
@@ -211,7 +214,7 @@ export async function franchise(
   // Joined by hand to another work: that work is the franchise.
   const joined = linkedRoot(anilistId);
   if (joined && joined !== anilistId) return franchise(joined, signal, options);
-  const key = `anime-franchise:v5:${anilistId}`;
+  const key = `anime-franchise:v6:${anilistId}`;
   // A sheet being rebuilt waits for an outdated work (it is rebuilt in the background anyway):
   // otherwise the sheet keeps the old episodes until its own next refresh.
   const load = () =>
@@ -418,7 +421,7 @@ const seasonSummaries = tenantState(
 const NO_DETAILS = { title: null, thumbnail: null } as const;
 export function knownSeasons(anilistId: number): AnimeSeason[] | null {
   const row = statement('SELECT updated_at FROM metadata_cache WHERE key=?').get(
-    `anime-franchise:v5:${anilistId}`,
+    `anime-franchise:v6:${anilistId}`,
   ) as { updated_at: number } | undefined;
   const cache = seasonSummaries();
   if (!row) {
@@ -439,7 +442,7 @@ export function knownSeasons(anilistId: number): AnimeSeason[] | null {
 }
 /** A work already resolved for this AniList id, without any network call. */
 export function knownFranchise(anilistId: number): Franchise | null {
-  return storedMetadata<Franchise>(`anime-franchise:v5:${anilistId}`)?.value ?? null;
+  return storedMetadata<Franchise>(`anime-franchise:v6:${anilistId}`)?.value ?? null;
 }
 /** Episodes before a season (absolute numbering across the work). */
 export function seasonOffset(seasons: AnimeSeason[], number: number) {
@@ -468,8 +471,10 @@ export function linkedRoot(anilistId: number): number | null {
   const row = statement('SELECT root FROM work_links WHERE member=?').get(
     `anilist:${anilistId}`,
   ) as { root: string } | undefined;
-  // A part of a non-AniList work (a film saga on TMDB) has no AniList root.
-  return row?.root.startsWith('anilist:') ? Number(row.root.slice('anilist:'.length)) : null;
+  // A part of a non-AniList work (a film saga on TMDB) has no AniList root; ignore self-links.
+  if (!row?.root.startsWith('anilist:')) return null;
+  const id = Number(row.root.slice('anilist:'.length));
+  return Number.isInteger(id) && id > 0 && id !== anilistId ? id : null;
 }
 /**
  * Works joined by hand across catalogs (a TMDB film saga, films into a series): any catalog
@@ -478,24 +483,44 @@ export function linkedRoot(anilistId: number): number | null {
  */
 export function workParts(root: string): string[] {
   return (
-    statement('SELECT member FROM work_links WHERE root=? ORDER BY created_at').all(root) as {
-      member: string;
-    }[]
+    statement('SELECT member FROM work_links WHERE root=? AND member<>root ORDER BY created_at').all(
+      root,
+    ) as { member: string }[]
   ).map((r) => r.member);
 }
 /** Every hand-made link, member → root (for lists that show a work's parts under it). */
 export function workPartOf(): Map<string, string> {
-  return new Map(
-    (
-      statement('SELECT member, root FROM work_links').all() as { member: string; root: string }[]
-    ).map((r) => [r.member, r.root]),
-  );
+  const raw = new Map<string, string>();
+  for (const r of statement('SELECT member, root FROM work_links WHERE member<>root').all() as {
+    member: string;
+    root: string;
+  }[])
+    raw.set(r.member, r.root);
+  // Guard against accidental cycles (A → B → A): never hide every member of a cycle from lists.
+  const out = new Map<string, string>();
+  for (const [member, root] of raw) {
+    const visited = new Set([member]);
+    let cur: string | undefined = root;
+    let cyclic = false;
+    while (cur) {
+      if (visited.has(cur)) {
+        cyclic = true;
+        break;
+      }
+      visited.add(cur);
+      cur = raw.get(cur);
+    }
+    if (!cyclic) out.set(member, root);
+  }
+  return out;
 }
 export function setPartLink(root: string, member: string, joined: boolean) {
   if (root === member) throw new AppError('VALIDATION_ERROR', 'A work cannot contain itself', 400);
   if (joined) {
-    // No chains: the member's own parts move to the new root.
+    // No chains or cycles: reparent member's children, clear any reverse/self link on root.
+    statement('DELETE FROM work_links WHERE member=? AND root=?').run(root, member);
     statement('UPDATE work_links SET root=? WHERE root=?').run(root, member);
+    statement('DELETE FROM work_links WHERE member=root').run();
     statement('INSERT OR REPLACE INTO work_links(member,root,created_at) VALUES(?,?,?)').run(
       member,
       root,
@@ -511,11 +536,17 @@ export function setPartLink(root: string, member: string, joined: boolean) {
 export function setWorkLink(root: number, member: number, joined: boolean) {
   if (root === member) throw new AppError('VALIDATION_ERROR', 'A work cannot contain itself', 400);
   if (joined) {
-    // A member cannot itself be a root (no chains): its members move to the new root.
+    // A member cannot itself be a root (no chains or cycles): reparent children and clear any
+    // reverse link before inserting.
+    statement('DELETE FROM work_links WHERE member=? AND root=?').run(
+      `anilist:${root}`,
+      `anilist:${member}`,
+    );
     statement('UPDATE work_links SET root=? WHERE root=?').run(
       `anilist:${root}`,
       `anilist:${member}`,
     );
+    statement('DELETE FROM work_links WHERE member=root').run();
     statement('INSERT OR REPLACE INTO work_links(member,root,created_at) VALUES(?,?,?)').run(
       `anilist:${member}`,
       `anilist:${root}`,

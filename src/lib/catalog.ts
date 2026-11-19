@@ -932,7 +932,7 @@ export async function refreshMediaDetail(id: string) {
   const patterns: string[] = [];
   if (id.startsWith('anilist:')) {
     const root = stored?.value.video?.seasons?.[0]?.anilistId ?? Number(id.slice(8));
-    keys.push(`anime-franchise:v5:${root}`, `anime-node:${root}`);
+    keys.push(`anime-franchise:v6:${root}`, `anime-node:${root}`);
     for (const s of stored?.value.video?.seasons ?? [])
       if (s.anilistId) keys.push(`anime-node:${s.anilistId}`);
   }
@@ -1042,4 +1042,66 @@ export async function animeAiring(
       };
     })
     .filter((a) => visible(a.media));
+}
+
+/**
+ * Animated films (AniList `MOVIE`) whose theatrical/release start date falls between two dates.
+ * Complements TMDB animated film releases (which filter out Japanese anime). Cached 6 hours.
+ */
+export async function animeFilmReleases(
+  from: Date,
+  to: Date,
+): Promise<import('@/types/shared').ChapterRelease[]> {
+  const fromDay = from.toISOString().slice(0, 10);
+  const toDay = to.toISOString().slice(0, 10);
+  const fromInt = Number(fromDay.replaceAll('-', ''));
+  const toInt = Number(toDay.replaceAll('-', ''));
+  const adult = adultScope() === 'only' ? true : includeProviderAdults() ? undefined : false;
+  const key = `anime-films:${fromDay}:${toDay}:${adultKey()}`;
+  const raw = await cached(key, 6 * 3600_000, async () => {
+    const data = await anilist<{
+      Page: { media: AniMedia[] };
+    }>(
+      `query($adult: Boolean, $from: FuzzyDateInt, $to: FuzzyDateInt) {
+        Page(page: 1, perPage: 50) {
+          media(
+            type: ANIME,
+            format: MOVIE,
+            isAdult: $adult,
+            startDate_greater: $from,
+            startDate_lesser: $to,
+            sort: [START_DATE_DESC, POPULARITY_DESC]
+          ) { ${aniFields} }
+        }
+      }`,
+      { adult, from: fromInt - 1, to: toInt + 1 },
+    );
+    return data.Page.media;
+  });
+  const visible = mediaVisibility();
+  const mapped = withTracking(raw.map(fromAniList)).filter(
+    (m) =>
+      visible(m) &&
+      typeof m.startDate === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(m.startDate) &&
+      m.startDate >= fromDay &&
+      m.startDate <= toDay,
+  );
+  return mapped
+    .map(
+      (media): import('@/types/shared').ChapterRelease => ({
+        id: `anilist-film:${media.id}`,
+        media,
+        chapter: null,
+        volume: null,
+        unit: 'film',
+        label: '',
+        group: null,
+        releasedAt: media.startDate!,
+        hasTime: false,
+        provider: 'anilist',
+        trackedId: media.trackedId ?? null,
+      }),
+    )
+    .sort((a, b) => b.releasedAt.localeCompare(a.releasedAt));
 }

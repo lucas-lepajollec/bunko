@@ -1,7 +1,7 @@
 'use client';
 import { SlidingHighlight } from '@/components/sliding-highlight';
+import { ScrollStrip } from '@/components/scroll-strip';
 import {
-  KINDS,
   KIND_IDS,
   byKindOrder,
   isVideoKind,
@@ -27,7 +27,7 @@ import { SelectionBar, SelectionMark } from '@/components/library-selection';
 import { LibraryNews, hasNews } from '@/components/updates';
 import { WorkMarks } from '@/components/work-marks';
 import { libraryMark, seenState } from '@/domain/library-mark';
-import { workProgress } from '@/domain/progress';
+import { isFilm, workProgress } from '@/domain/progress';
 import { useViewState } from '@/lib/client/view-state';
 import { api, useApi } from '@/lib/client/api';
 import { send } from '@/lib/client/api';
@@ -388,10 +388,11 @@ function Library() {
         ]}
       />
       {shownShelf !== 'kavita' && (
-        <div
-          className="toolbar-kinds no-scrollbar relative -mx-4 -mb-2 flex gap-1 overflow-x-auto px-4 text-sm md:mx-0 md:flex-wrap md:px-0"
+        <ScrollStrip
           role="group"
           aria-label={t('catalog.kind')}
+          wrapperClassName="-mx-4 -mb-2 md:mx-0"
+          className="toolbar-kinds gap-1 px-4 text-sm md:flex-wrap md:px-0"
         >
           <SlidingHighlight />
           {[
@@ -421,7 +422,7 @@ function Library() {
                 )}
               </button>
             ))}
-        </div>
+        </ScrollStrip>
       )}
       {shownShelf === 'updates' ? (
         <LibraryNews kind={kind} entries={ofKindNow} />
@@ -607,14 +608,13 @@ function Library() {
               );
               const card = (
                 <>
-                  <span className="relative block">
+                  <span className="relative block transition-transform duration-300 group-hover:-translate-y-1">
                     {selecting && <SelectionMark selected={picked.has(e.id)} />}
                     <Cover
                       src={e.coverUrl ?? e.media.coverUrl}
                       fallbacks={e.coverFallbacks}
                       alt={e.title}
                       priority={index < 12}
-                      className="transition-transform duration-300 group-hover:-translate-y-1"
                     />
                     {e.type === 'MANGA' && e.sourceMatch !== 'linked' && (
                       <span
@@ -631,12 +631,16 @@ function Library() {
                     <WorkMarks
                       mark={libraryMark(e)}
                       video={e.type === 'ANIME'}
+                      topLeft={!selecting}
                       raised={e.type === 'MANGA' && e.sourceMatch !== 'linked'}
                     />
                     {e.newChapters > 0 && (
                       <span
                         className={cx(
-                          'bg-fg text-bg absolute left-1.5 flex h-[22px] items-center rounded-full px-2 text-[11px] font-bold md:h-6 md:text-xs',
+                          'bg-fg text-bg absolute left-1.5 flex h-[22px] items-center truncate rounded-full px-2 text-[11px] font-bold md:h-6 md:text-xs',
+                          e.rating != null
+                            ? 'max-w-[calc(100%-4.5rem)]'
+                            : 'max-w-[calc(100%-0.75rem)]',
                           e.type === 'MANGA' && e.sourceMatch !== 'linked'
                             ? 'bottom-10'
                             : 'bottom-1.5',
@@ -708,8 +712,6 @@ function Library() {
   );
 }
 
-const isFilm = (e: TrackedMedia) => KINDS[kindOfMedia(e.media)].unit === 'film';
-
 /**
  * What a series, anime or film card says under its title: episodes watched out of the total
  * (or the film's state), what the media server holds, and whether it is still airing.
@@ -722,12 +724,20 @@ function VideoMeta({ entry: e }: { entry: TrackedMedia }) {
   // for cards, statuses and the "New" view.
   const { total, seen: read } = workProgress(e);
   const airing = m.status === 'RELEASING' || m.status === 'Returning Series';
-  const parts: { text: string; strong?: boolean }[] = film
+  const multiFilm = film && total !== null && total > 1;
+  const parts: { text: string; strong?: boolean }[] = multiFilm
     ? [
-        { text: read > 0 ? t('library.filmSeen') : t('library.filmToWatch'), strong: read > 0 },
+        read > 0
+          ? { text: t('library.watchedOf', { n: n(read), total: n(total) }), strong: true }
+          : { text: t('library.filmToWatch') },
         ...(m.year ? [{ text: String(m.year) }] : []),
       ]
-    : [
+    : film
+      ? [
+          { text: read > 0 ? t('library.filmSeen') : t('library.filmToWatch'), strong: read > 0 },
+          ...(m.year ? [{ text: String(m.year) }] : []),
+        ]
+      : [
         read > 0
           ? {
               text: total

@@ -1,7 +1,7 @@
 import type { AnimeSeason, EpisodeRange, TrackedMedia } from '@/types/shared';
-import { KINDS, kindOfMedia } from '@/domain/kinds';
+import { isFilm } from '@/domain/progress';
 import { jellyfinConfigured, matchJellyfin, resetJellyfinProgress, workAired } from './jellyfin';
-import { knownSeasons } from './anime-franchise';
+import { knownSeasons, linkedMembers } from './anime-franchise';
 import { inTenant, tenantId, tenantState } from './tenant-context';
 
 /**
@@ -157,7 +157,8 @@ export function withVideoOwnership(entries: TrackedMedia[]): TrackedMedia[] {
   const jellyfin = jellyfinConfigured();
   return entries.map((e) => {
     if (e.type !== 'ANIME') return e;
-    const film = KINDS[kindOfMedia(e.media)].unit === 'film';
+    // Media mechanics (film vs episodic) follow the underlying format, never the user's kindOverride.
+    const film = isFilm(e);
     let jellyfinOwned = 0;
     const match = jellyfin ? matchJellyfin(e.media, e.jellyfinLink) : null;
     if (jellyfin) {
@@ -168,7 +169,14 @@ export function withVideoOwnership(entries: TrackedMedia[]): TrackedMedia[] {
               .filter(([season]) => Number(season) >= 1)
               .reduce((n, [, episodes]) => n + new Set(episodes.map((x) => x.n)).size, 0) || 1;
     }
-    const airedEpisodes = film || !e.media.anilistId ? null : airedOfWork(e.media.anilistId);
+    const seasons = e.media.anilistId ? knownSeasons(e.media.anilistId) : null;
+    // A film saga with linked films tracks progress across all linked films (even before cache warm).
+    const multiPartFilm =
+      film &&
+      ((seasons?.length ?? 0) > 1 ||
+        Boolean(e.media.anilistId && linkedMembers(e.media.anilistId).length > 0));
+    const airedEpisodes =
+      !e.media.anilistId || (film && !multiPartFilm) ? null : airedOfWork(e.media.anilistId);
     return {
       ...e,
       jellyfinOwned,
@@ -178,7 +186,7 @@ export function withVideoOwnership(entries: TrackedMedia[]): TrackedMedia[] {
           ? null
           : videoNews(
               e,
-              knownSeasons(e.media.anilistId) ?? undefined,
+              seasons ?? undefined,
               // Only works the media server holds at all: one missing nothing is no news.
               match ? match.series.seasons : null,
             ),

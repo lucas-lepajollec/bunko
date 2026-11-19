@@ -1,5 +1,6 @@
 'use client';
 import { SlidingHighlight } from './sliding-highlight';
+import { ScrollStrip } from './scroll-strip';
 import Link from 'next/link';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { clsx, type ClassValue } from 'clsx';
@@ -202,10 +203,10 @@ export function Tabs<T extends string>({
   label: string;
 }) {
   return (
-    <div
+    <ScrollStrip
       role="tablist"
       aria-label={label}
-      className="ui-tabs border-line no-scrollbar relative flex gap-6 overflow-x-auto border-b md:gap-8"
+      className="ui-tabs border-line gap-6 border-b md:gap-8"
     >
       <SlidingHighlight variant="line" />
       {items.map((item) => (
@@ -232,7 +233,7 @@ export function Tabs<T extends string>({
           )}
         </button>
       ))}
-    </div>
+    </ScrollStrip>
   );
 }
 
@@ -407,16 +408,21 @@ export function statusKey(status: string) {
 export function useMediaMeta() {
   const { t } = useI18n();
   return (
-    m: Pick<UnifiedMedia, 'format' | 'type' | 'year' | 'status' | 'extensionSection'>,
+    m: Pick<
+      UnifiedMedia,
+      'format' | 'type' | 'year' | 'status' | 'extensionSection' | 'kindOverride'
+    >,
     withStatus = false,
   ) =>
     [
-      // An extension's own work: the section name that extension declared.
+      // An extension's own work: the section name that extension declared; else the user's kind override.
       m.extensionSection
         ? m.extensionSection.name
-        : m.format
-          ? t(`format.${m.format}`)
-          : t(`type.${m.type}`),
+        : m.kindOverride
+          ? t(`kind.${m.kindOverride}`)
+          : m.format
+            ? t(`format.${m.format}`)
+            : t(`type.${m.type}`),
       m.year,
       withStatus && m.status ? t(`status.${statusKey(m.status)}`) : null,
     ]

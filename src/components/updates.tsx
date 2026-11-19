@@ -314,14 +314,13 @@ export function LibraryNews({ kind, entries }: { kind: DiscoverKind; entries: Tr
                 return (
                   <div key={e.id} className="flex min-w-0 flex-col gap-2">
                     <MediaLink media={e.media} className="group flex min-w-0 flex-col gap-2">
-                      <span className="relative block">
+                      <span className="relative block transition-transform duration-300 group-hover:-translate-y-1">
                         <Cover
                           src={e.coverUrl ?? e.media.coverUrl}
                           fallbacks={e.coverFallbacks}
                           alt={e.title}
-                          className="transition-transform duration-300 group-hover:-translate-y-1"
                         />
-                        <span className="bg-fg text-bg absolute bottom-2 left-2 flex h-6 max-w-[calc(100%-1rem)] items-center truncate rounded-full px-2.5 text-xs font-bold">
+                        <span className="bg-fg text-bg absolute bottom-1.5 left-1.5 flex h-[22px] max-w-[calc(100%-0.75rem)] items-center truncate rounded-full px-2 text-[11px] font-bold md:h-6 md:px-2.5 md:text-xs">
                           {label}
                         </span>
                       </span>

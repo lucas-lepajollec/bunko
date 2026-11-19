@@ -17,9 +17,10 @@ const { deduplicate } = await import('@/lib/search-engine');
 const { seedAnimeIds, compact, tmdbEntries, anilistOfTmdbMovie } = await import(
   '@/lib/anime-ids'
 );
-const { qualityOf } = await import('@/lib/video-addons');
+const { episodeIds, qualityOf } = await import('@/lib/video-addons');
 const { db, track, getTracked } = await import('@/lib/db');
-const { setPartLink, workParts } = await import('@/lib/anime-franchise');
+const { setPartLink, setWorkLink, workPartOf, workParts } = await import('@/lib/anime-franchise');
+const { workLength, workProgress } = await import('@/domain/progress');
 const { deduplicateReleases } = await import('@/lib/releases');
 
 beforeEach(() => {
@@ -183,5 +184,56 @@ describe('V1 work linking, kindOverride & video quality ranking', () => {
     expect(qualityOf('MULTI 1440p')).toBe(1440);
     expect(qualityOf('VF 2K')).toBe(1440);
     expect(qualityOf('VOSTFR 1080p')).toBe(1080);
+  });
+
+  it('prevents self-cycles and reverse cycles in work_links so root works never vanish from the library', () => {
+    setWorkLink(3782, 2593, true);
+    setWorkLink(2593, 3782, true);
+    const map = workPartOf();
+    expect(map.get('anilist:2593')).toBeUndefined();
+    expect(map.get('anilist:3782')).toBe('anilist:2593');
+
+    setPartLink('tmdbmovie:2', 'tmdbmovie:1', true);
+    setPartLink('tmdbmovie:1', 'tmdbmovie:2', true);
+    const parts = workPartOf();
+    expect(parts.get('tmdbmovie:1')).toBeUndefined();
+    expect(parts.get('tmdbmovie:2')).toBe('tmdbmovie:1');
+  });
+
+  it('tracks multi-film sagas without clamping watched count to 1 while keeping single films at length 1', () => {
+    const film1 = {
+      ...emptyMedia('anilist:2593', 'The Garden of Sinners', 'ANIME'),
+      anilistId: 2593,
+      format: 'ANIMATION_FILM' as const,
+      kindOverride: 'anime' as const,
+    };
+    const base = track({ media: film1, status: 'READING' });
+    const single = { ...base, progress: { ...base.progress, read: 1 }, airedEpisodes: null };
+    expect(workLength(single)).toBe(1);
+
+    const saga = { ...base, progress: { ...base.progress, read: 3 }, airedEpisodes: 10 };
+    expect(workLength(saga)).toBe(10);
+    expect(workProgress(saga).seen).toBe(3);
+    expect(workProgress(saga).left).toBe(7);
+  });
+
+  it('queries movie ids (IMDb / TMDB movie before Kitsu) for anime films, never series SxEy', () => {
+    seedAnimeIds(
+      compact([
+        {
+          anilist_id: 3782,
+          type: 'MOVIE',
+          imdb_id: 'tt1155652',
+          themoviedb_id: { movie: 23447 },
+          kitsu_id: 2358,
+          mal_id: 3782,
+        },
+      ]),
+    );
+    const ids = episodeIds(3782, 1, true);
+    expect(ids[0]).toEqual({ id: 'tt1155652', prefix: 'tt', types: ['movie'] });
+    expect(ids[1]).toEqual({ id: 'tmdb:23447', prefix: 'tmdb', types: ['movie'] });
+    expect(ids[2]).toEqual({ id: 'kitsu:2358', prefix: 'kitsu', types: ['movie', 'anime'] });
+    expect(ids.some((i) => i.types.includes('series'))).toBe(false);
   });
 });

@@ -29,15 +29,15 @@ export function PosterCard({
       media={media}
       className={cx('poster group flex min-w-0 flex-col gap-2.5', className)}
     >
-      <span className="@container relative block">
-        <Cover
-          src={media.coverUrl}
-          priority={priority}
-          className="transition-transform duration-300 group-hover:-translate-y-1"
-        />
+      <span className="@container relative block transition-transform duration-300 group-hover:-translate-y-1">
+        <Cover src={media.coverUrl} priority={priority} />
         {/* Ciné shows the year and score on the poster when it is pointed at (themes.css). */}
         {(media.year || media.score) && (
-          <span aria-hidden className="poster-chip">
+          <span
+            aria-hidden
+            data-rated={media.mine?.rating != null ? 'true' : undefined}
+            className="poster-chip"
+          >
             {media.year}
             {media.year && media.score ? ' · ' : ''}
             {media.score ? (

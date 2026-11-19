@@ -377,14 +377,14 @@ function CineHeader() {
       <div
         aria-hidden
         className={cx(
-          'header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-32 transition-opacity duration-300 md:h-44',
+          'header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-36 transition-opacity duration-500 ease-out md:h-48',
           solid ? 'opacity-100' : 'opacity-0',
         )}
       />
       <div
         aria-hidden
         className={cx(
-          'pointer-events-none absolute inset-x-0 top-0 -z-10 h-28 bg-gradient-to-b from-black/50 to-transparent transition-opacity duration-300 md:h-36',
+          'pointer-events-none absolute inset-x-0 top-0 -z-10 h-28 bg-gradient-to-b from-black/50 to-transparent transition-opacity duration-500 ease-out md:h-36',
           solid ? 'opacity-0' : 'opacity-100',
         )}
       />

@@ -44,6 +44,7 @@ export function WorkMarks({
   inLibrary,
   owned,
   video,
+  topLeft = true,
   progressCorner = true,
   raised,
   size = 'sm',
@@ -55,6 +56,8 @@ export function WorkMarks({
   owned?: boolean;
   /** Episodes and films: "watching" instead of "reading". */
   video?: boolean;
+  /** Off when the top left corner holds something else (e.g. a selection checkbox). */
+  topLeft?: boolean;
   /** Off when the top right corner holds something else (e.g. a like button). */
   progressCorner?: boolean;
   /** The bottom corners sit above a strip along the cover's bottom edge. */
@@ -71,7 +74,7 @@ export function WorkMarks({
   const seenLabel = seen ? t(`marks.${video ? 'seen' : 'read'}.${seen}`) : '';
   return (
     <>
-      {(inLibrary || hasFiles) && (
+      {topLeft && (inLibrary || hasFiles) && (
         <span className={cx('pointer-events-none absolute flex gap-1', s.tl)}>
           {inLibrary && (
             <span title={t('common.inLibrary')} className={cx(bubble, s.dot)}>

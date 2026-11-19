@@ -98,7 +98,7 @@ export const streamsPath = (episode: PlayerEpisode, language: string) =>
   episode.streamsUrl
     ? `${episode.streamsUrl}${episode.streamsUrl.includes('?') ? '&' : '?'}lang=${language}`
     : episode.seasonAnilistId
-      ? `/api/video/streams?anilist=${episode.seasonAnilistId}&episode=${episode.episode}&lang=${language}`
+      ? `/api/video/streams?anilist=${episode.seasonAnilistId}&episode=${episode.episode}${episode.isFilm ? '&film=1' : ''}&lang=${language}`
       : episode.imdb && (episode.imdb.id || episode.imdb.tmdb)
         ? `/api/video/streams?${new URLSearchParams({
             ...(episode.imdb.id ? { imdb: episode.imdb.id } : {}),
@@ -134,6 +134,8 @@ export interface PlayerEpisode {
   label: string;
   /** AniList id of the season (extensions look the episode up with it), when known. */
   seasonAnilistId: number | null;
+  /** True when playing a standalone film (or linked film part) so addons query movie ids. */
+  isFilm?: boolean;
   /**
    * Series and films: IMDb id and TMDB id (addons know one or the other), and the TMDB season of
    * the episode (null for a film).

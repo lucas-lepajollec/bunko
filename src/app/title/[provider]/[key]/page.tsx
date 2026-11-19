@@ -1,5 +1,4 @@
 'use client';
-import { KINDS, kindOfMedia } from '@/domain/kinds';
 import { MediaDownload } from '@/components/media-download';
 import { MediaLink } from '@/components/media-link';
 import { LoadNotice } from '@/components/load-notice';
@@ -150,22 +149,22 @@ function Title({
   const isComic = media.type === 'MANGA';
   const video = media.type === 'ANIME' ? media.video : undefined;
   const extension = media.providers.includes('extension');
-  // A film (live action or animated) is watched, not browsed by episode — unless the user
-  // explicitly overrode its kind to an episodic kind (e.g. anime or series).
-  const effectiveKind = kindOfMedia(entry?.media ?? media);
+  // A film (live action or animated) is watched as a film, not browsed by TV episode — changing
+  // its display/library category (`kindOverride`, e.g. filing an anime film under Animes) never
+  // alters how the work itself is played or structured.
+  const overrideKind = entry?.media.kindOverride ?? media.kindOverride;
   const filmSheet =
-    (entry?.media.kindOverride ?? media.kindOverride)
-      ? KINDS[effectiveKind].unit === 'film'
-      : media.format === 'MOVIE' ||
-        media.format === 'ANIMATION_FILM' ||
-        media.video?.ids?.kind === 'movie' ||
-        media.extension?.type === 'movie';
-  // Film sheets do not render the season switcher, so all joined parts (including linked anime
-  // movies) must remain visible in the joined-parts row instead of being hidden behind seasons.
+    media.format === 'MOVIE' ||
+    media.format === 'ANIMATION_FILM' ||
+    media.video?.ids?.kind === 'movie' ||
+    media.extension?.type === 'movie';
+  // Parts already rendered inside the video switcher (seasons or linked AniList films) stay
+  // there; any other joined parts (e.g. TMDB film sagas, books, cross-provider links) show below.
   const seasonIds = new Set((media.video?.seasons ?? []).map((s) => s.anilistId));
-  const joinedParts = filmSheet
-    ? (parts.data ?? [])
-    : (parts.data ?? []).filter((m) => !m.anilistId || !seasonIds.has(m.anilistId));
+  const joinedParts =
+    seasonIds.size > 1
+      ? (parts.data ?? []).filter((m) => !m.anilistId || !seasonIds.has(m.anilistId))
+      : (parts.data ?? []);
   const seasonParam = Number(useSearchParams().get('season')) || undefined;
   const fromDetail: ChapterSelection[] = media.sources.map((s) => ({
     suwayomiMangaId: s.suwayomiMangaId,
@@ -268,8 +267,11 @@ function Title({
     unread: 0,
     readSource: 'none' as const,
   };
-  const released =
-    entry?.unit === 'volume' ? (entry.progress?.released ?? media.volumes) : chapterReleased;
+  const released = video
+    ? (video.aired ?? video.episodes ?? video.seasons?.length ?? null)
+    : entry?.unit === 'volume'
+      ? (entry.progress?.released ?? media.volumes)
+      : chapterReleased;
   // What is seen follows the status: a finished work shows everything out (when it was
   // finished) as read, whatever position was recorded.
   const progress = {
@@ -429,13 +431,16 @@ function Title({
     }
   }
 
+  const nativeFormat =
+    media.extensionSection?.name ??
+    (media.format ? t(`format.${media.format}`) : t(`type.${media.type}`));
+  const overrideLabel = overrideKind ? t(`kind.${overrideKind}`) : null;
   const facts = [
     [
       t('title.facts.format'),
       [
-        // An extension's own work: the section name its extension declared.
-        media.extensionSection?.name ??
-          (media.format ? t(`format.${media.format}`) : t(`type.${media.type}`)),
+        overrideLabel,
+        nativeFormat !== overrideLabel ? nativeFormat : null,
         media.origin && t(`origin.${media.origin}`) !== `origin.${media.origin}`
           ? t(`origin.${media.origin}`)
           : null,
@@ -551,7 +556,7 @@ function Title({
   );
   const titleBlock = (
     <div className="flex min-w-0 flex-col gap-2 md:gap-4">
-      <Kicker media={media} />
+      <Kicker media={media} overrideKind={overrideKind} />
       <h1 className="sheet-title font-display text-[34px] leading-[0.92] font-extrabold tracking-[-0.05em] [overflow-wrap:anywhere] md:text-[56px] xl:text-[80px]">
         {media.title}
       </h1>
@@ -630,34 +635,44 @@ function Title({
       />
     </div>
   );
-  const progressBlock = entry && !filmSheet && (
+  const multiFilmSheet = filmSheet && (video?.seasons?.length ?? 0) > 1;
+  const progressBlock = entry && (!filmSheet || multiFilmSheet) && (
     <div className="flex max-w-[560px] flex-col gap-2">
       <ProgressBar progress={progress} className="h-1.5" />
       <span className="text-mid flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]">
         <span>
-          {t(video ? 'episodes.watchedCount' : vol('title.read'), {
-            n: progress.read !== null ? n(progress.read) : '—',
-          })}
+          {multiFilmSheet
+            ? t('library.watchedOf', {
+                n: progress.read !== null ? n(progress.read) : '—',
+                total: released !== null ? n(released) : '—',
+              })
+            : t(video ? 'episodes.watchedCount' : vol('title.read'), {
+                n: progress.read !== null ? n(progress.read) : '—',
+              })}
         </span>
         {!video && <OwnedInventory entry={entry} />}
         {video && media.jellyfin && (
           <span>{t('jellyfin.owned', { n: n(media.jellyfin.ownedCount) })}</span>
         )}
         {media.kavita && <KavitaRefresh trackedId={entry.id} />}
-        <span>
-          {video
-            ? t('episodes.airedCount', { n: video.aired !== null ? n(video.aired) : '—' })
-            : t(vol('title.released'), {
-                n: progress.released !== null ? n(progress.released) : '—',
-              })}
-        </span>
-        <InfoBubble label={t('title.progressInfo')}>
-          {progress.readSource === 'suwayomi'
-            ? t('title.readFromSuwayomi')
-            : progress.readSource === 'kavita'
-              ? t('title.readFromKavita')
-              : t('title.readUnknown')}
-        </InfoBubble>
+        {!multiFilmSheet && (
+          <span>
+            {video
+              ? t('episodes.airedCount', { n: video.aired !== null ? n(video.aired) : '—' })
+              : t(vol('title.released'), {
+                  n: progress.released !== null ? n(progress.released) : '—',
+                })}
+          </span>
+        )}
+        {!video && (
+          <InfoBubble label={t('title.progressInfo')}>
+            {progress.readSource === 'suwayomi'
+              ? t('title.readFromSuwayomi')
+              : progress.readSource === 'kavita'
+                ? t('title.readFromKavita')
+                : t('title.readUnknown')}
+          </InfoBubble>
+        )}
       </span>
     </div>
   );
@@ -969,12 +984,21 @@ function Title({
   );
 }
 
-function Kicker({ media }: { media: MediaDetail }) {
+function Kicker({
+  media,
+  overrideKind,
+}: {
+  media: MediaDetail;
+  overrideKind?: UnifiedMedia['kindOverride'];
+}) {
   const { t } = useI18n();
-  const parts = [
-    // An extension's own work: the section name its extension declared.
+  const nativeFormat =
     media.extensionSection?.name ??
-      (media.format ? t(`format.${media.format}`) : t(`type.${media.type}`)),
+    (media.format ? t(`format.${media.format}`) : t(`type.${media.type}`));
+  const overrideLabel = overrideKind ? t(`kind.${overrideKind}`) : null;
+  const parts = [
+    overrideLabel,
+    nativeFormat !== overrideLabel ? nativeFormat : null,
     media.origin && t(`origin.${media.origin}`) !== `origin.${media.origin}`
       ? t(`origin.${media.origin}`)
       : null,

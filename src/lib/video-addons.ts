@@ -344,14 +344,15 @@ export async function removeVideoAddon(id: string, signal?: AbortSignal) {
   return videoAddons(signal);
 }
 
-/** Ids an addon may know for one episode, in the order addons usually prefer. */
-export function episodeIds(anilistId: number, episode: number) {
+/** Ids an addon may know for one episode (or anime film), in the order addons usually prefer. */
+export function episodeIds(anilistId: number, episode: number, film = false) {
   const ids = idsOfAnilist(anilistId);
-  const natural = naturalEpisode(anilistId, episode);
+  const movie = Boolean(film || ids?.type === 'MOVIE');
+  const natural = movie ? null : naturalEpisode(anilistId, episode);
   // TMDB files some shows as one long season (every AniList season under season 1): there,
   // the season people use is the one sources understand (verified with TMDB-keyed addons).
   const shared =
-    ids?.tmdb && ids.type !== 'MOVIE' && ids.tmdbSeason !== null
+    !movie && ids?.tmdb && ids.tmdbSeason !== null
       ? tmdbEntries(ids.tmdb).some(
           (e) =>
             e.anilist !== anilistId &&
@@ -364,31 +365,38 @@ export function episodeIds(anilistId: number, episode: number) {
     ? (natural ?? { season: ids?.tvdbSeason ?? ids?.tmdbSeason ?? 1, episode })
     : { season: ids?.tmdbSeason, episode };
   const out: { id: string; prefix: string; types: string[] }[] = [];
+  if (movie) {
+    // Anime films: movie-keyed addons expect IMDb/TMDB movie ids first (never `series` SxEy).
+    const tmdbMovieId = ids?.tmdbMovie ?? ids?.tmdb ?? null;
+    if (ids?.imdb) out.push({ id: ids.imdb, prefix: 'tt', types: ['movie'] });
+    if (tmdbMovieId) out.push({ id: `tmdb:${tmdbMovieId}`, prefix: 'tmdb', types: ['movie'] });
+    if (ids?.kitsu) {
+      out.push({ id: `kitsu:${ids.kitsu}`, prefix: 'kitsu', types: ['movie', 'anime'] });
+      out.push({ id: `kitsu:${ids.kitsu}:${episode}`, prefix: 'kitsu', types: ['anime', 'movie'] });
+    }
+    if (ids?.mal)
+      out.push({ id: `mal:${ids.mal}:${episode}`, prefix: 'mal', types: ['anime', 'movie'] });
+    out.push({ id: `anilist:${anilistId}:${episode}`, prefix: 'anilist', types: ['anime', 'movie'] });
+    return out;
+  }
   if (ids?.kitsu)
     out.push({ id: `kitsu:${ids.kitsu}:${episode}`, prefix: 'kitsu', types: ['anime', 'series'] });
   // Before IMDb: an addon that knows TMDB ids numbers seasons the TMDB way, which the map gives
   // exactly, while an IMDb id carries the TVDB season. Without a known TMDB season, nothing is
   // guessed.
-  if (ids?.tmdb && (ids.type === 'MOVIE' || ids.tmdbSeason !== null))
-    out.push(
-      ids.type === 'MOVIE'
-        ? { id: `tmdb:${ids.tmdb}`, prefix: 'tmdb', types: ['movie'] }
-        : {
-            id: `tmdb:${ids.tmdb}:${tmdbAt.season}:${tmdbAt.episode}`,
-            prefix: 'tmdb',
-            types: ['series'],
-          },
-    );
+  if (ids?.tmdb && ids.tmdbSeason !== null)
+    out.push({
+      id: `tmdb:${ids.tmdb}:${tmdbAt.season}:${tmdbAt.episode}`,
+      prefix: 'tmdb',
+      types: ['series'],
+    });
   if (ids?.imdb)
     out.push({
-      id:
-        ids.type === 'MOVIE'
-          ? ids.imdb
-          : natural
-            ? `${ids.imdb}:${natural.season}:${natural.episode}`
-            : `${ids.imdb}:${ids.tvdbSeason ?? 1}:${episode}`,
+      id: natural
+        ? `${ids.imdb}:${natural.season}:${natural.episode}`
+        : `${ids.imdb}:${ids.tvdbSeason ?? 1}:${episode}`,
       prefix: 'tt',
-      types: ids.type === 'MOVIE' ? ['movie'] : ['series'],
+      types: ['series'],
     });
   if (ids?.mal) out.push({ id: `mal:${ids.mal}:${episode}`, prefix: 'mal', types: ['anime'] });
   out.push({ id: `anilist:${anilistId}:${episode}`, prefix: 'anilist', types: ['anime'] });
@@ -612,10 +620,11 @@ export async function episodeStreams(
   episode: number,
   language: string,
   signal?: AbortSignal,
+  film = false,
 ) {
   await ensureAnimeIds();
   void signal;
-  return remembered(episodeIds(anilistId, episode), language);
+  return remembered(episodeIds(anilistId, episode, film), language);
 }
 /**
  * Series and films (TMDB): addons know them by IMDb id or by TMDB id (`tmdb:1399:1:2`), with the
@@ -709,15 +718,24 @@ async function streamsFor(
         return [];
       }
       const ask = async (wanted: Resource) => {
-        const id = ids.find((i) => supports(m, i, wanted));
-        if (!id) return null;
-        const type = id.types.find((t) => m.types.includes(t)) ?? id.types[0];
-        return addonJson(
-          url,
-          `/${wanted}/${type}/${idPath(id.id)}.json`,
-          undefined,
-          wanted === 'stream' ? STREAM_TIMEOUT_MS : 10_000,
-        );
+        const candidates = ids.filter((i) => supports(m, i, wanted));
+        if (!candidates.length) return null;
+        const limit = wanted === 'stream' ? 2 : 1;
+        let last: unknown = null;
+        for (const id of candidates.slice(0, limit)) {
+          const type = id.types.find((t) => m.types.includes(t)) ?? id.types[0];
+          const data = await addonJson(
+            url,
+            `/${wanted}/${type}/${idPath(id.id)}.json`,
+            undefined,
+            wanted === 'stream' ? STREAM_TIMEOUT_MS : 10_000,
+          );
+          last = data;
+          if (wanted !== 'stream') return data;
+          const streams = (data as { streams?: unknown[] } | null)?.streams;
+          if (Array.isArray(streams) && streams.length > 0) return data;
+        }
+        return last;
       };
       const [streamData, subtitleData] = await Promise.all([
         ask('stream').then(

@@ -1,6 +1,7 @@
 'use client';
 import { dateFormat } from '@/lib/intl';
 import { SlidingHighlight } from './sliding-highlight';
+import { ScrollStrip } from './scroll-strip';
 import { useState } from 'react';
 import { Check, RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
@@ -13,7 +14,7 @@ import type {
 } from '@/types/shared';
 import { mediaHref } from '@/lib/client/api';
 import { jellyfinSeason } from '@/domain/seasons';
-import { workProgress } from '@/domain/progress';
+import { seenUpTo, workProgress } from '@/domain/progress';
 import { useI18n } from '@/i18n/I18nProvider';
 import { cx } from './ui';
 import { useLook } from '@/lib/client/theme';
@@ -107,9 +108,18 @@ export function EpisodeList({
       .slice(0, i)
       .reduce((sum, x) => sum + Math.max(x.episodes ?? 0, x.aired ?? 0, x.list.length), 0),
   );
-  // Seen follows the status: a finished work's episodes (aired when it was finished) are seen.
-  const read = entry ? workProgress(entry).seen : 0;
   const film = filmProp ?? video.ids?.kind === 'movie';
+  // Each part knows whether it is a film (AniList MOVIE, or a 1-entry film sheet without TV seasons).
+  const isPartFilm = (s: AnimeSeason) =>
+    Boolean(s.isFilm) || (film && s.list.length <= 1 && !s.display);
+  const totalParts = seasons.reduce(
+    (sum, x) => sum + Math.max(x.episodes ?? 0, x.aired ?? 0, x.list.length, isPartFilm(x) ? 1 : 0),
+    0,
+  );
+  // Seen follows the status and the real length of all seasons/linked films (never clamped to 1).
+  const read = entry
+    ? seenUpTo(entry, entry.progress?.read, Math.max(workProgress(entry).total ?? 0, totalParts) || null)
+    : 0;
   const resume = Math.max(
     0,
     offsets.findLastIndex((o) => o <= read && read > 0),
@@ -148,26 +158,35 @@ export function EpisodeList({
     const jf = jellyfinSeason(s, jellyfin);
     // Generic extension catalog work: its own streams endpoint replaces id-based lookups.
     const extension = media?.id.startsWith('ext:') ?? false;
+    const partFilm = isPartFilm(s);
+    const partTitle = s.label && s.title ? s.title : title;
+    const partAnilistId = extension ? null : (s.anilistId ?? anilistId);
+    const differentAnilist = Boolean(partAnilistId && anilistId && partAnilistId !== anilistId);
     return {
-      title,
-      label: film
+      title: partTitle,
+      label: partFilm
         ? t('episodes.film')
-        : seasons.length > 1
-          ? t('episodes.seasonShort', {
-              s: n(s.display ?? s.number),
-              n: n((s.partOffset ?? 0) + at.episode),
-            })
-          : t('episodes.short', { n: n(at.episode) }),
-      seasonAnilistId: extension ? null : (s.anilistId ?? anilistId),
-      imdb: extension
-        ? null
-        : video.ids?.imdb || video.ids?.tmdb
-          ? {
-              id: video.ids.imdb ?? null,
-              tmdb: video.ids.tmdb ?? null,
-              season: video.ids.kind === 'movie' ? null : (s.tmdbSeason ?? s.number),
-            }
-          : null,
+        : s.label
+          ? t('episodes.short', { n: n((s.partOffset ?? 0) + at.episode) })
+          : seasons.length > 1
+            ? t('episodes.seasonShort', {
+                s: n(s.display ?? s.number),
+                n: n((s.partOffset ?? 0) + at.episode),
+              })
+            : t('episodes.short', { n: n(at.episode) }),
+      seasonAnilistId: partAnilistId,
+      isFilm: partFilm,
+      imdb:
+        extension || differentAnilist
+          ? null
+          : video.ids?.imdb || video.ids?.tmdb
+            ? {
+                id: video.ids.imdb ?? null,
+                tmdb: video.ids.tmdb ?? null,
+                season:
+                  partFilm || video.ids.kind === 'movie' ? null : (s.tmdbSeason ?? s.number),
+              }
+            : null,
       ...(extension && media
         ? {
             streamsUrl: `/api/video/streams?ext=${encodeURIComponent(media.id)}&episode=${at.episode}`,
@@ -220,15 +239,16 @@ export function EpisodeList({
   });
   const rows = newestFirst ? [...season.list].reverse() : season.list;
   const tabs = seasons.length > 1 && (
-    <div
+    <ScrollStrip
       role="tablist"
       aria-label={t('episodes.seasonsLabel')}
-      className="ep-tabs relative flex gap-1.5 overflow-x-auto pb-3"
+      wrapperClassName="pb-3"
+      className="ep-tabs gap-1.5"
     >
       <SlidingHighlight />
       {seasons.map((x, i) => (
         <button
-          key={x.number}
+          key={x.anilistId ?? x.number}
           type="button"
           role="tab"
           aria-selected={i === index}
@@ -249,13 +269,17 @@ export function EpisodeList({
               : t('episodes.seasonN', { n: n(x.display ?? x.number) }))}
         </button>
       ))}
-    </div>
+    </ScrollStrip>
   );
-  if (film && season.list.length <= 1) {
+  if (isPartFilm(season) && season.list.length <= 1) {
     const released = (season.aired ?? 1) >= 1;
-    const jf = jellyfin?.bySeason[0];
-    const image = season.list[0]?.thumbnail ?? artwork;
+    const absolute = offset + 1;
+    const seen = absolute <= read || played.has(1);
+    const jf = jellyfinSeason(season, jellyfin) ?? jellyfin?.bySeason[0];
+    const image =
+      season.list[0]?.thumbnail ?? season.bannerUrl ?? season.coverUrl ?? artwork;
     const meta = [
+      season.year ? String(season.year) : null,
       season.duration ? t('episodes.duration', { n: n(season.duration) }) : null,
       !released ? t('episodes.upcoming') : jf?.owned.length ? t('episodes.inJellyfin') : null,
     ]
@@ -264,32 +288,52 @@ export function EpisodeList({
     return (
       <div className="flex flex-col gap-3">
         {player}
+        {tabs}
+        {seasons.length > 1 && season.title && (
+          <p className="text-soft text-base font-semibold">{season.title}</p>
+        )}
         {image ? (
-          <button
-            type="button"
-            disabled={!released}
-            onClick={() => setPlaying({ season: 0, episode: 1 })}
-            aria-label={t('player.playFilm')}
-            className="group relative block aspect-video w-full max-w-[760px] overflow-hidden rounded-2xl bg-white/[0.06] disabled:cursor-default"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element -- the film's own still */}
-            <img src={image} alt="" className="size-full object-cover" />
-            {released && (
-              <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-colors group-hover:bg-black/40">
-                <span className="flex size-16 items-center justify-center rounded-full bg-white text-black shadow-xl">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                    <path d="M7 4v16l13-8Z" />
-                  </svg>
+          <div className="group relative aspect-video w-full max-w-[760px] overflow-hidden rounded-2xl bg-white/[0.06]">
+            <button
+              type="button"
+              disabled={!released}
+              onClick={() => setPlaying({ season: index, episode: 1 })}
+              aria-label={t('player.playFilm')}
+              className="relative block size-full disabled:cursor-default"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- the film's own still */}
+              <img
+                src={image}
+                alt=""
+                referrerPolicy="no-referrer"
+                className={cx('size-full object-cover', seen && 'opacity-70')}
+              />
+              {released && (
+                <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-colors group-hover:bg-black/40">
+                  <span className="flex size-16 items-center justify-center rounded-full bg-white text-black shadow-xl">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                      <path d="M7 4v16l13-8Z" />
+                    </svg>
+                  </span>
                 </span>
-              </span>
+              )}
+            </button>
+            {seen && (
+              <span
+                className={cx(
+                  'pointer-events-none absolute inset-x-0 bottom-0 h-1',
+                  look === 'cine' ? 'bg-(--tone)' : 'bg-fg',
+                )}
+                aria-hidden
+              />
             )}
-          </button>
+          </div>
         ) : (
           // No still: a plain play button rather than an empty frame.
           <button
             type="button"
             disabled={!released}
-            onClick={() => setPlaying({ season: 0, episode: 1 })}
+            onClick={() => setPlaying({ season: index, episode: 1 })}
             className="bg-fg text-bg flex h-12 items-center gap-2.5 self-start rounded-full px-6 font-semibold disabled:opacity-50"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -298,7 +342,26 @@ export function EpisodeList({
             {t('player.playFilm')}
           </button>
         )}
-        {meta && <span className="text-mid text-sm">{meta}</span>}
+        <div className="flex flex-wrap items-center gap-3">
+          {entry && released && (
+            <button
+              type="button"
+              disabled={busy}
+              aria-pressed={seen}
+              onClick={() => onWatched(seen ? (absolute > 1 ? absolute - 1 : null) : absolute)}
+              className={cx(
+                'inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium transition-colors disabled:opacity-50',
+                seen
+                  ? 'bg-fg text-bg font-semibold'
+                  : 'text-soft bg-white/[0.08] hover:bg-white/[0.14]',
+              )}
+            >
+              <Check size={15} strokeWidth={2.75} aria-hidden />
+              {seen ? t('episodes.watchedFilm') : t('episodes.markFilm')}
+            </button>
+          )}
+          {meta && <span className="text-mid text-sm">{meta}</span>}
+        </div>
       </div>
     );
   }

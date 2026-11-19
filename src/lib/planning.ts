@@ -292,10 +292,19 @@ export async function withTmdbReleases(
   from.setHours(0, 0, 0, 0);
   const to = new Date(from);
   to.setDate(to.getDate() + 6);
-  const releases = await Promise.race([
-    tmdbReleases(kind as 'all' | 'series' | 'movies' | 'animation', from, to).catch(() => []),
-    new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
+  const [tmdb, animeFilms] = await Promise.all([
+    Promise.race([
+      tmdbReleases(kind as 'all' | 'series' | 'movies' | 'animation', from, to).catch(() => []),
+      new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
+    ]),
+    kind === 'animation' || kind === 'all'
+      ? Promise.race([
+          (await import('./catalog')).animeFilmReleases(from, to).catch(() => []),
+          new Promise<[]>((resolve) => setTimeout(() => resolve([]), 3000)),
+        ])
+      : Promise.resolve([]),
   ]);
+  const releases = [...animeFilms, ...tmdb];
   const wanted = q.library ? releases.filter((r) => r.trackedId !== null) : releases;
   if (!wanted.length) return week;
   const today = localDate(new Date());

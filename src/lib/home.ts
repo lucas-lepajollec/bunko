@@ -208,15 +208,27 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
   // mixed home has them too when series or films are enabled.
   const enabled = getSettings().universes;
   const mixedTmdb = !kind && (!enabled.length || enabled.some((k) => KINDS[k].releases === 'tmdb'));
-  const tmdbWeek =
+  const wantAnimeFilms =
+    kind === 'animation' ||
+    (!kind && followsAnime && (!enabled.length || enabled.includes('animation')));
+  const [tmdbWeek, animeFilmWeek] = await Promise.all([
     (kind && KINDS[kind].releases === 'tmdb') || mixedTmdb
-      ? await Promise.race([
+      ? Promise.race([
           (await import('./tmdb-releases'))
             .tmdbReleases(kind ?? 'all', new Date(Date.now() - 7 * 86400_000), new Date())
             .catch(() => []),
           new Promise<[]>((resolve) => setTimeout(() => resolve([]), 4000)),
         ])
-      : [];
+      : Promise.resolve([]),
+    wantAnimeFilms
+      ? Promise.race([
+          (await import('./catalog'))
+            .animeFilmReleases(new Date(Date.now() - 30 * 86400_000), new Date())
+            .catch(() => []),
+          new Promise<[]>((resolve) => setTimeout(() => resolve([]), 3000)),
+        ])
+      : Promise.resolve([]),
+  ]);
   // Extension works (the extension kind, or those that joined the anime kind) are read in
   // memory; a slow extension never holds the home feed. Which extensions count follows the
   // account's 18+ mode (see `extensionCatalogAddons`).
@@ -255,7 +267,7 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
     ...baseTop,
     ...extensionAnimeTop.filter((m) => !topTitles.has(normalizeTitle(m.title))),
   ];
-  const pool = [...reading, ...episodes, ...tmdbWeek, ...extensionWeek].filter(
+  const pool = [...reading, ...episodes, ...animeFilmWeek, ...tmdbWeek, ...extensionWeek].filter(
     (r) => !kind || mediaKind(r.media) === kind,
   );
   const home = fillHero(normalizeHome(composeHome(heroArtwork(pool), topWithExtension, kind)));
