@@ -100,12 +100,14 @@
 }
 
 /* ───────────────────────── Header ───────────────────────── */
-/* Scrolled: blur and shade that wrap cleanly below the header buttons and fade out softly. */
+/* Scrolled: blur and shade that wrap cleanly below the header buttons with a soft multi-stop fade. */
 .header-fade {
   background: linear-gradient(
     180deg,
-    color-mix(in oklab, var(--color-bg) 82%, transparent) 0%,
-    color-mix(in oklab, var(--color-bg) 56%, transparent) 58%,
+    color-mix(in oklab, var(--color-bg) 80%, transparent) 0%,
+    color-mix(in oklab, var(--color-bg) 66%, transparent) 38%,
+    color-mix(in oklab, var(--color-bg) 38%, transparent) 66%,
+    color-mix(in oklab, var(--color-bg) 12%, transparent) 86%,
     transparent 100%
   );
   -webkit-backdrop-filter: blur(22px) saturate(1.3);
@@ -113,11 +115,23 @@
   -webkit-mask-image: linear-gradient(
     180deg,
     #000 0%,
-    #000 58%,
-    rgb(0 0 0 / 0.45) 82%,
+    #000 34%,
+    rgb(0 0 0 / 0.82) 50%,
+    rgb(0 0 0 / 0.54) 64%,
+    rgb(0 0 0 / 0.26) 77%,
+    rgb(0 0 0 / 0.09) 89%,
     transparent 100%
   );
-  mask-image: linear-gradient(180deg, #000 0%, #000 58%, rgb(0 0 0 / 0.45) 82%, transparent 100%);
+  mask-image: linear-gradient(
+    180deg,
+    #000 0%,
+    #000 34%,
+    rgb(0 0 0 / 0.82) 50%,
+    rgb(0 0 0 / 0.54) 64%,
+    rgb(0 0 0 / 0.26) 77%,
+    rgb(0 0 0 / 0.09) 89%,
+    transparent 100%
+  );
 }
 :root[data-theme='cine'] .app-tabbar {
   background: color-mix(in oklab, var(--color-bg) 82%, transparent);
@@ -149,30 +163,40 @@
    blurred layers stall mobile compositing when sheets open or pages change). */
 @media (hover: hover) and (pointer: fine) {
   :root[data-theme='cine'] .poster-chip:not(:empty) {
-    display: block;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
     position: absolute;
-    left: 50%;
-    bottom: 10px;
-    translate: -50% 4px;
+    left: 6px;
+    bottom: 6px;
+    max-width: calc(100% - 12px);
+    height: 24px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    translate: 0 4px;
     white-space: nowrap;
-    padding: 5px 12px;
+    padding: 0 9px;
     border-radius: 999px;
     border: 1px solid rgb(255 255 255 / 0.18);
     background: rgb(7 11 16 / 0.78);
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
     color: #fff;
-    font-size: 12px;
+    font-size: 11.5px;
+    line-height: 1;
     opacity: 0;
     transition:
       opacity 180ms,
       translate 180ms;
     pointer-events: none;
   }
+  :root[data-theme='cine'] .poster-chip[data-rated='true']:not(:empty) {
+    max-width: calc(100% - 68px);
+  }
   :root[data-theme='cine'] .poster:hover .poster-chip,
   :root[data-theme='cine'] .poster:focus-visible .poster-chip {
     opacity: 1;
-    translate: -50% 0;
+    translate: 0 0;
   }
 }
 :root[data-theme='cine'] .poster-title {

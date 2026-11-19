@@ -21,7 +21,11 @@ export const isFilm = (e: Pick<TrackedMedia, 'media'>) =>
 
 /** The work's length in its own unit (episodes, chapters or volumes as displayed). */
 export function workLength(e: TrackedMedia): number | null {
-  if (e.type === 'ANIME') return isFilm(e) ? 1 : (e.airedEpisodes ?? null);
+  if (e.type === 'ANIME') {
+    // A single film has length 1; a film saga with linked films counts every linked film.
+    if (isFilm(e)) return e.airedEpisodes && e.airedEpisodes > 1 ? e.airedEpisodes : 1;
+    return e.airedEpisodes ?? null;
+  }
   return e.progress?.released ?? null;
 }
 

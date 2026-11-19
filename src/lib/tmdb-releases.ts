@@ -163,7 +163,7 @@ export async function tmdbReleases(kind: Kind | 'all', fromDate: Date, toDate: D
   const parts = await Promise.all([
     kind === 'all' || kind === 'series' ? seriesEpisodes(from, to) : Promise.resolve([]),
     kind === 'all' || kind === 'movies' ? filmReleases(from, to, false) : Promise.resolve([]),
-    kind === 'animation' ? filmReleases(from, to, true) : Promise.resolve([]),
+    kind === 'all' || kind === 'animation' ? filmReleases(from, to, true) : Promise.resolve([]),
   ]);
   return parts
     .flat()

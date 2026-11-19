@@ -212,6 +212,8 @@ export function db(): Database.Database {
     migrateV28(connection);
     migrateV29(connection);
     migrateV30(connection);
+    // Heal any self-referential work_links rows that could hide a root work from the library.
+    connection.exec('DELETE FROM work_links WHERE member = root');
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
     const versionConnection = connection;
     connection.transaction(() => {

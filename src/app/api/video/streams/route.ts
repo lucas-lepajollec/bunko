@@ -26,12 +26,13 @@ export const GET = route(async (r) => {
       tmdb: z.coerce.number().int().positive().max(2_147_483_647).optional(),
       season: z.coerce.number().int().min(0).max(500).optional(),
       episode: z.coerce.number().int().positive().max(5000).optional(),
+      film: z.enum(['0', '1']).optional(),
       lang: z.enum(['en', 'fr', 'es', 'de', 'it']).default('en'),
     })
     .parse(Object.fromEntries(new URL(r.url).searchParams));
   if (q.ext) return json(await extensionStreams(q.ext, q.lang, q.episode, r.signal));
   if (q.anilist && q.episode)
-    return json(await episodeStreams(q.anilist, q.episode, q.lang, r.signal));
+    return json(await episodeStreams(q.anilist, q.episode, q.lang, r.signal, q.film === '1'));
   if (q.imdb || q.tmdb)
     return json(
       await titleStreams(

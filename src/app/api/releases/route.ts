@@ -19,13 +19,22 @@ export const GET = route(async (r) => {
       nextCursor: Date.now() - from.getTime() < 8 * WEEK ? from.toISOString() : null,
     } satisfies ReleasesPage);
   }
-  // Series and films: TMDB episodes and film releases, one week per page.
+  // Series and films: TMDB episodes and film releases, plus AniList anime films for animation.
   if (q.kind && q.kind !== 'all' && KINDS[q.kind].releases === 'tmdb') {
     const to = q.cursor && !Number.isNaN(Date.parse(q.cursor)) ? new Date(q.cursor) : new Date();
     const from = new Date(to.getTime() - WEEK);
     const { tmdbReleases } = await import('@/lib/tmdb-releases');
+    const [tmdb, animeFilms] = await Promise.all([
+      tmdbReleases(q.kind, from, to),
+      q.kind === 'animation'
+        ? (await import('@/lib/catalog')).animeFilmReleases(from, to).catch(() => [])
+        : Promise.resolve([]),
+    ]);
+    const items = [...animeFilms, ...tmdb].sort((a, b) =>
+      b.releasedAt.localeCompare(a.releasedAt),
+    );
     return json({
-      items: await tmdbReleases(q.kind, from, to),
+      items,
       nextCursor: Date.now() - from.getTime() < 8 * WEEK ? from.toISOString() : null,
     } satisfies ReleasesPage);
   }

@@ -195,13 +195,10 @@ function SourcePageContent() {
                 href={`/title/suwayomi/${it.suwayomiMangaId}`}
                 className="group flex min-w-0 flex-col gap-2"
               >
-                <span className="relative block">
-                  <Cover
-                    src={it.thumbnailUrl}
-                    className="transition-transform duration-300 group-hover:-translate-y-1"
-                  />
+                <span className="relative block transition-transform duration-300 group-hover:-translate-y-1">
+                  <Cover src={it.thumbnailUrl} />
                   {it.trackedId !== null && (
-                    <span className="bg-bg/85 absolute top-2 right-2 flex h-6 items-center rounded-full px-2 text-[11px] font-semibold">
+                    <span className="bg-bg/85 absolute top-1.5 right-1.5 flex h-6 items-center rounded-full px-2 text-[11px] font-semibold">
                       ✓
                     </span>
                   )}

@@ -48,7 +48,8 @@ export const GET = route(async (r) => {
     entries.map((e) => {
       const root =
         links.get(e.media.id) ?? (e.anilistId ? links.get(`anilist:${e.anilistId}`) : undefined);
-      return root && followed.has(root) ? { ...e, partOf: root } : e;
+      const self = root === e.media.id || (e.anilistId != null && root === `anilist:${e.anilistId}`);
+      return root && !self && followed.has(root) ? { ...e, partOf: root } : e;
     }),
   );
 });

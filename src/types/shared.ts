@@ -316,6 +316,11 @@ export interface AnimeSeason {
   part?: number;
   partOffset?: number;
   anilistId: number | null;
+  /** True when this part is a standalone film (AniList MOVIE, linked film, etc.). */
+  isFilm?: boolean;
+  /** Part-specific artwork (used for linked films/specials so each shows its own poster/still). */
+  coverUrl?: string | null;
+  bannerUrl?: string | null;
   title: string;
   year: number | null;
   status: string | null;
