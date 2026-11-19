@@ -433,6 +433,7 @@ export const trackPatch = z
           .object({
             seriesId: z.string().min(1).max(100),
             season: z.number().int().min(0).max(1000),
+            order: z.enum(['seasons', 'absolute']).optional(),
           })
           .strict(),
       ])

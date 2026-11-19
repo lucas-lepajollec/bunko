@@ -71,7 +71,7 @@ export function ScrollStrip({
         onClick={() => scroll(dir)}
         tabIndex={hidden ? -1 : 0}
         className={cx(
-          'bg-bg/90 absolute top-1/2 z-20 flex size-8 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 text-white shadow-[0_6px_18px_rgba(0,0,0,0.55)] backdrop-blur-md transition-[opacity,transform,background-color] duration-200 hover:bg-hover',
+          'absolute top-1/2 z-20 flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/12 bg-[#0e141b]/95 text-white shadow-[0_8px_24px_rgba(0,0,0,0.5)] transition-[opacity,transform,background-color] duration-200 hover:bg-[#18212b]',
           dir === -1 ? 'left-0' : 'right-0',
           hidden && 'pointer-events-none scale-90 opacity-0',
         )}
@@ -85,31 +85,36 @@ export function ScrollStrip({
     );
   };
 
+  // The arrows sit on the strip itself (an inner box), so outer spacing never moves them off
+  // centre; the strip fades under them.
+  const fade = (edge: boolean) => (edge ? '0px' : '56px');
   return (
-    <div className={cx('relative min-w-0', wrapperClassName)}>
-      {arrowButton(-1)}
-      <div
-        ref={ref}
-        role={role}
-        aria-label={ariaLabel}
-        onScroll={measure}
-        className={cx(
-          'no-scrollbar relative flex overflow-x-auto scroll-smooth motion-reduce:scroll-auto',
-          overflow && 'px-1',
-          className,
-        )}
-        style={
-          overflow
-            ? {
-                maskImage: `linear-gradient(to right, ${edges.start ? 'black' : 'transparent'}, black ${edges.start ? '0px' : '38px'}, black calc(100% - ${edges.end ? '0px' : '38px'}), ${edges.end ? 'black' : 'transparent'})`,
-                WebkitMaskImage: `linear-gradient(to right, ${edges.start ? 'black' : 'transparent'}, black ${edges.start ? '0px' : '38px'}, black calc(100% - ${edges.end ? '0px' : '38px'}), ${edges.end ? 'black' : 'transparent'})`,
-              }
-            : undefined
-        }
-      >
-        {children}
+    <div className={cx('min-w-0', wrapperClassName)}>
+      <div className="relative min-w-0">
+        {arrowButton(-1)}
+        <div
+          ref={ref}
+          role={role}
+          aria-label={ariaLabel}
+          onScroll={measure}
+          className={cx(
+            'no-scrollbar relative flex overflow-x-auto scroll-smooth motion-reduce:scroll-auto',
+            overflow && 'px-1',
+            className,
+          )}
+          style={
+            overflow
+              ? {
+                  maskImage: `linear-gradient(to right, ${edges.start ? 'black' : 'transparent'}, black ${fade(edges.start)}, black calc(100% - ${fade(edges.end)}), ${edges.end ? 'black' : 'transparent'})`,
+                  WebkitMaskImage: `linear-gradient(to right, ${edges.start ? 'black' : 'transparent'}, black ${fade(edges.start)}, black calc(100% - ${fade(edges.end)}), ${edges.end ? 'black' : 'transparent'})`,
+                }
+              : undefined
+          }
+        >
+          {children}
+        </div>
+        {arrowButton(1)}
       </div>
-      {arrowButton(1)}
     </div>
   );
 }

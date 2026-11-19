@@ -317,7 +317,10 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
   // What the library holds per kind: how many works, and the one that stands for it — a favorite,
   // else the best rated, else the one read or watched last.
   const byKind = useMemo(() => {
-    const map = new Map<string, { count: number; best: TrackedMedia; rank: [number, number, number] }>();
+    const map = new Map<
+      string,
+      { count: number; best: TrackedMedia; rank: [number, number, number] }
+    >();
     const rankOf = (e: TrackedMedia): [number, number, number] => [
       e.favorite ? 1 : 0,
       e.rating ?? -1,
@@ -399,7 +402,12 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
   // "Everything": the work that stands for each kind, in the user's order.
   const mosaic = showCovers
     ? universe.order
-        .map((k) => byKind.get(k)?.best?.coverUrl ?? byKind.get(k)?.best?.media.coverUrl ?? cachedCovers.get(k))
+        .map(
+          (k) =>
+            byKind.get(k)?.best?.coverUrl ??
+            byKind.get(k)?.best?.media.coverUrl ??
+            cachedCovers.get(k),
+        )
         .filter((src): src is string => Boolean(src))
         .slice(0, 6)
     : [];

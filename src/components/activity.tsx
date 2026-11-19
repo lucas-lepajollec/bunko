@@ -47,11 +47,11 @@ const busy = (a: LibraryActivity | undefined) =>
   Boolean(a?.tasks?.length) ||
   Boolean(
     a &&
-      (a.activeDownloads ||
-        a.matching.queued > 0 ||
-        a.matching.current ||
-        a.refresh.running ||
-        a.jellyfinImport),
+    (a.activeDownloads ||
+      a.matching.queued > 0 ||
+      a.matching.current ||
+      a.refresh.running ||
+      a.jellyfinImport),
   );
 
 /**
@@ -633,11 +633,7 @@ function ActivityLog({ serverEvents }: { serverEvents: ActivityEvent[] }) {
               aria-hidden
               className={cx(
                 'mt-0.5 size-4 shrink-0',
-                entry.tone === 'bad'
-                  ? 'text-bad'
-                  : entry.tone === 'ok'
-                    ? 'text-ok'
-                    : 'text-mid',
+                entry.tone === 'bad' ? 'text-bad' : entry.tone === 'ok' ? 'text-ok' : 'text-mid',
               )}
             />
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">

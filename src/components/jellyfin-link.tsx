@@ -5,7 +5,14 @@ import { useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { cx, smallButton } from './ui';
 
-/** Link an anime to its Jellyfin series and season, or keep it unlinked. */
+type Order = 'seasons' | 'absolute';
+
+/**
+ * Link a video work (anime, series, film or a work of films) to its Jellyfin series or film by
+ * hand, or keep it unlinked. Episodes match by season numbers, or "in order": every episode of
+ * the work one after another against every episode of the series (films or parts kept as one
+ * series in Jellyfin, another numbering).
+ */
 export function JellyfinTab({
   entry,
   media,
@@ -14,7 +21,7 @@ export function JellyfinTab({
   entry: TrackedMedia;
   media: MediaDetail;
   /** `null` = automatic, `none` = never link. */
-  onLink: (link: { seriesId: string; season: number } | 'none' | null) => void;
+  onLink: (link: { seriesId: string; season: number; order?: Order } | 'none' | null) => void;
 }) {
   const { t, n } = useI18n();
   const [query, setQuery] = useState(entry.title);
@@ -22,6 +29,10 @@ export function JellyfinTab({
   const list = useApi<JellyfinSeriesSummary[]>(`/api/jellyfin/series?q=${encodeURIComponent(q)}`);
   const current = media.jellyfin;
   const manual = entry.jellyfinLink;
+  const linked = manual && manual !== 'none' ? manual : null;
+  const [order, setOrder] = useState<Order>(linked?.order ?? 'seasons');
+  const link = (seriesId: string, seasons: number[], how: Order) =>
+    onLink({ seriesId, season: seasons.find((x) => x >= 1) ?? 1, order: how });
   return (
     <div className="flex flex-col gap-4">
       <p className="text-mid text-sm leading-relaxed">{t('jellyfin.linkHint')}</p>
@@ -56,6 +67,44 @@ export function JellyfinTab({
           )}
         </span>
       </div>
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-medium">{t('jellyfin.order')}</span>
+        <div
+          role="radiogroup"
+          aria-label={t('jellyfin.order')}
+          className="grid gap-2 sm:grid-cols-2"
+        >
+          {(['seasons', 'absolute'] as const).map((how) => (
+            <button
+              key={how}
+              type="button"
+              role="radio"
+              aria-checked={order === how}
+              onClick={() => {
+                setOrder(how);
+                // Already linked by hand: the same series, matched the new way.
+                if (linked && linked.order !== how) {
+                  const s = list.data?.find((x) => x.id === linked.seriesId);
+                  onLink({
+                    ...linked,
+                    order: how,
+                    season: s?.seasons.find((x) => x >= 1) ?? linked.season,
+                  });
+                }
+              }}
+              className={cx(
+                'flex flex-col gap-0.5 rounded-2xl border p-3 text-left transition-colors',
+                order === how ? 'border-fg bg-white/[0.06]' : 'border-line hover:bg-white/[0.04]',
+              )}
+            >
+              <span className="text-sm font-semibold">{t(`jellyfin.order.${how}`)}</span>
+              <span className="text-muted text-xs leading-snug">
+                {t(`jellyfin.orderHint.${how}`)}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -80,7 +129,7 @@ export function JellyfinTab({
           <button
             key={s.id}
             type="button"
-            onClick={() => onLink({ seriesId: s.id, season: s.seasons.find((x) => x >= 1) ?? 1 })}
+            onClick={() => link(s.id, s.seasons, order)}
             className={cx(
               'flex items-center justify-between gap-3 rounded-xl p-2.5 text-left text-sm hover:bg-white/[0.05]',
               current?.seriesId === s.id && 'bg-white/[0.06]',

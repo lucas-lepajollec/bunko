@@ -102,36 +102,41 @@
 /* ───────────────────────── Header ───────────────────────── */
 /* Scrolled: blur and shade that wrap cleanly below the header buttons with a soft multi-stop fade. */
 .header-fade {
+  /* An eased shade (many stops: no visible band), then a progressive blur in three layers,
+     strongest at the top and fading out one after another. */
   background: linear-gradient(
     180deg,
-    color-mix(in oklab, var(--color-bg) 80%, transparent) 0%,
-    color-mix(in oklab, var(--color-bg) 66%, transparent) 38%,
-    color-mix(in oklab, var(--color-bg) 38%, transparent) 66%,
-    color-mix(in oklab, var(--color-bg) 12%, transparent) 86%,
+    color-mix(in oklab, var(--color-bg) 86%, transparent) 0%,
+    color-mix(in oklab, var(--color-bg) 80%, transparent) 14%,
+    color-mix(in oklab, var(--color-bg) 68%, transparent) 28%,
+    color-mix(in oklab, var(--color-bg) 52%, transparent) 42%,
+    color-mix(in oklab, var(--color-bg) 34%, transparent) 56%,
+    color-mix(in oklab, var(--color-bg) 18%, transparent) 70%,
+    color-mix(in oklab, var(--color-bg) 7%, transparent) 84%,
     transparent 100%
   );
-  -webkit-backdrop-filter: blur(22px) saturate(1.3);
-  backdrop-filter: blur(22px) saturate(1.3);
-  -webkit-mask-image: linear-gradient(
-    180deg,
-    #000 0%,
-    #000 34%,
-    rgb(0 0 0 / 0.82) 50%,
-    rgb(0 0 0 / 0.54) 64%,
-    rgb(0 0 0 / 0.26) 77%,
-    rgb(0 0 0 / 0.09) 89%,
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    180deg,
-    #000 0%,
-    #000 34%,
-    rgb(0 0 0 / 0.82) 50%,
-    rgb(0 0 0 / 0.54) 64%,
-    rgb(0 0 0 / 0.26) 77%,
-    rgb(0 0 0 / 0.09) 89%,
-    transparent 100%
-  );
+}
+.header-fade > span {
+  position: absolute;
+  inset: 0;
+}
+.header-fade > span:nth-child(1) {
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 50%, transparent 92%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 50%, transparent 92%);
+}
+.header-fade > span:nth-child(2) {
+  -webkit-backdrop-filter: blur(9px);
+  backdrop-filter: blur(9px);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 34%, transparent 70%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 34%, transparent 70%);
+}
+.header-fade > span:nth-child(3) {
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 22%, transparent 50%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 22%, transparent 50%);
 }
 :root[data-theme='cine'] .app-tabbar {
   background: color-mix(in oklab, var(--color-bg) 82%, transparent);
@@ -440,9 +445,8 @@
       ),
       linear-gradient(180deg, transparent 45%, rgb(7 11 16 / 0.65) 100%);
   }
-  .header-fade {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
+  .header-fade > span {
+    display: none;
   }
   :root[data-theme='cine'] .ui-panel {
     -webkit-backdrop-filter: none;

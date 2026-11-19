@@ -87,14 +87,7 @@ export function ManagedImage({
   const stored = src.startsWith('/api/covers/');
   const direct = !local || stored || isCoverWarm(src);
   if (direct)
-    return (
-      <DirectImage
-        src={src}
-        local={local && !stored}
-        onLoadError={onLoadError}
-        {...props}
-      />
-    );
+    return <DirectImage src={src} local={local && !stored} onLoadError={onLoadError} {...props} />;
   return <QueuedLocalImage src={src} onLoadError={onLoadError} {...props} />;
 }
 

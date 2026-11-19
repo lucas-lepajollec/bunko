@@ -7,12 +7,16 @@ import type { AnimeSeason, JellyfinPresence } from '@/types/shared';
  */
 export function jellyfinSeason(
   season: Pick<AnimeSeason, 'number' | 'display' | 'partOffset' | 'episodes' | 'list'>,
-  presence: Pick<JellyfinPresence, 'bySeason'> | null | undefined,
+  presence: Pick<JellyfinPresence, 'bySeason' | 'absolute'> | null | undefined,
+  /** Episodes of the work before this season: places it in a series linked "in order". */
+  start = 0,
 ) {
   const display = season.display ?? season.number;
-  const jf = presence?.bySeason.find((s) => s.season === display);
+  const jf = presence?.absolute
+    ? presence.bySeason[0]
+    : presence?.bySeason.find((s) => s.season === display);
   if (!jf) return null;
-  const offset = season.partOffset ?? 0;
+  const offset = presence?.absolute ? start : (season.partOffset ?? 0);
   const size = Math.max(season.episodes ?? 0, season.list.length) || Infinity;
   const local = (n: number) => n - offset;
   const inPart = (n: number) => local(n) >= 1 && local(n) <= size;
