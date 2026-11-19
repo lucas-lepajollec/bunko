@@ -19,7 +19,8 @@ import { Play } from 'lucide-react';
 import { InfoBubble, toast } from './notify';
 import { useI18n } from '@/i18n/I18nProvider';
 import { useRelativeTime } from './time';
-import { Spinner, cx, errorText, smallButton } from './ui';
+import { Spinner, cx, errorText } from './ui';
+import { SlidingHighlight } from './sliding-highlight';
 
 const busy = (a: LibraryActivity | undefined) =>
   Boolean(a?.tasks?.length) ||
@@ -67,28 +68,167 @@ export function useLibraryActivity({ sync = false }: { sync?: boolean } = {}) {
   return activity.data;
 }
 
-/**
- * The one place that says what Bunko is doing: background tasks (downloads, source search,
- * release checks, Jellyfin import, translations) with their progress, page loads and partial
- * results. The bell spins while something runs and shows a dot for warnings; pages stay quiet.
- */
-export function ActivityCenter() {
-  const { t } = useI18n();
+/** What the bell says: running tasks (background and page loads) and whether results are partial. */
+function useActivityState() {
   const universe = useUniverse();
   const a = useLibraryActivity({ sync: true });
   const notices = useNotices();
-  const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
   const tasks = useMemo(() => {
     const list = a?.tasks ?? [];
     // The side of the app on screen first (reading or video).
     const scope = isVideoKind(universe.active) ? 'video' : 'reading';
     return [...list].sort((x, y) => Number(y.scope === scope) - Number(x.scope === scope));
   }, [a?.tasks, universe.active]);
+  const pages = notices.filter((x) => x.task && x.pending).map((x) => x.task!);
   const loading = notices.some((x) => x.pending);
   const partial = notices.some((x) => x.partial);
-  const busy = tasks.length > 0 || loading;
+  return { tasks, pages, loading, partial, running: tasks.length + pages.length };
+}
+
+/** The bell: how many tasks run (a badge), a spinner while a page loads, a dot for warnings. */
+export function ActivityBell({
+  open,
+  onClick,
+  className,
+}: {
+  open: boolean;
+  onClick: () => void;
+  className?: string;
+}) {
+  const { t, n } = useI18n();
+  const { running, loading, partial } = useActivityState();
+  return (
+    <button
+      type="button"
+      aria-label={t('notices.label')}
+      aria-expanded={open}
+      onClick={onClick}
+      className={cx(
+        'relative flex size-11 items-center justify-center rounded-full transition-colors',
+        open ? 'bg-white/[0.14] text-white' : 'text-mid hover:bg-white/[0.08] hover:text-white',
+        className,
+      )}
+    >
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        aria-hidden
+      >
+        <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+      </svg>
+      {running > 0 ? (
+        <span
+          aria-hidden
+          className="bg-fg text-bg absolute top-1.5 right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold"
+        >
+          {n(running)}
+        </span>
+      ) : loading ? (
+        <span aria-hidden className="absolute top-[8px] left-[9px] flex leading-none">
+          <Spinner className="block size-2.5 border-[1.5px] text-white" />
+        </span>
+      ) : (
+        partial && (
+          <span aria-hidden className="bg-warn absolute top-2.5 right-2.5 size-2 rounded-full" />
+        )
+      )}
+    </button>
+  );
+}
+
+/**
+ * The one place that says what Bunko is doing: a status line, then "Now" (running tasks with
+ * their progress, and what runs next) and "Scheduled" (every background job, by service, with a
+ * way to run it now). Release checks are one job among the others.
+ */
+export function ActivityPanel() {
+  const { t, n } = useI18n();
+  const { tasks, pages, loading, partial, running } = useActivityState();
+  const [tab, setTab] = useState<'now' | 'planned'>('now');
+  return (
+    <div
+      role="dialog"
+      aria-label={t('notices.label')}
+      className="flex max-h-[inherit] min-h-0 flex-col"
+    >
+      <div className="flex items-center gap-3 px-[18px] pt-4 pb-3">
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="text-[17px] font-bold">{t('notices.title')}</span>
+          <span
+            className={cx(
+              'flex items-center gap-1.5 text-[12.5px] leading-snug',
+              partial && !running ? 'text-warn' : 'text-muted',
+            )}
+          >
+            {(running > 0 || loading) && <Spinner className="size-2.5 border-[1.5px]" />}
+            {running > 0
+              ? t('activity.running', { count: n(running) })
+              : loading
+                ? t('loading.more')
+                : partial
+                  ? t('loading.partial')
+                  : t('notices.idle')}
+          </span>
+        </span>
+        <span className="relative flex shrink-0 gap-0.5 rounded-full bg-white/[0.06] p-[3px] text-[12.5px]">
+          <SlidingHighlight />
+          {(['now', 'planned'] as const).map((x) => (
+            <button
+              key={x}
+              type="button"
+              aria-pressed={tab === x}
+              onClick={() => setTab(x)}
+              className={cx(
+                'h-7 rounded-full px-3 transition-colors',
+                tab === x ? 'bg-fg text-bg font-bold' : 'text-mid hover:text-white',
+              )}
+            >
+              {t(x === 'now' ? 'activity.now' : 'activity.planned')}
+            </button>
+          ))}
+        </span>
+      </div>
+      <div className="flex min-h-0 flex-col gap-1.5 overflow-y-auto overscroll-contain px-2.5 pb-2.5 *:shrink-0">
+        {tab === 'now' && (
+          <>
+            {tasks.map((task) => (
+              <TaskRow
+                key={task.id}
+                label={t(`activity.task.${task.kind}`)}
+                detail={task.detail}
+                done={task.done}
+                total={task.total}
+              />
+            ))}
+            {pages.map((task, i) => (
+              <TaskRow key={`page-${i}`} label={task.label} done={task.done} total={task.total} />
+            ))}
+          </>
+        )}
+        <BackgroundJobs upcoming={tab === 'now'} />
+      </div>
+      <Link
+        href="/downloads"
+        className="border-line text-mid flex items-center justify-between border-t px-[18px] py-3 text-[13px] hover:text-white"
+      >
+        {t('nav.downloads')}
+        <span aria-hidden>→</span>
+      </Link>
+    </div>
+  );
+}
+
+/** Default look: the bell with its own dropdown. Ciné shows the panel in the header's shared one. */
+export function ActivityCenter() {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
   // Navigating closes the panel.
   const [lastPath, setLastPath] = useState(pathname);
   if (lastPath !== pathname) {
@@ -110,91 +250,17 @@ export function ActivityCenter() {
   }, [open]);
   return (
     <div ref={root} className="relative">
-      <button
-        type="button"
-        aria-label={t('notices.label')}
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className="text-mid relative flex size-11 items-center justify-center rounded-full hover:bg-white/[0.08] hover:text-white"
-      >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          aria-hidden
-        >
-          <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-          <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-        </svg>
-        {busy && (
-          // A small spinner at the bell's top-left, touching its edge, while anything loads.
-          <span aria-hidden className="absolute top-[8px] left-[9px] flex leading-none">
-            <Spinner className="block size-2.5 border-[1.5px] text-white" />
-          </span>
-        )}
-        {partial && !busy && (
-          <span aria-hidden className="bg-warn absolute top-2.5 right-2.5 size-2 rounded-full" />
-        )}
-      </button>
+      <ActivityBell open={open} onClick={() => setOpen((o) => !o)} />
       {open && (
-        <div
-          role="dialog"
-          aria-label={t('notices.label')}
-          className="ui-panel border-line fixed inset-x-3 top-[68px] z-50 flex max-h-[calc(100dvh-68px-7rem-env(safe-area-inset-bottom))] touch-pan-y flex-col overflow-hidden rounded-[22px] border bg-panel text-sm shadow-[0_24px_60px_rgba(0,0,0,0.55)] md:absolute md:inset-x-auto md:top-full md:right-0 md:mt-3 md:max-h-[min(76vh,calc(100dvh-110px))] md:w-[400px]"
-        >
-          {/* What is happening now, in one line; the details below scroll. */}
-          <div className="border-line flex items-center gap-3 border-b px-4 py-3.5">
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="text-[16px] font-semibold">{t('notices.title')}</span>
-              <span
-                className={cx(
-                  'flex items-center gap-1.5 text-xs leading-snug',
-                  partial && !busy ? 'text-warn' : 'text-muted',
-                )}
-              >
-                {busy && <Spinner className="size-2.5 border-[1.5px]" />}
-                {busy ? t('loading.more') : partial ? t('loading.partial') : t('notices.idle')}
-              </span>
-            </span>
-          </div>
-          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain p-4 *:shrink-0">
-            {tasks.length + notices.filter((x) => x.task && x.pending).length > 0 && (
-              <section className="flex flex-col gap-2">
-                {tasks.map((task) => (
-                  <TaskRow
-                    key={task.id}
-                    label={t(`activity.task.${task.kind}`)}
-                    detail={task.detail}
-                    done={task.done}
-                    total={task.total}
-                  />
-                ))}
-                {notices
-                  .filter((x) => x.task && x.pending)
-                  .map((x, i) => (
-                    <TaskRow
-                      key={`page-${i}`}
-                      label={x.task!.label}
-                      done={x.task!.done}
-                      total={x.task!.total}
-                    />
-                  ))}
-              </section>
-            )}
-            <ReleaseChecks />
-            <BackgroundJobs />
-          </div>
+        <div className="ui-panel anim-pop border-line fixed inset-x-3 top-[68px] z-50 flex max-h-[calc(100dvh-68px-7rem-env(safe-area-inset-bottom))] touch-pan-y flex-col overflow-hidden rounded-[22px] border bg-panel text-sm shadow-[0_24px_60px_rgba(0,0,0,0.55)] md:absolute md:inset-x-auto md:top-full md:right-0 md:mt-3 md:max-h-[min(76vh,calc(100dvh-110px))] md:w-[420px]">
+          <ActivityPanel />
         </div>
       )}
     </div>
   );
 }
 
-/** One running task: name, how far, and a bar (pulsing while its size is unknown). */
+/** One running task: a ring of progress (spinning while its size is unknown), name and detail. */
 function TaskRow({
   label,
   detail,
@@ -208,96 +274,78 @@ function TaskRow({
 }) {
   const { n } = useI18n();
   const p = total ? Math.min(100, Math.round((done / total) * 100)) : null;
+  const length = 2 * Math.PI * 16;
   return (
-    <div className="flex flex-col gap-1.5 rounded-[14px] bg-white/[0.05] px-3 py-2.5">
-      <span className="flex items-baseline justify-between gap-3">
-        <span className="truncate font-medium">{label}</span>
-        <span className="text-mid shrink-0 text-xs tabular-nums">
-          {p !== null ? `${p} % · ${n(Math.floor(done))}/${n(total!)}` : total ? n(total) : ''}
-        </span>
+    <div className="anim-rise flex items-center gap-3 rounded-[14px] bg-white/[0.05] p-3">
+      <span className="relative size-10 shrink-0">
+        <svg
+          viewBox="0 0 40 40"
+          className={cx('size-10', p === null && 'animate-spin')}
+          aria-hidden
+        >
+          <circle
+            cx="20"
+            cy="20"
+            r="16"
+            fill="none"
+            stroke="rgb(255 255 255 / 0.12)"
+            strokeWidth="3"
+          />
+          <circle
+            cx="20"
+            cy="20"
+            r="16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeDasharray={length}
+            strokeDashoffset={length * (1 - (p ?? 25) / 100)}
+            transform="rotate(-90 20 20)"
+            className="transition-[stroke-dashoffset] duration-500"
+          />
+        </svg>
+        {p !== null && (
+          <span className="absolute inset-0 flex items-center justify-center text-[10.5px] font-bold tabular-nums">
+            {p}%
+          </span>
+        )}
       </span>
-      {detail && <span className="text-muted truncate text-xs">{detail}</span>}
-      <span className="h-1 overflow-hidden rounded-full bg-white/10">
-        <span
-          className={cx(
-            'bg-fg block h-full rounded-full transition-[width] duration-500',
-            p === null && 'w-1/3 animate-pulse',
-          )}
-          style={p !== null ? { width: `${Math.max(3, p)}%` } : undefined}
-        />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-[14px] font-semibold">{label}</span>
+        {(detail || total) && (
+          <span className="text-muted truncate text-xs">
+            {detail ?? ''}
+            {detail && total ? ' · ' : ''}
+            {total ? `${n(Math.floor(done))}/${n(total)}` : ''}
+          </span>
+        )}
       </span>
     </div>
   );
 }
 
 /**
- * New chapters and episodes: when the sources were last checked, when they are next, how many
- * works fetch by themselves, and a way to check now. (Formerly on the library's "New" tab.)
+ * Background jobs (release checks, source and catalog matching, Kavita, Jellyfin, covers,
+ * translations). `upcoming`: the few that run next, under the running tasks; otherwise every job,
+ * grouped by service. Loaded only while the panel is open.
  */
-function ReleaseChecks() {
-  const { t } = useI18n();
+function BackgroundJobs({ upcoming }: { upcoming: boolean }) {
+  const { t, n } = useI18n();
   const relative = useRelativeTime();
-  const { mutate } = useSWRConfig();
+  const jobs = useApi<BackgroundJob[]>('/api/jobs', { refreshInterval: 4000 });
   const feed = useApi<UpdatesFeed>('/api/updates', {
     refreshInterval: (data) => (data?.checking ? 1500 : 60_000),
   });
   const settings = useApi<PublicSettings>('/api/settings');
-  if (!feed.data) return null;
-  return (
-    <section className="flex items-center gap-3 rounded-[14px] bg-white/[0.05] px-3 py-2.5">
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex items-center gap-2 font-medium">
-          {t('library.updates')}
-          <InfoBubble label={t('updates.auto')}>
-            {t('updates.autoInfo', {
-              auto: feed.data.autoCount ?? 0,
-              total: feed.data.trackedCount ?? 0,
-              n: settings.data?.updateIntervalMinutes ?? 15,
-            })}{' '}
-            <Link href="/settings#suwayomi" className="underline">
-              {t('updates.edit')}
-            </Link>
-          </InfoBubble>
-        </span>
-        <span className="text-muted flex items-center gap-1.5 text-xs">
-          {feed.data.checking && <Spinner className="size-2.5 border-[1.5px]" />}
-          {feed.data.checking
-            ? t('updates.checking')
-            : t('updates.checkSentence', {
-                last: relative(feed.data.lastCheckAt ?? null),
-                next: relative(feed.data.nextCheckAt ?? null),
-              })}
-        </span>
-      </span>
-      <button
-        type="button"
-        disabled={feed.data.checking}
-        className={cx(smallButton, 'shrink-0')}
-        onClick={async () => {
-          try {
-            await send('/api/updates/check', 'POST');
-            await Promise.all([feed.mutate(), mutate('/api/tracked')]);
-          } catch (error) {
-            toast({ tone: 'bad', text: errorText(t, error) });
-          }
-        }}
-      >
-        {t('updates.checkNow')}
-      </button>
-    </section>
-  );
-}
-
-/**
- * Every background job of the account (release checks, source and catalog matching, Kavita,
- * Jellyfin, covers, translations): when it last ran, when it runs next, and a button to run it
- * now. Loaded only while the panel is open.
- */
-function BackgroundJobs() {
-  const { t, n } = useI18n();
-  const relative = useRelativeTime();
-  const jobs = useApi<BackgroundJob[]>('/api/jobs', { refreshInterval: 4000 });
+  const { mutate } = useSWRConfig();
   const [asked, setAsked] = useState<Set<string>>(new Set());
+  // The clock the "next run" times are compared with, moved along while the panel is open.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, []);
   if (!jobs.data?.length) return null;
   const run = async (job: BackgroundJob) => {
     const name = t(`jobs.name.${job.id}`);
@@ -305,6 +353,7 @@ function BackgroundJobs() {
     try {
       const done = await send<{ jobs: BackgroundJob[] }>('/api/jobs', 'POST', { id: job.id });
       await jobs.mutate(done.jobs, { revalidate: false });
+      if (job.id === 'update-check') void Promise.all([feed.mutate(), mutate('/api/tracked')]);
       toast({ tone: 'ok', text: t('jobs.started', { name }) });
     } catch (err) {
       toast({ tone: 'bad', text: errorText(t, err) });
@@ -319,16 +368,24 @@ function BackgroundJobs() {
       }, 5000);
     }
   };
+  const list = upcoming
+    ? [...jobs.data]
+        .filter((j) => j.nextAt && !j.running)
+        .sort((a, b) => (a.nextAt ?? '').localeCompare(b.nextAt ?? ''))
+        .slice(0, 4)
+    : jobs.data;
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-muted mb-1 px-1 text-[11px] font-semibold tracking-[0.12em] uppercase">
-        {t('jobs.title')}
+    <div className="flex flex-col gap-0.5">
+      <span className="text-muted px-2 pt-3 pb-1.5 text-[11px] font-semibold tracking-[0.14em] uppercase">
+        {t(upcoming ? 'activity.upNext' : 'jobs.title')}
       </span>
-      {jobs.data.map((job, i) => {
+      {list.map((job, i) => {
         const name = t(`jobs.name.${job.id}`);
-        // Jobs come grouped by what they work with (Suwayomi, Kavita, Jellyfin, catalogs…).
-        const header = i === 0 || jobs.data![i - 1].group !== job.group;
+        // The full list comes grouped by what the jobs work with (Suwayomi, Kavita, Jellyfin…).
+        const header = !upcoming && (i === 0 || list[i - 1].group !== job.group);
         const busy = job.running || asked.has(job.id);
+        // Its next run, when it is still ahead (an overdue job just waits for the worker).
+        const due = job.nextAt && Date.parse(job.nextAt) > now ? job.nextAt : null;
         const status = job.running
           ? [t('jobs.running'), job.pending && `${n(job.pending.done)}/${n(job.pending.total)}`]
           : [
@@ -340,22 +397,35 @@ function BackgroundJobs() {
                 : job.pending
                   ? `${n(job.pending.done)}/${n(job.pending.total)}`
                   : null,
-              job.nextAt && t('jobs.next', { when: relative(job.nextAt) }),
             ];
         return (
           <Fragment key={job.id}>
             {header && (
-              <span className="text-mid mt-3 px-1 text-xs font-semibold first:mt-0">
+              <span className="text-mid px-2 pt-3 pb-1 text-xs font-semibold first:pt-0">
                 {t(`jobs.group.${job.group}`)}
               </span>
             )}
             <div
-              className="flex min-h-11 items-center gap-3 rounded-[12px] px-1 hover:bg-white/[0.04]"
+              className="group/job flex min-h-[52px] items-center gap-3 rounded-[14px] px-2.5 py-2 transition-colors hover:bg-white/[0.06]"
               title={t(`jobs.desc.${job.id}`)}
             >
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate" aria-description={t(`jobs.desc.${job.id}`)}>
-                  {name}
+                <span className="flex items-center gap-1.5 text-[14px]">
+                  <span className="truncate" aria-description={t(`jobs.desc.${job.id}`)}>
+                    {name}
+                  </span>
+                  {job.id === 'update-check' && feed.data && (
+                    <InfoBubble label={t('updates.auto')}>
+                      {t('updates.autoInfo', {
+                        auto: feed.data.autoCount ?? 0,
+                        total: feed.data.trackedCount ?? 0,
+                        n: settings.data?.updateIntervalMinutes ?? 15,
+                      })}{' '}
+                      <Link href="/settings#suwayomi" className="underline">
+                        {t('updates.edit')}
+                      </Link>
+                    </InfoBubble>
+                  )}
                 </span>
                 <span
                   className={cx(
@@ -367,22 +437,35 @@ function BackgroundJobs() {
                   {status.filter(Boolean).join(' · ')}
                 </span>
               </span>
+              {due && !job.running && (
+                <span className="text-muted shrink-0 text-xs group-hover/job:hidden group-focus-within/job:hidden [@media(hover:none)]:hidden">
+                  {relative(due)}
+                </span>
+              )}
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => void run(job)}
                 aria-label={t('jobs.run', { name })}
                 title={t('jobs.run', { name })}
-                className="text-mid flex size-9 shrink-0 items-center justify-center rounded-full bg-white/[0.06] hover:text-white disabled:opacity-40"
+                className={cx(
+                  'h-[30px] shrink-0 items-center gap-1.5 rounded-full bg-white px-3 text-xs font-bold text-[#070b10] disabled:opacity-40',
+                  due && !job.running
+                    ? 'hidden group-hover/job:flex group-focus-within/job:flex [@media(hover:none)]:flex'
+                    : 'flex',
+                )}
               >
                 {asked.has(job.id) && !job.running ? (
                   <Spinner className="size-3 border-[1.5px]" />
                 ) : (
-                  <Play className="size-3.5 fill-current" aria-hidden />
+                  <Play className="size-3 fill-current" aria-hidden />
                 )}
+                {t('activity.run')}
               </button>
             </div>
-            {job.unlinked && job.unlinked.length > 0 && <Unlinked items={job.unlinked} />}
+            {!upcoming && job.unlinked && job.unlinked.length > 0 && (
+              <Unlinked items={job.unlinked} />
+            )}
           </Fragment>
         );
       })}

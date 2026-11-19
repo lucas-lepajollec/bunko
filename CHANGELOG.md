@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Ciné menus and player, from validated mock-ups. The header's type menu and activity menu share
+  one panel that slides and reshapes from one to the other (content fades in, a caret follows the
+  button); the type menu shows each kind as a tile with a cover and the count of followed works,
+  tabs for reading/video and the 18+ switch; the activity menu has a status line, "Now" (running
+  tasks with progress rings, then what runs next) and "Scheduled" (every background job by service,
+  "Run" on hover; release checks are one job among them). The highlight of the navigation and of
+  every group of choices (kinds, views, tabs, seasons) slides from one choice to the next. Once
+  scrolled, the header's blur fades out downwards instead of ending in a bar. Player (both looks):
+  a searching screen with the work's artwork and the extensions being asked, sources in a side
+  panel (a bottom sheet on phones) with quick filters, grouped by version, the advised one marked
+  and failed ones faded; a thicker timeline with what is loaded and the time under the pointer;
+  back/play/forward in the middle; subtitles on/off in one click; the next episode's label; the
+  source in use at the top; settings as a short list that opens each choice in place; an error
+  screen with its reason and a way back to the work.
+
 - Two looks only: Bunko (default) and Ciné; Aurore and Édition are retired (a device that used
   them goes back to Bunko). Ciné reworked: a centred header (brand and type on the left, the
   navigation in a floating pill, tools grouped on the right, everything the same height); search

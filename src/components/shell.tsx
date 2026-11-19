@@ -1,11 +1,14 @@
 'use client';
-import { UniverseMenu, UniverseTab } from './universe-switch';
+import { SlidingHighlight } from './sliding-highlight';
+import { TypesPanel, UniverseMenu, UniverseTab, activeLabel } from './universe-switch';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Suspense,
   useEffect,
+  useLayoutEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type FormEvent,
@@ -19,11 +22,12 @@ import { UI_LANGUAGES, type UiLanguage } from '@/i18n/messages';
 import { UNAUTHORIZED_EVENT, send, useApi, batchesInterval } from '@/lib/client/api';
 import { cx, errorText, field, primaryButton, Skeleton } from './ui';
 import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
-import { ActivityCenter } from './activity';
+import { ActivityBell, ActivityCenter, ActivityPanel } from './activity';
 import { Toaster } from './notify';
 import { ScrollMemory } from './scroll-memory';
 import { Select } from './select';
 import {
+  ChevronDown,
   ChevronRight,
   Download,
   ListOrdered,
@@ -36,6 +40,7 @@ import {
 } from 'lucide-react';
 import { clearPersistentCache, persistentCache } from '@/lib/client/cache';
 import { getAmbient, subscribeAmbient } from '@/lib/client/ambient';
+import { useUniverse } from '@/lib/client/universe';
 import { applyTheme, getTheme, useLook } from '@/lib/client/theme';
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -336,14 +341,41 @@ function CineHeader() {
   const pill = 'h-[50px] rounded-full border border-white/12 bg-white/[0.07] backdrop-blur-xl';
   const tool =
     'relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.1]';
+  const {
+    header,
+    types: typesButton,
+    bell,
+    panel,
+    open: menuOpen,
+    close: closeMenu,
+    toggle,
+  } = useHeaderMenus(pathname);
+  const universe = useUniverse();
+  const typesShown =
+    universe.ready &&
+    (universe.enabled.length + (universe.allowAll ? 1 : 0) > 1 || universe.adultAllowed);
   return (
     <header
+      ref={header}
       data-solid={solid}
-      className={cx(
-        'app-header fixed inset-x-0 top-0 z-40 grid h-16 grid-cols-[1fr_auto] items-center gap-4 px-4 transition-[background-color,backdrop-filter] duration-300 md:h-24 md:grid-cols-[1fr_auto_1fr] md:px-[max(2.5rem,calc((100%-1760px)/2+2.5rem))]',
-        !solid && 'bg-gradient-to-b from-black/50 to-transparent',
-      )}
+      className="app-header fixed inset-x-0 top-0 z-40 grid h-16 grid-cols-[1fr_auto] items-center gap-4 px-4 md:h-24 md:grid-cols-[1fr_auto_1fr] md:px-[max(2.5rem,calc((100%-1760px)/2+2.5rem))]"
     >
+      {/* Over the page: a blur that fades out downwards (no bar, no edge), shown once scrolled;
+          before that, a light shade for the artwork. */}
+      <div
+        aria-hidden
+        className={cx(
+          'header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-28 transition-opacity duration-300 md:h-40',
+          solid ? 'opacity-100' : 'opacity-0',
+        )}
+      />
+      <div
+        aria-hidden
+        className={cx(
+          'pointer-events-none absolute inset-x-0 top-0 -z-10 h-28 bg-gradient-to-b from-black/50 to-transparent transition-opacity duration-300 md:h-36',
+          solid ? 'opacity-0' : 'opacity-100',
+        )}
+      />
       <div className="flex min-w-0 items-center gap-4 lg:gap-5">
         <Link href="/" className="app-brand flex shrink-0 items-center gap-2.5 text-white">
           <Logo size={30} />
@@ -351,13 +383,37 @@ function CineHeader() {
             {PRODUCT_NAME}
           </span>
         </Link>
-        <UniverseMenu />
+        {typesShown && (
+          <button
+            ref={typesButton}
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen === 'types'}
+            onClick={() => toggle('types')}
+            className={cx(
+              'hidden h-[50px] items-center gap-2 rounded-full border px-5 text-[15px] backdrop-blur-xl transition-colors md:flex',
+              menuOpen === 'types'
+                ? 'border-white/25 bg-white/[0.14] text-white'
+                : 'text-mid border-white/12 bg-white/[0.07] hover:text-white',
+            )}
+          >
+            {activeLabel(t, universe)}
+            {universe.adultMode && <span className="text-warn text-[11px] font-semibold">18+</span>}
+            <ChevronDown
+              className={cx(
+                'size-4 transition-transform duration-200',
+                menuOpen === 'types' && 'rotate-180',
+              )}
+              aria-hidden
+            />
+          </button>
+        )}
       </div>
       <nav
         aria-label={t('nav.label')}
         className={cx(
           pill,
-          'hidden items-center gap-0.5 p-1 text-[14px] md:flex lg:text-[15px]',
+          'relative hidden items-center gap-0.5 p-1 text-[14px] md:flex lg:text-[15px]',
           searching && 'w-[min(640px,calc(100vw-560px))] min-w-[380px]',
         )}
       >
@@ -365,6 +421,7 @@ function CineHeader() {
           <QuickSearch variant="bar" onClose={() => setSearching(false)} />
         ) : (
           <>
+            <SlidingHighlight />
             {NAV.map((n) => (
               <Link
                 key={n.href}
@@ -394,7 +451,9 @@ function CineHeader() {
         )}
       </nav>
       <div className="flex items-center justify-self-end md:h-[50px] md:rounded-full md:border md:border-white/12 md:bg-white/[0.07] md:px-1 md:backdrop-blur-xl">
-        <ActivityCenter />
+        <span ref={bell} className="flex">
+          <ActivityBell open={menuOpen === 'activity'} onClick={() => toggle('activity')} />
+        </span>
         <button
           type="button"
           aria-label={t('nav.search')}
@@ -441,7 +500,152 @@ function CineHeader() {
         </IconLink>
         <MobileMenu />
       </div>
+      <HeaderPanel
+        open={menuOpen}
+        onClose={closeMenu}
+        headerRef={header}
+        typesRef={typesButton}
+        bellRef={bell}
+        panelRef={panel}
+      />
     </header>
+  );
+}
+
+type HeaderMenu = 'types' | 'activity';
+
+/**
+ * Ciné header menus share one panel: switching from one to the other slides and reshapes it
+ * instead of closing and reopening. Outside clicks, Escape and navigation close it.
+ */
+function useHeaderMenus(pathname: string) {
+  const header = useRef<HTMLElement>(null);
+  const types = useRef<HTMLButtonElement>(null);
+  const bell = useRef<HTMLSpanElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState<HeaderMenu | null>(null);
+  const [lastPath, setLastPath] = useState(pathname);
+  if (lastPath !== pathname) {
+    setLastPath(pathname);
+    setOpen(null);
+  }
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: Event) => {
+      const target = e.target as Node;
+      if (
+        !panel.current?.contains(target) &&
+        !types.current?.contains(target) &&
+        !bell.current?.contains(target)
+      )
+        setOpen(null);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(null);
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  return {
+    header,
+    types,
+    bell,
+    panel,
+    open,
+    close: () => setOpen(null),
+    toggle: (menu: HeaderMenu) => setOpen((o) => (o === menu ? null : menu)),
+  };
+}
+
+/** The shared panel under the Ciné header, placed under the button of the open menu. */
+function HeaderPanel({
+  open,
+  onClose,
+  headerRef,
+  typesRef,
+  bellRef,
+  panelRef,
+}: {
+  open: HeaderMenu | null;
+  onClose: () => void;
+  headerRef: React.RefObject<HTMLElement | null>;
+  typesRef: React.RefObject<HTMLButtonElement | null>;
+  bellRef: React.RefObject<HTMLSpanElement | null>;
+  panelRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const content = useRef<HTMLDivElement>(null);
+  // The last menu stays inside while the panel closes, so it fades out with its content.
+  const [shown, setShown] = useState<HeaderMenu | null>(open);
+  if (open && open !== shown) setShown(open);
+  const [box, setBox] = useState<{ left: number; width: number; caret: number } | null>(null);
+  const [height, setHeight] = useState(0);
+  // Geometry moves smoothly between menus, but appears in place when the panel opens.
+  const [glide, setGlide] = useState(false);
+  if (!open && glide) setGlide(false);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const anchor = (
+        open === 'types' ? typesRef.current : bellRef.current
+      )?.getBoundingClientRect();
+      const frame = headerRef.current?.getBoundingClientRect();
+      if (!anchor || !frame) return;
+      const width = Math.min(open === 'types' ? 720 : 420, window.innerWidth - 24);
+      const wanted = open === 'types' ? anchor.left : anchor.right - width;
+      const left = Math.max(12, Math.min(wanted, window.innerWidth - 12 - width)) - frame.left;
+      setBox({ left, width, caret: anchor.left + anchor.width / 2 - frame.left - left });
+    };
+    const first = requestAnimationFrame(() => {
+      place();
+      requestAnimationFrame(() => setGlide(true));
+    });
+    window.addEventListener('resize', place);
+    return () => {
+      cancelAnimationFrame(first);
+      window.removeEventListener('resize', place);
+    };
+  }, [open, headerRef, typesRef, bellRef]);
+  useLayoutEffect(() => {
+    const el = content.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setHeight(el.offsetHeight));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [shown, box]);
+  if (!shown || !box) return null;
+  return (
+    <div
+      ref={panelRef}
+      aria-hidden={!open}
+      className={cx(
+        'ui-panel absolute top-[calc(100%-6px)] z-50 rounded-[24px] border bg-panel text-sm',
+        glide &&
+          'transition-[left,width,height] duration-[260ms] ease-[cubic-bezier(0.2,0.9,0.3,1)]',
+        open ? 'header-panel-in' : 'header-panel-out pointer-events-none invisible opacity-0',
+      )}
+      style={{ left: box.left, width: box.width, height: height || undefined }}
+    >
+      <span
+        aria-hidden
+        className={cx(
+          'bg-panel absolute -top-[7px] size-3.5 rotate-45 rounded-[3px] border-t border-l border-white/10',
+          glide && 'transition-[left] duration-[260ms] ease-[cubic-bezier(0.2,0.9,0.3,1)]',
+        )}
+        style={{ left: box.caret - 7 }}
+      />
+      <div className="overflow-hidden rounded-[24px]" style={{ height: height || undefined }}>
+        <div
+          ref={content}
+          key={shown}
+          className="header-panel-content flex flex-col"
+          style={{ maxHeight: 'min(76vh, calc(100dvh - 120px))' }}
+        >
+          {shown === 'types' ? <TypesPanel onDone={onClose} /> : <ActivityPanel />}
+        </div>
+      </div>
+    </div>
   );
 }
 

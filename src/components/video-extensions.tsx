@@ -129,7 +129,11 @@ export function VideoExtensions({
                         <li
                           key={s.name}
                           className={
-                            !s.enabled ? 'text-muted' : s.status === 'down' ? 'text-bad' : 'text-warn'
+                            !s.enabled
+                              ? 'text-muted'
+                              : s.status === 'down'
+                                ? 'text-bad'
+                                : 'text-warn'
                           }
                         >
                           {s.name} · {t(s.enabled ? HEALTH_LABEL[s.status] : 'video.healthOff')}

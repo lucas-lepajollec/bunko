@@ -1,4 +1,5 @@
 'use client';
+import { SlidingHighlight } from './sliding-highlight';
 import Link from 'next/link';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { clsx, type ClassValue } from 'clsx';
@@ -194,8 +195,9 @@ export function Tabs<T extends string>({
     <div
       role="tablist"
       aria-label={label}
-      className="ui-tabs border-line no-scrollbar flex gap-6 overflow-x-auto border-b md:gap-8"
+      className="ui-tabs border-line no-scrollbar relative flex gap-6 overflow-x-auto border-b md:gap-8"
     >
+      <SlidingHighlight variant="line" />
       {items.map((item) => (
         <button
           key={item.id}
@@ -240,9 +242,10 @@ export function Segmented<T extends string>({
     <div
       role="tablist"
       aria-label={label}
-      className="ui-seg grid rounded-full bg-white/[0.07] p-1"
+      className="ui-seg relative grid rounded-full bg-white/[0.07] p-1"
       style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
     >
+      <SlidingHighlight />
       {items.map((item) => (
         <button
           key={item.id}

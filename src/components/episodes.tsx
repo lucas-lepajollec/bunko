@@ -1,4 +1,5 @@
 'use client';
+import { SlidingHighlight } from './sliding-highlight';
 import { useState } from 'react';
 import { Check, RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
@@ -221,8 +222,9 @@ export function EpisodeList({
     <div
       role="tablist"
       aria-label={t('episodes.seasonsLabel')}
-      className="ep-tabs flex gap-1.5 overflow-x-auto pb-3"
+      className="ep-tabs relative flex gap-1.5 overflow-x-auto pb-3"
     >
+      <SlidingHighlight />
       {seasons.map((x, i) => (
         <button
           key={x.number}
