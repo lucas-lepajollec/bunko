@@ -4,6 +4,8 @@ import { json, route } from '@/lib/api';
 import { KINDS } from '@/domain/kinds';
 import { discoverQuery } from '@/lib/validation';
 import { discoverAniList, progressiveDiscover, withTracking } from '@/lib/catalog';
+import { deduplicate } from '@/lib/search-engine';
+import { canonicalTitle } from '@/lib/media';
 import type { UnifiedMedia } from '@/types/shared';
 import { groupAnimeSeasons } from '@/lib/anime-works';
 import { discoverTmdb, tmdbConfigured } from '@/lib/tmdb';
@@ -43,9 +45,11 @@ export const GET = route(async (r) => {
     ]);
     const a = anime?.items ?? [];
     const w = westernPage?.items ?? [];
-    const items = Array.from({ length: Math.max(a.length, w.length) }, (_, i) =>
-      [a[i], w[i]].filter((m): m is UnifiedMedia => Boolean(m)),
-    ).flat();
+    const items = deduplicate(
+      Array.from({ length: Math.max(a.length, w.length) }, (_, i) =>
+        [a[i], w[i]].filter((m): m is UnifiedMedia => Boolean(m)),
+      ).flat(),
+    );
     return json({
       items: withTracking(items),
       page: q.page ?? 1,
@@ -57,11 +61,24 @@ export const GET = route(async (r) => {
   // Anime are listed as works: a trending later season shows its whole work once.
   // Anime are listed as works (seasons grouped); other kinds are returned as is.
   if (q.kind && q.kind !== 'all' && KINDS[q.kind].releases !== 'anilist') return json(page);
-  // Generic extension works keep their own sheet: never regrouped into an AniList work.
+  // Generic extension works keep their own sheet: never regrouped into an AniList work,
+  // but extension entries duplicating an AniList title on the same page are omitted.
   const extension = page.items.filter((m) => m.providers.includes('extension'));
   const grouped = await groupAnimeSeasons(
     page.items.filter((m) => !m.providers.includes('extension')),
     r.signal,
   );
-  return json({ ...page, items: withTracking([...grouped, ...extension]) });
+  const nativeKeys = new Map<string, number | null>();
+  for (const m of grouped)
+    for (const raw of [m.title, ...m.altTitles]) {
+      const k = canonicalTitle(raw);
+      if (k && !nativeKeys.has(k)) nativeKeys.set(k, m.year);
+    }
+  const uniqueExtension = extension.filter((m) => {
+    const k = canonicalTitle(m.title);
+    if (!nativeKeys.has(k)) return true;
+    const ny = nativeKeys.get(k);
+    return Boolean(ny && m.year && Math.abs(ny - m.year) > 1);
+  });
+  return json({ ...page, items: withTracking([...grouped, ...uniqueExtension]) });
 });

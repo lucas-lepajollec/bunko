@@ -286,7 +286,7 @@ export function CatalogTab({
 /** The catalog id a work can be joined by (AniList anime, TMDB series and films). */
 export function workIdOf(media: Pick<UnifiedMedia, 'id' | 'anilistId'>): string | null {
   if (media.anilistId) return `anilist:${media.anilistId}`;
-  return /^(tmdbtv|tmdbmovie|mangadex|mangaupdates|openlibrary|hardcover|metron):[\w-]{1,100}$/.test(
+  return /^(tmdbtv|tmdbmovie|mangadex|mangaupdates|openlibrary|hardcover|metron|googlebooks|bnf|rakuten|royalroad):[\w.-]{1,100}$/.test(
     media.id,
   )
     ? media.id

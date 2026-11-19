@@ -5,7 +5,7 @@ import { AppError } from './errors';
 const serial = sharedConcurrencyGate('mangaupdates', 1);
 const scope = globalThis as typeof globalThis & { __bunkoMuNext?: number };
 export const BUNKO_USER_AGENT =
-  'Bunko/0.1.0 (self-hosted reading hub; https://github.com/lucas-lepajollec/kaviseer)';
+  'Bunko/1.0.0 (self-hosted media hub; https://github.com/lucas-lepajollec/bunko)';
 /** Public API, serialized across route bundles. The gate and abortable waits never spin. */
 export function mangaUpdates<T>(
   path: string,

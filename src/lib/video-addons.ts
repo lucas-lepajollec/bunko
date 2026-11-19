@@ -494,6 +494,7 @@ function lineVersion(text: string, language: string): VideoStream['version'] {
 }
 export function qualityOf(text: string) {
   if (/\b(?:2160p|4k|uhd)\b/i.test(text)) return 2160;
+  if (/\b(?:1440p|2k|qhd)\b/i.test(text)) return 1440;
   const m = /\b(1080|720|576|480|360)p\b/i.exec(text);
   return m ? Number(m[1]) : null;
 }
@@ -673,7 +674,15 @@ function remembered(
 const subtitleRank = (lang: string | null, language: string) =>
   lang === language ? 0 : lang === 'en' ? 1 : lang ? 2 : 3;
 
-const QUALITY_RANK: Record<number, number> = { 1080: 0, 720: 1, 2160: 2, 576: 3, 480: 3, 360: 4 };
+const QUALITY_RANK: Record<number, number> = {
+  2160: 0,
+  1440: 1,
+  1080: 2,
+  720: 3,
+  576: 4,
+  480: 4,
+  360: 5,
+};
 
 async function streamsFor(
   ids: { id: string; prefix: string; types: string[] }[],

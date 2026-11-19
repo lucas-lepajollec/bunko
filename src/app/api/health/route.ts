@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 export function GET() {
   try {
     accountsDb().prepare('SELECT 1').get();
-    return json({ status: 'ok', version: '0.1.0' });
+    return json({ status: 'ok', version: '1.0.0' });
   } catch {
     return json({ status: 'error' }, 503);
   }

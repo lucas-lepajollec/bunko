@@ -40,6 +40,91 @@ export function normalizeTitle(title: string) {
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]/gu, '');
 }
+
+/** Explicit provider format tags and book edition qualifiers that never denote a separate work. */
+const EDITION_TAG =
+  /\s*[(\[]\s*(?:(?:light|web)\s+)?(?:novels?|ln|wn|manga|manhwa|manhua|promo|official|full\s*colou?r|(?:digital\s+)?colou?red(?:\s+comics?)?|(?:[ée]ditions?\s+)?(?:deluxe|collector'?s?|illustrated|illustr[ée]e?|anniversary|special|sp[ée]ciale?|limited|limit[ée]e?|complete|compl[èe]te?|revised|expanded|abridged|unabridged|pocket|poche|int[ée]grale?|omnibus|box\s*set|hardcover|paperback|reprint|\d+(?:st|nd|rd|th)\s+anniversary)(?:\s+[ée]ditions?)?)\s*[)\]]\s*$/i;
+const EDITION_SUFFIX =
+  /\s*[:\-–—]\s*(?:a\s+(?:novel|memoir|biography|thriller|mystery|graphic\s+novel)|roman|essais?|(?:[ée]ditions?\s+)?(?:deluxe|collector'?s?|illustrated|illustr[ée]e?|special|sp[ée]ciale?|limited|limit[ée]e?|complete|int[ée]grale?|\d+(?:st|nd|rd|th)\s+anniversary)(?:\s+[ée]ditions?)?)\s*$/i;
+
+/** Whether a raw title explicitly carries a provider format tag or book edition qualifier. */
+export function hasEditionQualifier(title: string): boolean {
+  return EDITION_TAG.test(title) || EDITION_SUFFIX.test(title);
+}
+
+/**
+ * Normalized title with explicit format/edition qualifiers stripped (e.g. `(Light Novel)`,
+ * `(Deluxe Edition)`, `: A Novel`). Never strips arbitrary subtitles or volume/sequel numbers so
+ * spin-offs and sequels (`Solo Leveling: Ragnarok`, `Tokyo Ghoul:re`, `Dune Messiah`) stay apart.
+ */
+export function canonicalTitle(title: string): string {
+  let clean = title.trim();
+  for (let i = 0; i < 3; i++) {
+    const next = clean.replace(EDITION_TAG, '').replace(EDITION_SUFFIX, '').trim();
+    if (next === clean) break;
+    clean = next;
+  }
+  return normalizeTitle(clean || title);
+}
+
+/** Strip library/MARC life-dates and role annotations (`"Herbert, Frank (1920-1986)"`). */
+export function cleanAuthorName(name: string): string {
+  return name
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\b\d{4}\s*[-–]\s*(?:\d{4})?\b/g, ' ')
+    .replace(/\.\s*(?:auteur|author|illustrator|illustrateur|translator|traducteur).*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function authorTokens(name: string): string[] {
+  const cleaned = cleanAuthorName(name)
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase();
+  return cleaned
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+    .map((tok) => (tok.length >= 4 ? tok.replace(/ou/g, 'o').replace(/uu/g, 'u') : tok));
+}
+
+/**
+ * Compare two creator lists across Western (`First Last`), bibliographic (`Last, First`),
+ * Japanese (`Family Given` + `ou`/`o` romaji), and initialed (`J. R. R. Tolkien`) conventions.
+ */
+export function authorsMatch(left: readonly string[], right: readonly string[]): boolean {
+  if (!left.length || !right.length) return false;
+  const parsedRight = right.map(authorTokens).filter((t) => t.length > 0);
+  if (!parsedRight.length) return false;
+  for (const rawA of left) {
+    const a = authorTokens(rawA);
+    if (!a.length) continue;
+    const sortedA = [...a].sort().join(' ');
+    for (const b of parsedRight) {
+      if (sortedA === [...b].sort().join(' ')) return true;
+      // Single-letter initials + shared surname (`J. R. R. Tolkien` ↔ `John Ronald Reuel Tolkien`).
+      if (a.length >= 2 && b.length >= 2) {
+        const lastA = a.find((t) => t.length > 1 && b.includes(t));
+        if (!lastA) continue;
+        const restA = a.filter((t) => t !== lastA);
+        const restB = b.filter((t) => t !== lastA);
+        if (
+          restA.length === restB.length &&
+          restA.every((ta, idx) => {
+            const tb = restB[idx];
+            return (
+              ta === tb ||
+              (ta.length === 1 && tb.startsWith(ta)) ||
+              (tb.length === 1 && ta.startsWith(tb))
+            );
+          })
+        )
+          return true;
+      }
+    }
+  }
+  return false;
+}
 /** Provider synopses carry HTML fragments, entities and trailing source credits. */
 export function cleanSynopsis(value: string | null | undefined): string | null {
   if (!value) return null;

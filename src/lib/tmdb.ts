@@ -12,6 +12,7 @@ import { cached } from './metadata-cache';
 import { getSettings } from './settings';
 import { preferredSourceLanguage } from './source-preferences';
 import { workVideo } from './anime-franchise';
+import { anilistOfTmdbMovie, animeIdsReady, tmdbEntries } from './anime-ids';
 
 /**
  * TMDB: TV series and films. After Jellyseerr: per-endpoint TTLs (lists 1 h, details 12 h,
@@ -130,9 +131,20 @@ export interface TmdbFilters {
 const filtered = (f?: TmdbFilters) =>
   Boolean(f && (f.genre || f.status || f.year || f.tags?.length || f.minScore));
 
-/** Japanese animation is anime: AniList shows it, TMDB lists leave it out. */
-export const isAnime = (m: TmdbItem) =>
-  (m.genre_ids ?? m.genres?.map((g) => g.id) ?? []).includes(16) && m.original_language === 'ja';
+/**
+ * Anime (Japanese animation, plus donghua/aeni/co-productions mapped in AniList's offline id
+ * table) live on AniList; TMDB lists leave them out to avoid cross-provider duplicates.
+ * Requiring TMDB genre 16 (Animation) ensures live-action works are never excluded.
+ */
+export const isAnime = (m: TmdbItem, kind?: TmdbKind) => {
+  const animated = (m.genre_ids ?? m.genres?.map((g) => g.id) ?? []).includes(16);
+  if (!animated) return false;
+  if (m.original_language === 'ja') return true;
+  if (!animeIdsReady()) return false;
+  if (kind === 'movie') return anilistOfTmdbMovie(m.id) !== null;
+  if (kind === 'tv') return tmdbEntries(m.id).length > 0;
+  return anilistOfTmdbMovie(m.id) !== null || tmdbEntries(m.id).length > 0;
+};
 
 export function fromTmdb(m: TmdbItem, kind: TmdbKind, genres = new Map<number, string>()) {
   const title = (kind === 'tv' ? m.name : m.title) ?? m.name ?? m.title ?? '';
@@ -215,7 +227,7 @@ export async function discoverTmdb(
   ]);
   return {
     items: data.results
-      .filter((m) => !isAnime(m))
+      .filter((m) => !isAnime(m, kind))
       .filter(
         (m) =>
           kind !== 'movie' ||
@@ -271,7 +283,7 @@ async function discoverFiltered(
   );
   return {
     items: data.results
-      .filter((m) => !isAnime(m))
+      .filter((m) => !isAnime(m, kind))
       .map((m) => fromTmdb(m, kind, genres))
       // Rated 18 by the query itself: classified as such everywhere it is shown or followed.
       .map((m) => (adultOnly ? { ...m, adult: true } : m)),
@@ -290,7 +302,7 @@ export async function searchTmdb(q: string, kind?: TmdbKind): Promise<UnifiedMed
   const [tv, movie] = await Promise.all([genreNames('tv'), genreNames('movie')]);
   return data.results
     .map((m) => ({ m, k: (kind ?? m.media_type) as TmdbKind }))
-    .filter(({ m, k }) => (k === 'tv' || k === 'movie') && !isAnime(m))
+    .filter(({ m, k }) => (k === 'tv' || k === 'movie') && !isAnime(m, k))
     .map(({ m, k }) => fromTmdb(m, k, k === 'tv' ? tv : movie));
 }
 

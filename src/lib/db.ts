@@ -494,7 +494,8 @@ export function sameMedia(a: UnifiedMedia, b: UnifiedMedia) {
     a.type === b.type &&
     (a.id === b.id ||
       (a.anilistId !== null && a.anilistId === b.anilistId) ||
-      (a.mangadexId !== null && a.mangadexId === b.mangadexId))
+      (a.mangadexId !== null && a.mangadexId === b.mangadexId) ||
+      (a.mangaUpdatesId !== null && a.mangaUpdatesId === b.mangaUpdatesId))
   );
 }
 /** Exact catalog identities win; a unique linked source/series is also authoritative. */

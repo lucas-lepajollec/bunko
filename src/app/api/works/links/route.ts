@@ -10,7 +10,7 @@ import {
   workParts,
 } from '@/lib/anime-franchise';
 import { mediaPreview } from '@/lib/media-preview';
-import { idsOfAnilist } from '@/lib/anime-ids';
+import { ensureAnimeIds, idsOfAnilist } from '@/lib/anime-ids';
 import { normalizeAnimeWorks } from '@/lib/anime-works';
 import { wakeWorker } from '@/lib/worker-events';
 
@@ -18,7 +18,7 @@ import { wakeWorker } from '@/lib/worker-events';
 const workId = z
   .string()
   .regex(
-    /^(anilist|tmdbtv|tmdbmovie|mangadex|mangaupdates|openlibrary|hardcover|metron):[\w-]{1,100}$/,
+    /^(anilist|tmdbtv|tmdbmovie|mangadex|mangaupdates|openlibrary|hardcover|metron|googlebooks|bnf|rakuten|royalroad):[\w.-]{1,100}$/,
   );
 /** An AniList anime (the offline anime map knows it): two of them merge as seasons. */
 const isAnime = (id: number | null) => id !== null && idsOfAnilist(id) !== null;
@@ -33,7 +33,10 @@ export const GET = route(async (r) => {
   const parts = await Promise.all(
     ids.map(async (id) => {
       const a = anilistOf(id);
-      if (a) return loadedAnime(a);
+      if (a) {
+        const loaded = loadedAnime(a);
+        if (loaded) return loaded;
+      }
       return mediaPreview(id) ?? (await mediaDetail(id, r.signal).catch(() => null)) ?? null;
     }),
   );
@@ -47,6 +50,7 @@ export const POST = route(async (r) => {
   );
   const root = anilistOf(input.root);
   const member = anilistOf(input.member);
+  if (root !== null && member !== null) await ensureAnimeIds().catch(() => undefined);
   // Two anime: seasons merged into one sheet (the deeper link).
   if (isAnime(root) && isAnime(member)) {
     setWorkLink(root!, member!, input.joined);

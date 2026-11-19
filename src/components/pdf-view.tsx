@@ -103,7 +103,10 @@ export function PdfView({
     };
     el.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
-    return () => el.removeEventListener('scroll', onScroll);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      cancelAnimationFrame(request);
+    };
   }, [pdf]);
 
   return (

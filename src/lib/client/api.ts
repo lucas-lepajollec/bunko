@@ -43,11 +43,16 @@ export async function api<T>(
     if ((e as Error).name === 'AbortError') throw e;
     throw new ApiFailure('NETWORK_ERROR', 0);
   }
-  // The session check itself answers 401 when signed out; only other calls signal an expiry.
-  if (response.status === 401 && path !== '/api/auth')
-    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
   if (response.status === 204) return undefined as T;
   const body = (await response.json().catch(() => null)) as T | ApiError | null;
+  // The session check itself answers 401 when signed out; only real session expiry (`UNAUTHORIZED`)
+  // signs the shell out — wrong current password or recovery code stays inside its form.
+  if (
+    response.status === 401 &&
+    path !== '/api/auth' &&
+    ((body as ApiError | null)?.error?.code ?? 'UNAUTHORIZED') === 'UNAUTHORIZED'
+  )
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
   if (signal.aborted) {
     if (init.signal?.aborted) init.signal.throwIfAborted();
     throw new ApiFailure('UPSTREAM_TIMEOUT', 0);

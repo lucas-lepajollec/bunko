@@ -24,8 +24,19 @@ const SERVICE_KEYS = [
   'mediaRoot',
   'sonarrUrl',
   'sonarrApiKey',
+  'sonarrQualityProfile',
+  'sonarrRootFolder',
+  'sonarrAnimeRootFolder',
+  'radarrUrl',
+  'radarrApiKey',
+  'radarrQualityProfile',
+  'radarrRootFolder',
   'prowlarrUrl',
   'prowlarrApiKey',
+  'qbittorrentUrl',
+  'qbittorrentUsername',
+  'qbittorrentPassword',
+  'qbittorrentApiKey',
   'tradocUrl',
   'tradocApiKey',
   'jellyfinUrl',
@@ -39,6 +50,8 @@ export const PATCH = route(async (r) => {
   const patch = await body(r, settingsPatch);
   if (Object.keys(patch).some((k) => SERVICE_KEYS.includes(k))) requirePermission('services');
   if (patch.extensionRepos) requirePermission('extensions');
+  if (patch.adultContent === true || patch.adultMode === true) requirePermission('adult');
+  if (patch.adultContent === false && patch.adultMode === undefined) patch.adultMode = false;
   const result = updateSettings(patch);
   if (patch.extensionRepos) await configureRepos(patch.extensionRepos);
   // Jellyfin connected or retuned: index and import now, not at the next scheduled cycle.

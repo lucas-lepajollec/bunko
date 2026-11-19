@@ -187,6 +187,7 @@ export async function fetchDexReleases(): Promise<ChapterRelease[]> {
   mangaUrl.searchParams.set('limit', '100');
   for (const id of ids) mangaUrl.searchParams.append('ids[]', id);
   mangaUrl.searchParams.append('includes[]', 'cover_art');
+  mangaUrl.searchParams.append('includes[]', 'author');
   for (const rating of ['safe', 'suggestive', 'erotica', 'pornographic'])
     mangaUrl.searchParams.append('contentRating[]', rating);
   const mangas = await cached(`release:dex:${ids.slice().sort().join(',')}`, 24 * 3600_000, () =>

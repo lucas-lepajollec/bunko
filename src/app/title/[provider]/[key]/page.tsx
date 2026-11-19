@@ -1,4 +1,5 @@
 'use client';
+import { KINDS, kindOfMedia } from '@/domain/kinds';
 import { MediaDownload } from '@/components/media-download';
 import { MediaLink } from '@/components/media-link';
 import { LoadNotice } from '@/components/load-notice';
@@ -142,8 +143,6 @@ function Title({
   const parts = useApi<UnifiedMedia[]>(
     workId ? `/api/works/links?root=${encodeURIComponent(workId)}` : null,
   );
-  const seasonIds = new Set((media.video?.seasons ?? []).map((s) => s.anilistId));
-  const joinedParts = (parts.data ?? []).filter((m) => !m.anilistId || !seasonIds.has(m.anilistId));
   const [tab, setTab] = useViewState<'chapters' | 'info'>('tab', 'chapters', ['chapters', 'info']);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [choice, setChoice] = useState<Record<string, number>>({});
@@ -151,12 +150,22 @@ function Title({
   const isComic = media.type === 'MANGA';
   const video = media.type === 'ANIME' ? media.video : undefined;
   const extension = media.providers.includes('extension');
-  // A film (live action or animated) is watched, not browsed by episode.
+  // A film (live action or animated) is watched, not browsed by episode — unless the user
+  // explicitly overrode its kind to an episodic kind (e.g. anime or series).
+  const effectiveKind = kindOfMedia(entry?.media ?? media);
   const filmSheet =
-    media.format === 'MOVIE' ||
-    media.format === 'ANIMATION_FILM' ||
-    media.video?.ids?.kind === 'movie' ||
-    media.extension?.type === 'movie';
+    (entry?.media.kindOverride ?? media.kindOverride)
+      ? KINDS[effectiveKind].unit === 'film'
+      : media.format === 'MOVIE' ||
+        media.format === 'ANIMATION_FILM' ||
+        media.video?.ids?.kind === 'movie' ||
+        media.extension?.type === 'movie';
+  // Film sheets do not render the season switcher, so all joined parts (including linked anime
+  // movies) must remain visible in the joined-parts row instead of being hidden behind seasons.
+  const seasonIds = new Set((media.video?.seasons ?? []).map((s) => s.anilistId));
+  const joinedParts = filmSheet
+    ? (parts.data ?? [])
+    : (parts.data ?? []).filter((m) => !m.anilistId || !seasonIds.has(m.anilistId));
   const seasonParam = Number(useSearchParams().get('season')) || undefined;
   const fromDetail: ChapterSelection[] = media.sources.map((s) => ({
     suwayomiMangaId: s.suwayomiMangaId,

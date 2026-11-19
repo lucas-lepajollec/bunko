@@ -781,7 +781,11 @@ export async function upgradeOffCatalogWorks(signal?: AbortSignal, budget = 20) 
       work.anilistId,
       work.title,
       work.coverUrl,
-      JSON.stringify({ ...work, trackedId: null }),
+      JSON.stringify({
+        ...work,
+        trackedId: null,
+        ...(t.media.kindOverride ? { kindOverride: t.media.kindOverride } : {}),
+      }),
       JSON.stringify({ seriesId: s.id, season: 1 }),
       t.id,
     );

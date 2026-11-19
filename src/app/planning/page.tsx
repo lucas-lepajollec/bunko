@@ -61,13 +61,16 @@ function Planning() {
   const week = /^\d{4}-\d{2}-\d{2}$/.test(weekParam) ? weekParam : today;
   const setWeek = (next: string) => setWeekParam(next);
   const universe = useUniverse();
-  // The kind pills open on the current universe; another kind chosen here stays in the address.
-  const [kind, setKind] = useViewState<DiscoverKind>('kind', universe.active, ['all', ...KIND_IDS]);
+  // The kind pills open on the current universe when it has dated releases; books/novels fall back to all.
+  const defaultKind: DiscoverKind =
+    universe.active === 'all' || KINDS.includes(universe.active) ? universe.active : 'all';
+  const [kind, setKind] = useViewState<DiscoverKind>('kind', defaultKind, ['all', ...KINDS]);
   const [mineParam, setMineParam] = useViewState<'0' | '1'>('mine', '0', ['0', '1']);
   const mine = mineParam === '1';
   const setMine = (next: (m: boolean) => boolean) => setMineParam(next(mine) ? '1' : '0');
   const query = new URLSearchParams({ week });
   if (kind !== 'all') query.set('kind', kind);
+  if (kind === 'extension' && universe.section) query.set('section', universe.section);
   if (mine) query.set('library', '1');
   const plan = useApi<PlanningWeek>(universe.ready ? `/api/planning?${query}` : null, {
     keepPreviousData: true,

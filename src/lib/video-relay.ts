@@ -251,7 +251,14 @@ export async function relay(token: string, request: Request): Promise<Response> 
 // browser's <track> only reads WebVTT.
 
 function decodeText(raw: Buffer) {
-  const bytes = raw[0] === 0x1f && raw[1] === 0x8b ? gunzipSync(raw) : raw;
+  let bytes = raw;
+  if (raw[0] === 0x1f && raw[1] === 0x8b) {
+    try {
+      bytes = gunzipSync(raw, { maxOutputLength: SUBTITLE_LIMIT });
+    } catch {
+      throw new AppError('VIDEO_STREAM_ERROR', 'Subtitle stream could not be decompressed', 502);
+    }
+  }
   const utf8 = new TextDecoder('utf-8').decode(bytes);
   const text = utf8.includes('�') ? new TextDecoder('windows-1252').decode(bytes) : utf8;
   return text.replace(/^﻿/, '').replace(/\r\n?/g, '\n');

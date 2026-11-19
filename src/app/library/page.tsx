@@ -1,6 +1,7 @@
 'use client';
 import { SlidingHighlight } from '@/components/sliding-highlight';
 import {
+  KINDS,
   KIND_IDS,
   byKindOrder,
   isVideoKind,
@@ -150,11 +151,15 @@ function Library() {
   useEffect(() => {
     // Reading progress comes from Kavita; respect the server's 2-minute refresh budget on the
     // client too so bouncing back to /library does not serialize the whole library twice.
-    if (Date.now() - lastProgressRefreshAt < PROGRESS_REFRESH_COOLDOWN_MS) return;
-    lastProgressRefreshAt = Date.now();
+    if (Date.now() - lastProgressRefreshAt < PROGRESS_REFRESH_COOLDOWN_MS) {
+      return;
+    }
     const controller = new AbortController();
     api<TrackedMedia[]>('/api/tracked?refresh=progress', { signal: controller.signal })
-      .then((fresh) => mutateList(fresh, { revalidate: false }))
+      .then((fresh) => {
+        lastProgressRefreshAt = Date.now();
+        return mutateList(fresh, { revalidate: false });
+      })
       .catch(() => {
         if (!controller.signal.aborted) setRefreshFailed(true);
       })
@@ -703,8 +708,7 @@ function Library() {
   );
 }
 
-const isFilm = (e: TrackedMedia) =>
-  e.media.format === 'MOVIE' || e.media.format === 'ANIMATION_FILM';
+const isFilm = (e: TrackedMedia) => KINDS[kindOfMedia(e.media)].unit === 'film';
 
 /**
  * What a series, anime or film card says under its title: episodes watched out of the total

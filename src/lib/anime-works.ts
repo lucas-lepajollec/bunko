@@ -64,6 +64,10 @@ export async function normalizeAnimeWorks(signal?: AbortSignal, budget = 4) {
         statement(
           'UPDATE tracked_media SET last_read=? WHERE id=? AND COALESCE(last_read,0)<?',
         ).run(absolute, owner.id, absolute);
+      if (t.media.kindOverride && !owner.media.kindOverride)
+        statement(
+          "UPDATE tracked_media SET media_json=json_set(media_json,'$.kindOverride',?) WHERE id=?",
+        ).run(t.media.kindOverride, owner.id);
       untrack(t.id);
     } else {
       statement(
@@ -72,7 +76,11 @@ export async function normalizeAnimeWorks(signal?: AbortSignal, budget = 4) {
         root.anilistId,
         root.title,
         root.coverUrl,
-        JSON.stringify({ ...root, trackedId: null }),
+        JSON.stringify({
+          ...root,
+          trackedId: null,
+          ...(t.media.kindOverride ? { kindOverride: t.media.kindOverride } : {}),
+        }),
         absolute,
         absolute,
         t.id,
@@ -106,7 +114,7 @@ export async function groupAnimeSeasons<T extends UnifiedMedia>(
     if (known) return known;
     if (!mapped) return null;
     const ids = idsOfAnilist(m.anilistId);
-    if (!ids || !['TV', 'ONA'].includes(ids.type ?? '')) return null;
+    if (!ids || (ids.type !== null && !['TV', 'ONA'].includes(ids.type))) return null;
     return firstSeason(m.anilistId);
   };
   const roots = items.map(rootOf);

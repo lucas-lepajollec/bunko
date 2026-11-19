@@ -253,12 +253,16 @@ export const EpubView = forwardRef<
       const d = doc();
       const href = a.getAttribute('href') ?? a.getAttribute('xlink:href');
       if (!d || !href) return;
-      const url = new URL(href, d.baseURI);
-      if (url.origin === window.location.origin) {
-        const i = paths.indexOf(decodeURIComponent(url.pathname));
-        const anchor = url.hash ? decodeURIComponent(url.hash.slice(1)) : null;
-        if (i >= 0) open(i, anchor ? { anchor } : { offset: 0 });
-      } else if (/^https?:$/.test(url.protocol)) window.open(url.href, '_blank', 'noopener');
+      try {
+        const url = new URL(href, d.baseURI);
+        if (url.origin === window.location.origin) {
+          const i = paths.indexOf(decodeURIComponent(url.pathname));
+          const anchor = url.hash ? decodeURIComponent(url.hash.slice(1)) : null;
+          if (i >= 0) open(i, anchor ? { anchor } : { offset: 0 });
+        } else if (/^https?:$/.test(url.protocol)) window.open(url.href, '_blank', 'noopener');
+      } catch {
+        /* Malformed link inside book markup: ignore safely. */
+      }
     },
     [open, paths],
   );

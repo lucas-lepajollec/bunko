@@ -301,14 +301,17 @@ async function readCatalog(
   const lanes = pages.flatMap((page) => (page.status === 'fulfilled' ? [page.value] : []));
   // Round-robin the catalogs: one large section must not hide the others behind its rows.
   const seen = new Set<string>();
+  const seenTitles = new Set<string>();
   const out: CatalogEntry[] = [];
   for (let i = 0; lanes.some((lane) => i < lane.length); i++)
     for (const lane of lanes) {
       const entry = lane[i];
       if (!entry) continue;
       const key = `${entry.addon.id}:${entry.meta.id}`;
-      if (seen.has(key)) continue;
+      const titleKey = `${entry.meta.type}:${entry.meta.name.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')}:${entry.meta.releaseInfo?.match(/\b(19|20)\d{2}\b/)?.[0] ?? ''}`;
+      if (seen.has(key) || (entry.meta.name && seenTitles.has(titleKey))) continue;
       seen.add(key);
+      if (entry.meta.name) seenTitles.add(titleKey);
       out.push(entry);
     }
   remember(out);

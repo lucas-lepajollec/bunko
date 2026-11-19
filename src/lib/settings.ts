@@ -361,13 +361,16 @@ function seedEnvironment() {
         };
         for (const [key, name] of Object.entries(keys)) {
           const value = process.env[name] ?? env(name);
-          if (value !== undefined)
-            database
-              .prepare('INSERT OR IGNORE INTO settings VALUES(?,?)')
-              .run(
-                key,
-                secretKeys.includes(key as SecretSetting) ? encrypt(value) : JSON.stringify(value),
-              );
+          if (value !== undefined) {
+            const encoded = secretKeys.includes(key as SecretSetting)
+              ? encrypt(value)
+              : JSON.stringify(value);
+            if (catalogSettingKeys.includes(key as CatalogSetting))
+              accountsDb()
+                .prepare('INSERT OR IGNORE INTO catalog_settings(key,value) VALUES(?,?)')
+                .run(key, encoded);
+            else database.prepare('INSERT OR IGNORE INTO settings VALUES(?,?)').run(key, encoded);
+          }
         }
       }
       database.prepare("INSERT OR IGNORE INTO worker_state VALUES('environment_seeded','1')").run();

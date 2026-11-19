@@ -37,10 +37,13 @@ export function CatalogFilterBar({
   releasesView,
   onChange,
   leading,
+  trailing,
   className,
 }: {
   /** Controls shown first in the same row (the catalog's sort). */
   leading?: ReactNode;
+  /** Controls shown right beside the filters (e.g. Planning button in releases view). */
+  trailing?: ReactNode;
   className?: string;
   kind: DiscoverKind;
   /** With the extension kind: the section on screen (its own genres and tags). */
@@ -172,6 +175,7 @@ export function CatalogFilterBar({
             {t('catalog.adultOnly')}
           </button>
         )}
+        {trailing}
         {count > 0 && (
           <button
             type="button"

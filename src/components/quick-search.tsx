@@ -45,6 +45,7 @@ export function QuickSearch({
   const pathname = usePathname();
   const look = useLook();
   const [text, setText] = useState('');
+  const touched = useRef(false);
   const [open, setOpen] = useState(variant === 'bar');
   const [active, setActive] = useState(-1);
   const root = useRef<HTMLDivElement>(null);
@@ -56,12 +57,16 @@ export function QuickSearch({
   // A chosen universe searches only its own kind (and asks only those providers).
   const universe = useUniverse();
   const type = searchTypeOf(universe.active);
-  const results = useProgressiveSearch(scope ? '' : q, type);
+  const results = useProgressiveSearch(
+    scope ? '' : q,
+    type,
+    universe.active === 'extension' ? { section: universe.section } : undefined,
+  );
   const items = scope
     ? []
     : (results.data?.results ?? []).filter((m) => inUniverse(universe.active, m)).slice(0, 6);
   useEffect(() => {
-    if (!scope) return;
+    if (!scope || !touched.current) return;
     const url = new URL(window.location.href);
     if (q) url.searchParams.set('q', q);
     else url.searchParams.delete('q');
@@ -275,6 +280,7 @@ export function QuickSearch({
         placeholder={t(scope ? `search.filter.${scope}` : 'search.placeholderShort')}
         value={text}
         onChange={(e) => {
+          touched.current = true;
           setText(e.target.value);
           setActive(-1);
           setOpen(true);
@@ -311,6 +317,7 @@ export function QuickSearch({
           placeholder={t(scope ? `search.filter.${scope}` : 'search.placeholderShort')}
           value={text}
           onChange={(e) => {
+            touched.current = true;
             setText(e.target.value);
             setActive(-1);
             setOpen(true);
@@ -324,6 +331,7 @@ export function QuickSearch({
             type="button"
             aria-label={t('common.clear')}
             onClick={() => {
+              touched.current = true;
               setText('');
               input.current?.focus();
             }}

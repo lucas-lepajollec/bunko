@@ -314,5 +314,14 @@ export async function withTmdbReleases(
       trackedId: r.trackedId,
     });
   }
+  for (const day of days) {
+    day.items = groupDay(day.items);
+    day.items.sort(
+      (a, b) =>
+        Number(b.trackedId !== null) - Number(a.trackedId !== null) ||
+        (a.time ?? '99:99').localeCompare(b.time ?? '99:99') ||
+        a.media.title.localeCompare(b.media.title),
+    );
+  }
   return { ...week, days };
 }
