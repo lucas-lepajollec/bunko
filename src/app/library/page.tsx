@@ -12,7 +12,7 @@ import { MediaLink } from '@/components/media-link';
 import { Select } from '@/components/select';
 import Link from 'next/link';
 import { useLook } from '@/lib/client/theme';
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useUniverse } from '@/lib/client/universe';
 import type {
@@ -250,33 +250,67 @@ function Library() {
   const withoutSources = filtered.filter(
     (entry) => entry.type === 'MANGA' && !entry.sources.length,
   );
-  const shown = [...(sort === 'unlinked' ? withoutSources : filtered)].sort((a, b) => {
-    if (sort === 'news' || sort === 'unlinked')
-      return b.newChapters - a.newChapters || (b.progress?.unread ?? 0) - (a.progress?.unread ?? 0);
-    if (sort === 'recent') return (b.lastReadAt ?? '').localeCompare(a.lastReadAt ?? '');
-    if (sort === 'title') return a.title.localeCompare(b.title);
-    // Newest publication / first airing first; undated works last.
-    if (sort === 'released')
-      return (
-        (b.media.startDate ?? String(b.media.year ?? '')).localeCompare(
-          a.media.startDate ?? String(a.media.year ?? ''),
-        ) || a.title.localeCompare(b.title)
-      );
-    // The user's own score; unrated works last, then the public score breaks ties.
-    if (sort === 'rating')
-      return (
-        (b.rating ?? -1) - (a.rating ?? -1) ||
-        (b.media.score ?? -1) - (a.media.score ?? -1) ||
-        a.title.localeCompare(b.title)
-      );
-    if (sort === 'score') return (b.media.score ?? -1) - (a.media.score ?? -1);
-    if (sort === 'popular') return (b.media.popularity ?? -1) - (a.media.popularity ?? -1);
-    if (sort === 'unread')
-      return (
-        (b.progress?.unread ?? 0) - (a.progress?.unread ?? 0) || a.title.localeCompare(b.title)
-      );
-    return b.createdAt.localeCompare(a.createdAt);
+  const shown = useMemo(
+    () =>
+      [...(sort === 'unlinked' ? withoutSources : filtered)].sort((a, b) => {
+        if (sort === 'news' || sort === 'unlinked')
+          return (
+            b.newChapters - a.newChapters || (b.progress?.unread ?? 0) - (a.progress?.unread ?? 0)
+          );
+        if (sort === 'recent') return (b.lastReadAt ?? '').localeCompare(a.lastReadAt ?? '');
+        if (sort === 'title') return a.title.localeCompare(b.title);
+        // Newest publication / first airing first; undated works last.
+        if (sort === 'released')
+          return (
+            (b.media.startDate ?? String(b.media.year ?? '')).localeCompare(
+              a.media.startDate ?? String(a.media.year ?? ''),
+            ) || a.title.localeCompare(b.title)
+          );
+        // The user's own score; unrated works last, then the public score breaks ties.
+        if (sort === 'rating')
+          return (
+            (b.rating ?? -1) - (a.rating ?? -1) ||
+            (b.media.score ?? -1) - (a.media.score ?? -1) ||
+            a.title.localeCompare(b.title)
+          );
+        if (sort === 'score') return (b.media.score ?? -1) - (a.media.score ?? -1);
+        if (sort === 'popular') return (b.media.popularity ?? -1) - (a.media.popularity ?? -1);
+        if (sort === 'unread')
+          return (
+            (b.progress?.unread ?? 0) - (a.progress?.unread ?? 0) || a.title.localeCompare(b.title)
+          );
+        return b.createdAt.localeCompare(a.createdAt);
+      }),
+    [filtered, sort, withoutSources],
+  );
+  // Windowed progressive rendering: mount the first 60 cards immediately on big libraries and
+  // append +60 smoothly as the user scrolls near the bottom sentinel.
+  const WINDOW_STEP = 60;
+  const viewKey = `${shownShelf}:${kind}:${status}:${sort}:${filterText}`;
+  const [rendered, setRendered] = useState<{ key: string; count: number }>({
+    key: viewKey,
+    count: WINDOW_STEP,
   });
+  const limit = rendered.key === viewKey ? rendered.count : WINDOW_STEP;
+  if (rendered.key !== viewKey) setRendered({ key: viewKey, count: WINDOW_STEP });
+  const visibleShown = shown.slice(0, limit);
+  const hasMoreShown = limit < shown.length;
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!hasMoreShown || !moreRef.current || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting))
+          setRendered((r) => ({
+            key: viewKey,
+            count: (r.key === viewKey ? r.count : WINDOW_STEP) + WINDOW_STEP,
+          }));
+      },
+      { rootMargin: '800px' },
+    );
+    observer.observe(moreRef.current);
+    return () => observer.disconnect();
+  }, [hasMoreShown, viewKey, limit]);
   return (
     <Page className="pb-16">
       <PageTitle
@@ -530,7 +564,7 @@ function Library() {
           )}
           <div className="grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-6 md:gap-x-[26px] md:gap-y-9 xl:grid-cols-7">
             {!library.data && !library.error && <PosterSkeletons count={14} />}
-            {shown.map((e) => {
+            {visibleShown.map((e) => {
               const meta = (
                 <>
                   {e.type === 'ANIME' ? (
@@ -636,6 +670,7 @@ function Library() {
               );
             })}
           </div>
+          {hasMoreShown && <div ref={moreRef} aria-hidden className="h-8" />}
           {selecting && (
             <>
               {/* Room below the grid so the bar never hides the last row. */}

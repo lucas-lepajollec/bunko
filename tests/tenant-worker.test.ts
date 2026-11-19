@@ -61,7 +61,7 @@ it('runs tenant leases independently with at most two active instances, skips bl
   await runTenantWorkers();
   expect(maximum).toBe(2);
   expect(matched.sort()).toEqual([1, 2, 3, 4]);
-  expect(covered.sort()).toEqual([1, 1, 2, 2, 3, 3, 4, 4]);
+  expect(covered.sort()).toEqual([1, 2, 3, 4]);
   for (let id = 1; id <= 5; id++)
     inTenant(id, () => {
       const lease = db().prepare('SELECT owner,expires_at FROM worker_lock').get();

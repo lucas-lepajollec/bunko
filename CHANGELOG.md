@@ -13,6 +13,15 @@
     Planning.
   - Long single-word page titles (e.g. "Téléchargements", "Herunterladen") and hero titles scale to
     fit phone widths without horizontal overflow, backed by `overflow-x: clip`.
+  - Windowed progressive library grid: large libraries mount the first 60 works immediately and
+    extend smoothly on scroll without losing full selection or counters.
+  - Activity center, notifications and worker CPU overhaul: heavy periodic maintenance runs
+    sequentially per account (eliminating 5-way CPU/SQLite spikes) and skips redundant second cover
+    passes when nothing changed; manual Covers runs reset the 5-minute cooldown immediately;
+    `libraryActivity()` avoids duplicate queries and reports live progress + a recent event log for
+    all jobs (including Covers, Catalog linking and Release calendar). The Activity menu is rebuilt
+    into three clear tabs (Now, Tasks in 4 plain-language groups with visible descriptions and
+    always-accessible Run buttons, and Log uniting server job results with app toast notifications).
 
 - Ciné is now the default look of Bunko; the original Bunko look remains available in Settings →
   Appearance. Home hero: swipe on touch screens or click-and-drag with the mouse (plus arrow keys)

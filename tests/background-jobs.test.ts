@@ -38,6 +38,10 @@ it('lists only the jobs that apply, with their last run', async () => {
   expect(jobs.covers).toMatchObject({ failed: false, running: false });
   expect(jobs.covers.lastAt).not.toBeNull();
   expect(jobs['update-check'].failed).toBe(true);
+
+  // Failures are kept in the in-memory activity journal so they surface in the Activity Log tab.
+  const { recentActivityEvents } = await import('@/lib/job-runs');
+  expect(recentActivityEvents().some((e) => e.job === 'update-check' && e.failed)).toBe(true);
 });
 
 it('runs a job on request, only when it applies', () => {

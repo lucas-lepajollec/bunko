@@ -995,12 +995,29 @@ export interface TrackedMedia {
  */
 export interface ActivityTask {
   id: string;
-  kind: 'downloads' | 'matching' | 'releases' | 'jellyfin' | 'translations' | 'kavita';
+  kind:
+    | 'downloads'
+    | 'matching'
+    | 'releases'
+    | 'jellyfin'
+    | 'translations'
+    | 'kavita'
+    | 'catalog-linking'
+    | 'covers'
+    | 'release-ingestion';
   scope: 'reading' | 'video';
   done: number;
   total: number | null;
   /** Title being worked on, when there is one. */
   detail: string | null;
+}
+export interface ActivityEvent {
+  id: string;
+  job: BackgroundJobId;
+  at: string;
+  ms: number;
+  failed: boolean;
+  detail?: string | null;
 }
 export type BackgroundJobId =
   | 'update-check'
@@ -1039,6 +1056,8 @@ export interface BackgroundJob {
 export interface LibraryActivity {
   /** Everything running now, for the header indicator and notification panel. */
   tasks?: ActivityTask[];
+  /** Recent completed or failed background runs for the activity journal. */
+  recent?: ActivityEvent[];
   /** Tenant library revision; clients invalidate stale sheets/lists when background writes land. */
   revision?: number;
   /** Separate durable domains avoid reloading source lists after page turns or release ingestion. */

@@ -11,6 +11,7 @@ import { setWorkerValue, workerValue } from './updates';
 import { statement } from './db';
 import { wakeWorker } from './worker-events';
 import { forgetRelinkAttempts, relinkKavitaWorks } from './kavita-track';
+import { clearJobProgress, setJobProgress } from './job-runs';
 
 const EVERY_MS = 15 * 60_000;
 
@@ -20,8 +21,17 @@ export async function linkCatalog(signal?: AbortSignal) {
   const last = workerValue('catalog_link_at');
   if (last && Date.now() - Date.parse(last) < cadence(EVERY_MS, 60 * 60_000)) return;
   setWorkerValue('catalog_link_at', new Date().toISOString());
-  if (jellyfinConfigured()) await upgradeOffCatalogWorks(signal).catch(() => undefined);
-  await relinkKavitaWorks(signal).catch(() => undefined);
+  const steps = jellyfinConfigured() ? 2 : 1;
+  try {
+    if (jellyfinConfigured()) {
+      setJobProgress('catalog-linking', { done: 0, total: steps, detail: 'Jellyfin' });
+      await upgradeOffCatalogWorks(signal).catch(() => undefined);
+    }
+    setJobProgress('catalog-linking', { done: steps - 1, total: steps, detail: 'Kavita' });
+    await relinkKavitaWorks(signal).catch(() => undefined);
+  } finally {
+    clearJobProgress('catalog-linking');
+  }
 }
 export const catalogLinkingNext = () => {
   const last = workerValue('catalog_link_at');

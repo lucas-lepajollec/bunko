@@ -1,31 +1,42 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react';
 import { useI18n } from '@/i18n/I18nProvider';
 import { cx } from './ui';
 
 /*
  * Three levels of feedback, so screens stay calm:
- * - toast(): temporary confirmation or failure of an action, bottom of the screen, fades away;
+ * - toast(): temporary confirmation or failure of an action, bottom of the screen, fades away
+ *   and is also recorded in the Activity panel's Log tab so nothing important is lost;
  * - <InfoBubble>: a persistent but minor caveat, behind a small ⓘ;
  * - <Notice>: an important, persistent problem, shown above the content it affects.
  */
 
-type Toast = {
+export interface ToastNotice {
   id: number;
   tone: 'ok' | 'bad' | 'info';
   text: string;
+  at: string;
   link?: { href: string; label: string };
-};
-let toasts: Toast[] = [];
+}
+
+const MAX_HISTORY = 20;
+let toasts: ToastNotice[] = [];
+let history: ToastNotice[] = [];
 let nextId = 1;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
-export function toast(t: Omit<Toast, 'id'>) {
+export function toast(t: Omit<ToastNotice, 'id' | 'at'>) {
   const id = nextId++;
+  const entry: ToastNotice = { ...t, id, at: new Date().toISOString() };
   // One message per text: repeating an action does not stack identical toasts.
-  toasts = [...toasts.filter((x) => x.text !== t.text), { ...t, id }].slice(-3);
+  toasts = [...toasts.filter((x) => x.text !== t.text), entry].slice(-3);
+  history = [entry, ...history.filter((x) => x.text !== t.text || Date.now() - Date.parse(x.at) > 5000)].slice(
+    0,
+    MAX_HISTORY,
+  );
   emit();
   window.setTimeout(() => dismiss(id), t.tone === 'bad' ? 7000 : 4000);
 }
@@ -37,6 +48,15 @@ const subscribe = (l: () => void) => {
   listeners.add(l);
   return () => listeners.delete(l);
 };
+
+/** Recent app notifications (toasts), shown alongside server job events in the Activity Log. */
+export function useRecentNotifications(): ToastNotice[] {
+  return useSyncExternalStore(
+    subscribe,
+    () => history,
+    () => history,
+  );
+}
 
 export function Toaster() {
   const { t } = useI18n();
@@ -50,35 +70,41 @@ export function Toaster() {
       aria-live="polite"
       className="pointer-events-none fixed inset-x-3 bottom-24 z-[60] flex flex-col items-center gap-2 md:bottom-8"
     >
-      {list.map((x) => (
-        <div
-          key={x.id}
-          role={x.tone === 'bad' ? 'alert' : 'status'}
-          className="ui-panel animate-toast pointer-events-auto flex max-w-[560px] items-center gap-3 rounded-full bg-panel-hi py-2.5 pr-2.5 pl-4 text-sm shadow-[0_16px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/10"
-        >
-          <span
-            aria-hidden
-            className={cx(
-              'size-2 shrink-0 rounded-full',
-              x.tone === 'ok' ? 'bg-ok' : x.tone === 'bad' ? 'bg-bad' : 'bg-fg',
-            )}
-          />
-          <span className="min-w-0">{x.text}</span>
-          {x.link && (
-            <Link href={x.link.href} className="text-mid shrink-0 underline hover:text-white">
-              {x.link.label}
-            </Link>
-          )}
-          <button
-            type="button"
-            aria-label={t('common.close')}
-            onClick={() => dismiss(x.id)}
-            className="text-muted flex size-7 shrink-0 items-center justify-center rounded-full hover:bg-white/10 hover:text-white"
+      {list.map((x) => {
+        const Icon = x.tone === 'ok' ? CheckCircle2 : x.tone === 'bad' ? AlertCircle : Info;
+        return (
+          <div
+            key={x.id}
+            role={x.tone === 'bad' ? 'alert' : 'status'}
+            className="ui-panel animate-toast pointer-events-auto flex max-w-[min(560px,calc(100vw-24px))] items-center gap-2.5 rounded-2xl bg-panel-hi py-2.5 pr-2 pl-3.5 text-sm shadow-[0_16px_40px_rgba(0,0,0,0.55)] ring-1 ring-white/12"
           >
-            ✕
-          </button>
-        </div>
-      ))}
+            <Icon
+              aria-hidden
+              className={cx(
+                'size-4 shrink-0',
+                x.tone === 'ok' ? 'text-ok' : x.tone === 'bad' ? 'text-bad' : 'text-mid',
+              )}
+            />
+            <span className="min-w-0 leading-snug">{x.text}</span>
+            {x.link && (
+              <Link
+                href={x.link.href}
+                className="text-fg shrink-0 rounded-full bg-white/[0.08] px-2.5 py-1 text-xs font-semibold hover:bg-white/[0.14]"
+              >
+                {x.link.label}
+              </Link>
+            )}
+            <button
+              type="button"
+              aria-label={t('common.close')}
+              onClick={() => dismiss(x.id)}
+              className="text-muted flex size-7 shrink-0 items-center justify-center rounded-full hover:bg-white/10 hover:text-white"
+            >
+              <X className="size-3.5" aria-hidden />
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

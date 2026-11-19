@@ -10,6 +10,7 @@ import { selectedCover, syncSeriesCover } from './kavita-cover';
 import { coverContext } from './cover-state';
 import { sharedConcurrencyGate } from './concurrency';
 import { cached, storedMetadata, saveMetadata } from './metadata-cache';
+import { clearJobProgress, setJobProgress } from './job-runs';
 
 export function storedMedia(id: number): UnifiedMedia {
   const row = statement('SELECT media_json FROM tracked_media WHERE id=?').get(id) as {
@@ -221,6 +222,11 @@ export async function syncTrackedCover(
 const backfillState = tenantState(() => ({ stamp: -1, at: 0 }));
 const BACKFILL_EVERY_MS = 5 * 60_000;
 
+/** Reset the 5-minute backfill cooldown so a manual "Covers" run executes right away. */
+export function resetCoverBackfill() {
+  Object.assign(backfillState(), { stamp: -1, at: 0 });
+}
+
 export async function syncTrackedCovers(parentSignal?: AbortSignal, backfillOnly = false) {
   // The worker asks on every tick: the backfill only looks again when the library changed, or
   // every few minutes for the retries that are due (their waits are minutes to a day anyway).
@@ -280,23 +286,29 @@ export async function syncTrackedCovers(parentSignal?: AbortSignal, backfillOnly
           due(t)),
     )
     .sort((a, b) => (checked.get(a.id)?.at ?? 0) - (checked.get(b.id)?.at ?? 0));
-  for (const t of queue) {
-    if (signal.aborted) return;
-    try {
-      await syncTrackedCover(t.id, signal);
-    } catch {
-      /* Persisted choices retry next cycle. */
-    } finally {
-      const last = checked.get(t.id);
-      const resolved = getTracked(t.id)?.coverUrl?.startsWith('/api/covers/');
-      statement('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)').run(
-        `tracked_cover_checked:${t.id}`,
-        JSON.stringify({
-          at: Date.now(),
-          context: key(t),
-          tries: resolved ? 0 : last?.context === key(t) ? last.tries + 1 : 0,
-        }),
-      );
+  try {
+    for (let i = 0; i < queue.length; i++) {
+      const t = queue[i];
+      if (signal.aborted) return;
+      setJobProgress('covers', { done: i, total: queue.length, detail: t.title });
+      try {
+        await syncTrackedCover(t.id, signal);
+      } catch {
+        /* Persisted choices retry next cycle. */
+      } finally {
+        const last = checked.get(t.id);
+        const resolved = getTracked(t.id)?.coverUrl?.startsWith('/api/covers/');
+        statement('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)').run(
+          `tracked_cover_checked:${t.id}`,
+          JSON.stringify({
+            at: Date.now(),
+            context: key(t),
+            tries: resolved ? 0 : last?.context === key(t) ? last.tries + 1 : 0,
+          }),
+        );
+      }
     }
+  } finally {
+    clearJobProgress('covers');
   }
 }

@@ -606,7 +606,7 @@ function HeaderPanel({
       )?.getBoundingClientRect();
       const frame = headerRef.current?.getBoundingClientRect();
       if (!anchor || !frame) return;
-      const width = Math.min(open === 'types' ? 720 : 420, window.innerWidth - 24);
+      const width = Math.min(open === 'types' ? 720 : 440, window.innerWidth - 24);
       const wanted = open === 'types' ? anchor.left : anchor.right - width;
       const left = Math.max(12, Math.min(wanted, window.innerWidth - 12 - width)) - frame.left;
       setBox({ left, width, caret: anchor.left + anchor.width / 2 - frame.left - left });
