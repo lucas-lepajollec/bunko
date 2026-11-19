@@ -1,3 +1,4 @@
+import { dateFormat } from '@/lib/intl';
 import type { Season } from '@/types/shared';
 
 export const SEASONS: Season[] = ['WINTER', 'SPRING', 'SUMMER', 'FALL'];
@@ -18,7 +19,7 @@ export function formatStartDate(value: string | null | undefined, locale: string
   const [y, m, d] = value.split('-').map(Number);
   if (!m) return String(y);
   const date = new Date(Date.UTC(y, m - 1, d || 1));
-  return new Intl.DateTimeFormat(
+  return dateFormat(
     locale,
     d
       ? { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }

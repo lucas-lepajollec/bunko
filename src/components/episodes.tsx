@@ -1,4 +1,5 @@
 'use client';
+import { dateFormat } from '@/lib/intl';
 import { SlidingHighlight } from './sliding-highlight';
 import { useState } from 'react';
 import { Check, RefreshCw } from 'lucide-react';
@@ -210,7 +211,7 @@ export function EpisodeList({
   const [newestFirst, setNewestFirst] = useState(false);
   const aired = season.aired ?? season.list.length;
   const airedTotal = video.aired ?? video.list.length;
-  const date = new Intl.DateTimeFormat(locale, {
+  const date = dateFormat(locale, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',

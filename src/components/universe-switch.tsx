@@ -13,6 +13,7 @@ import { kindOfMedia } from '@/domain/kinds';
 import { Check, Puzzle } from 'lucide-react';
 import { Cover } from './ui';
 import { useLook } from '@/lib/client/theme';
+import { SlidingHighlight } from './sliding-highlight';
 
 /** The current universe's name: the extension section shown, else the kind. */
 export function activeLabel(t: (k: string) => string, universe: ReturnType<typeof useUniverse>) {
@@ -347,8 +348,10 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
     .slice(0, 6);
   return (
     <div role="menu" aria-label={t('universe.label')} className="flex flex-col gap-1 p-3.5">
-      <div className="flex items-center gap-3 px-1 pb-2.5">
-        <span className="flex gap-0.5 rounded-full bg-white/[0.06] p-[3px] text-[13px]">
+      {/* Phones: the 18+ switch takes its own line under the tabs. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-1 pb-2.5">
+        <span className="relative flex gap-0.5 rounded-full bg-white/[0.06] p-[3px] text-[13px]">
+          <SlidingHighlight />
           {(['all', 'reading', 'video'] as const)
             .filter((x) => x !== 'video' || video.length > 0)
             .map((x) => (
@@ -372,7 +375,7 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
               </button>
             ))}
         </span>
-        <span className="flex-1" />
+        <span className="hidden flex-1 sm:block" />
         {universe.adultAllowed && (
           <button
             type="button"
@@ -382,7 +385,7 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
               onDone();
               void universe.setAdultMode(!universe.adultMode);
             }}
-            className="text-mid flex items-center gap-2.5 text-[13px] hover:text-white"
+            className="text-mid flex w-full items-center justify-between gap-2.5 rounded-[14px] bg-white/[0.04] px-3 py-2 text-[13px] hover:text-white sm:w-auto sm:justify-start sm:bg-transparent sm:p-0"
           >
             {t('universe.adultMode')}
             <span
