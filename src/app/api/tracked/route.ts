@@ -327,6 +327,15 @@ export const PATCH = route(async (r) => {
         db()
           .prepare('UPDATE tracked_media SET jellyfin_link=? WHERE id=?')
           .run(input.jellyfinLink === null ? null : JSON.stringify(input.jellyfinLink), input.id);
+      if (input.kavitaMap !== undefined)
+        db()
+          .prepare('UPDATE tracked_media SET kavita_map=? WHERE id=?')
+          .run(
+            input.kavitaMap && Object.keys(input.kavitaMap).length
+              ? JSON.stringify(input.kavitaMap)
+              : null,
+            input.id,
+          );
       if (input.read !== undefined) {
         // The status follows what is marked seen: unmarking part of a finished work means it is
         // being watched again; everything out seen on a work that has ended means finished.

@@ -6,6 +6,7 @@ import type {
   ChapterSelection,
   CoverChoice,
   CoverOption,
+  KavitaMap,
   MediaDetail,
   TrackedMedia,
   UnifiedMedia,
@@ -18,6 +19,7 @@ import { rankSourceCandidates } from '@/lib/client/source-ranking';
 import { useRelativeTime } from './time';
 import type { Lane } from '@/lib/client/use-source-scan';
 import { CatalogPicker, KavitaPicker } from './relink';
+import { KavitaEntries } from './kavita-entries';
 import { kindOf } from '@/lib/client/universe';
 import { Cover, Dot, Skeleton, Spinner, cx, errorText, primaryButton, smallButton } from './ui';
 
@@ -344,11 +346,13 @@ export function KavitaTab({
   media,
   onPick,
   onCoverSync,
+  onMap,
 }: {
   entry: TrackedMedia;
   media: MediaDetail;
   onPick: (id: number | null) => void;
   onCoverSync: (on: boolean) => void;
+  onMap: (map: KavitaMap | null) => void;
 }) {
   const { t, n } = useI18n();
   return (
@@ -377,6 +381,9 @@ export function KavitaTab({
             className="accent-fg size-[18px] shrink-0"
           />
         </label>
+      )}
+      {media.kavita && (
+        <KavitaEntries entry={entry} seriesId={media.kavita.seriesId} onMap={onMap} />
       )}
       <KavitaPicker initial={entry.title} onPick={onPick} onNone={() => onPick(null)} />
     </div>

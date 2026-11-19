@@ -426,6 +426,23 @@ export const trackPatch = z
       .optional(),
     /** Set progress by hand (episodes watched for anime); may go back. */
     read: z.number().min(0).max(100_000).nullable().optional(),
+    /** Kavita entries linked by hand (`null`: every entry as Kavita numbers it). */
+    kavitaMap: z
+      .record(
+        z.string().regex(/^[cv]:\d{1,6}(?:\.\d{1,3})?$/),
+        z
+          .object({
+            unit: z.enum(['chapter', 'volume']),
+            from: z.number().int().min(0).max(100_000),
+            to: z.number().int().min(0).max(100_000),
+          })
+          .strict()
+          .refine((v) => v.to >= v.from && v.to - v.from < 1000, 'Invalid range')
+          .nullable(),
+      )
+      .refine((v) => Object.keys(v).length <= 5000, 'Too many entries')
+      .nullable()
+      .optional(),
     jellyfinLink: z
       .union([
         z.literal('none'),

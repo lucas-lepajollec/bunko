@@ -3,6 +3,7 @@ import { listTracked, statement, trackedForMedia } from './db';
 import { matchKavita } from './kavita-index';
 import { getSettings } from './settings';
 import { projectStock, stockContext, type StockImport } from './owned-stock';
+import { applyKavitaMap } from './kavita-map';
 
 /** Chapter ownership is independent of source availability and of the display's counting unit. */
 export function ownedChapters(media: UnifiedMedia) {
@@ -10,7 +11,8 @@ export function ownedChapters(media: UnifiedMedia) {
 }
 export function ownedStock(media: UnifiedMedia) {
   const tracked = trackedForMedia(media, listTracked());
-  const series = matchKavita(media, tracked?.kavitaSeriesId);
+  // Entries linked by hand count as the chapters or volumes chosen for them.
+  const series = applyKavitaMap(matchKavita(media, tracked?.kavitaSeriesId), tracked?.kavitaMap);
   const imports = statement(`SELECT namespace,chapter_id,number,volume FROM imported_chapters
     WHERE (tracked_id=? OR media_json ->> '$.id'=?) AND number IS NOT NULL`).all(
     tracked?.id ?? null,
