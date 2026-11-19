@@ -202,6 +202,9 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
         SeriesId: z.string().nullable().optional(),
         ParentIndexNumber: z.number().nullable().optional(),
         IndexNumber: z.number().nullable().optional(),
+        Name: z.string().nullable().optional(),
+        SortName: z.string().nullable().optional(),
+        PremiereDate: z.string().nullable().optional(),
         UserData: z.object({ Played: z.boolean().optional() }).partial().nullable().optional(),
       })
       .passthrough(),
@@ -242,16 +245,25 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
       ...episodeSchema.parse(
         await allItems(
           uid,
-          `ParentId=${library.id}&IncludeItemTypes=Episode&EnableUserData=true`,
+          `ParentId=${library.id}&IncludeItemTypes=Episode&EnableUserData=true&Fields=SortName,PremiereDate`,
           signal,
         ),
       ),
     );
   }
   const bySeries = new Map<string, IndexedJellyfinSeries['seasons']>();
+  // Episodes Jellyfin could not number ("unknown" episodes: films or parts filed as one series,
+  // files named freely) still count: after the numbered ones of their season, by release date
+  // then title, so a work linked "in order" finds them.
+  const unnumbered = new Map<string, typeof episodes>();
   for (const e of episodes) {
-    if (!e.SeriesId || e.IndexNumber == null) continue;
+    if (!e.SeriesId) continue;
     const season = String(e.ParentIndexNumber ?? 1);
+    if (e.IndexNumber == null) {
+      const key = `${e.SeriesId}\u0000${season}`;
+      unnumbered.set(key, [...(unnumbered.get(key) ?? []), e]);
+      continue;
+    }
     const seasons = bySeries.get(e.SeriesId) ?? {};
     (seasons[season] ??= []).push({
       n: e.IndexNumber,
@@ -259,6 +271,22 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
       played: Boolean(e.UserData?.Played),
     });
     bySeries.set(e.SeriesId, seasons);
+  }
+  for (const [key, list] of unnumbered) {
+    const [seriesId, season] = key.split('\u0000');
+    const seasons = bySeries.get(seriesId) ?? {};
+    const known = (seasons[season] ??= []);
+    let next = Math.max(0, ...known.map((x) => x.n));
+    const sorted = [...list].sort(
+      (a, b) =>
+        (a.PremiereDate ?? '').localeCompare(b.PremiereDate ?? '') ||
+        (a.SortName ?? a.Name ?? '').localeCompare(b.SortName ?? b.Name ?? '', undefined, {
+          numeric: true,
+        }),
+    );
+    for (const e of sorted)
+      known.push({ n: ++next, id: e.Id, played: Boolean(e.UserData?.Played) });
+    bySeries.set(seriesId, seasons);
   }
   signal?.throwIfAborted();
   db().transaction(() => {

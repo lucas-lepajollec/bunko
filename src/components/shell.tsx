@@ -376,7 +376,7 @@ function CineHeader() {
       <div
         aria-hidden
         className={cx(
-          'header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-40 transition-opacity duration-500 ease-out md:h-64',
+          'header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-[86px] transition-opacity duration-300 ease-out md:h-32',
           solid ? 'opacity-100' : 'opacity-0',
         )}
       >

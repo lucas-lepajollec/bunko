@@ -247,11 +247,21 @@ function Hero({
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
+  // Which way the last change went: the new title slides in from that side.
+  const [dir, setDir] = useState<1 | -1>(1);
+  const wheel = useRef<{ dx: number; done: boolean; timer: ReturnType<typeof setTimeout> | null }>({
+    dx: 0,
+    done: false,
+    timer: null,
+  });
   const drag = useRef<{ id: number; x: number; y: number; locked: 'x' | 'y' | null } | null>(null);
   const suppressClick = useRef(false);
   useEffect(() => {
     if (paused || items.length < 2) return;
-    const id = setTimeout(() => setIndex((i) => (i + 1) % items.length), 9000);
+    const id = setTimeout(() => {
+      setDir(1);
+      setIndex((i) => (i + 1) % items.length);
+    }, 9000);
     return () => clearTimeout(id);
   }, [items.length, paused, index]);
   const r = items[index % Math.max(items.length, 1)];
@@ -280,7 +290,15 @@ function Hero({
     );
   const m = r.media;
   const current = index % items.length;
-  const step = (delta: 1 | -1) => setIndex((i) => (i + delta + items.length) % items.length);
+  const step = (delta: 1 | -1) => {
+    setDir(delta);
+    setIndex((i) => (i + delta + items.length) % items.length);
+  };
+  const goTo = (i: number) => {
+    if (i === current) return;
+    setDir(i > current ? 1 : -1);
+    setIndex(i);
+  };
   const kicker =
     r.provider === 'tmdb' || r.featured
       ? t('home.trendingKicker', { meta: meta(m) })
@@ -360,15 +378,40 @@ function Hero({
       e.stopPropagation();
       suppressClick.current = false;
     },
+    // Two-finger horizontal swipe on a trackpad (and shift + wheel): the text follows the
+    // fingers, one swipe = one title. Momentum events after the change are ignored until the
+    // gesture stops.
+    onWheel: (e: React.WheelEvent<HTMLElement>) => {
+      if (items.length < 2) return;
+      const dx = e.deltaX || (e.shiftKey ? e.deltaY : 0);
+      if (Math.abs(dx) <= Math.abs(e.deltaY) && !e.shiftKey) return;
+      const w = wheel.current;
+      if (w.timer) clearTimeout(w.timer);
+      w.timer = setTimeout(
+        () => {
+          w.dx = 0;
+          w.done = false;
+          w.timer = null;
+          setDragOffset(0);
+          // After a change, wait for the momentum to die out completely.
+        },
+        wheel.current.done ? 360 : 200,
+      );
+      if (w.done) return;
+      w.dx += dx;
+      if (Math.abs(w.dx) >= 90) {
+        w.done = true;
+        setDragOffset(0);
+        step(w.dx > 0 ? 1 : -1);
+      } else setDragOffset(Math.max(-72, Math.min(72, -w.dx * 0.6)));
+    },
     onKeyDown: (e: React.KeyboardEvent<HTMLElement>) => {
       if (items.length < 2) return;
       if (e.key === 'ArrowRight') step(1);
       else if (e.key === 'ArrowLeft') step(-1);
     },
   };
-  const dragStyle = dragOffset
-    ? { transform: `translateX(${dragOffset}px)` }
-    : undefined;
+  const dragStyle = dragOffset ? { transform: `translateX(${dragOffset}px)` } : undefined;
   // Ciné: one bar per featured title.
   const pick = (className?: string) =>
     items.length > 1 && (
@@ -379,7 +422,7 @@ function Hero({
             type="button"
             aria-label={`${item.media.title} · ${label(item)}`}
             aria-current={i === current}
-            onClick={() => setIndex(i)}
+            onClick={() => goTo(i)}
             className={cx(
               'h-1 rounded-full transition-[width,background-color] duration-300',
               i === current ? 'w-11 bg-white' : 'w-5 bg-white/35 hover:bg-white/60',
@@ -400,15 +443,18 @@ function Hero({
         style={{ ['--accent' as string]: m.color ?? '#e2dbd0' }}
       >
         <Backdrop
+          key={`art-${m.id}`}
           image={m.bannerUrl}
           fallback={m.coverUrl}
           mobileImage={m.coverUrl}
           color={m.color}
-          className="h-[calc(100%+80px)]"
+          className="hero-art-in h-[calc(100%+80px)]"
         />
         <div
+          key={`text-${m.id}`}
           style={dragStyle}
           className={cx(
+            dir === 1 ? 'hero-slide-next' : 'hero-slide-prev',
             'absolute inset-x-4 bottom-12 flex flex-col gap-4 md:bottom-[90px] md:left-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] md:max-w-[min(900px,72vw)] md:gap-5',
             !dragOffset && 'transition-transform duration-200',
           )}
@@ -487,18 +533,23 @@ function Hero({
       style={{ ['--accent' as string]: m.color ?? '#e2dbd0' }}
     >
       <Backdrop
+        key={`art-${m.id}`}
         image={m.bannerUrl}
         fallback={m.coverUrl}
         mobileImage={m.coverUrl}
         color={m.color}
-        className="h-[calc(100%+140px)] md:h-[calc(100%+200px)]"
+        className="hero-art-in h-[calc(100%+140px)] md:h-[calc(100%+200px)]"
       />
       {/* Books, novels and web novels have no wide artwork: the cover itself takes the stage, as
           a book standing in the light of its own colours, above the other titles. */}
-      {!m.bannerUrl && m.coverUrl && <BookStage key={m.id} src={m.coverUrl} shelf={shelf} />}
+      {!m.bannerUrl && m.coverUrl && (
+        <BookStage key={`book-${m.id}`} src={m.coverUrl} shelf={shelf} />
+      )}
       <div
+        key={`text-${m.id}`}
         style={dragStyle}
         className={cx(
+          dir === 1 ? 'hero-slide-next' : 'hero-slide-prev',
           'absolute inset-x-4 bottom-8 flex flex-col gap-3 md:inset-x-auto md:top-[150px] md:bottom-auto md:left-[max(2.5rem,calc((100%-1760px)/2+2.5rem))] md:w-[680px] md:gap-[18px]',
           !dragOffset && 'transition-transform duration-200',
         )}
@@ -532,7 +583,11 @@ function Hero({
           >
             {t('home.openSheet')}
           </MediaLink>
-          <Link href={releasesHref} draggable={false} className={cx(ghostButton, 'flex-1 md:flex-none')}>
+          <Link
+            href={releasesHref}
+            draggable={false}
+            className={cx(ghostButton, 'flex-1 md:flex-none')}
+          >
             {releasesLabel}
           </Link>
         </div>
@@ -555,7 +610,7 @@ function Hero({
                 type="button"
                 aria-label={`${item.media.title} · ${label(item)}`}
                 aria-current={i === current}
-                onClick={() => setIndex(i)}
+                onClick={() => goTo(i)}
                 style={{
                   width: Math.max(40, 84 - distance * 12),
                   opacity: i === current ? 1 : Math.max(0.35, 0.8 - distance * 0.15),
@@ -580,7 +635,13 @@ function Hero({
  * break between words within three lines instead of being cut.
  */
 function heroTitleSize(title: string) {
-  const longestWord = Math.max(1, ...title.trim().split(/\s+/).map((w) => w.length));
+  const longestWord = Math.max(
+    1,
+    ...title
+      .trim()
+      .split(/\s+/)
+      .map((w) => w.length),
+  );
   const length = title.length;
   const max = length <= 14 ? 132 : length <= 26 ? 108 : length <= 42 ? 86 : length <= 64 ? 68 : 56;
   // A long single word must still fit the column (~ 0.5em per letter in Anton) on desktop and phone.
