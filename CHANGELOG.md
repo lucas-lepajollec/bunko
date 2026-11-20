@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Stash: untitled scenes take their file name (as Stash shows them) instead of `#id`; covers
+  come from the image addresses Stash gives (scene screenshots, a group's own cover, else the
+  screenshot of its first scene); episodes of a work held by Stash play in Bunko's player
+  (`/api/stash/streams`: the original file when browsers decode it, Stash's MP4 conversion
+  otherwise, both through `/api/stash/stream/<scene>` with seeking).
 - Stash integration (Settings › Integrations › Stash: address and API key). Bunko reads the
   server's groups and scenes every 15 minutes (GraphQL; Stash 0.27 groups, older servers'
   movies) and lists the groups and the scenes outside any group that no work is linked to in

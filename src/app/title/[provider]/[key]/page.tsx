@@ -773,6 +773,7 @@ function Title({
               anilistId={media.anilistId}
               video={seasonParam ? { ...video, focus: seasonParam } : video}
               jellyfin={media.jellyfin}
+              stash={Boolean(media.stash)}
               entry={entry}
               busy={false}
               onWatched={(w) => void setWatched(w)}
