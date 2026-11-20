@@ -35,6 +35,7 @@ export const POST = route(async (r) => {
           .strict()
           .nullable()
           .optional(),
+        adult: z.boolean().optional(),
       })
       .strict(),
   );

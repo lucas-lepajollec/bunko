@@ -1133,6 +1133,7 @@ const en: Dictionary = {
   'updates.autoInfo':
     'Automatic download is on for {auto} of {total} followed series; sources are checked every {n} min.',
   'library.hiddenAdult': '{count} series hidden by the 18+ setting.',
+  'library.hiddenNotAdult': '{count} works not marked 18+ are hidden by the "18+ only" mode.',
   'library.hiddenAdultShow': 'Change',
   'library.all': 'All',
   'library.allStatuses': 'All statuses',
@@ -1332,6 +1333,9 @@ const en: Dictionary = {
   'unlinked.createHint.video': 'Added to your library, episodes and watched state from the server.',
   'unlinked.createHint.read': 'Added to your library, chapters and read state from the server.',
   'unlinked.createConfirm': 'Create the sheet',
+  'unlinked.adult': '18+',
+  'unlinked.adultHint': 'Shown only with 18+ on; the "18+ only" mode shows only works marked 18+.',
+  'unlinked.adultSection': 'This section is declared 18+ by its extension.',
   'settings.work.collection': 'My collection',
   'settings.work.content': 'Content',
   'settings.work.unitChapterHint': 'Bunko lists, counts and fetches chapters one by one.',
@@ -3209,6 +3213,8 @@ const fr: Dictionary = {
   'updates.autoInfo':
     'Téléchargement automatique activé pour {auto} séries sur {total} ; les sources sont vérifiées toutes les {n} min.',
   'library.hiddenAdult': '{count} série(s) masquée(s) par le réglage 18+.',
+  'library.hiddenNotAdult':
+    '{count} œuvres non marquées 18+ sont masquées par le mode « 18+ uniquement ».',
   'library.hiddenAdultShow': 'Modifier',
   'library.all': 'Tout',
   'library.allStatuses': 'Tous les statuts',
@@ -3413,6 +3419,10 @@ const fr: Dictionary = {
   'unlinked.createHint.video': 'Ajoutée à ta bibliothèque, épisodes et « vu » repris du serveur.',
   'unlinked.createHint.read': 'Ajoutée à ta bibliothèque, chapitres et « lu » repris du serveur.',
   'unlinked.createConfirm': 'Créer la fiche',
+  'unlinked.adult': '18+',
+  'unlinked.adultHint':
+    'Affichée seulement avec le 18+ activé ; le mode « 18+ uniquement » ne montre que les œuvres marquées 18+.',
+  'unlinked.adultSection': 'Cette section est déclarée 18+ par son extension.',
   'settings.work.collection': 'Ma collection',
   'settings.work.content': 'Contenu',
   'settings.work.unitChapterHint': 'Bunko liste, compte et récupère les chapitres un par un.',
@@ -5292,6 +5302,7 @@ const es: Dictionary = {
   'updates.autoInfo':
     'Descarga automática activa en {auto} de {total} series; las fuentes se revisan cada {n} min.',
   'library.hiddenAdult': '{count} serie(s) ocultas por el ajuste +18.',
+  'library.hiddenNotAdult': '{count} obras no marcadas 18+ están ocultas por el modo «solo 18+».',
   'library.hiddenAdultShow': 'Cambiar',
   'library.all': 'Todo',
   'library.allStatuses': 'Todos los estados',
@@ -5492,6 +5503,10 @@ const es: Dictionary = {
   'unlinked.createHint.video': 'Se añade a tu biblioteca, con episodios y vistos del servidor.',
   'unlinked.createHint.read': 'Se añade a tu biblioteca, con capítulos y leídos del servidor.',
   'unlinked.createConfirm': 'Crear la ficha',
+  'unlinked.adult': '18+',
+  'unlinked.adultHint':
+    'Solo se muestra con el 18+ activado; el modo «solo 18+» muestra solo las obras marcadas 18+.',
+  'unlinked.adultSection': 'Su extensión declara esta sección 18+.',
   'settings.work.collection': 'Mi colección',
   'settings.work.content': 'Contenido',
   'settings.work.unitChapterHint': 'Bunko lista, cuenta y descarga los capítulos uno a uno.',
@@ -7375,6 +7390,8 @@ const de: Dictionary = {
   'updates.autoInfo':
     'Automatischer Download für {auto} von {total} Serien aktiv; Quellen werden alle {n} Min. geprüft.',
   'library.hiddenAdult': '{count} Serie(n) durch die 18+-Einstellung ausgeblendet.',
+  'library.hiddenNotAdult':
+    '{count} nicht als 18+ markierte Werke sind im Modus „nur 18+“ ausgeblendet.',
   'library.hiddenAdultShow': 'Ändern',
   'library.all': 'Alle',
   'library.allStatuses': 'Alle Status',
@@ -7579,6 +7596,10 @@ const de: Dictionary = {
   'unlinked.createHint.video': 'Kommt in deine Bibliothek, Folgen und „gesehen“ vom Server.',
   'unlinked.createHint.read': 'Kommt in deine Bibliothek, Kapitel und „gelesen“ vom Server.',
   'unlinked.createConfirm': 'Werk anlegen',
+  'unlinked.adult': '18+',
+  'unlinked.adultHint':
+    'Nur mit aktiviertem 18+ sichtbar; der Modus „nur 18+“ zeigt nur als 18+ markierte Werke.',
+  'unlinked.adultSection': 'Diese Sektion wird von ihrer Erweiterung als 18+ erklärt.',
   'settings.work.collection': 'Meine Sammlung',
   'settings.work.content': 'Inhalt',
   'settings.work.unitChapterHint': 'Bunko listet, zählt und holt Kapitel einzeln.',
@@ -9460,6 +9481,8 @@ const it: Dictionary = {
   'updates.autoInfo':
     'Download automatico attivo per {auto} serie su {total}; le fonti sono controllate ogni {n} min.',
   'library.hiddenAdult': '{count} serie nascoste dall’impostazione 18+.',
+  'library.hiddenNotAdult':
+    '{count} opere non segnate 18+ sono nascoste dalla modalità «solo 18+».',
   'library.hiddenAdultShow': 'Modifica',
   'library.all': 'Tutto',
   'library.allStatuses': 'Tutti gli stati',
@@ -9659,6 +9682,10 @@ const it: Dictionary = {
   'unlinked.createHint.video': 'Aggiunta alla libreria, episodi e visti dal server.',
   'unlinked.createHint.read': 'Aggiunta alla libreria, capitoli e letti dal server.',
   'unlinked.createConfirm': 'Crea la scheda',
+  'unlinked.adult': '18+',
+  'unlinked.adultHint':
+    'Mostrata solo con il 18+ attivo; la modalità «solo 18+» mostra solo le opere segnate 18+.',
+  'unlinked.adultSection': 'Questa sezione è dichiarata 18+ dalla sua estensione.',
   'settings.work.collection': 'La mia collezione',
   'settings.work.content': 'Contenuto',
   'settings.work.unitChapterHint': 'Bunko elenca, conta e scarica i capitoli uno per uno.',

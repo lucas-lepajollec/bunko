@@ -97,6 +97,7 @@ export function sheetMedia(
   title: string,
   year: number | null,
   section: ExtensionSectionRef | null,
+  adult = false,
 ): UnifiedMedia {
   const def = KINDS[kind];
   if ((base.type === 'ANIME') !== (def.family === 'video'))
@@ -115,6 +116,8 @@ export function sheetMedia(
     ...(kind === 'extension' && section ? { extensionSection: section } : {}),
     title,
     year: year ?? base.year,
+    // 18+ as chosen (or as the extension declares its section): the 18+ modes show it accordingly.
+    adult: adult || Boolean(base.adult),
   };
 }
 
@@ -130,6 +133,7 @@ export function createSheet(input: {
   title: string;
   year: number | null;
   section: ExtensionSectionRef | null;
+  adult?: boolean;
 }): TrackedMedia {
   if (input.integration === 'jellyfin') {
     const media = sheetMedia(
@@ -138,6 +142,7 @@ export function createSheet(input: {
       input.title,
       input.year,
       input.section,
+      input.adult,
     );
     const entry = track({ media, status: 'PLANNING' });
     statement('UPDATE tracked_media SET jellyfin_link=?, off_catalog=1 WHERE id=?').run(
@@ -155,6 +160,7 @@ export function createSheet(input: {
       input.title,
       input.year,
       input.section,
+      input.adult,
     );
     const entry = track({ media, status: 'PLANNING' });
     statement('UPDATE tracked_media SET off_catalog=1 WHERE id=?').run(entry.id);

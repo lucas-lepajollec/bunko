@@ -204,7 +204,7 @@ function Library() {
     ...librarySections.map((s) => s.id),
   ]);
   const kind: Kind = chosenKind || universe.active;
-  // An extension's section (JAV, Videos…) is a kind of its own in the library.
+  // An extension's section (as an extension declares them) is a kind of its own in the library.
   const section = chosenKind ? chosenSection || null : universe.section;
   const setKind = (k: Kind, sec: string | null = null) => {
     setChosenKind(k === universe.active && sec === universe.section ? '' : k);
@@ -416,6 +416,14 @@ function Library() {
           refreshFailed || library.error || (shownShelf === 'unlinked' && unlinked.error),
         )}
       />
+      {(activity.data?.hiddenNotAdult ?? 0) > 0 && (
+        <p className="text-mid -mt-2 flex flex-wrap items-center gap-x-2 text-sm">
+          {t('library.hiddenNotAdult', { count: activity.data!.hiddenNotAdult! })}
+          <Link href="/settings#account" className="underline hover:text-white">
+            {t('library.hiddenAdultShow')}
+          </Link>
+        </p>
+      )}
       {(activity.data?.hiddenAdult ?? 0) > 0 && (
         <p className="text-mid -mt-2 flex flex-wrap items-center gap-x-2 text-sm">
           {t('library.hiddenAdult', { count: activity.data!.hiddenAdult })}

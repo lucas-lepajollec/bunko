@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Works of one's own and the 18+ modes: creating a work from a server item has an 18+ switch,
+  on by default in the 18+ mode and always on for a section its extension declares 18+, so the
+  work shows where it was filed (the "18+ only" mode shows only works marked 18+; a work made
+  there used to vanish). The library says how many works the "18+ only" mode leaves out.
 - Fixes from the architecture audit: Jellyfin playback is noted in "pick up where you left off"
   (only extension streams were), works picked up from Jellyfin or Stash progress open the next
   episode in the player (`?play=next`) instead of the sheet, Stash works count as owned on cards
