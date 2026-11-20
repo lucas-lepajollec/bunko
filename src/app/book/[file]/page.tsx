@@ -108,6 +108,9 @@ function BookReader({ manifest, media }: { manifest: BookManifest; media: string
         origin: m.origin,
         adult: Boolean(m.adult),
         color: m.color,
+        // Its kind and section as filed, so "pick up where you left off" shows it in that view.
+        ...(m.kindOverride ? { kindOverride: m.kindOverride } : {}),
+        ...(m.extensionSection ? { extensionSection: m.extensionSection } : {}),
       };
   }, [sheet.data, media]);
   const flush = useCallback(() => {

@@ -204,7 +204,7 @@ export function EpisodeList({
       // Held by Stash: its scenes play through Bunko (episode numbers across the whole work).
       ...(stashHeld && media
         ? {
-            streamsUrl: `/api/stash/streams?id=${encodeURIComponent(media.id)}&episode=${(offsets[at.season] ?? 0) + at.episode}`,
+            localStreamsUrl: `/api/stash/streams?id=${encodeURIComponent(media.id)}&episode=${(offsets[at.season] ?? 0) + at.episode}`,
           }
         : {}),
       episode: at.episode,

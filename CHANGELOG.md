@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Playback sources and reading progress (plug-in step 5): the player takes the streams of the
+  servers holding a work (Stash…) first, beside the extensions' streams instead of in their place
+  (a catalog work linked to Stash keeps its extension streams as fallbacks); a work made from Stash
+  still keeps its resume position. The chapter and book readers note the work's chosen kind and
+  section in "pick up where you left off", so it shows in that view. Reaching the end of a book
+  that is one unnumbered file (a novel, an essay) marks it finished.
 - Integration links in one table (plug-in step 4): `integration_links` (schema v34: one row per
   work and integration) holds the Jellyfin and Stash links instead of a column each; existing
   links move into it and the work's projection (`jellyfinLink`, `stashLink`) is built from it.
