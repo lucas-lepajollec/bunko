@@ -35,6 +35,7 @@ import {
 } from '@/domain/kinds';
 import { ChevronDown, ChevronUp, Languages } from 'lucide-react';
 import { IntegrationLogo, type LogoId } from '@/components/integration-logo';
+import { integrationPages } from '@/domain/integrations';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LanguageSelect, Page } from '@/components/shell';
@@ -770,12 +771,11 @@ function IntegrationsOverview({
     const key = s === 'translation' ? 'tradoc' : s;
     return { state: states[key]?.state, version: states[key]?.version ?? null };
   };
-  const categories: { id: string; pages: SectionId[] }[] = [
-    { id: 'reading', pages: ['suwayomi', 'kavita'] },
-    { id: 'video', pages: ['jellyfin', 'emby', 'stash'] },
-    { id: 'downloads', pages: ['arr'] },
-    { id: 'translation', pages: ['translation'] },
-  ];
+  // From the integration registry: a new service shows here under its category by itself.
+  const categories = integrationPages().map((c) => ({
+    id: c.id,
+    pages: c.pages.filter((p): p is SectionId => (SECTIONS as readonly string[]).includes(p)),
+  }));
   const logos: Partial<Record<SectionId, LogoId[]>> = {
     arr: ['sonarr', 'radarr', 'prowlarr', 'qbittorrent'],
   };

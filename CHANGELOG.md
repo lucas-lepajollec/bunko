@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Registry, continued: Library › Unlinked and "create a sheet" go through one inventory per
+  integration (items no work is linked to, the work an item becomes, how it stays linked), and
+  the Settings › Integrations overview is laid out from the registry (a new service shows under
+  its category by itself). A sheet made from Kavita now keeps the 18+ choice too.
 - Integration registry (plug-in step 3): `src/domain/integrations.ts` (names, categories,
   whether a service holds a work) and `src/lib/integrations.ts` (configured, connection state,
   images, "open in" pages). The status page, the worker's "anything to do" check, the cover job's
