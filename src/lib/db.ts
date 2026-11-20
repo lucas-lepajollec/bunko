@@ -16,6 +16,7 @@ import { sourceServerKey, sourceConnectionKey } from './source-server';
 import { migrateV14 } from './source-ledger-migration';
 import { projectStock, type StockImport, stockContext } from './owned-stock';
 import { applyKavitaMap, parseKavitaMap } from './kavita-map';
+import { isServerWorkId } from '@/domain/providers';
 import { env } from './env';
 import { kavitaLibraryClassification } from './library-kinds';
 import { tenantId, tenantPath, tenantState } from './tenant-context';
@@ -854,10 +855,7 @@ function snapshotTracked(id?: number) {
         match(rawMedia, r.kavita_series_id as number | null),
         kavitaMap,
       );
-      const identity =
-        r.off_catalog || /^(kavita|suwayomi|local|jellyfin|stash):/.test(rawMedia.id)
-          ? 'off-catalog'
-          : 'catalog';
+      const identity = r.off_catalog || isServerWorkId(rawMedia.id) ? 'off-catalog' : 'catalog';
       const automaticCovers = [
         ...new Set(
           [

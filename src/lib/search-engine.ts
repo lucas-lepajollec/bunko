@@ -1,3 +1,4 @@
+import { isServerWorkId } from '@/domain/providers';
 import { searchComics, metronConfigured, metronScope } from './metron';
 import { searchHardcover, hardcoverConfigured } from './hardcover';
 import { credentialScope } from './catalog-provider-http';
@@ -72,11 +73,8 @@ const PROVIDER_RANK: Record<string, number> = {
 };
 const providerOf = (m: UnifiedMedia) => m.id.slice(0, m.id.indexOf(':'));
 const providerRank = (m: UnifiedMedia) => PROVIDER_RANK[providerOf(m)] ?? 12;
-const isLocalItem = (m: UnifiedMedia) =>
-  m.id.startsWith('kavita:') ||
-  m.id.startsWith('suwayomi:') ||
-  m.id.startsWith('jellyfin:') ||
-  m.id.startsWith('stash:');
+/** A work held by a server or files of one's own (see `domain/providers.ts`). */
+const isLocalItem = (m: UnifiedMedia) => isServerWorkId(m.id);
 
 function effectiveFormat(m: UnifiedMedia): string | null {
   if (m.format) return m.format;

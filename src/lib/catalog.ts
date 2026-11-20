@@ -1,3 +1,4 @@
+import { isServerWorkId, parseWorkId, type ProviderId } from '@/domain/providers';
 import { keepInfo } from './work-info';
 import { airedSince, loadedAnime, naturalEpisode, rollAiring, seasonRef } from './anime-franchise';
 import { firstSeason } from './anime-ids';
@@ -103,8 +104,7 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
     const own = trackedForMedia(m, tracked);
     const associated = own;
     const t =
-      associated &&
-      (sameMedia(associated.media, m) || /^(kavita|suwayomi|local|jellyfin|stash):/.test(m.id))
+      associated && (sameMedia(associated.media, m) || isServerWorkId(m.id))
         ? associated
         : undefined;
     const enriched = withKavita(
@@ -759,37 +759,39 @@ async function loadSuwayomiDetail(id: number, signal?: AbortSignal): Promise<Med
     recommendations: [],
   };
 }
+/**
+ * The sheet loader of each provider (ids and key formats live in `domain/providers.ts`). A new
+ * provider is one entry there and one loader here.
+ */
+const DETAIL_LOADERS: Partial<
+  Record<ProviderId, (key: string, id: string, signal?: AbortSignal) => Promise<MediaDetail>>
+> = {
+  metron: (key) => metronDetail(Number(key)),
+  hardcover: (key) => hardcoverDetail(Number(key)),
+  rakuten: async (_key, id) => rakutenDetail(id),
+  googlebooks: async (_key, id) => (await import('./edition-feeds')).editionDetail(id),
+  bnf: async (_key, id) => (await import('./edition-feeds')).editionDetail(id),
+  openlibrary: (key) => openLibraryDetail(key),
+  kavita: async (key) => ({
+    ...kavitaMedia(Number(key)),
+    tags: [],
+    relations: [],
+    recommendations: [],
+  }),
+  anilist: (key, _id, signal) => anilistDetail(Number(key), signal),
+  tmdbtv: async (key) => (await import('./tmdb')).tmdbDetail('tv', Number(key)),
+  tmdbmovie: async (key) => (await import('./tmdb')).tmdbDetail('movie', Number(key)),
+  jellyfin: async (key) => (await import('./jellyfin')).jellyfinMedia(key),
+  stash: async (key) => (await import('./stash')).stashMedia(key),
+  mangadex: (key, _id, signal) => mangadexDetail(key, signal),
+  mangaupdates: (key, _id, signal) => mangaupdatesDetail(key, signal),
+  suwayomi: (key, _id, signal) => loadSuwayomiDetail(Number(key), signal),
+};
 async function loadDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
-  const [provider, key] = [id.slice(0, id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
-  let detail: MediaDetail;
-  if (provider === 'metron' && /^[1-9]\d{0,9}$/.test(key)) detail = await metronDetail(Number(key));
-  else if (provider === 'hardcover' && /^[1-9]\d{0,9}$/.test(key))
-    detail = await hardcoverDetail(Number(key));
-  else if (provider === 'rakuten' && /^\d{13}$/.test(key)) detail = rakutenDetail(id);
-  else if (['googlebooks', 'bnf'].includes(provider))
-    detail = await (await import('./edition-feeds')).editionDetail(id);
-  else if (provider === 'openlibrary' && /^OL[1-9]\d*W$/.test(key))
-    detail = await openLibraryDetail(key);
-  else if (provider === 'kavita' && /^[1-9]\d{0,9}$/.test(key))
-    detail = { ...kavitaMedia(Number(key)), tags: [], relations: [], recommendations: [] };
-  else if (provider === 'anilist' && /^[1-9]\d{0,9}$/.test(key))
-    detail = await anilistDetail(Number(key), signal);
-  else if ((provider === 'tmdbtv' || provider === 'tmdbmovie') && /^[1-9]\d{0,9}$/.test(key))
-    detail = await (
-      await import('./tmdb')
-    ).tmdbDetail(provider === 'tmdbtv' ? 'tv' : 'movie', Number(key));
-  else if (provider === 'jellyfin' && /^[0-9a-f]{32}$/i.test(key))
-    detail = (await import('./jellyfin')).jellyfinMedia(key);
-  else if (provider === 'stash' && /^[gs]\d{1,12}$/.test(key))
-    detail = (await import('./stash')).stashMedia(key);
-  else if (provider === 'mangadex' && /^[0-9a-f-]{36}$/i.test(key))
-    detail = await mangadexDetail(key, signal);
-  else if (provider === 'mangaupdates' && /^\d{1,20}$/.test(key))
-    detail = await mangaupdatesDetail(key, signal);
-  else if (provider === 'suwayomi' && /^[1-9]\d{0,9}$/.test(key))
-    detail = await loadSuwayomiDetail(Number(key), signal);
-  else throw new AppError('VALIDATION_ERROR', 'Unknown media identifier');
-  return detail;
+  const work = parseWorkId(id);
+  const load = work && DETAIL_LOADERS[work.provider.id as ProviderId];
+  if (!work || !load) throw new AppError('VALIDATION_ERROR', 'Unknown media identifier');
+  return load(work.key, id, signal);
 }
 function enrichDetail(detail: MediaDetail): MediaDetail {
   const [tracked] = withTracking([detail]);

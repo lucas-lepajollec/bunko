@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Provider registry (`src/domain/providers.ts`): every provider's id prefix, key format and
+  origin (catalog or server) in one place. API validation of work ids, the sheet loaders, the
+  "work of one's own" identity, library-to-catalog association and the local search use it
+  instead of copied lists. The image reader's direction is a capability of the kind (`direction`),
+  so a work filed under another kind (a manga kept as a manhwa) reads as that kind.
 - Jellyfin, season by season: a work whose seasons are separate Jellyfin series (or filed
   elsewhere, such as a sequel kept in a series' specials) is no longer limited to one series.
   Each season of the work is found where it is: its own series as Jellyfin identifies it (the

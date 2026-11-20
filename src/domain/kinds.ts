@@ -30,6 +30,8 @@ export interface KindDef {
   datedReleases: boolean;
   /** A provider key the kind cannot work without. */
   requires?: 'tmdb';
+  /** How its pages read in the image reader (right to left, left to right, one long strip). */
+  direction?: 'rtl' | 'ltr' | 'vertical';
 }
 
 /** Display and iteration order (menus, chips, homes). */
@@ -65,10 +67,10 @@ const text = (formats: readonly MediaFormat[], extra: Partial<KindDef> = {}) =>
   reading(formats, { mediaType: 'NOVEL', search: 'NOVEL', sources: false, ...extra });
 
 export const KINDS: Record<Kind, KindDef> = {
-  manga: reading(['MANGA', 'ONE_SHOT']),
-  manhwa: reading(['MANHWA']),
-  manhua: reading(['MANHUA']),
-  comic: reading(['COMIC'], { catalog: 'aggregate' }),
+  manga: reading(['MANGA', 'ONE_SHOT'], { direction: 'rtl' }),
+  manhwa: reading(['MANHWA'], { direction: 'vertical' }),
+  manhua: reading(['MANHUA'], { direction: 'vertical' }),
+  comic: reading(['COMIC'], { catalog: 'aggregate', direction: 'ltr' }),
   lightnovel: text(['LIGHT_NOVEL']),
   webnovel: text(['WEB_NOVEL'], { catalog: 'aggregate' }),
   novel: text(['NOVEL'], { catalog: 'aggregate', datedReleases: false }),
