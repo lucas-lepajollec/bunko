@@ -17,6 +17,7 @@ import { migrateV14 } from './source-ledger-migration';
 import { projectStock, type StockImport, stockContext } from './owned-stock';
 import { applyKavitaMap, parseKavitaMap } from './kavita-map';
 import { isServerWorkId } from '@/domain/providers';
+import { integrationLinks } from './integration-links';
 import { env } from './env';
 import { kavitaLibraryClassification } from './library-kinds';
 import { tenantId, tenantPath, tenantState } from './tenant-context';
@@ -217,6 +218,7 @@ export function db(): Database.Database {
     migrateV31(connection);
     migrateV32(connection);
     migrateV33(connection);
+    migrateV34(connection);
     // Heal any self-referential work_links rows that could hide a root work from the library.
     connection.exec('DELETE FROM work_links WHERE member = root');
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
@@ -245,6 +247,7 @@ export function db(): Database.Database {
         'adult_overrides',
         'chapter_releases',
         'source_links',
+        'integration_links',
         'imported_chapters',
         'observed_chapters',
         'observation_dates',
@@ -265,7 +268,7 @@ export function db(): Database.Database {
                   ? 'series'
                   : table === 'settings'
                     ? 'settings'
-                    : table === 'tracked_media'
+                    : table === 'tracked_media' || table === 'integration_links'
                       ? 'linkage'
                       : null;
           versionConnection.exec(`DROP TRIGGER IF EXISTS version_${table}_${operation}; CREATE TRIGGER version_${table}_${operation}
@@ -728,6 +731,8 @@ function snapshotTracked(id?: number) {
       'id',
       ' ORDER BY id DESC',
     ) as Record<string, unknown>[];
+    // Every integration's links of the works, in one query.
+    const integrationLinksOf = integrationLinks(id);
     const links = new Map<number, SourceLinkStatus[]>();
     for (const r of select('SELECT tracked_id,payload FROM source_links', 'tracked_id') as {
       tracked_id: number;
@@ -988,9 +993,11 @@ function snapshotTracked(id?: number) {
         coverUrl,
         coverChoice,
         kavitaCoverSync: Boolean(r.kavita_cover_sync),
-        jellyfinLink: r.jellyfin_link ? JSON.parse(String(r.jellyfin_link)) : null,
+        jellyfinLink: (integrationLinksOf.get(id)?.jellyfin as TrackedMedia['jellyfinLink']) ?? null,
         ...(kavitaMap ? { kavitaMap } : {}),
-        ...(r.stash_link ? { stashLink: String(r.stash_link) } : {}),
+        ...(typeof integrationLinksOf.get(id)?.stash === 'string'
+          ? { stashLink: integrationLinksOf.get(id)!.stash as string }
+          : {}),
         kavitaCover:
           !r.kavita_cover_sync || !kavita || !coverUrl
             ? { state: 'none', error: null }
@@ -1686,6 +1693,29 @@ export function migrateV33(database: Database.Database) {
       FROM tracked_media WHERE json_extract(media_json,'$.extensionSection.id') IS NOT NULL
         AND json_extract(media_json,'$.extensionSection.name') IS NOT NULL`);
     database.pragma('user_version=33');
+  })();
+}
+/**
+ * One table for every integration's links of a work (Jellyfin, Stash…), replacing a column per
+ * integration; the existing links move into it.
+ */
+export function migrateV34(database: Database.Database) {
+  database.transaction(() => {
+    database.exec(`CREATE TABLE IF NOT EXISTS integration_links (
+      tracked_id INTEGER NOT NULL REFERENCES tracked_media(id) ON DELETE CASCADE,
+      integration TEXT NOT NULL, value TEXT NOT NULL,
+      PRIMARY KEY(tracked_id, integration))`);
+    if (Number(database.pragma('user_version', { simple: true })) >= 34) return;
+    const columns = (
+      database.prepare('PRAGMA table_info(tracked_media)').all() as { name: string }[]
+    ).map((c) => c.name);
+    if (columns.includes('jellyfin_link'))
+      database.exec(`INSERT OR IGNORE INTO integration_links(tracked_id,integration,value)
+        SELECT id,'jellyfin',jellyfin_link FROM tracked_media WHERE jellyfin_link IS NOT NULL`);
+    if (columns.includes('stash_link'))
+      database.exec(`INSERT OR IGNORE INTO integration_links(tracked_id,integration,value)
+        SELECT id,'stash',json_quote(stash_link) FROM tracked_media WHERE stash_link IS NOT NULL`);
+    database.pragma('user_version=34');
   })();
 }
 /** Parts of a catalog sheet that a followed work never stores. */

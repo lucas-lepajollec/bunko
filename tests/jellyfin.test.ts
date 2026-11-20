@@ -453,14 +453,30 @@ it('takes each season of a work from where it is in Jellyfin, chosen by hand or 
   expect(presence!.bySeason[0].played).toEqual([1, 2, 4]);
   // The other series counts as linked: it leaves the unlinked inbox.
   const { unlinkedItems } = await import('@/lib/unlinked');
-  db()
-    .prepare('UPDATE tracked_media SET jellyfin_link=? WHERE id=?')
-    .run(
-      JSON.stringify({ seriesId: 'A', season: 1, seasons: { '2': { seriesId: 'C', season: 1 } } }),
-      followed.id,
-    );
+  const { setIntegrationLink } = await import('@/lib/integration-links');
+  setIntegrationLink(followed.id, 'jellyfin', {
+    seriesId: 'A',
+    season: 1,
+    seasons: { '2': { seriesId: 'C', season: 1 } },
+  });
   expect(unlinkedItems().some((i) => i.id === 'C')).toBe(false);
   // Without a choice, both seasons of series A are its seasons 1 and 2 (plain mapping).
   const plain = jellyfin.jellyfinPresence(media, null);
   expect(plain?.absolute).toBeUndefined();
+});
+
+it('keeps every integration link in one table, one per work and integration', async () => {
+  const { setIntegrationLink, integrationLinks } = await import('@/lib/integration-links');
+  const work = track({ media: anime(60, 'Linked Twice'), status: 'PLANNING' });
+  setIntegrationLink(work.id, 'jellyfin', { seriesId: 'A', season: 1 });
+  setIntegrationLink(work.id, 'stash', 'g7');
+  expect(getTracked(work.id)).toMatchObject({
+    jellyfinLink: { seriesId: 'A', season: 1 },
+    stashLink: 'g7',
+  });
+  setIntegrationLink(work.id, 'stash', null);
+  expect(getTracked(work.id)!.stashLink).toBeUndefined();
+  expect(integrationLinks(work.id).get(work.id)).toEqual({
+    jellyfin: { seriesId: 'A', season: 1 },
+  });
 });

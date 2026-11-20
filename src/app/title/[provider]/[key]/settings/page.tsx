@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { useSWRConfig } from 'swr';
-import type { ChapterSelection, MediaDetail, TrackedMedia } from '@/types/shared';
+import type { ChapterSelection, MediaDetail, PublicSettings, TrackedMedia } from '@/types/shared';
 import { libraryKeys, mediaHref, send, useApi } from '@/lib/client/api';
 import { useSourceScan } from '@/lib/client/use-source-scan';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -17,6 +17,7 @@ import {
 } from '@/components/matches';
 import { GeneralTab } from '@/components/work-settings';
 import { JellyfinTab } from '@/components/jellyfin-link';
+import { StashLinkCard } from '@/components/stash-link';
 import { trackedFor } from '@/lib/client/tracked-entry';
 import { kindOf } from '@/lib/client/universe';
 import {
@@ -72,6 +73,8 @@ function WorkSettings({ media }: { media: MediaDetail }) {
   const params = useSearchParams();
   const { mutate } = useSWRConfig();
   const library = useApi<TrackedMedia[]>('/api/tracked');
+  const settings = useApi<PublicSettings>('/api/settings');
+  const stashConnected = Boolean(settings.data?.stashUrl);
   const entry = trackedFor(library.data, media);
   const isComic = media.type === 'MANGA';
   // Kavita links books too; sources (and their scan) only exist for comics.
@@ -247,11 +250,20 @@ function WorkSettings({ media }: { media: MediaDetail }) {
               busy={save?.state === 'saving'}
             />
           ) : section === 'jellyfin' ? (
-            <JellyfinTab
-              entry={entry}
-              media={media}
-              onLink={(jellyfinLink) => run(() => patch({ jellyfinLink }))}
-            />
+            <div className="flex flex-col gap-10">
+              <JellyfinTab
+                entry={entry}
+                media={media}
+                onLink={(jellyfinLink) => run(() => patch({ jellyfinLink }))}
+              />
+              {/* Every video server with links shows here (Stash when it is connected). */}
+              {stashConnected && (
+                <StashLinkCard
+                  entry={entry}
+                  onLink={(stashLink) => run(() => patch({ stashLink }))}
+                />
+              )}
+            </div>
           ) : section === 'kavita' ? (
             <KavitaTab
               entry={entry}
