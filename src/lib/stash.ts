@@ -536,3 +536,25 @@ export function rewriteStashPlaylist(text: string, sceneId: string, playlistUrl:
     })
     .join('\n');
 }
+
+/** Groups and scenes whose name holds the query (for linking a work to one by hand). */
+export function stashSearch(query: string) {
+  const q = query.trim().toLowerCase();
+  return allItems()
+    .map(({ key, value }) => {
+      const group = key.startsWith('g');
+      const name = group ? (value as StashGroup).name : (value as StashScene).title;
+      return {
+        id: key,
+        name,
+        kind: group ? ('group' as const) : ('scene' as const),
+        count: group ? (value as StashGroup).scenes.length : 1,
+      };
+    })
+    .filter((i) => !q || i.id === q || i.name.toLowerCase().includes(q))
+    .sort(
+      (a, b) =>
+        Number(b.kind === 'group') - Number(a.kind === 'group') || a.name.localeCompare(b.name),
+    )
+    .slice(0, 40);
+}

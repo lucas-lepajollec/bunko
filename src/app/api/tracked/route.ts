@@ -1,3 +1,4 @@
+import { setIntegrationLink } from '@/lib/integration-links';
 import { moveReading } from '@/lib/library-matching';
 import { requirePermission } from '@/lib/auth';
 import type { TrackedMedia } from '@/types/shared';
@@ -343,13 +344,8 @@ export const PATCH = route(async (r) => {
           .prepare('UPDATE tracked_media SET last_read=MAX(COALESCE(last_read,0),?) WHERE id=?')
           .run(previousRead, input.id);
       if (input.jellyfinLink !== undefined)
-        db()
-          .prepare('UPDATE tracked_media SET jellyfin_link=? WHERE id=?')
-          .run(input.jellyfinLink === null ? null : JSON.stringify(input.jellyfinLink), input.id);
-      if (input.stashLink !== undefined)
-        db()
-          .prepare('UPDATE tracked_media SET stash_link=? WHERE id=?')
-          .run(input.stashLink, input.id);
+        setIntegrationLink(input.id, 'jellyfin', input.jellyfinLink);
+      if (input.stashLink !== undefined) setIntegrationLink(input.id, 'stash', input.stashLink);
       if (input.kavitaMap !== undefined)
         db()
           .prepare('UPDATE tracked_media SET kavita_map=? WHERE id=?')

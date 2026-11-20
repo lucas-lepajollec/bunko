@@ -13,6 +13,7 @@ import { kavitaSummaries } from './kavita-index';
 import { applyStashProgress, stashUnlinked, stashWork } from './stash';
 import { kavitaMedia } from './kavita-track';
 import { INTEGRATIONS, type IntegrationId } from '@/domain/integrations';
+import { setIntegrationLink } from './integration-links';
 
 /**
  * What the account's integrations hold that no work of the library is linked to: the inbox where
@@ -75,10 +76,8 @@ const INVENTORIES: Partial<Record<IntegrationId, Inventory>> = {
     },
     work: (id) => jellyfinWorkOf(id),
     adopt: (trackedId, id) => {
-      statement('UPDATE tracked_media SET jellyfin_link=?, off_catalog=1 WHERE id=?').run(
-        JSON.stringify({ seriesId: id, season: 1 }),
-        trackedId,
-      );
+      statement('UPDATE tracked_media SET off_catalog=1 WHERE id=?').run(trackedId);
+      setIntegrationLink(trackedId, 'jellyfin', { seriesId: id, season: 1 });
       // What was already watched in Jellyfin counts at once.
       applyJellyfinProgress();
     },

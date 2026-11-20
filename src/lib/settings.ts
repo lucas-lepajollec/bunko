@@ -298,12 +298,12 @@ export function updateSettings(patch: SettingsPatch) {
       if (patch.jellyfinUrl !== undefined && patch.jellyfinUrl !== current.jellyfinUrl)
         // Item IDs belong to the previous server.
         db().exec(
-          "DELETE FROM jellyfin_series; UPDATE tracked_media SET jellyfin_link=NULL; DELETE FROM worker_state WHERE key='jellyfin_synced_at' OR key LIKE 'jellyfin_import_tried:%';",
+          "DELETE FROM jellyfin_series; DELETE FROM integration_links WHERE integration='jellyfin'; DELETE FROM worker_state WHERE key='jellyfin_synced_at' OR key LIKE 'jellyfin_import_tried:%';",
         );
       if (patch.stashUrl !== undefined && patch.stashUrl !== current.stashUrl)
         // Scene and group ids belong to the previous server.
         db().exec(
-          "DELETE FROM stash_items; UPDATE tracked_media SET stash_link=NULL; DELETE FROM worker_state WHERE key='stash_synced_at';",
+          "DELETE FROM stash_items; DELETE FROM integration_links WHERE integration='stash'; DELETE FROM worker_state WHERE key='stash_synced_at';",
         );
       if (patch.suwayomiUrl !== undefined && patch.suwayomiUrl !== current.suwayomiUrl) {
         // Chapter IDs from the previous server could name other chapters: forget source positions.

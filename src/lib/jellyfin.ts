@@ -22,6 +22,7 @@ import { franchise, knownSeasons, loadedAnime, prefetchNodes, workVideo } from '
 import { anilistFromProviders, ensureAnimeIds, idsOfAnilist, tvdbSeasons } from './anime-ids';
 import { getSettings, updateSettings } from './settings';
 import { tenantSignal } from './tenant-lifecycle';
+import { setIntegrationLink } from './integration-links';
 import { tenantState } from './tenant-context';
 
 /** One Jellyfin series as indexed: names, provider ids and its episodes by season. */
@@ -941,10 +942,7 @@ export async function importJellyfinAnime(signal?: AbortSignal) {
       track({ media: work ?? jellyfinWork(s), status: played ? 'READING' : 'PLANNING' });
     if (!existing) mark.run(`jellyfin_imported:${entry.id}`, s.id);
     if (work && (!existing || !existing.jellyfinLink))
-      statement('UPDATE tracked_media SET jellyfin_link=? WHERE id=?').run(
-        JSON.stringify({ seriesId: s.id, season: 1 }),
-        entry.id,
-      );
+      setIntegrationLink(entry.id, 'jellyfin', { seriesId: s.id, season: 1 });
     mark.run(`jellyfin_import_tried:${s.id}`, new Date().toISOString());
   }
   const candidates = all.filter((s) => (s.role ?? 'anime') === 'anime');
@@ -984,10 +982,7 @@ export async function importJellyfinAnime(signal?: AbortSignal) {
     const entry = existing ?? track({ media: work ?? jellyfinWork(s), status });
     if (!existing) mark.run(`jellyfin_imported:${entry.id}`, s.id);
     if (work && (!existing || !existing.jellyfinLink))
-      statement('UPDATE tracked_media SET jellyfin_link=? WHERE id=?').run(
-        JSON.stringify({ seriesId: s.id, season: 1 }),
-        entry.id,
-      );
+      setIntegrationLink(entry.id, 'jellyfin', { seriesId: s.id, season: 1 });
     statement('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)').run(
       `jellyfin_import_tried:${s.id}`,
       new Date().toISOString(),
@@ -1033,7 +1028,7 @@ export async function upgradeOffCatalogWorks(signal?: AbortSignal, budget = 20) 
     // Another entry already follows that work: leave both as they are (the user decides).
     if (listTracked().some((x) => x.id !== t.id && x.media.id === work!.id)) continue;
     statement(
-      'UPDATE tracked_media SET anilist_id=?,title=?,cover_url=?,media_json=?,jellyfin_link=? WHERE id=?',
+      'UPDATE tracked_media SET anilist_id=?,title=?,cover_url=?,media_json=? WHERE id=?',
     ).run(
       work.anilistId,
       work.title,
@@ -1043,9 +1038,9 @@ export async function upgradeOffCatalogWorks(signal?: AbortSignal, budget = 20) 
         trackedId: null,
         ...(t.media.kindOverride ? { kindOverride: t.media.kindOverride } : {}),
       }),
-      JSON.stringify({ seriesId: s.id, season: 1 }),
       t.id,
     );
+    setIntegrationLink(t.id, 'jellyfin', { seriesId: s.id, season: 1 });
   }
 }
 

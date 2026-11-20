@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Integration links in one table (plug-in step 4): `integration_links` (schema v34: one row per
+  work and integration) holds the Jellyfin and Stash links instead of a column each; existing
+  links move into it and the work's projection (`jellyfinLink`, `stashLink`) is built from it.
+  A link change now refreshes what depends on links (watched counts, unlinked inbox). Work
+  settings › Links shows Stash for video works: the group or scene holding the work, linked by
+  hand to another, or unlinked (`GET /api/stash/items?q=`).
 - Registry, continued: Library › Unlinked and "create a sheet" go through one inventory per
   integration (items no work is linked to, the work an item becomes, how it stays linked), and
   the Settings › Integrations overview is laid out from the registry (a new service shows under
