@@ -872,10 +872,36 @@ const en: Dictionary = {
   'enhance.testPictureHint': 'test picture at 640×360, heavily compressed',
   'settings.section.suwayomi': 'Suwayomi',
   'settings.section.jellyfin': 'Jellyfin',
+  'settings.section.integrations': 'Integrations',
+  'settings.section.emby': 'Emby',
+  'settings.service.embyTip':
+    'Your Emby video library: Bunko finds your works there, shows owned episodes and reads what you watched. Create an API key in Emby → Settings → Advanced → API Keys.',
+  'settings.embyUser': 'Emby user (watched state)',
+  'settings.videoServer.taken.jellyfin':
+    'The video server connected is a Jellyfin server: its settings are in Jellyfin. Bunko connects one Jellyfin or Emby server at a time.',
+  'settings.videoServer.taken.emby':
+    'The video server connected is an Emby server: its settings are in Emby. Bunko connects one Jellyfin or Emby server at a time.',
+  'settings.integrations.intro':
+    'The services Bunko works with, by what they bring. Open one to connect it and set it up.',
+  'settings.integrations.overview': 'Overview',
+  'settings.integrations.cat.reading': 'Reading',
+  'settings.integrations.cat.video': 'Video',
+  'settings.integrations.cat.downloads': 'Downloads',
+  'settings.integrations.cat.translation': 'Translation',
+  'settings.integrations.hint.suwayomi': 'Reading sources: chapters to read and download.',
+  'settings.integrations.hint.kavita':
+    'Your book and manga library: owned chapters, reading progress.',
+  'settings.integrations.hint.jellyfin':
+    'Your Jellyfin video library: owned episodes, watched state, playback.',
+  'settings.integrations.hint.emby':
+    'Your Emby video library: owned episodes, watched state, playback.',
+  'settings.integrations.hint.arr':
+    'Sonarr, Radarr, Prowlarr and qBittorrent: get the episodes and films you are missing.',
+  'settings.integrations.hint.translation': 'TraDoc: translate a book into another language.',
   'settings.section.translation': 'Translation',
   'settings.group.personal': 'You',
   'settings.group.admin': 'Administration',
-  'settings.group.services': 'Services',
+  'settings.group.services': 'Integrations',
   'settings.group.content': 'Content',
   'kavita.needsConnection': 'Connect Kavita first (section I).',
   'kavita.indexed': '{count} series indexed from Kavita · {when}',
@@ -2903,10 +2929,35 @@ const fr: Dictionary = {
   'enhance.testPictureHint': 'image de test en 640×360, très compressée',
   'settings.section.suwayomi': 'Suwayomi',
   'settings.section.jellyfin': 'Jellyfin',
+  'settings.section.integrations': 'Intégrations',
+  'settings.section.emby': 'Emby',
+  'settings.service.embyTip':
+    'Ta vidéothèque Emby : Bunko y trouve tes œuvres, montre les épisodes possédés et lit ce que tu as vu. Crée une clé d’API dans Emby → Paramètres → Avancé → Clés d’API.',
+  'settings.embyUser': 'Utilisateur Emby (vu)',
+  'settings.videoServer.taken.jellyfin':
+    'Le serveur vidéo connecté est un Jellyfin : ses réglages sont dans Jellyfin. Bunko se connecte à un seul serveur Jellyfin ou Emby à la fois.',
+  'settings.videoServer.taken.emby':
+    'Le serveur vidéo connecté est un Emby : ses réglages sont dans Emby. Bunko se connecte à un seul serveur Jellyfin ou Emby à la fois.',
+  'settings.integrations.intro':
+    'Les services avec lesquels Bunko travaille, par ce qu’ils apportent. Ouvre-en un pour le connecter et le régler.',
+  'settings.integrations.overview': 'Vue d’ensemble',
+  'settings.integrations.cat.reading': 'Lecture',
+  'settings.integrations.cat.video': 'Vidéo',
+  'settings.integrations.cat.downloads': 'Téléchargements',
+  'settings.integrations.cat.translation': 'Traduction',
+  'settings.integrations.hint.suwayomi': 'Sources de lecture : chapitres à lire et télécharger.',
+  'settings.integrations.hint.kavita':
+    'Ta bibliothèque de livres et mangas : chapitres possédés, progression.',
+  'settings.integrations.hint.jellyfin':
+    'Ta vidéothèque Jellyfin : épisodes possédés, vu, lecture.',
+  'settings.integrations.hint.emby': 'Ta vidéothèque Emby : épisodes possédés, vu, lecture.',
+  'settings.integrations.hint.arr':
+    'Sonarr, Radarr, Prowlarr et qBittorrent : récupérer les épisodes et films qui manquent.',
+  'settings.integrations.hint.translation': 'TraDoc : traduire un livre dans une autre langue.',
   'settings.section.translation': 'Traduction',
   'settings.group.personal': 'Personnel',
   'settings.group.admin': 'Administration',
-  'settings.group.services': 'Services',
+  'settings.group.services': 'Intégrations',
   'settings.group.content': 'Contenus',
   'kavita.needsConnection': 'Connecte d’abord Kavita (section I).',
   'kavita.indexed': '{count} séries indexées depuis Kavita · {when}',
@@ -4942,10 +4993,36 @@ const es: Dictionary = {
   'enhance.testPictureHint': 'imagen de prueba en 640×360, muy comprimida',
   'settings.section.suwayomi': 'Suwayomi',
   'settings.section.jellyfin': 'Jellyfin',
+  'settings.section.integrations': 'Integraciones',
+  'settings.section.emby': 'Emby',
+  'settings.service.embyTip':
+    'Tu videoteca Emby: Bunko encuentra ahí tus obras, muestra los episodios que tienes y lee lo que viste. Crea una clave de API en Emby → Ajustes → Avanzado → Claves de API.',
+  'settings.embyUser': 'Usuario de Emby (visto)',
+  'settings.videoServer.taken.jellyfin':
+    'El servidor de vídeo conectado es un Jellyfin: sus ajustes están en Jellyfin. Bunko se conecta a un solo servidor Jellyfin o Emby a la vez.',
+  'settings.videoServer.taken.emby':
+    'El servidor de vídeo conectado es un Emby: sus ajustes están en Emby. Bunko se conecta a un solo servidor Jellyfin o Emby a la vez.',
+  'settings.integrations.intro':
+    'Los servicios con los que trabaja Bunko, según lo que aportan. Abre uno para conectarlo y configurarlo.',
+  'settings.integrations.overview': 'Vista general',
+  'settings.integrations.cat.reading': 'Lectura',
+  'settings.integrations.cat.video': 'Vídeo',
+  'settings.integrations.cat.downloads': 'Descargas',
+  'settings.integrations.cat.translation': 'Traducción',
+  'settings.integrations.hint.suwayomi': 'Fuentes de lectura: capítulos para leer y descargar.',
+  'settings.integrations.hint.kavita':
+    'Tu biblioteca de libros y mangas: capítulos que tienes, progreso.',
+  'settings.integrations.hint.jellyfin':
+    'Tu videoteca Jellyfin: episodios que tienes, vistos, reproducción.',
+  'settings.integrations.hint.emby':
+    'Tu videoteca Emby: episodios que tienes, vistos, reproducción.',
+  'settings.integrations.hint.arr':
+    'Sonarr, Radarr, Prowlarr y qBittorrent: conseguir los episodios y películas que faltan.',
+  'settings.integrations.hint.translation': 'TraDoc: traducir un libro a otro idioma.',
   'settings.section.translation': 'Traducción',
   'settings.group.personal': 'Personal',
   'settings.group.admin': 'Administración',
-  'settings.group.services': 'Servicios',
+  'settings.group.services': 'Integraciones',
   'settings.group.content': 'Contenido',
   'kavita.needsConnection': 'Conecta primero Kavita (sección I).',
   'kavita.indexed': '{count} series indexadas desde Kavita · {when}',
@@ -6981,10 +7058,36 @@ const de: Dictionary = {
   'enhance.testPictureHint': 'Testbild in 640×360, stark komprimiert',
   'settings.section.suwayomi': 'Suwayomi',
   'settings.section.jellyfin': 'Jellyfin',
+  'settings.section.integrations': 'Integrationen',
+  'settings.section.emby': 'Emby',
+  'settings.service.embyTip':
+    'Deine Emby-Videothek: Bunko findet dort deine Werke, zeigt vorhandene Folgen und liest, was du gesehen hast. Erstelle einen API-Schlüssel unter Emby → Einstellungen → Erweitert → API-Schlüssel.',
+  'settings.embyUser': 'Emby-Benutzer (gesehen)',
+  'settings.videoServer.taken.jellyfin':
+    'Der verbundene Videoserver ist ein Jellyfin: seine Einstellungen findest du unter Jellyfin. Bunko verbindet jeweils einen Jellyfin- oder Emby-Server.',
+  'settings.videoServer.taken.emby':
+    'Der verbundene Videoserver ist ein Emby: seine Einstellungen findest du unter Emby. Bunko verbindet jeweils einen Jellyfin- oder Emby-Server.',
+  'settings.integrations.intro':
+    'Die Dienste, mit denen Bunko arbeitet, nach dem, was sie beitragen. Öffne einen, um ihn zu verbinden und einzurichten.',
+  'settings.integrations.overview': 'Übersicht',
+  'settings.integrations.cat.reading': 'Lesen',
+  'settings.integrations.cat.video': 'Video',
+  'settings.integrations.cat.downloads': 'Downloads',
+  'settings.integrations.cat.translation': 'Übersetzung',
+  'settings.integrations.hint.suwayomi': 'Lesequellen: Kapitel zum Lesen und Herunterladen.',
+  'settings.integrations.hint.kavita':
+    'Deine Buch- und Manga-Bibliothek: vorhandene Kapitel, Fortschritt.',
+  'settings.integrations.hint.jellyfin':
+    'Deine Jellyfin-Videothek: vorhandene Folgen, gesehen, Wiedergabe.',
+  'settings.integrations.hint.emby':
+    'Deine Emby-Videothek: vorhandene Folgen, gesehen, Wiedergabe.',
+  'settings.integrations.hint.arr':
+    'Sonarr, Radarr, Prowlarr und qBittorrent: fehlende Folgen und Filme holen.',
+  'settings.integrations.hint.translation': 'TraDoc: ein Buch in eine andere Sprache übersetzen.',
   'settings.section.translation': 'Übersetzung',
   'settings.group.personal': 'Persönlich',
   'settings.group.admin': 'Verwaltung',
-  'settings.group.services': 'Dienste',
+  'settings.group.services': 'Integrationen',
   'settings.group.content': 'Inhalte',
   'kavita.needsConnection': 'Verbinde zuerst Kavita (Abschnitt I).',
   'kavita.indexed': '{count} Serien aus Kavita indexiert · {when}',
@@ -9024,10 +9127,36 @@ const it: Dictionary = {
   'enhance.testPictureHint': 'immagine di prova a 640×360, molto compressa',
   'settings.section.suwayomi': 'Suwayomi',
   'settings.section.jellyfin': 'Jellyfin',
+  'settings.section.integrations': 'Integrazioni',
+  'settings.section.emby': 'Emby',
+  'settings.service.embyTip':
+    'La tua videoteca Emby: Bunko vi trova le tue opere, mostra gli episodi posseduti e legge ciò che hai visto. Crea una chiave API in Emby → Impostazioni → Avanzate → Chiavi API.',
+  'settings.embyUser': 'Utente Emby (visto)',
+  'settings.videoServer.taken.jellyfin':
+    'Il server video collegato è un Jellyfin: le sue impostazioni sono in Jellyfin. Bunko si collega a un solo server Jellyfin o Emby alla volta.',
+  'settings.videoServer.taken.emby':
+    'Il server video collegato è un Emby: le sue impostazioni sono in Emby. Bunko si collega a un solo server Jellyfin o Emby alla volta.',
+  'settings.integrations.intro':
+    'I servizi con cui lavora Bunko, per ciò che portano. Aprine uno per collegarlo e configurarlo.',
+  'settings.integrations.overview': 'Panoramica',
+  'settings.integrations.cat.reading': 'Lettura',
+  'settings.integrations.cat.video': 'Video',
+  'settings.integrations.cat.downloads': 'Download',
+  'settings.integrations.cat.translation': 'Traduzione',
+  'settings.integrations.hint.suwayomi': 'Fonti di lettura: capitoli da leggere e scaricare.',
+  'settings.integrations.hint.kavita':
+    'La tua libreria di libri e manga: capitoli posseduti, progressi.',
+  'settings.integrations.hint.jellyfin':
+    'La tua videoteca Jellyfin: episodi posseduti, visti, riproduzione.',
+  'settings.integrations.hint.emby':
+    'La tua videoteca Emby: episodi posseduti, visti, riproduzione.',
+  'settings.integrations.hint.arr':
+    'Sonarr, Radarr, Prowlarr e qBittorrent: recuperare episodi e film mancanti.',
+  'settings.integrations.hint.translation': 'TraDoc: tradurre un libro in un’altra lingua.',
   'settings.section.translation': 'Traduzione',
   'settings.group.personal': 'Personale',
   'settings.group.admin': 'Amministrazione',
-  'settings.group.services': 'Servizi',
+  'settings.group.services': 'Integrazioni',
   'settings.group.content': 'Contenuti',
   'kavita.needsConnection': 'Collega prima Kavita (sezione I).',
   'kavita.indexed': '{count} serie indicizzate da Kavita · {when}',

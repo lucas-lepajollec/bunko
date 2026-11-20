@@ -24,7 +24,7 @@ import type {
   SettingsPatch,
 } from '@/types/shared';
 import { PERMISSIONS } from '@/types/shared';
-import type { ArrOptions, JellyfinLibrary, JellyfinRole } from '@/types/shared';
+import type { ArrOptions, JellyfinLibrary, JellyfinRole, VideoServer } from '@/types/shared';
 import { UNIVERSES } from '@/lib/client/universe';
 import {
   KIND_IDS,
@@ -33,7 +33,8 @@ import {
   isVideoKind,
   kindVisible,
 } from '@/domain/kinds';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Languages } from 'lucide-react';
+import { IntegrationLogo, type LogoId } from '@/components/integration-logo';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
 import { LanguageSelect, Page } from '@/components/shell';
@@ -50,11 +51,31 @@ import { Dot, ErrorNote, Skeleton, cx, errorText, field, smallButton } from '@/c
 const GROUPS = [
   { id: 'personal', sections: ['account', 'appearance', 'media', 'playback', 'import'] },
   { id: 'admin', sections: ['users'] },
-  { id: 'services', sections: ['suwayomi', 'kavita', 'jellyfin', 'arr', 'translation'] },
+  // Integrations: an overview, then one page per service.
+  {
+    id: 'services',
+    sections: ['integrations', 'suwayomi', 'kavita', 'jellyfin', 'emby', 'arr', 'translation'],
+  },
   { id: 'content', sections: ['catalogs', 'extensions'] },
 ] as const;
 type SectionId = (typeof GROUPS)[number]['sections'][number];
 const SECTIONS: readonly SectionId[] = GROUPS.flatMap((g) => g.sections);
+/** Pages under the Integrations overview (shown indented, with their logo). */
+const INTEGRATION_PAGES: readonly SectionId[] = [
+  'suwayomi',
+  'kavita',
+  'jellyfin',
+  'emby',
+  'arr',
+  'translation',
+];
+const PAGE_LOGO: Partial<Record<SectionId, LogoId>> = {
+  suwayomi: 'suwayomi',
+  kavita: 'kavita',
+  jellyfin: 'jellyfin',
+  emby: 'emby',
+  arr: 'sonarr',
+};
 /** Earlier links (#connections, #downloads…) open the section that now holds them. */
 const ALIASES: Record<string, SectionId> = {
   connections: 'suwayomi',
@@ -97,6 +118,11 @@ export default function SettingsPage() {
   const reload = () => Promise.all([settings.mutate(), status.mutate()]);
   const keep = (s: Settings) => settings.mutate(s, { revalidate: false });
   const current = open ?? visible[0];
+  const go = (s: SectionId) => {
+    setPicked(s);
+    history.replaceState(null, '', `#${s}`);
+    window.scrollTo(0, 0);
+  };
   return (
     <Page className="settings-page pb-20 md:grid md:grid-cols-[240px_minmax(0,1fr)] md:gap-16">
       <nav
@@ -127,21 +153,42 @@ export default function SettingsPage() {
                       onClick={(e) => {
                         // One section at a time on every screen; the hash keeps it linkable.
                         e.preventDefault();
-                        setPicked(s);
-                        history.replaceState(null, '', `#${s}`);
-                        window.scrollTo(0, 0);
+                        go(s);
                       }}
                       className={cx(
                         'border-line flex min-h-[52px] items-center gap-3 border-b px-3 last:border-b-0 hover:text-white md:min-h-10 md:rounded-xl md:border-b-0',
+                        INTEGRATION_PAGES.includes(s) && 'md:pl-6',
                         current === s
                           ? 'md:bg-white/[0.07] md:font-semibold md:text-white'
                           : 'text-mid',
                       )}
                     >
-                      <span className="flex-1 text-[16px] md:text-[15px]">
-                        {t(`settings.section.${s}`)}
+                      {INTEGRATION_PAGES.includes(s) && (
+                        <span className="flex size-5 shrink-0 items-center justify-center">
+                          {PAGE_LOGO[s] ? (
+                            <IntegrationLogo id={PAGE_LOGO[s]} exact className="size-5" />
+                          ) : (
+                            <Languages className="size-4" aria-hidden />
+                          )}
+                        </span>
+                      )}
+                      <span
+                        className={cx(
+                          'flex-1',
+                          INTEGRATION_PAGES.includes(s)
+                            ? 'text-[15px] md:text-[14px]'
+                            : 'text-[16px] md:text-[15px]',
+                        )}
+                      >
+                        {s === 'integrations'
+                          ? t('settings.integrations.overview')
+                          : t(`settings.section.${s}`)}
                       </span>
-                      <ServiceDot section={s} status={status.data} />
+                      <ServiceDot
+                        section={s}
+                        status={status.data}
+                        videoServer={settings.data?.videoServer}
+                      />
                       <span aria-hidden className="text-muted md:hidden">
                         ›
                       </span>
@@ -197,7 +244,10 @@ export default function SettingsPage() {
           current !== 'users' && <Skeleton className="h-96 rounded-2xl" />
         ) : (
           <>
-            <Section open={open} visible={visible} id="suwayomi">
+            <Section open={open} visible={visible} id="integrations">
+              <IntegrationsOverview settings={settings.data} status={status.data} onOpen={go} />
+            </Section>
+            <Section open={open} visible={visible} id="suwayomi" onBack={go}>
               <Connection
                 service="suwayomi"
                 settings={settings.data}
@@ -216,7 +266,7 @@ export default function SettingsPage() {
                 </>
               )}
             </Section>
-            <Section open={open} visible={visible} id="kavita">
+            <Section open={open} visible={visible} id="kavita" onBack={go}>
               <Connection
                 service="kavita"
                 settings={settings.data}
@@ -234,18 +284,18 @@ export default function SettingsPage() {
                 </>
               )}
             </Section>
-            <Section open={open} visible={visible} id="jellyfin">
-              <Connection
-                service="jellyfin"
-                settings={settings.data}
-                status={status.data}
-                onSaved={reload}
-              />
-              {status.data?.jellyfin?.state && status.data.jellyfin.state !== 'unconfigured' && (
-                <JellyfinOptions settings={settings.data} onSaved={reload} />
-              )}
-            </Section>
-            <Section open={open} visible={visible} id="arr">
+            {(['jellyfin', 'emby'] as const).map((server) => (
+              <Section key={server} open={open} visible={visible} id={server} onBack={go}>
+                <VideoServerPage
+                  server={server}
+                  settings={settings.data!}
+                  status={status.data}
+                  onSaved={reload}
+                  onOpen={go}
+                />
+              </Section>
+            ))}
+            <Section open={open} visible={visible} id="arr" onBack={go}>
               <p className="text-mid text-sm leading-relaxed">{t('arr.intro')}</p>
               {(['sonarr', 'radarr'] as const).map((service) => (
                 <div key={service} className="flex flex-col gap-3">
@@ -273,7 +323,7 @@ export default function SettingsPage() {
                 </div>
               ))}
             </Section>
-            <Section open={open} visible={visible} id="translation">
+            <Section open={open} visible={visible} id="translation" onBack={go}>
               <Connection
                 service="tradoc"
                 settings={settings.data}
@@ -298,12 +348,17 @@ export default function SettingsPage() {
 function ServiceDot({
   section,
   status,
+  videoServer,
 }: {
   section: SectionId;
   status: ServicesStatus | undefined;
+  videoServer?: VideoServer;
 }) {
-  const key = section === 'translation' ? 'tradoc' : section;
+  const key = section === 'translation' ? 'tradoc' : section === 'emby' ? 'jellyfin' : section;
   if (!['suwayomi', 'kavita', 'jellyfin', 'tradoc', 'arr'].includes(key) || !status) return null;
+  // One connection serves Jellyfin or Emby: the dot sits on the server actually connected.
+  if ((section === 'jellyfin' || section === 'emby') && (videoServer ?? 'jellyfin') !== section)
+    return null;
   const states = status as unknown as Record<string, { state?: string } | undefined>;
   // Sonarr & Radarr share one entry: red if either fails, green if one works.
   const arr = [
@@ -333,13 +388,17 @@ function Section({
   visible,
   id,
   children,
+  onBack,
 }: {
   open: SectionId | null;
   visible: readonly SectionId[];
   id: SectionId;
   children: ReactNode;
+  /** An integration's page: a way back to the Integrations overview. */
+  onBack?: (s: SectionId) => void;
 }) {
   const { t } = useI18n();
+  const logo = PAGE_LOGO[id];
   return (
     <section
       id={id}
@@ -350,10 +409,20 @@ function Section({
         (open ?? visible[0]) === id ? 'md:flex' : 'md:hidden',
       )}
     >
+      {onBack && (
+        <button
+          type="button"
+          onClick={() => onBack('integrations')}
+          className="text-mid -mb-2 hidden items-center gap-1.5 self-start text-sm hover:text-white md:flex"
+        >
+          <span aria-hidden>‹</span> {t('settings.section.integrations')}
+        </button>
+      )}
       <h2
         id={`${id}-title`}
-        className="font-display text-[26px] font-bold tracking-[-0.02em] md:text-[30px]"
+        className="font-display flex items-center gap-3 text-[26px] font-bold tracking-[-0.02em] md:text-[30px]"
       >
+        {logo && <IntegrationLogo id={logo} exact className="size-8" />}
         {t(`settings.section.${id}`)}
       </h2>
       {children}
@@ -398,6 +467,7 @@ function Connection({
     | 'kavita'
     | 'tradoc'
     | 'jellyfin'
+    | 'emby'
     | 'sonarr'
     | 'radarr'
     | 'prowlarr'
@@ -413,6 +483,7 @@ function Connection({
       | 'kavita'
       | 'tradoc'
       | 'jellyfin'
+      | 'emby'
       | 'sonarr'
       | 'radarr'
       | 'prowlarr'
@@ -470,6 +541,22 @@ function Connection({
           secret: 'jellyfinApiKey',
         },
         { name: 'jellyfinUser', label: t('settings.jellyfinUser') },
+      ],
+    },
+    // Emby answers the same API through the same connection (one Jellyfin or Emby server).
+    {
+      key: 'emby',
+      state: status?.jellyfin?.state,
+      detail: status?.jellyfin?.version ? `v${status.jellyfin.version}` : null,
+      fields: [
+        { name: 'jellyfinUrl', label: t('settings.address'), type: 'url' },
+        {
+          name: 'jellyfinApiKey',
+          label: t('settings.apiKey'),
+          type: 'password',
+          secret: 'jellyfinApiKey',
+        },
+        { name: 'jellyfinUser', label: t('settings.embyUser') },
       ],
     },
     ...(['sonarr', 'radarr', 'prowlarr'] as const).map((key) => ({
@@ -532,6 +619,149 @@ function Connection({
       settings={settings}
       onSaved={onSaved}
     />
+  );
+}
+
+/**
+ * Jellyfin and Emby each have their page. One connection serves either (same API): the page of
+ * the server not connected says which one is, instead of showing the other's settings.
+ */
+function VideoServerPage({
+  server,
+  settings,
+  status,
+  onSaved,
+  onOpen,
+}: {
+  server: VideoServer;
+  settings: Settings;
+  status: ServicesStatus | undefined;
+  onSaved: () => Promise<unknown>;
+  onOpen: (s: SectionId) => void;
+}) {
+  const { t } = useI18n();
+  const configured = Boolean(settings.jellyfinUrl);
+  const other: VideoServer = server === 'jellyfin' ? 'emby' : 'jellyfin';
+  if (configured && settings.videoServer === other)
+    return (
+      <div className="flex flex-col items-start gap-3 rounded-[18px] bg-white/[0.045] p-4 text-sm md:p-[22px]">
+        <p className="text-mid leading-relaxed">{t(`settings.videoServer.taken.${other}`)}</p>
+        <button type="button" className={smallButton} onClick={() => onOpen(other)}>
+          {t(`settings.section.${other}`)} →
+        </button>
+      </div>
+    );
+  return (
+    <>
+      <Connection service={server} settings={settings} status={status} onSaved={onSaved} />
+      {status?.jellyfin?.state && status.jellyfin.state !== 'unconfigured' && (
+        <JellyfinOptions settings={settings} onSaved={onSaved} />
+      )}
+    </>
+  );
+}
+
+/** Every integration at a glance, by what it brings; each opens its own page. */
+function IntegrationsOverview({
+  settings,
+  status,
+  onOpen,
+}: {
+  settings: Settings;
+  status: ServicesStatus | undefined;
+  onOpen: (s: SectionId) => void;
+}) {
+  const { t } = useI18n();
+  const states = (status ?? {}) as unknown as Record<
+    string,
+    { state?: string; version?: string | null } | undefined
+  >;
+  const stateOf = (s: SectionId): { state: string | undefined; version: string | null } => {
+    if (s === 'jellyfin' || s === 'emby') {
+      const own = !settings.jellyfinUrl || settings.videoServer === s;
+      return own
+        ? { state: states.jellyfin?.state, version: states.jellyfin?.version ?? null }
+        : { state: 'unconfigured', version: null };
+    }
+    if (s === 'arr') {
+      const all = ['sonarr', 'radarr', 'prowlarr', 'qbittorrent'].map((k) => states[k]?.state);
+      return {
+        state: all.includes('error')
+          ? 'error'
+          : all.includes('ok')
+            ? 'ok'
+            : status
+              ? 'unconfigured'
+              : undefined,
+        version: null,
+      };
+    }
+    const key = s === 'translation' ? 'tradoc' : s;
+    return { state: states[key]?.state, version: states[key]?.version ?? null };
+  };
+  const categories: { id: string; pages: SectionId[] }[] = [
+    { id: 'reading', pages: ['suwayomi', 'kavita'] },
+    { id: 'video', pages: ['jellyfin', 'emby'] },
+    { id: 'downloads', pages: ['arr'] },
+    { id: 'translation', pages: ['translation'] },
+  ];
+  const logos: Partial<Record<SectionId, LogoId[]>> = {
+    arr: ['sonarr', 'radarr', 'prowlarr', 'qbittorrent'],
+  };
+  return (
+    <div className="flex flex-col gap-8">
+      <p className="text-mid text-sm leading-relaxed">{t('settings.integrations.intro')}</p>
+      {categories.map((c) => (
+        <div key={c.id} className="flex flex-col gap-3">
+          <h3 className="text-muted text-xs font-medium tracking-[0.06em] uppercase">
+            {t(`settings.integrations.cat.${c.id}`)}
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {c.pages.map((page) => {
+              const { state, version } = stateOf(page);
+              const tone = state === 'ok' ? 'ok' : state === 'error' ? 'bad' : 'idle';
+              const marks = logos[page] ?? (PAGE_LOGO[page] ? [PAGE_LOGO[page]] : []);
+              return (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => onOpen(page)}
+                  className="flex flex-col gap-3 rounded-[18px] bg-white/[0.045] p-4 text-left transition-colors hover:bg-white/[0.07]"
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="flex -space-x-1.5">
+                      {marks.length ? (
+                        marks.map((m) => (
+                          <IntegrationLogo key={m} id={m} exact className="size-8" />
+                        ))
+                      ) : (
+                        <span className="flex size-8 items-center justify-center rounded-full bg-white/[0.08]">
+                          <Languages className="size-4" aria-hidden />
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex-1 text-[16px] font-semibold">
+                      {t(`settings.section.${page}`)}
+                    </span>
+                    <span aria-hidden className="text-muted">
+                      ›
+                    </span>
+                  </span>
+                  <span className="text-mid text-[13px] leading-snug">
+                    {t(`settings.integrations.hint.${page}`)}
+                  </span>
+                  <span className="text-muted flex items-center gap-2 text-xs">
+                    <Dot tone={tone} />
+                    {state ? t(`settings.state.${state}`) : '…'}
+                    {version ? ` · v${version.replace(/^v/, '')}` : ''}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -711,6 +941,7 @@ function ServiceCard({
     | 'kavita'
     | 'tradoc'
     | 'jellyfin'
+    | 'emby'
     | 'sonarr'
     | 'radarr'
     | 'prowlarr'
