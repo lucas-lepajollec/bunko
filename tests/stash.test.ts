@@ -170,10 +170,34 @@ it('names untitled scenes after their file, pictures groups by their first scene
   // Episode 2 of the group is scene 1 (MP4/H.264: the original first); episode 1 is HEVC.
   const second = stash.stashSceneStreams('stash:g1', 2).streams.map((x) => [x.url, x.webReady]);
   expect(second[0]).toEqual(['/api/stash/stream/1?mode=direct', true]);
+  // HEVC/MKV: Stash's HLS first (starts in seconds), then its MP4, the original last.
   const first = stash.stashSceneStreams('stash:g1', 1).streams.map((x) => [x.url, x.webReady]);
   expect(first).toEqual([
+    ['/api/stash/stream/2/stream.m3u8', true],
     ['/api/stash/stream/2?mode=mp4', true],
     ['/api/stash/stream/2?mode=direct', false],
   ]);
   expect(stash.stashSceneStreams('stash:g1', 9).streams).toEqual([]);
+});
+
+it('sends a Stash HLS playlist back through Bunko without the API key', () => {
+  const playlist = [
+    '#EXTM3U',
+    '#EXT-X-KEY:METHOD=NONE,URI="http://stash.local/scene/7/stream.m3u8/key?apikey=secret"',
+    '#EXTINF:2.0,',
+    'http://stash.local/scene/7/stream.m3u8/0.ts?apikey=secret&resolution=ORIGINAL',
+    '#EXTINF:2.0,',
+    'stream.m3u8/1.ts?apikey=secret',
+    'http://elsewhere.test/evil.ts',
+  ].join('\n');
+  const out = stash.rewriteStashPlaylist(
+    playlist,
+    '7',
+    'http://stash.local/scene/7/stream.m3u8?resolution=ORIGINAL',
+  );
+  expect(out).not.toContain('secret');
+  expect(out).not.toContain('elsewhere');
+  expect(out).toContain('/api/stash/stream/7/stream.m3u8/0.ts?resolution=ORIGINAL');
+  expect(out).toContain('/api/stash/stream/7/stream.m3u8/1.ts');
+  expect(out).toContain('URI="/api/stash/stream/7/stream.m3u8/key"');
 });

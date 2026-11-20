@@ -494,11 +494,57 @@ export function stashSceneStreams(mediaIdValue: string, episode: number): VideoS
       subtitles: [],
     };
   };
+  // Stash's HLS starts in seconds whatever the codec (its own player's choice); the original
+  // file first when browsers decode it; the MP4 conversion as a last resort.
+  const hls: VideoStream = {
+    ...stream('mp4', true),
+    id: `stash:${scene.id}:hls`,
+    title: 'HLS',
+    kind: 'hls',
+    url: `/api/stash/stream/${scene.id}/stream.m3u8`,
+  };
   return {
     streams: scene.webReady
-      ? [stream('direct', true), stream('mp4', true)]
-      : [stream('mp4', true), stream('direct', false)],
+      ? [stream('direct', true), hls, stream('mp4', true)]
+      : [hls, stream('mp4', true), stream('direct', false)],
     subtitles: [],
     errors: [],
   };
+}
+
+/**
+ * A Stash HLS playlist with every address sent back through Bunko: segments and sub-playlists
+ * of the scene become `/api/stash/stream/<id>/…`, without the API key Stash may add; anything
+ * pointing elsewhere is dropped.
+ */
+export function rewriteStashPlaylist(text: string, sceneId: string, playlistUrl: string) {
+  const own = new URL(playlistUrl);
+  const map = (ref: string): string | null => {
+    let target: URL;
+    try {
+      target = new URL(ref, playlistUrl);
+    } catch {
+      return null;
+    }
+    const prefix = `/scene/${sceneId}/`;
+    if (target.origin !== own.origin || !target.pathname.startsWith(prefix)) return null;
+    target.searchParams.delete('apikey');
+    const query = target.searchParams.size ? `?${target.searchParams}` : '';
+    return `/api/stash/stream/${sceneId}/${target.pathname.slice(prefix.length)}${query}`;
+  };
+  return text
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      if (!line.trim()) return [line];
+      if (line.startsWith('#'))
+        return [
+          line.replace(/URI="([^"]+)"/g, (whole, ref: string) => {
+            const next = map(ref);
+            return next ? `URI="${next}"` : whole;
+          }),
+        ];
+      const next = map(line.trim());
+      return next ? [next] : [];
+    })
+    .join('\n');
 }

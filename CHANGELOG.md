@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Library: kinds turned off in the settings no longer show (their chips and their works, "All"
+  included), and each section of the extension kind (JAV, Videos…) has its own chip, so works
+  filed under an extension section appear under it.
+- Stash: scenes play through Stash's HLS when the original file is not one browsers decode (it
+  starts in seconds, like Stash's own player; the playlist is sent back through Bunko without the
+  API key); the full MP4 conversion is the last resort. Works made from Jellyfin or Stash keep
+  their cover: the cover job now fetches those servers' images instead of dropping them.
 - Stash: untitled scenes take their file name (as Stash shows them) instead of `#id`; covers
   come from the image addresses Stash gives (scene screenshots, a group's own cover, else the
   screenshot of its first scene); episodes of a work held by Stash play in Bunko's player
