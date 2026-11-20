@@ -769,22 +769,26 @@ function Screen({
     (forget = false) => {
       // Closing the player detaches the element before this last save: use the one kept below.
       const el = video.current ?? lastVideo.current;
-      if (!posKey || !el) return;
+      if (!el) return;
       if (!forget && el.currentTime < 5) return;
       const seconds = forget ? null : el.currentTime;
-      // Reopening the episode in this session reads the new place, not the first one fetched.
-      void mutate(
-        `/api/video/position?key=${encodeURIComponent(posKey)}`,
-        { seconds },
-        {
-          revalidate: false,
-        },
-      );
-      void send('/api/video/position', 'PUT', {
-        key: posKey,
-        seconds,
-        duration: Number.isFinite(el.duration) ? el.duration : null,
-      }).catch(() => undefined);
+      // Bunko keeps the place of streams (Jellyfin keeps its own); every source is noted in
+      // "pick up where you left off".
+      if (posKey) {
+        // Reopening the episode in this session reads the new place, not the first one fetched.
+        void mutate(
+          `/api/video/position?key=${encodeURIComponent(posKey)}`,
+          { seconds },
+          {
+            revalidate: false,
+          },
+        );
+        void send('/api/video/position', 'PUT', {
+          key: posKey,
+          seconds,
+          duration: Number.isFinite(el.duration) ? el.duration : null,
+        }).catch(() => undefined);
+      }
       if (!forget)
         noteWatching(
           current.current,
@@ -794,7 +798,6 @@ function Screen({
     [posKey],
   );
   useEffect(() => {
-    if (!posKey) return;
     const timer = setInterval(() => {
       if (video.current && !video.current.paused && !finished.current) savePosition();
     }, 15_000);

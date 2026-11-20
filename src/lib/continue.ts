@@ -54,6 +54,12 @@ const inProgress = (t: TrackedMedia) =>
   t.status !== 'COMPLETED' &&
   Boolean(t.readerPosition || ((t.progress?.read ?? 0) > 0 && t.lastReadAt));
 
+/** A work's sheet (`/title/<provider>/<key>`). */
+const sheetHref = (id: string) => {
+  const at = id.indexOf(':');
+  return `/title/${id.slice(0, at)}/${encodeURIComponent(id.slice(at + 1))}`;
+};
+
 export function continueItems(): ContinueItem[] {
   const tracked = listTracked();
   const byMedia = new Map(tracked.map((t) => [t.media.id, t]));
@@ -109,7 +115,9 @@ export function continueItems(): ContinueItem[] {
           : `ch:${t.progress?.read ?? ''}`,
       href: position
         ? `/read/${position.chapterId}?media=${encodeURIComponent(t.media.id)}`
-        : (known?.href ?? ''),
+        : (known?.href ??
+          // Watched in Jellyfin or Stash: the sheet opens the next episode in the player.
+          (watch ? `${sheetHref(t.media.id)}?play=next` : '')),
       position: position?.pageCount ? (position.page + 1) / position.pageCount : null,
       updatedAt: new Date(at).toISOString(),
       trackedId: t.id,

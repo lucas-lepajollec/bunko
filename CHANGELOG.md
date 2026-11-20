@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixes from the architecture audit: Jellyfin playback is noted in "pick up where you left off"
+  (only extension streams were), works picked up from Jellyfin or Stash progress open the next
+  episode in the player (`?play=next`) instead of the sheet, Stash works count as owned on cards
+  and in the library's Owned tab, the planning's "all" keeps only the kinds chosen in the
+  settings, and the worker no longer skips an account whose only service is Stash.
 - One answer to "does this work belong to this view" (`inKindScope` in the kind registry):
   library, home releases and top, "pick up where you left off" and the quick search all use it.
   Kinds turned off in the settings stay out of every view ("all" included), and an extension's
