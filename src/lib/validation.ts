@@ -356,6 +356,8 @@ export const settingsPatch = z
       .regex(/^[a-z]{1,20}$/)
       .optional(),
     kindOrder: z.array(z.enum(KIND_IDS)).max(KIND_IDS.length).optional(),
+    hiddenSections: z.array(z.string().min(1).max(200)).max(200).optional(),
+    sectionOrder: z.array(z.string().min(1).max(200)).max(200).optional(),
     favoriteSourceIds: z.array(sourceId).max(100).optional(),
     extensionRepos: z.array(httpUrl).max(20).optional(),
     updateIntervalMinutes: z.number().int().min(5).max(1440).optional(),

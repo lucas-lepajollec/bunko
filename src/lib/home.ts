@@ -1,4 +1,4 @@
-import { KIND_IDS, KINDS, inKindScope, isVideoKind } from '@/domain/kinds';
+import { KIND_IDS, KINDS, inKindScope, isVideoKind, type KindScope } from '@/domain/kinds';
 import { normalizeHome } from './home-shape';
 import { heroArtwork } from './hero-artwork';
 import type { ChapterRelease, DiscoverKind, HomeFeed } from '@/types/shared';
@@ -24,6 +24,9 @@ export function composeHome(
   kind?: Exclude<DiscoverKind, 'all'>,
 ): HomeFeed {
   const visibleMedia = mediaVisibility();
+  // Read once: the kinds and sections the top keeps (see `inKindScope`).
+  const { universes, hiddenSections } = getSettings();
+  const topScope: KindScope = { kind: kind ?? 'all', enabled: universes, hiddenSections };
   const latest = Object.fromEntries(KIND_IDS.map((k) => [k, []])) as unknown as HomeFeed['latest'];
 
   const banners: ChapterRelease[] = [];
@@ -48,7 +51,7 @@ export function composeHome(
       .filter(visibleMedia)
       // The mixed home ranks comics/LN/anime; a books universe shows its own books.
       // One kind's home keeps that kind; the mixed home keeps the catalog mix's order.
-      .filter((m) => inKindScope(m, { kind: kind ?? 'all', enabled: getSettings().universes }))
+      .filter((m) => inKindScope(m, topScope))
       .slice(0, 10),
     latest,
   };
@@ -269,8 +272,13 @@ export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<Hom
   ];
   // The same question every view asks: one kind's home keeps that kind, the mixed one the kinds
   // chosen in the settings (a release of a kind turned off never shows).
+  const scope: KindScope = {
+    kind: kind ?? 'all',
+    enabled,
+    hiddenSections: getSettings().hiddenSections,
+  };
   const pool = [...reading, ...episodes, ...animeFilmWeek, ...tmdbWeek, ...extensionWeek].filter(
-    (r) => inKindScope(r.media, { kind: kind ?? 'all', enabled }),
+    (r) => inKindScope(r.media, scope),
   );
   const home = fillHero(normalizeHome(composeHome(heroArtwork(pool), topWithExtension, kind)));
   return {

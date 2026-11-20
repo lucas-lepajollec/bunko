@@ -259,7 +259,7 @@ export async function videoAddons(signal?: AbortSignal): Promise<VideoAddon[]> {
           health,
         };
       } catch (e) {
-        noteExtensionSections(id, []);
+        // Unreachable for now: what it declared is kept (a failure is not a removal).
         const error = (e as AppError).code === 'DESTINATION_REFUSED' ? 'private' : 'unreachable';
         return {
           id,
@@ -298,7 +298,7 @@ export async function extensionCatalogAddons(
         if (catalogs.length && adult === adultOnly)
           out.push({ url, id, name: m.name, adult, catalogs });
       } catch {
-        noteExtensionSections(id, []);
+        // Unreachable for now: what it declared is kept.
       }
     }),
   );
@@ -376,7 +376,11 @@ export function episodeIds(anilistId: number, episode: number, film = false) {
     }
     if (ids?.mal)
       out.push({ id: `mal:${ids.mal}:${episode}`, prefix: 'mal', types: ['anime', 'movie'] });
-    out.push({ id: `anilist:${anilistId}:${episode}`, prefix: 'anilist', types: ['anime', 'movie'] });
+    out.push({
+      id: `anilist:${anilistId}:${episode}`,
+      prefix: 'anilist',
+      types: ['anime', 'movie'],
+    });
     return out;
   }
   if (ids?.kitsu)

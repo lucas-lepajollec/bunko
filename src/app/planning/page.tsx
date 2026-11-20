@@ -64,13 +64,26 @@ function Planning() {
   // The kind pills open on the current universe when it has dated releases; books/novels fall back to all.
   const defaultKind: DiscoverKind =
     universe.active === 'all' || KINDS.includes(universe.active) ? universe.active : 'all';
-  const [kind, setKind] = useViewState<DiscoverKind>('kind', defaultKind, ['all', ...KINDS]);
+  const [kind, setKindParam] = useViewState<DiscoverKind>('kind', defaultKind, ['all', ...KINDS]);
+  // Each section an extension declares is a kind of its own here too.
+  const [sectionParam, setSectionParam] = useViewState<string>('section', '', [
+    '',
+    ...universe.sections.map((s) => s.id),
+  ]);
+  const section =
+    kind === 'extension'
+      ? sectionParam || (universe.active === 'extension' ? universe.section : null)
+      : null;
+  const setKind = (k: DiscoverKind, sec: string | null = null) => {
+    setKindParam(k);
+    setSectionParam(sec ?? '');
+  };
   const [mineParam, setMineParam] = useViewState<'0' | '1'>('mine', '0', ['0', '1']);
   const mine = mineParam === '1';
   const setMine = (next: (m: boolean) => boolean) => setMineParam(next(mine) ? '1' : '0');
   const query = new URLSearchParams({ week });
   if (kind !== 'all') query.set('kind', kind);
-  if (kind === 'extension' && universe.section) query.set('section', universe.section);
+  if (section) query.set('section', section);
   if (mine) query.set('library', '1');
   const plan = useApi<PlanningWeek>(universe.ready ? `/api/planning?${query}` : null, {
     keepPreviousData: true,
@@ -118,18 +131,19 @@ function Planning() {
           aria-label={t('catalog.kind')}
         >
           <SlidingHighlight />
-          {(['all', ...universe.enabled.filter((k) => KINDS.includes(k))] as DiscoverKind[]).map(
-            (k) => (
-              <Pill
-                key={k}
-                active={kind === k}
-                onClick={() => setKind(k)}
-                className="h-10 px-[18px]"
-              >
-                {t(`kind.${k}`)}
-              </Pill>
-            ),
-          )}
+          {[
+            { kind: 'all' as DiscoverKind, section: null, name: null },
+            ...universe.choices(universe.enabled.filter((k) => KINDS.includes(k))),
+          ].map((c) => (
+            <Pill
+              key={`${c.kind}|${c.section ?? ''}`}
+              active={kind === c.kind && (!c.section || section === c.section)}
+              onClick={() => setKind(c.kind, c.section)}
+              className="h-10 px-[18px]"
+            >
+              {c.name ?? t(`kind.${c.kind}`)}
+            </Pill>
+          ))}
         </div>
         <div className="flex flex-wrap items-center gap-2 md:ml-auto md:shrink-0 md:flex-nowrap">
           <button

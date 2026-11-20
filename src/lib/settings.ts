@@ -13,7 +13,7 @@ import { currentUser } from './user-context';
 import { requireAdmin } from './auth';
 import { catalogSettingKeys, type CatalogSetting } from '@/types/shared';
 import { KIND_IDS, completeKindOrder, isKind } from '@/domain/kinds';
-import { resetExtensionSections, visibleExtensionSections } from './extension-catalog-state';
+import { pruneExtensionSections, visibleExtensionSections } from './extension-catalog-state';
 import { createHash } from 'node:crypto';
 import type {
   DiscoverKind,
@@ -150,6 +150,8 @@ function serverSettings(): Settings {
     showAllUniverse: true,
     librarySort: 'released',
     kindOrder: [...KIND_IDS],
+    hiddenSections: [],
+    sectionOrder: [],
     favoriteSourceIds: [],
     extensionRepos: [],
     updateIntervalMinutes: 15,
@@ -338,7 +340,8 @@ export function updateSettings(patch: SettingsPatch) {
     })();
   });
   // Extension sections belong to the configured addresses (read again on the next look).
-  if (patch.videoAddons !== undefined) resetExtensionSections();
+  // Extensions removed from the account no longer declare their sections.
+  if (patch.videoAddons !== undefined) pruneExtensionSections(patch.videoAddons.map(addonId));
   wakeWorker();
   return publicSettings();
 }

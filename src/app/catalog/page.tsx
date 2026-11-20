@@ -260,7 +260,9 @@ function Catalog() {
   const loadingMore =
     pages.isLoading ||
     (pages.size > 0 && pages.data && typeof pages.data[pages.size - 1] === 'undefined');
-  const rawSearchItems = (searched.data?.results ?? []).filter((m) => inUniverse(kind, m));
+  const rawSearchItems = (searched.data?.results ?? []).filter((m) =>
+    inUniverse({ kind, section, hiddenSections: universe.hiddenSections }, m),
+  );
   const searchItems = useStableOrder(
     rawSearchItems,
     (m) => m.id,

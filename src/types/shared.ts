@@ -830,6 +830,12 @@ export interface Settings {
    * the mix in "Everything". Always holds every kind (missing ones are appended).
    */
   kindOrder: Exclude<DiscoverKind, 'all'>[];
+  /**
+   * Sections video extensions declare (their own kinds), turned off or reordered by the user:
+   * ids as the extensions give them. A newly declared section shows, in the extension's order.
+   */
+  hiddenSections: string[];
+  sectionOrder: string[];
   /** Where outside reading progress is read from (Bunko's own reader always counts). */
   progressSource: 'suwayomi' | 'kavita';
   favoriteSourceIds: string[];

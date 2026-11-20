@@ -18,13 +18,13 @@ export const GET = route(async (r) => {
   );
   // The same scope as every view: "all" keeps the kinds chosen in the settings.
   if (q.kind && q.kind !== 'all') return json(week);
-  const enabled = getSettings().universes;
-  if (!enabled.length) return json(week);
+  const { universes: enabled, hiddenSections } = getSettings();
+  if (!enabled.length && !hiddenSections.length) return json(week);
   return json({
     ...week,
     days: week.days.map((d) => ({
       ...d,
-      items: d.items.filter((i) => inKindScope(i.media, { kind: 'all', enabled })),
+      items: d.items.filter((i) => inKindScope(i.media, { kind: 'all', enabled, hiddenSections })),
     })),
   });
 });

@@ -25,7 +25,7 @@ import type {
 } from '@/types/shared';
 import { PERMISSIONS } from '@/types/shared';
 import type { ArrOptions, JellyfinLibrary, JellyfinRole, VideoServer } from '@/types/shared';
-import { UNIVERSES } from '@/lib/client/universe';
+import { UNIVERSES, sortSections } from '@/lib/client/universe';
 import {
   KIND_IDS,
   KINDS as KIND_DEFS,
@@ -2132,10 +2132,22 @@ function UniverseSettings() {
   const data = settings.data;
   const enabled = data?.universes?.length ? data.universes : UNIVERSES;
   const order = completeKindOrder(data?.kindOrder);
-  // The extension kind is only offered while an extension declares a section to show.
+  // The extension kind is only offered while an extension declares a section (shown or not).
   const visibleOrder = order.filter((k) =>
     kindVisible(k, { extensionSections: data?.extensionSections }),
   );
+  // Sections video extensions declare: their names and 18+ flags are theirs; the user only
+  // turns each on or off and orders them, like Bunko's own kinds.
+  const sections = sortSections(data?.extensionSections ?? [], data?.sectionOrder ?? []);
+  const hidden = data?.hiddenSections ?? [];
+  const moveSection = (id: string, to: number) => {
+    const ids = sections.map((x) => x.id);
+    const from = ids.indexOf(id);
+    if (to < 0 || to >= ids.length) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, id);
+    void save({ sectionOrder: ids });
+  };
   async function save(patch: Partial<Settings>) {
     try {
       await send('/api/settings', 'PATCH', patch);
@@ -2164,42 +2176,88 @@ function UniverseSettings() {
             void save({ kindOrder: next });
           };
           return (
-            <li
-              key={k}
-              className="border-line flex min-h-[52px] items-center gap-2 border-b px-3 last:border-b-0"
-            >
-              <span className="text-muted w-6 text-right text-xs tabular-nums">{i + 1}</span>
-              <span className={cx('flex-1', !on && 'text-muted')}>{name}</span>
-              <button
-                type="button"
-                disabled={!data || i === 0}
-                onClick={() => move(i - 1)}
-                aria-label={t('universe.moveUp', { name })}
-                className="text-mid flex size-9 items-center justify-center rounded-full hover:bg-white/[0.07] hover:text-white disabled:opacity-25"
-              >
-                <ChevronUp className="size-4" aria-hidden />
-              </button>
-              <button
-                type="button"
-                disabled={!data || i === visibleOrder.length - 1}
-                onClick={() => move(i + 1)}
-                aria-label={t('universe.moveDown', { name })}
-                className="text-mid flex size-9 items-center justify-center rounded-full hover:bg-white/[0.07] hover:text-white disabled:opacity-25"
-              >
-                <ChevronDown className="size-4" aria-hidden />
-              </button>
-              <input
-                type="checkbox"
-                checked={on}
-                disabled={!data || (on && enabled.length === 1)}
-                aria-label={t('universe.show', { name })}
-                onChange={() =>
-                  void save({
-                    universes: on ? enabled.filter((x) => x !== k) : [...enabled, k],
-                  })
-                }
-                className="accent-fg ml-1 size-[18px] shrink-0"
-              />
+            <li key={k} className="border-line flex flex-col border-b px-3 last:border-b-0">
+              <div className="flex min-h-[52px] items-center gap-2">
+                <span className="text-muted w-6 text-right text-xs tabular-nums">{i + 1}</span>
+                <span className={cx('flex-1', !on && 'text-muted')}>{name}</span>
+                <button
+                  type="button"
+                  disabled={!data || i === 0}
+                  onClick={() => move(i - 1)}
+                  aria-label={t('universe.moveUp', { name })}
+                  className="text-mid flex size-9 items-center justify-center rounded-full hover:bg-white/[0.07] hover:text-white disabled:opacity-25"
+                >
+                  <ChevronUp className="size-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  disabled={!data || i === visibleOrder.length - 1}
+                  onClick={() => move(i + 1)}
+                  aria-label={t('universe.moveDown', { name })}
+                  className="text-mid flex size-9 items-center justify-center rounded-full hover:bg-white/[0.07] hover:text-white disabled:opacity-25"
+                >
+                  <ChevronDown className="size-4" aria-hidden />
+                </button>
+                <input
+                  type="checkbox"
+                  checked={on}
+                  disabled={!data || (on && enabled.length === 1)}
+                  aria-label={t('universe.show', { name })}
+                  onChange={() =>
+                    void save({
+                      universes: on ? enabled.filter((x) => x !== k) : [...enabled, k],
+                    })
+                  }
+                  className="accent-fg ml-1 size-[18px] shrink-0"
+                />
+              </div>
+              {k === 'extension' && on && sections.length > 0 && (
+                <ol className="border-line ml-8 flex flex-col border-l" aria-label={name}>
+                  {sections.map((x, j) => {
+                    const shown = !hidden.includes(x.id);
+                    return (
+                      <li key={x.id} className="flex min-h-11 items-center gap-2 pl-3">
+                        <span className={cx('flex-1', !shown && 'text-muted')}>
+                          {x.name}
+                          {x.adult && <span className="text-muted ml-2 text-xs">18+</span>}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={!data || j === 0}
+                          onClick={() => moveSection(x.id, j - 1)}
+                          aria-label={t('universe.moveUp', { name: x.name })}
+                          className="text-mid flex size-9 items-center justify-center rounded-full hover:bg-white/[0.07] hover:text-white disabled:opacity-25"
+                        >
+                          <ChevronUp className="size-4" aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!data || j === sections.length - 1}
+                          onClick={() => moveSection(x.id, j + 1)}
+                          aria-label={t('universe.moveDown', { name: x.name })}
+                          className="text-mid flex size-9 items-center justify-center rounded-full hover:bg-white/[0.07] hover:text-white disabled:opacity-25"
+                        >
+                          <ChevronDown className="size-4" aria-hidden />
+                        </button>
+                        <input
+                          type="checkbox"
+                          checked={shown}
+                          disabled={!data}
+                          aria-label={t('universe.show', { name: x.name })}
+                          onChange={() =>
+                            void save({
+                              hiddenSections: shown
+                                ? [...hidden, x.id]
+                                : hidden.filter((id) => id !== x.id),
+                            })
+                          }
+                          className="accent-fg ml-1 size-[18px] shrink-0"
+                        />
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
             </li>
           );
         })}
