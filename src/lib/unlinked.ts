@@ -12,6 +12,7 @@ import {
 import { kavitaSummaries } from './kavita-index';
 import { applyStashProgress, stashUnlinked, stashWork } from './stash';
 import { kavitaMedia } from './kavita-track';
+import { INTEGRATIONS, type IntegrationId } from '@/domain/integrations';
 
 /**
  * What the account's integrations hold that no work of the library is linked to: the inbox where
@@ -32,47 +33,93 @@ function ignoredIds(integration: Integration) {
   );
 }
 
-/** Jellyfin series and films that no followed work is linked to. */
-function jellyfinUnlinked(): UnlinkedItem[] {
-  if (!jellyfinConfigured()) return [];
-  // Every series a work holds, one per season when its seasons are separate series.
-  const linked = jellyfinSeriesInUse(listTracked().filter((t) => t.type === 'ANIME'));
-  const ignored = ignoredIds('jellyfin');
-  return jellyfinIndexedSeries()
-    .filter((s) => !linked.has(s.id))
-    .map((s) => ({
-      integration: 'jellyfin' as const,
-      id: s.id,
-      name: s.name,
-      year: s.year,
-      library: s.library ?? '',
-      count: Object.values(s.seasons).reduce((n, list) => n + list.length, 0),
-      coverUrl: `/api/jellyfin/image?id=${s.id}`,
-      kind: (
-        { anime: 'anime', series: 'series', movies: 'movies', animation: 'animation' } as const
-      )[s.role === 'ignore' ? 'anime' : s.role],
-      ignored: ignored.has(s.id),
-    }));
+/**
+ * What each integration holding works brings to the inbox (one entry per integration, keyed like
+ * the registry in `lib/integrations.ts`): its items no work is linked to, the work an item becomes,
+ * and how the new work stays linked to its item (and takes what the server says was seen).
+ */
+interface Inventory {
+  unlinked(ignored: Set<string>): UnlinkedItem[];
+  work(id: string): UnifiedMedia;
+  adopt(trackedId: number, id: string): void;
+  /** A work made from it starts as being read (Kavita) rather than planned. */
+  status?: 'READING';
 }
-
-/** Kavita series that no followed work is linked to. */
-function kavitaUnlinked(): UnlinkedItem[] {
-  const ignored = ignoredIds('kavita');
-  return kavitaSummaries(true).map((s) => ({
-    integration: 'kavita' as const,
-    id: String(s.seriesId),
-    name: s.name,
-    year: null,
-    library: s.libraryName,
-    count: s.chapters,
-    coverUrl: s.coverUrl,
-    kind: kindOfMedia(kavitaMedia(s.seriesId)),
-    ignored: ignored.has(String(s.seriesId)),
-  }));
-}
+const kavitaSeries = (id: string) => {
+  const seriesId = Number(id);
+  if (!Number.isInteger(seriesId) || seriesId <= 0)
+    throw new AppError('VALIDATION_ERROR', 'Invalid Kavita series', 400);
+  return seriesId;
+};
+const INVENTORIES: Partial<Record<IntegrationId, Inventory>> = {
+  jellyfin: {
+    unlinked: (ignored) => {
+      if (!jellyfinConfigured()) return [];
+      // Every series a work holds, one per season when its seasons are separate series.
+      const linked = jellyfinSeriesInUse(listTracked().filter((t) => t.type === 'ANIME'));
+      return jellyfinIndexedSeries()
+        .filter((s) => !linked.has(s.id))
+        .map((s) => ({
+          integration: 'jellyfin' as const,
+          id: s.id,
+          name: s.name,
+          year: s.year,
+          library: s.library ?? '',
+          count: Object.values(s.seasons).reduce((n, list) => n + list.length, 0),
+          coverUrl: `/api/jellyfin/image?id=${s.id}`,
+          kind: (
+            { anime: 'anime', series: 'series', movies: 'movies', animation: 'animation' } as const
+          )[s.role === 'ignore' ? 'anime' : s.role],
+          ignored: ignored.has(s.id),
+        }));
+    },
+    work: (id) => jellyfinWorkOf(id),
+    adopt: (trackedId, id) => {
+      statement('UPDATE tracked_media SET jellyfin_link=?, off_catalog=1 WHERE id=?').run(
+        JSON.stringify({ seriesId: id, season: 1 }),
+        trackedId,
+      );
+      // What was already watched in Jellyfin counts at once.
+      applyJellyfinProgress();
+    },
+  },
+  stash: {
+    unlinked: (ignored) => stashUnlinked(ignored),
+    work: (id) => stashWork(id),
+    adopt: (trackedId) => {
+      statement('UPDATE tracked_media SET off_catalog=1 WHERE id=?').run(trackedId);
+      applyStashProgress();
+    },
+  },
+  kavita: {
+    unlinked: (ignored) =>
+      kavitaSummaries(true).map((s) => ({
+        integration: 'kavita' as const,
+        id: String(s.seriesId),
+        name: s.name,
+        year: null,
+        library: s.libraryName,
+        count: s.chapters,
+        coverUrl: s.coverUrl,
+        kind: kindOfMedia(kavitaMedia(s.seriesId)),
+        ignored: ignored.has(String(s.seriesId)),
+      })),
+    work: (id) => kavitaMedia(kavitaSeries(id)),
+    // Chosen by hand: automatic matching never moves this series elsewhere.
+    adopt: (trackedId, id) =>
+      statement(
+        'UPDATE tracked_media SET kavita_series_id=?, kavita_manual=1, off_catalog=1 WHERE id=?',
+      ).run(kavitaSeries(id), trackedId),
+    status: 'READING',
+  },
+};
 
 export function unlinkedItems(): UnlinkedItem[] {
-  return [...jellyfinUnlinked(), ...stashUnlinked(ignoredIds('stash')), ...kavitaUnlinked()];
+  // Video servers first, then reading ones (the registry's order).
+  return INTEGRATIONS.flatMap((i) => {
+    const inventory = INVENTORIES[i.id];
+    return inventory ? inventory.unlinked(ignoredIds(i.id as Integration)) : [];
+  }).sort((a, b) => Number(a.integration === 'kavita') - Number(b.integration === 'kavita'));
 }
 
 export function setUnlinkedIgnored(integration: Integration, id: string, ignored: boolean) {
@@ -129,52 +176,17 @@ export function createSheet(input: {
   section: ExtensionSectionRef | null;
   adult?: boolean;
 }): TrackedMedia {
-  if (input.integration === 'jellyfin') {
-    const media = sheetMedia(
-      jellyfinWorkOf(input.id),
-      input.kind,
-      input.title,
-      input.year,
-      input.section,
-      input.adult,
-    );
-    const entry = track({ media, status: 'PLANNING' });
-    statement('UPDATE tracked_media SET jellyfin_link=?, off_catalog=1 WHERE id=?').run(
-      JSON.stringify({ seriesId: input.id, season: 1 }),
-      entry.id,
-    );
-    // What was already watched in Jellyfin counts at once.
-    applyJellyfinProgress();
-    return getTracked(entry.id)!;
-  }
-  if (input.integration === 'stash') {
-    const media = sheetMedia(
-      stashWork(input.id),
-      input.kind,
-      input.title,
-      input.year,
-      input.section,
-      input.adult,
-    );
-    const entry = track({ media, status: 'PLANNING' });
-    statement('UPDATE tracked_media SET off_catalog=1 WHERE id=?').run(entry.id);
-    applyStashProgress();
-    return getTracked(entry.id)!;
-  }
-  const seriesId = Number(input.id);
-  if (!Number.isInteger(seriesId) || seriesId <= 0)
-    throw new AppError('VALIDATION_ERROR', 'Invalid Kavita series', 400);
+  const inventory = INVENTORIES[input.integration];
+  if (!inventory) throw new AppError('VALIDATION_ERROR', 'Unknown integration', 400);
   const media = sheetMedia(
-    kavitaMedia(seriesId),
+    inventory.work(input.id),
     input.kind,
     input.title,
     input.year,
     input.section,
+    input.adult,
   );
-  const entry = track({ media, status: 'READING', kavitaSeriesId: seriesId });
-  // Chosen by hand: automatic matching never moves this series elsewhere.
-  statement(
-    'UPDATE tracked_media SET kavita_series_id=?, kavita_manual=1, off_catalog=1 WHERE id=?',
-  ).run(seriesId, entry.id);
+  const entry = track({ media, status: inventory.status ?? 'PLANNING' });
+  inventory.adopt(entry.id, input.id);
   return getTracked(entry.id)!;
 }

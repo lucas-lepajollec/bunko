@@ -29,3 +29,13 @@ it('marks a work owned when any service holds it', () => {
     ownedByIntegration({ media: emptyMedia('stash:s2', 'Own', 'ANIME') } as TrackedMedia),
   ).toBe(true);
 });
+
+it('lays the settings overview out from the registry', async () => {
+  const { integrationPages } = await import('@/domain/integrations');
+  expect(integrationPages()).toEqual([
+    { id: 'reading', pages: ['suwayomi', 'kavita'] },
+    { id: 'video', pages: ['jellyfin', 'emby', 'stash'] },
+    { id: 'downloads', pages: ['arr'] },
+    { id: 'translation', pages: ['translation'] },
+  ]);
+});
