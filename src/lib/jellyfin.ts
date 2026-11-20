@@ -7,6 +7,7 @@ import type {
   JellyfinLibrary,
   JellyfinRole,
   JellyfinItem,
+  VideoServer,
   JellyfinLink,
   JellyfinPresence,
   JellyfinSeriesSummary,
@@ -93,11 +94,41 @@ export async function jellyfin<T>(
   return (text ? JSON.parse(text) : null) as T;
 }
 
+/**
+ * Jellyfin and Emby answer the same API. Jellyfin names itself (`ProductName`) and is version
+ * 10.x; Emby is 4.x without that name.
+ */
+export function videoServerOf(info: { ProductName?: string; Version?: string }): VideoServer {
+  if (/jellyfin/i.test(info.ProductName ?? '') || /^10\./.test(info.Version ?? ''))
+    return 'jellyfin';
+  return /emby/i.test(info.ProductName ?? '') || /^[1-4]\./.test(info.Version ?? '')
+    ? 'emby'
+    : 'jellyfin';
+}
 export async function jellyfinInfo(signal?: AbortSignal) {
-  return z
-    .object({ Version: z.string().optional(), ServerName: z.string().optional() })
+  const info = z
+    .object({
+      Version: z.string().optional(),
+      ServerName: z.string().optional(),
+      ProductName: z.string().optional(),
+      Id: z.string().optional(),
+    })
     .passthrough()
     .parse(await jellyfin('/System/Info', signal, 5000));
+  // Names, logo and web links follow the server actually connected.
+  const set = statement('INSERT OR REPLACE INTO worker_state(key,value) VALUES(?,?)');
+  set.run('video_server', videoServerOf(info));
+  if (info.Id) set.run('video_server_id', info.Id);
+  return { ...info, server: videoServerOf(info) };
+}
+/** The server's web page of an item (Emby's web app routes items its own way). */
+export function videoServerItemUrl(base: string, id: string) {
+  const server = statement("SELECT value FROM worker_state WHERE key='video_server'").pluck().get();
+  if (server !== 'emby') return `${base}/web/#/details?id=${id}`;
+  const serverId = statement("SELECT value FROM worker_state WHERE key='video_server_id'")
+    .pluck()
+    .get() as string | undefined;
+  return `${base}/web/index.html#!/item?id=${id}${serverId ? `&serverId=${serverId}` : ''}`;
 }
 
 /** The account whose watched state counts: the named user (which must exist), else an administrator. */
@@ -183,6 +214,8 @@ export async function jellyfinLibraries(signal?: AbortSignal): Promise<JellyfinL
 /** Rebuild the index: series of the anime (and series) libraries, episodes and watched flags. */
 export async function syncJellyfinIndex(signal?: AbortSignal) {
   if (!jellyfinConfigured()) return;
+  // Which server this is (Jellyfin or Emby) is read again on every pass.
+  await jellyfinInfo(signal).catch(() => undefined);
   const uid = await userId(signal);
   const libraries = (await jellyfinLibraries(signal)).filter((l) => l.role !== 'ignore');
   const seriesSchema = z.array(
@@ -536,7 +569,7 @@ export function jellyfinPresence(
       bySeason: [season],
       ownedCount: season.owned.length,
       playedCount: season.played.length,
-      url: `${base}/web/#/details?id=${match.series.id}`,
+      url: videoServerItemUrl(base, match.series.id),
       manual: true,
       absolute: true,
     };
@@ -556,7 +589,7 @@ export function jellyfinPresence(
     bySeason,
     ownedCount: bySeason.reduce((n, s) => n + s.owned.length, 0),
     playedCount: bySeason.reduce((n, s) => n + s.played.length, 0),
-    url: `${base}/web/#/details?id=${match.series.id}`,
+    url: videoServerItemUrl(base, match.series.id),
     manual: match.manual,
   };
 }

@@ -855,6 +855,8 @@ export type PublicSettings = Omit<Settings, SecretSetting> & {
   catalogs: { canManage: boolean; configured: Record<CatalogProvider, boolean> };
   /** Sections the account's video extensions declare, those the current 18+ mode shows. */
   extensionSections: ExtensionSection[];
+  /** The video server behind the Jellyfin connection: Jellyfin or Emby (same API, own names). */
+  videoServer: VideoServer;
 };
 /** A section of works an extension declares in its manifest (names are the extension's). */
 export interface ExtensionSectionRef {
@@ -958,6 +960,8 @@ export interface JellyfinPresence {
   /** Linked "in order": one list (season 0) numbered across the whole series. */
   absolute?: boolean;
 }
+/** Jellyfin, or Emby (Jellyfin's parent project, same API): detected from the server itself. */
+export type VideoServer = 'jellyfin' | 'emby';
 /** What a Jellyfin library holds for Bunko (anime now; series and films in later phases). */
 export type JellyfinRole = 'anime' | 'series' | 'movies' | 'animation' | 'ignore';
 export interface JellyfinLibrary {

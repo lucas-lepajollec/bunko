@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Emby: the Jellyfin connection also takes an Emby server (Jellyfin's parent project, same API).
+  Bunko tells which one it is from the server itself (`ProductName`, version 10.x for Jellyfin,
+  4.x for Emby) on every status check and sync; interface texts, logos and "Open in" links then
+  name and reach the server actually connected (`PublicSettings.videoServer`).
 - A work of your own can take a catalog work's facts (work settings › Catalog › _Take its facts_,
   the default off the catalog): synopsis, artwork, genres, score, universe and recommendations
   come from the catalog while its episodes or chapters, watched state and server links stay;

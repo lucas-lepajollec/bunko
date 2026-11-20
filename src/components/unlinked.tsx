@@ -11,7 +11,7 @@ import type {
 import { ApiFailure, mediaHref, send, useApi } from '@/lib/client/api';
 import { KINDS, isVideoKind, kindsOf, type Kind } from '@/domain/kinds';
 import { useI18n } from '@/i18n/I18nProvider';
-import { IntegrationLogo, INTEGRATION_NAMES } from './integration-logo';
+import { IntegrationLogo, useIntegrationName } from './integration-logo';
 import { CatalogPicker } from './relink';
 import { toast } from './notify';
 import { Cover, Empty, PosterSkeletons, cx, errorText, field, smallButton } from './ui';
@@ -32,6 +32,7 @@ export function UnlinkedInbox({
   onChanged: () => Promise<unknown>;
 }) {
   const { t, n } = useI18n();
+  const integrationName = useIntegrationName();
   const [integration, setIntegration] = useState<UnlinkedItem['integration'] | 'all'>('all');
   const [showIgnored, setShowIgnored] = useState(false);
   const [open, setOpen] = useState<Open>(null);
@@ -72,7 +73,7 @@ export function UnlinkedInbox({
         {integrations.map((x) => (
           <FilterChip key={x} on={integration === x} onClick={() => setIntegration(x)}>
             <IntegrationLogo id={x} className="size-5" />
-            {INTEGRATION_NAMES[x]}
+            {integrationName(x)}
             <span className="opacity-70">{n(count(x))}</span>
           </FilterChip>
         ))}
@@ -100,7 +101,7 @@ export function UnlinkedInbox({
                   <span className="text-muted flex flex-wrap items-center gap-x-2 text-xs">
                     <IntegrationLogo id={item.integration} className="size-4" />
                     {[
-                      INTEGRATION_NAMES[item.integration],
+                      integrationName(item.integration),
                       item.library,
                       item.year,
                       t(isVideoKind(item.kind) ? 'unlinked.items' : 'unlinked.chapters', {
