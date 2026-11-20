@@ -49,6 +49,23 @@ source failures. Profile owns the liked collection; the former favorites URL red
 Home shelf fades mask only the actual scrolling viewport edges, including the mobile page gutters;
 no absolutely positioned shadow layer covers cards inside that viewport.
 
+## Registries: adding a kind, a provider or an integration
+
+Views never decide by hand which kind, provider or service they handle; they ask a registry.
+
+| To add                       | Declare it in                                                                                                                                                                                                                                            | It then shows in                                                                                                  |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| A kind                       | `src/domain/kinds.ts` (`KINDS`: family, media type, formats, catalog, releases, unit, sources, `direction`…)                                                                                                                                             | menus, catalog, library chips, home shelves, planning, settings › media types, scope (`inKindScope`)              |
+| An extension's section       | nothing in Bunko: the extension declares it (`extvideo` catalogs: id, name, adult); Bunko remembers it (`extension_sections`)                                                                                                                            | the same places as a kind, under Extensions; on or off and ordered by the user (`hiddenSections`, `sectionOrder`) |
+| A catalog or server provider | `src/domain/providers.ts` (`PROVIDERS`: prefix, key format, origin) and a sheet loader in `DETAIL_LOADERS` (`src/lib/catalog.ts`)                                                                                                                        | id validation, sheets, works of one's own, library association, local search                                      |
+| An integration (service)     | `src/domain/integrations.ts` (name, category, settings pages, `owns`) and `src/lib/integrations.ts` (`configured`, `status`, `image`, `openIn`); an inventory in `src/lib/unlinked.ts` when it holds works; links through `src/lib/integration-links.ts` | status, worker, settings overview, owned marks, covers, "Open in…", Library › Unlinked, create a sheet            |
+
+Which works a view shows is one question with one answer, `inKindScope(media, { kind, section,
+enabled, hiddenSections })`, used by the library, home, planning, catalog search and "pick up where
+you left off". `tests/integrations-contract.test.ts` fails when an integration misses one of the
+places every integration needs (settings page and texts in every language, logo, server side,
+state, owned mark and images for media servers, image route for server providers).
+
 ## Data and execution
 
 - Same-origin cover and extension-icon transfers are scheduled in the browser, at most two at
