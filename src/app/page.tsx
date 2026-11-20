@@ -1,5 +1,5 @@
 'use client';
-import { KIND_IDS, KINDS as KIND_DEFS, byKindOrder, type Kind } from '@/domain/kinds';
+import { KIND_IDS, KINDS as KIND_DEFS, byKindOrder, kindOfMedia, type Kind } from '@/domain/kinds';
 import { MediaLink } from '@/components/media-link';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
@@ -330,7 +330,8 @@ function Hero({
         : t('home.newChapterKicker', { when: relative(r.releasedAt), meta: meta(m) });
   const releasesHref = r.featured
     ? catalogHref
-    : `/catalog?view=chapters${m.type === 'ANIME' ? '&kind=anime' : ''}`;
+    : // The releases of the work's own kind (and extension section).
+      `/catalog?view=chapters&kind=${kindOfMedia(m)}${m.extensionSection ? `&section=${encodeURIComponent(m.extensionSection.id)}` : ''}`;
   const releasesLabel = r.featured ? t('home.allShelf') : t('home.allReleases');
   const facts = [
     m.score ? (

@@ -139,26 +139,8 @@ export const media = z.object({
 /** A work id of a known provider (see `domain/providers.ts`). */
 export const mediaId = z.string().max(800).refine(isWorkId, 'Unknown media identifier');
 export const adultOverrideBody = z.object({
-  id: z
-    .string()
-    .max(80)
-    .refine((value) => {
-      const [provider, key, extra] = value.split(':');
-      if (!key || extra !== undefined) return false;
-      if (['metron', 'hardcover'].includes(provider)) return /^[1-9]\d{0,9}$/.test(key);
-      if (provider === 'rakuten') return /^\d{13}$/.test(key);
-      if (provider === 'jellyfin') return /^[0-9a-f]{32}$/i.test(key);
-      if (provider === 'tmdbtv' || provider === 'tmdbmovie') return /^[1-9]\d{0,9}$/.test(key);
-      if (provider === 'googlebooks') return /^[\w-]{1,60}$/.test(key);
-      if (provider === 'bnf') return /^cb\d+[a-z0-9]$/i.test(key);
-      if (provider === 'openlibrary') return /^OL[1-9]\d*W$/.test(key);
-      if (provider === 'mangadex') return z.uuid().safeParse(key).success;
-      if (provider === 'mangaupdates') return /^[1-9]\d{0,19}$/.test(key);
-      if (['anilist', 'suwayomi', 'kavita'].includes(provider))
-        return /^[1-9]\d{0,9}$/.test(key) && Number(key) <= 2_147_483_647;
-      return false;
-    }, 'Unknown media identifier')
-    .transform((value) => (value.startsWith('mangadex:') ? value.toLowerCase() : value)),
+  // Any work Bunko opens (catalog, server, extension), as the provider registry knows them.
+  id: mediaId.transform((value) => (value.startsWith('mangadex:') ? value.toLowerCase() : value)),
   adult: z.boolean().nullable(),
 });
 /** An extension section id, as extensions declare it (see `video-addons.ts`). */

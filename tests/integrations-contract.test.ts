@@ -56,3 +56,14 @@ it('lets every server provider be followed as a work of its own with an image ro
     expect(readFileSync(route, 'utf8')).toMatch(/cachedImageResponse|fetchImage/);
   }
 });
+
+it('opens a sheet for every provider whose ids are accepted', async () => {
+  const { hasDetailLoader } = await import('@/lib/catalog');
+  const { isWorkId } = await import('@/domain/providers');
+  for (const p of PROVIDERS) {
+    const opens = !('sheet' in p) || p.sheet !== false;
+    expect(hasDetailLoader(p.id), `sheet loader of ${p.id}`).toBe(opens);
+  }
+  expect(isWorkId('local:1')).toBe(false);
+  expect(isWorkId('stash:g12')).toBe(true);
+});

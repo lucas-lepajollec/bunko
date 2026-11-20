@@ -993,7 +993,8 @@ function snapshotTracked(id?: number) {
         coverUrl,
         coverChoice,
         kavitaCoverSync: Boolean(r.kavita_cover_sync),
-        jellyfinLink: (integrationLinksOf.get(id)?.jellyfin as TrackedMedia['jellyfinLink']) ?? null,
+        jellyfinLink:
+          (integrationLinksOf.get(id)?.jellyfin as TrackedMedia['jellyfinLink']) ?? null,
         ...(kavitaMap ? { kavitaMap } : {}),
         ...(typeof integrationLinksOf.get(id)?.stash === 'string'
           ? { stashLink: integrationLinksOf.get(id)!.stash as string }
@@ -1689,9 +1690,10 @@ export function migrateV33(database: Database.Database) {
     if (Number(database.pragma('user_version', { simple: true })) >= 33) return;
     database.exec(`INSERT OR IGNORE INTO extension_sections(id,name,adult,addons)
       SELECT json_extract(media_json,'$.extensionSection.id'), json_extract(media_json,'$.extensionSection.name'),
-        COALESCE(json_extract(media_json,'$.adult'),0), '[]'
+        MAX(COALESCE(json_extract(media_json,'$.adult'),0)), '[]'
       FROM tracked_media WHERE json_extract(media_json,'$.extensionSection.id') IS NOT NULL
-        AND json_extract(media_json,'$.extensionSection.name') IS NOT NULL`);
+        AND json_extract(media_json,'$.extensionSection.name') IS NOT NULL
+      GROUP BY json_extract(media_json,'$.extensionSection.id')`);
     database.pragma('user_version=33');
   })();
 }

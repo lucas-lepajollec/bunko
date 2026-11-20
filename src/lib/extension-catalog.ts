@@ -24,7 +24,8 @@ import {
   type ExtensionCatalog,
   type ExtensionCatalogAddon,
 } from './video-addons';
-import type { Kind } from '@/domain/kinds';
+import { NO_SECTION, type Kind } from '@/domain/kinds';
+import { getSettings } from './settings';
 
 /**
  * Generic catalogs exposed by the account's video extensions under the custom `extvideo` type.
@@ -78,13 +79,16 @@ type ExtMeta = z.infer<typeof metaSchema>;
  * What a page reads: the extension catalogs that joined one of Bunko's own kinds (`native`), or
  * the sections of the extension kind (`section`: one id, or null for every section).
  */
-export type ExtensionTarget = { native: Kind } | { section: string | null } | { every: true };
+export type ExtensionTarget =
+  { native: Kind } | { section: string | null; hidden?: readonly string[] } | { every: true };
 const inTarget = (catalog: ExtensionCatalog, target: ExtensionTarget) =>
   'every' in target
     ? true
     : 'native' in target
       ? catalog.native === target.native
       : catalog.native === null &&
+        // Sections the user turned off never show, even through "every section".
+        !target.hidden?.includes(catalog.section?.id ?? NO_SECTION) &&
         (target.section === null || catalog.section?.id === target.section);
 
 const streamSchema = z
@@ -308,7 +312,14 @@ async function readCatalog(
       const entry = lane[i];
       if (!entry) continue;
       const key = `${entry.addon.id}:${entry.meta.id}`;
-      const titleKey = `${entry.meta.type}:${entry.meta.name.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')}:${entry.meta.releaseInfo?.match(/\b(19|20)\d{2}\b/)?.[0] ?? ''}`;
+      const titleKey = `${entry.meta.type}:${entry.meta.name
+        .normalize('NFKD')
+        .replace(/\p{M}/gu, '')
+        .toLowerCase()
+        .replace(
+          /[^\p{L}\p{N}]/gu,
+          '',
+        )}:${entry.meta.releaseInfo?.match(/\b(19|20)\d{2}\b/)?.[0] ?? ''}`;
       if (seen.has(key) || (entry.meta.name && seenTitles.has(titleKey))) continue;
       seen.add(key);
       if (entry.meta.name) seenTitles.add(titleKey);
@@ -360,9 +371,12 @@ export async function extensionCatalogPage(
   };
 }
 /** The section of the extension kind a query asks for (none = every section). */
-export const sectionTarget = (section?: string | null): ExtensionTarget => ({
-  section: section ?? null,
-});
+/** One section of the extension kind, or every section the user keeps on (`null`). */
+export function sectionTarget(section?: string | null): ExtensionTarget {
+  const hidden = getSettings().hiddenSections;
+  // A section turned off since it was chosen falls back to every visible one.
+  return { section: section && !hidden.includes(section) ? section : null, hidden };
+}
 
 /** Genres and tags the extension catalogs offer themselves (runtime data, never project data). */
 export async function extensionCatalogFilters(

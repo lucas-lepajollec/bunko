@@ -1,5 +1,6 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+import { isCatalogWorkId } from '@/domain/providers';
 import { z } from 'zod';
 import { body, json, route } from '@/lib/api';
 import {
@@ -15,11 +16,7 @@ import { normalizeAnimeWorks } from '@/lib/anime-works';
 import { wakeWorker } from '@/lib/worker-events';
 
 /** Catalog ids a work can be joined by, any kind (anime, series, films, manga, books…). */
-const workId = z
-  .string()
-  .regex(
-    /^(anilist|tmdbtv|tmdbmovie|mangadex|mangaupdates|openlibrary|hardcover|metron|googlebooks|bnf|rakuten|royalroad):[\w.-]{1,100}$/,
-  );
+const workId = z.string().refine(isCatalogWorkId, 'Unknown work identifier');
 /** An AniList anime (the offline anime map knows it): two of them merge as seasons. */
 const isAnime = (id: number | null) => id !== null && idsOfAnilist(id) !== null;
 const anilistOf = (id: string) => (id.startsWith('anilist:') ? Number(id.slice(8)) : null);

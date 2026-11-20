@@ -259,15 +259,21 @@ export function JellyfinTab({
         </div>
       )}
 
-      {seriesId && manual !== 'none' && (media.video?.seasons?.length ?? 0) > 1 && (
-        <SeasonSources
-          media={media}
-          linked={linked}
-          seriesId={seriesId}
-          sources={current?.seasonSources ?? null}
-          onLink={onLink}
-        />
-      )}
+      {/* Seasons from separate series only apply when episodes follow seasons (not "in order"
+          and not chosen one by one). */}
+      {seriesId &&
+        manual !== 'none' &&
+        !linked?.episodes &&
+        linked?.order !== 'absolute' &&
+        (media.video?.seasons?.length ?? 0) > 1 && (
+          <SeasonSources
+            media={media}
+            linked={linked}
+            seriesId={seriesId}
+            sources={current?.seasonSources ?? null}
+            onLink={onLink}
+          />
+        )}
       {seriesId && manual !== 'none' && (
         <section className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
