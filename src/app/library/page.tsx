@@ -6,6 +6,7 @@ import {
   NO_SECTION,
   inKindScope,
   isVideoKind,
+  KINDS as KIND_DEFS,
   kindOfMedia,
   type Kind as RegistryKind,
 } from '@/domain/kinds';
@@ -618,7 +619,8 @@ function Library() {
                         'popular',
                         'title',
                         'added',
-                        ...(video ? [] : ['unlinked']),
+                        // "Without sources" only means something where reading sources apply.
+                        ...(!kind || kind === 'all' || KIND_DEFS[kind].sources ? ['unlinked'] : []),
                       ] as Sort[]
                     ).map((x) => ({
                       value: x,

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Review fixes after the plug-in refactor: unmarking episodes syncs every Jellyfin series of a
+  work; library ownership and "new" use the same season-by-season presence as the sheet;
+  `?play=next` waits for the work's progress; playback positions keep their season key when Stash
+  plays; the season picker hides in "in order" mode; 18+ can be set on Stash and extension works;
+  hidden extension sections never show through "every section"; undeclared sections go with their
+  last work; joinable ids and `local:` follow the provider registry (strict ids, 32-bit integers);
+  the source list keeps its spinner while extensions still answer; the home hero links to the
+  work's own kind; "without sources" sorting only where sources apply.
 - Plug-in contract (step 6): `tests/integrations-contract.test.ts` fails when a service misses one
   of the places every service needs (settings page and texts in every language, logo, server
   side, state, owned mark and images for media servers, image route for server providers), and

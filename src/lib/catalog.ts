@@ -787,6 +787,8 @@ const DETAIL_LOADERS: Partial<
   mangaupdates: (key, _id, signal) => mangaupdatesDetail(key, signal),
   suwayomi: (key, _id, signal) => loadSuwayomiDetail(Number(key), signal),
 };
+/** Whether a provider's works open as sheets (the plug-in contract test checks it). */
+export const hasDetailLoader = (id: ProviderId) => Boolean(DETAIL_LOADERS[id]);
 async function loadDetail(id: string, signal?: AbortSignal): Promise<MediaDetail> {
   const work = parseWorkId(id);
   const load = work && DETAIL_LOADERS[work.provider.id as ProviderId];

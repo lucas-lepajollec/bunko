@@ -47,3 +47,14 @@ it('orders sections as the user chose, new ones after in the extension order', (
   const sections = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
   expect(sortSections(sections, ['c', 'a']).map((s) => s.id)).toEqual(['c', 'a', 'b', 'd']);
 });
+
+it('never reads a section the user turned off, even through "every section"', async () => {
+  const { updateSettings } = await import('@/lib/settings');
+  const { sectionTarget } = await import('@/lib/extension-catalog');
+  updateSettings({ hiddenSections: ['clips'] });
+  expect(sectionTarget(null)).toEqual({ section: null, hidden: ['clips'] });
+  // Chosen before it was turned off: every visible section instead.
+  expect(sectionTarget('clips')).toEqual({ section: null, hidden: ['clips'] });
+  expect(sectionTarget('films')).toEqual({ section: 'films', hidden: ['clips'] });
+  updateSettings({ hiddenSections: [] });
+});

@@ -1143,7 +1143,12 @@ export async function syncWatchedToJellyfin(
     .slice(0, 500);
   if (!changes.length) return;
   const uid = await userId(signal);
-  const series = jellyfinIndex().byId.get(presence.seriesId);
+  // Every series holding the work (a season can be a series of its own).
+  const index = jellyfinIndex();
+  const held = [...new Set([presence.seriesId, ...(presence.seriesIds ?? [])])]
+    .map((id) => index.byId.get(id))
+    .filter((x): x is NonNullable<typeof x> => Boolean(x));
+  const touched = new Set<string>();
   for (const [n, e] of changes) {
     const played = n <= (watched ?? 0);
     const paths = [`/UserPlayedItems/${e.id}?userId=${uid}`, `/Users/${uid}/PlayedItems/${e.id}`];
@@ -1155,12 +1160,18 @@ export async function syncWatchedToJellyfin(
         /* Older Jellyfin: the other form. */
       }
     }
-    for (const list of Object.values(series?.seasons ?? {}))
-      for (const episode of list) if (episode.id === e.id) episode.played = played;
+    for (const series of held)
+      for (const list of Object.values(series.seasons))
+        for (const episode of list)
+          if (episode.id === e.id) {
+            episode.played = played;
+            touched.add(series.id);
+          }
   }
-  if (series)
-    statement('UPDATE jellyfin_series SET payload=? WHERE series_id=?').run(
-      JSON.stringify(series),
-      series.id,
-    );
+  for (const series of held)
+    if (touched.has(series.id))
+      statement('UPDATE jellyfin_series SET payload=? WHERE series_id=?').run(
+        JSON.stringify(series),
+        series.id,
+      );
 }

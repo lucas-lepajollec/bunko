@@ -1,6 +1,12 @@
 import type { AnimeSeason, EpisodeRange, TrackedMedia } from '@/types/shared';
 import { isFilm } from '@/domain/progress';
-import { jellyfinConfigured, matchJellyfin, resetJellyfinProgress, workAired } from './jellyfin';
+import {
+  jellyfinConfigured,
+  jellyfinEpisodesOfWork,
+  jellyfinPresence,
+  resetJellyfinProgress,
+  workAired,
+} from './jellyfin';
 import { knownSeasons, linkedMembers } from './anime-franchise';
 import { inTenant, tenantId, tenantState } from './tenant-context';
 
@@ -130,6 +136,8 @@ export function videoNews(
   e: TrackedMedia,
   seasons: AnimeSeason[] | undefined,
   jellyfinSeasons: Record<string, { n: number }[]> | null,
+  /** Episodes the server holds, numbered across the work (its seasons may be separate series). */
+  ownedAcross?: ReadonlySet<number>,
 ): TrackedMedia['news'] {
   if (!seasons) return null;
   const work = displaySeasons(seasons);
@@ -141,7 +149,9 @@ export function videoNews(
   const read = Math.min(total, seen);
   const watch = e.status === 'DROPPED' || read >= total ? [] : toRanges([[read + 1, total]], work);
   const missing: number[] = [];
-  if (jellyfinSeasons) {
+  if (ownedAcross) {
+    for (let n = 1; n <= total; n++) if (!ownedAcross.has(n)) missing.push(n);
+  } else if (jellyfinSeasons) {
     let before = 0;
     for (const s of work) {
       const owned = new Set((jellyfinSeasons[String(s.season)] ?? []).map((x) => x.n));
@@ -160,16 +170,12 @@ export function withVideoOwnership(entries: TrackedMedia[]): TrackedMedia[] {
     // Media mechanics (film vs episodic) follow the underlying format, never the user's kindOverride.
     const film = isFilm(e);
     let jellyfinOwned = 0;
-    const match = jellyfin ? matchJellyfin(e.media, e.jellyfinLink) : null;
-    if (jellyfin) {
-      if (match)
-        jellyfinOwned = film
-          ? 1
-          : Object.entries(match.series.seasons)
-              .filter(([season]) => Number(season) >= 1)
-              .reduce((n, [, episodes]) => n + new Set(episodes.map((x) => x.n)).size, 0) || 1;
-    }
     const seasons = e.media.anilistId ? knownSeasons(e.media.anilistId) : null;
+    // What the sheet shows: every series holding the work (a season can be a series of its own).
+    const presence = jellyfin ? jellyfinPresence(e.media, e.jellyfinLink) : null;
+    const owned =
+      presence && !film ? new Set(jellyfinEpisodesOfWork(presence, seasons).keys()) : null;
+    if (presence) jellyfinOwned = film ? 1 : owned!.size || 1;
     // A film saga with linked films tracks progress across all linked films (even before cache warm).
     const multiPartFilm =
       film &&
@@ -188,7 +194,8 @@ export function withVideoOwnership(entries: TrackedMedia[]): TrackedMedia[] {
               e,
               seasons ?? undefined,
               // Only works the media server holds at all: one missing nothing is no news.
-              match ? match.series.seasons : null,
+              null,
+              owned ?? undefined,
             ),
     };
   });

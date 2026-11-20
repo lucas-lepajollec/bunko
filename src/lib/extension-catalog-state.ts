@@ -91,7 +91,11 @@ export function resetExtensionSections() {}
  * keep a kind to show under).
  */
 export function visibleExtensionSections(adultOnly: boolean): ExtensionSection[] {
-  return rows()
+  const all = rows();
+  // Undeclared sections only stay while a work is filed under them (the last one may be gone).
+  const filed = all.some((r) => r.addons === '[]') ? filedSections() : null;
+  return all
+    .filter((r) => r.addons !== '[]' || filed!.has(r.id))
     .filter((r) => Boolean(r.adult) === adultOnly)
     .map((r) => ({ id: r.id, name: r.name, adult: Boolean(r.adult) }));
 }

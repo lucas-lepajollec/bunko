@@ -99,14 +99,17 @@ function mergeStreams(
   local: { data?: VideoStreams; isLoading: boolean },
   remote: { data?: VideoStreams; isLoading: boolean },
   hasLocal: boolean,
-): { data?: VideoStreams; isLoading: boolean } {
+): { data?: VideoStreams; isLoading: boolean; more: boolean } {
   const parts = [hasLocal ? local.data : undefined, remote.data].filter((p): p is VideoStreams =>
     Boolean(p),
   );
-  // A work with server sources plays as soon as they answer, without waiting for extensions.
-  const ready = hasLocal
-    ? Boolean(local.data?.streams.length) || Boolean(remote.data)
-    : Boolean(remote.data);
+  const localDone = !hasLocal || Boolean(local.data) || !local.isLoading;
+  const remoteDone = Boolean(remote.data) || !remote.isLoading;
+  // A work with server sources plays as soon as they answer, without waiting for extensions;
+  // otherwise the list is ready once every source answered (or failed).
+  const ready =
+    Boolean(hasLocal && local.data?.streams.length) ||
+    (localDone && remoteDone && parts.length > 0);
   return {
     data: ready
       ? {
@@ -115,7 +118,9 @@ function mergeStreams(
           errors: parts.flatMap((p) => p.errors),
         }
       : undefined,
-    isLoading: !ready && (local.isLoading || remote.isLoading),
+    isLoading: !ready && !(localDone && remoteDone),
+    // Sources still answering while the list already shows.
+    more: ready && !(localDone && remoteDone),
   };
 }
 export const streamsPath = (episode: PlayerEpisode, language: string) =>
@@ -136,19 +141,20 @@ export const streamsPath = (episode: PlayerEpisode, language: string) =>
 
 /** Key of an episode's saved position (`anilist:21:3`, `tt0944947:1:2`, `tmdb:550`, `ext:…:1`). */
 export const positionKey = (e: PlayerEpisode) => {
+  // A catalog episode keeps its own key (its season's, whatever source plays it).
+  if (e.seasonAnilistId) return `anilist:${e.seasonAnilistId}:${e.episode}`;
+  if (e.imdb && (e.imdb.id || e.imdb.tmdb))
+    return `${e.imdb.id ?? `tmdb:${e.imdb.tmdb}`}${
+      e.imdb.season !== null ? `:${e.imdb.season}:${e.episode}` : ''
+    }`;
+  // A work of its own (extension, Stash): its id and the episode.
   if (e.streamsUrl || e.localStreamsUrl) {
     if (e.resume?.media.id && /^[\w.:-]+$/.test(e.resume.media.id))
       return `${e.resume.media.id}:${e.episode}`;
     const ext = e.streamsUrl ? new URL(e.streamsUrl, 'http://x').searchParams.get('ext') : null;
     return ext && /^[\w.:-]+$/.test(ext) ? `${ext}:${e.episode}` : null;
   }
-  return e.seasonAnilistId
-    ? `anilist:${e.seasonAnilistId}:${e.episode}`
-    : e.imdb && (e.imdb.id || e.imdb.tmdb)
-      ? `${e.imdb.id ?? `tmdb:${e.imdb.tmdb}`}${
-          e.imdb.season !== null ? `:${e.imdb.season}:${e.episode}` : ''
-        }`
-      : null;
+  return null;
 };
 
 export interface PlayerEpisode {
@@ -362,7 +368,7 @@ export function Player({
             )}
             <SourceSheet
               episode={episode}
-              loading={streams.isLoading}
+              loading={streams.isLoading || streams.more}
               streams={shown}
               torrents={showTorrents ? 0 : torrents.length}
               onShowTorrents={() => setShowTorrents(true)}

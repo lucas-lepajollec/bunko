@@ -1,4 +1,5 @@
 'use client';
+import { isCatalogWorkId } from '@/domain/providers';
 import Link from 'next/link';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { setNotice } from '@/lib/client/notices';
@@ -330,11 +331,7 @@ export function CatalogTab({
 /** The catalog id a work can be joined by (AniList anime, TMDB series and films). */
 export function workIdOf(media: Pick<UnifiedMedia, 'id' | 'anilistId'>): string | null {
   if (media.anilistId) return `anilist:${media.anilistId}`;
-  return /^(tmdbtv|tmdbmovie|mangadex|mangaupdates|openlibrary|hardcover|metron|googlebooks|bnf|rakuten|royalroad):[\w.-]{1,100}$/.test(
-    media.id,
-  )
-    ? media.id
-    : null;
+  return isCatalogWorkId(media.id) ? media.id : null;
 }
 function WorkParts({ root, kind }: { root: string; kind: ReturnType<typeof kindOf> }) {
   const { t } = useI18n();
