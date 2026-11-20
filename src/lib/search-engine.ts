@@ -73,7 +73,10 @@ const PROVIDER_RANK: Record<string, number> = {
 const providerOf = (m: UnifiedMedia) => m.id.slice(0, m.id.indexOf(':'));
 const providerRank = (m: UnifiedMedia) => PROVIDER_RANK[providerOf(m)] ?? 12;
 const isLocalItem = (m: UnifiedMedia) =>
-  m.id.startsWith('kavita:') || m.id.startsWith('suwayomi:') || m.id.startsWith('jellyfin:');
+  m.id.startsWith('kavita:') ||
+  m.id.startsWith('suwayomi:') ||
+  m.id.startsWith('jellyfin:') ||
+  m.id.startsWith('stash:');
 
 function effectiveFormat(m: UnifiedMedia): string | null {
   if (m.format) return m.format;
@@ -215,17 +218,17 @@ export function deduplicate(input: UnifiedMedia[]): UnifiedMedia[] {
       !target.trackedId &&
       !hasEditionQualifier(media.title)
     ) {
-      target.altTitles = [...new Set([target.title, ...target.altTitles, ...media.altTitles])].filter(
-        (t) => t !== media.title,
-      );
+      target.altTitles = [
+        ...new Set([target.title, ...target.altTitles, ...media.altTitles]),
+      ].filter((t) => t !== media.title);
       target.id = media.id;
       target.title = media.title;
       if (media.format) target.format = media.format;
       if (media.coverUrl) target.coverUrl = media.coverUrl;
     } else {
-      target.altTitles = [...new Set([...target.altTitles, media.title, ...media.altTitles])].filter(
-        (t) => t !== target.title,
-      );
+      target.altTitles = [
+        ...new Set([...target.altTitles, media.title, ...media.altTitles]),
+      ].filter((t) => t !== target.title);
     }
     target.adult = Boolean(target.adult || media.adult);
     providerIds.set(target, new Map([...(providerIds.get(target) ?? ids(target)), ...ids(media)]));

@@ -8,6 +8,7 @@ import { kavitaAdmin } from '@/lib/kavita-client';
 import { endpoint } from '@/lib/http';
 import { tradocInfo } from '@/lib/translations';
 import { jellyfinInfo } from '@/lib/jellyfin';
+import { stashInfo } from '@/lib/stash';
 import { arrConfigured, arrInfo } from '@/lib/media-requests';
 import { qbittorrentConfigured, qbittorrentVersion } from '@/lib/qbittorrent';
 /** Reachability of the services the interface depends on; never returns upstream details. */
@@ -18,6 +19,7 @@ export const GET = route(async (r) => {
     kavita: { state: 'unconfigured', admin: null },
     tradoc: { state: 'unconfigured', version: null },
     jellyfin: { state: 'unconfigured', version: null },
+    stash: { state: 'unconfigured', version: null },
     sonarr: { state: 'unconfigured', version: null },
     radarr: { state: 'unconfigured', version: null },
     prowlarr: { state: 'unconfigured', version: null },
@@ -58,6 +60,14 @@ export const GET = route(async (r) => {
         status.jellyfin = { state: 'ok', version: info.Version ?? null };
       } catch {
         status.jellyfin = { state: 'error', version: null };
+      }
+    })(),
+    (async () => {
+      if (!settings.stashUrl || !settings.stashApiKey) return;
+      try {
+        status.stash = { state: 'ok', version: (await stashInfo(r.signal)).version };
+      } catch {
+        status.stash = { state: 'error', version: null };
       }
     })(),
     (async () => {

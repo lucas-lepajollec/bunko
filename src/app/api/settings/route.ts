@@ -42,6 +42,8 @@ const SERVICE_KEYS = [
   'jellyfinUrl',
   'jellyfinApiKey',
   'jellyfinUser',
+  'stashUrl',
+  'stashApiKey',
   'jellyfinLibraries',
   'videoAddons',
 ];
@@ -55,7 +57,11 @@ export const PATCH = route(async (r) => {
   const result = updateSettings(patch);
   if (patch.extensionRepos) await configureRepos(patch.extensionRepos);
   // Jellyfin connected or retuned: index and import now, not at the next scheduled cycle.
-  if (Object.keys(patch).some((k) => k.startsWith('jellyfin') || k === 'autoImportJellyfin'))
+  if (
+    Object.keys(patch).some(
+      (k) => k.startsWith('jellyfin') || k.startsWith('stash') || k === 'autoImportJellyfin',
+    )
+  )
     wakeWorker();
   return json(result);
 });

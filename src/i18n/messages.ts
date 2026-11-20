@@ -884,6 +884,24 @@ const en: Dictionary = {
   'settings.integrations.intro':
     'The services Bunko works with, by what they bring. Open one to connect it and set it up.',
   'settings.integrations.overview': 'Overview',
+  'settings.section.stash': 'Stash',
+  'settings.service.stashTip':
+    'Your Stash server: its groups and scenes become works of the kind you choose, and what you watch stays in step both ways. Create an API key in Stash → Settings → Security.',
+  'settings.integrations.hint.stash':
+    'Your own videos: groups and scenes as works of any kind, watched state both ways.',
+  'stash.optionsHint':
+    'Bunko re-reads Stash every 15 minutes. Groups and scenes outside a group that no work is linked to wait in Library › Unlinked.',
+  'stash.syncNow': 'Re-read Stash now',
+  'stash.synced': 'Stash read.',
+  'stash.open': 'Open in Stash',
+  'jobs.name.stash': 'Stash sync',
+  'jobs.desc.stash': "Reads Stash's groups and scenes and what was watched.",
+  'jobs.group.stash': 'Stash',
+  'activity.task.stash': 'Stash sync',
+  'error.STASH_UNREACHABLE': 'Stash cannot be reached.',
+  'error.STASH_TIMEOUT': 'Stash took too long to answer.',
+  'error.STASH_UNAUTHORIZED': 'Stash rejected the API key.',
+  'error.STASH_ERROR': 'Stash returned an unexpected error.',
   'settings.integrations.cat.reading': 'Reading',
   'settings.integrations.cat.video': 'Video',
   'settings.integrations.cat.downloads': 'Downloads',
@@ -2941,6 +2959,24 @@ const fr: Dictionary = {
   'settings.integrations.intro':
     'Les services avec lesquels Bunko travaille, par ce qu’ils apportent. Ouvre-en un pour le connecter et le régler.',
   'settings.integrations.overview': 'Vue d’ensemble',
+  'settings.section.stash': 'Stash',
+  'settings.service.stashTip':
+    'Ton serveur Stash : ses groupes et scènes deviennent des œuvres du type que tu choisis, et ce que tu regardes reste synchronisé dans les deux sens. Crée une clé d’API dans Stash → Paramètres → Sécurité.',
+  'settings.integrations.hint.stash':
+    'Tes propres vidéos : groupes et scènes comme œuvres de n’importe quel type, vu dans les deux sens.',
+  'stash.optionsHint':
+    'Bunko relit Stash toutes les 15 minutes. Les groupes et les scènes hors groupe qu’aucune œuvre ne relie attendent dans Bibliothèque › Non reliés.',
+  'stash.syncNow': 'Relire Stash maintenant',
+  'stash.synced': 'Stash relu.',
+  'stash.open': 'Ouvrir dans Stash',
+  'jobs.name.stash': 'Synchro Stash',
+  'jobs.desc.stash': 'Lit les groupes et scènes de Stash et ce qui a été vu.',
+  'jobs.group.stash': 'Stash',
+  'activity.task.stash': 'Synchro Stash',
+  'error.STASH_UNREACHABLE': 'Stash est injoignable.',
+  'error.STASH_TIMEOUT': 'Stash a mis trop de temps à répondre.',
+  'error.STASH_UNAUTHORIZED': 'Stash a refusé la clé d’API.',
+  'error.STASH_ERROR': 'Stash a renvoyé une erreur inattendue.',
   'settings.integrations.cat.reading': 'Lecture',
   'settings.integrations.cat.video': 'Vidéo',
   'settings.integrations.cat.downloads': 'Téléchargements',
@@ -5005,6 +5041,24 @@ const es: Dictionary = {
   'settings.integrations.intro':
     'Los servicios con los que trabaja Bunko, según lo que aportan. Abre uno para conectarlo y configurarlo.',
   'settings.integrations.overview': 'Vista general',
+  'settings.section.stash': 'Stash',
+  'settings.service.stashTip':
+    'Tu servidor Stash: sus grupos y escenas se convierten en obras del tipo que elijas, y lo que ves se sincroniza en ambos sentidos. Crea una clave de API en Stash → Ajustes → Seguridad.',
+  'settings.integrations.hint.stash':
+    'Tus propios vídeos: grupos y escenas como obras de cualquier tipo, vistos en ambos sentidos.',
+  'stash.optionsHint':
+    'Bunko vuelve a leer Stash cada 15 minutos. Los grupos y escenas sin grupo que ninguna obra enlaza esperan en Biblioteca › Sin enlazar.',
+  'stash.syncNow': 'Releer Stash ahora',
+  'stash.synced': 'Stash leído.',
+  'stash.open': 'Abrir en Stash',
+  'jobs.name.stash': 'Sincronización de Stash',
+  'jobs.desc.stash': 'Lee los grupos y escenas de Stash y lo visto.',
+  'jobs.group.stash': 'Stash',
+  'activity.task.stash': 'Sincronización de Stash',
+  'error.STASH_UNREACHABLE': 'No se puede acceder a Stash.',
+  'error.STASH_TIMEOUT': 'Stash tardó demasiado en responder.',
+  'error.STASH_UNAUTHORIZED': 'Stash rechazó la clave de API.',
+  'error.STASH_ERROR': 'Stash devolvió un error inesperado.',
   'settings.integrations.cat.reading': 'Lectura',
   'settings.integrations.cat.video': 'Vídeo',
   'settings.integrations.cat.downloads': 'Descargas',
@@ -7070,6 +7124,24 @@ const de: Dictionary = {
   'settings.integrations.intro':
     'Die Dienste, mit denen Bunko arbeitet, nach dem, was sie beitragen. Öffne einen, um ihn zu verbinden und einzurichten.',
   'settings.integrations.overview': 'Übersicht',
+  'settings.section.stash': 'Stash',
+  'settings.service.stashTip':
+    'Dein Stash-Server: Seine Gruppen und Szenen werden Werke der gewählten Art, und was du schaust, bleibt in beide Richtungen abgeglichen. Erstelle einen API-Schlüssel unter Stash → Einstellungen → Sicherheit.',
+  'settings.integrations.hint.stash':
+    'Deine eigenen Videos: Gruppen und Szenen als Werke jeder Art, gesehen in beide Richtungen.',
+  'stash.optionsHint':
+    'Bunko liest Stash alle 15 Minuten neu. Gruppen und Szenen ohne Gruppe, die mit keinem Werk verknüpft sind, warten unter Bibliothek › Nicht verknüpft.',
+  'stash.syncNow': 'Stash jetzt neu lesen',
+  'stash.synced': 'Stash gelesen.',
+  'stash.open': 'In Stash öffnen',
+  'jobs.name.stash': 'Stash-Abgleich',
+  'jobs.desc.stash': 'Liest Gruppen und Szenen von Stash und was gesehen wurde.',
+  'jobs.group.stash': 'Stash',
+  'activity.task.stash': 'Stash-Abgleich',
+  'error.STASH_UNREACHABLE': 'Stash ist nicht erreichbar.',
+  'error.STASH_TIMEOUT': 'Stash hat zu lange gebraucht.',
+  'error.STASH_UNAUTHORIZED': 'Stash hat den API-Schlüssel abgelehnt.',
+  'error.STASH_ERROR': 'Stash hat einen unerwarteten Fehler gemeldet.',
   'settings.integrations.cat.reading': 'Lesen',
   'settings.integrations.cat.video': 'Video',
   'settings.integrations.cat.downloads': 'Downloads',
@@ -9139,6 +9211,24 @@ const it: Dictionary = {
   'settings.integrations.intro':
     'I servizi con cui lavora Bunko, per ciò che portano. Aprine uno per collegarlo e configurarlo.',
   'settings.integrations.overview': 'Panoramica',
+  'settings.section.stash': 'Stash',
+  'settings.service.stashTip':
+    'Il tuo server Stash: i suoi gruppi e le sue scene diventano opere del tipo scelto, e ciò che guardi resta sincronizzato nei due sensi. Crea una chiave API in Stash → Impostazioni → Sicurezza.',
+  'settings.integrations.hint.stash':
+    'I tuoi video: gruppi e scene come opere di qualsiasi tipo, visti nei due sensi.',
+  'stash.optionsHint':
+    'Bunko rilegge Stash ogni 15 minuti. I gruppi e le scene senza gruppo non collegati a nessuna opera aspettano in Libreria › Non collegati.',
+  'stash.syncNow': 'Rileggi Stash ora',
+  'stash.synced': 'Stash letto.',
+  'stash.open': 'Apri in Stash',
+  'jobs.name.stash': 'Sincronizzazione Stash',
+  'jobs.desc.stash': 'Legge i gruppi e le scene di Stash e ciò che è stato visto.',
+  'jobs.group.stash': 'Stash',
+  'activity.task.stash': 'Sincronizzazione Stash',
+  'error.STASH_UNREACHABLE': 'Stash non è raggiungibile.',
+  'error.STASH_TIMEOUT': 'Stash ha impiegato troppo a rispondere.',
+  'error.STASH_UNAUTHORIZED': 'Stash ha rifiutato la chiave API.',
+  'error.STASH_ERROR': 'Stash ha restituito un errore inatteso.',
   'settings.integrations.cat.reading': 'Lettura',
   'settings.integrations.cat.video': 'Video',
   'settings.integrations.cat.downloads': 'Download',

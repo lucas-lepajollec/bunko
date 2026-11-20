@@ -214,6 +214,7 @@ export function db(): Database.Database {
     migrateV29(connection);
     migrateV30(connection);
     migrateV31(connection);
+    migrateV32(connection);
     // Heal any self-referential work_links rows that could hide a root work from the library.
     connection.exec('DELETE FROM work_links WHERE member = root');
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
@@ -853,7 +854,7 @@ function snapshotTracked(id?: number) {
         kavitaMap,
       );
       const identity =
-        r.off_catalog || /^(kavita|suwayomi|local|jellyfin):/.test(rawMedia.id)
+        r.off_catalog || /^(kavita|suwayomi|local|jellyfin|stash):/.test(rawMedia.id)
           ? 'off-catalog'
           : 'catalog';
       const automaticCovers = [
@@ -990,6 +991,7 @@ function snapshotTracked(id?: number) {
         kavitaCoverSync: Boolean(r.kavita_cover_sync),
         jellyfinLink: r.jellyfin_link ? JSON.parse(String(r.jellyfin_link)) : null,
         ...(kavitaMap ? { kavitaMap } : {}),
+        ...(r.stash_link ? { stashLink: String(r.stash_link) } : {}),
         kavitaCover:
           !r.kavita_cover_sync || !kavita || !coverUrl
             ? { state: 'none', error: null }
@@ -1654,6 +1656,21 @@ export function migrateV31(database: Database.Database) {
     database.pragma('user_version=31');
   })();
 }
+/** Stash: the index of groups and scenes, and the Stash item a work is linked to by hand. */
+export function migrateV32(database: Database.Database) {
+  database.transaction(() => {
+    database.exec(
+      'CREATE TABLE IF NOT EXISTS stash_items (id TEXT PRIMARY KEY, payload TEXT NOT NULL)',
+    );
+    if (Number(database.pragma('user_version', { simple: true })) >= 32) return;
+    const columns = database.prepare('PRAGMA table_info(tracked_media)').all() as {
+      name: string;
+    }[];
+    if (!columns.some((c) => c.name === 'stash_link'))
+      database.exec('ALTER TABLE tracked_media ADD COLUMN stash_link TEXT');
+    database.pragma('user_version=32');
+  })();
+}
 /** Parts of a catalog sheet that a followed work never stores. */
 const SHEET_ONLY_KEYS = [
   'recommendations',
@@ -1662,6 +1679,7 @@ const SHEET_ONLY_KEYS = [
   'tags',
   'credits',
   'jellyfin',
+  'stash',
   'pending',
   'partial',
   'workOf',

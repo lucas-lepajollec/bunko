@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Stash integration (Settings › Integrations › Stash: address and API key). Bunko reads the
+  server's groups and scenes every 15 minutes (GraphQL; Stash 0.27 groups, older servers'
+  movies) and lists the groups and the scenes outside any group that no work is linked to in
+  Library › Unlinked. A group becomes a work with its scenes as episodes (in the group's order),
+  a scene a film, of any kind including extension sections; or an item is linked to a catalog
+  work (`stashLink`). Scenes played in Stash move progress forward; watched marks in Bunko go
+  back to Stash (played up to the mark, reset after it). Sheets show "Open in Stash"; images are
+  fetched server-side with the key. Schema v32 (`stash_items`, `tracked_media.stash_link`).
 - Settings › Integrations: an overview of every service by what it brings (reading, video,
   downloads, translation) with its logo and state, and one page per service underneath (shown
   indented with its logo in the menu, a way back to the overview on each page). Jellyfin and Emby

@@ -179,6 +179,7 @@ type CategoryId = 'libraries' | 'releases' | 'enrichment' | 'transfers';
 const JOB_CATEGORY: Record<BackgroundJobId, CategoryId> = {
   'kavita-index': 'libraries',
   jellyfin: 'libraries',
+  stash: 'libraries',
   'update-check': 'releases',
   'release-ingestion': 'releases',
   'source-matching': 'enrichment',

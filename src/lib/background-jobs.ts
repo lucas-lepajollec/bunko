@@ -17,6 +17,7 @@ import { requestUpdateCheck } from './downloads';
 import { requestKavitaSync } from './kavita-index';
 import { jellyfinConfigured, jellyfinImportProgress, requestJellyfinSync } from './jellyfin';
 import { refreshReleases } from './releases';
+import { requestStashSync, stashConfigured } from './stash';
 import { sourceMatchQueue } from './source-match-state';
 import { activeTranslations } from './translations';
 import { catalogLinkingNext, requestCatalogLinking } from './catalog-linking';
@@ -100,6 +101,16 @@ const JOBS: Definition[] = [
     },
   },
   {
+    id: 'stash',
+    group: 'stash',
+    applies: () => stashConfigured() && video(),
+    next: () => after(stamp('stash_synced_at'), 15 * MINUTE),
+    run: () => {
+      requestStashSync();
+      wakeWorker();
+    },
+  },
+  {
     id: 'catalog-linking',
     group: 'catalogs',
     // Imported works of every kind (Kavita and Jellyfin), and anime seasons.
@@ -147,6 +158,7 @@ const GROUP_ORDER: BackgroundJobGroup[] = [
   'suwayomi',
   'kavita',
   'jellyfin',
+  'stash',
   'catalogs',
   'tradoc',
   'bunko',

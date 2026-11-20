@@ -6,7 +6,7 @@ import { KIND_IDS } from '@/domain/kinds';
 import { wakeWorker } from '@/lib/worker-events';
 import { createSheet, setUnlinkedIgnored, unlinkedItems } from '@/lib/unlinked';
 
-const integration = z.enum(['jellyfin', 'kavita']);
+const integration = z.enum(['jellyfin', 'kavita', 'stash']);
 const itemId = z.string().min(1).max(100);
 
 /** What the integrations hold that no work is linked to (ignored items included, flagged). */

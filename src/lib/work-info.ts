@@ -23,6 +23,8 @@ async function serverWork(id: string): Promise<UnifiedMedia | null> {
   try {
     if (id.startsWith('jellyfin:'))
       return (await import('./jellyfin')).jellyfinWorkOf(id.slice('jellyfin:'.length));
+    if (id.startsWith('stash:'))
+      return (await import('./stash')).stashWork(id.slice('stash:'.length));
     if (id.startsWith('kavita:'))
       return (await import('./kavita-track')).kavitaMedia(Number(id.slice('kavita:'.length)));
   } catch {
@@ -32,7 +34,8 @@ async function serverWork(id: string): Promise<UnifiedMedia | null> {
 }
 
 /** Artwork that only stands in for a real cover: the server's own image. */
-const serverCover = (url: string | null) => !url || /^\/api\/(jellyfin|kavita)\/image\?/.test(url);
+const serverCover = (url: string | null) =>
+  !url || /^\/api\/(jellyfin|kavita|stash)\/image\?/.test(url);
 
 /** The facts of `info` on `own`; the cover too while `own` only has the server's image. */
 export function withInfo<T extends UnifiedMedia>(own: T, info: UnifiedMedia, keepCover = false): T {
