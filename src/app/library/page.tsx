@@ -126,11 +126,13 @@ function ofKind(
   kind: Kind,
   section: string | null = null,
   enabled: ReadonlySet<Kind> | null = null,
+  hiddenSections: readonly string[] = [],
 ) {
   return inKindScope(e.media, {
     kind,
     section,
     enabled: enabled ? ([...enabled] as RegistryKind[]) : null,
+    hiddenSections,
   });
 }
 const PROGRESS_REFRESH_COOLDOWN_MS = 120_000;
@@ -196,8 +198,11 @@ function Library() {
     for (const e of library.data ?? [])
       if (e.media.extensionSection && !out.has(e.media.extensionSection.id))
         out.set(e.media.extensionSection.id, e.media.extensionSection.name);
-    return [...out].map(([id, name]) => ({ id, name }));
-  }, [universe.sections, library.data]);
+    // Sections turned off in the settings stay out, like a kind turned off.
+    return [...out]
+      .filter(([id]) => !universe.hiddenSections.includes(id))
+      .map(([id, name]) => ({ id, name }));
+  }, [universe.sections, universe.hiddenSections, library.data]);
   const [chosenSection, setChosenSection] = useViewState<string>('section', '', [
     '',
     NO_SECTION,
@@ -215,7 +220,8 @@ function Library() {
     () => (universe.ready ? new Set<Kind>(universe.chosen) : null),
     [universe.ready, universe.chosen],
   );
-  const ofKindHere = (e: TrackedMedia) => ofKind(e, kind, section, enabledKinds);
+  const ofKindHere = (e: TrackedMedia) =>
+    ofKind(e, kind, section, enabledKinds, universe.hiddenSections);
   // Anime speaks of episodes and watching; every label follows the kind on screen.
   const video = isVideoKind(kind);
   const vt = (key: string, vars?: Record<string, string | number>) =>
@@ -263,9 +269,10 @@ function Library() {
       DROPPED: 0,
     };
     // Counted on the kind on screen, like the grid the filter applies to.
-    for (const e of entries) if (ofKind(e, kind, section, enabledKinds)) c[shelfOf(e)]++;
+    for (const e of entries)
+      if (ofKind(e, kind, section, enabledKinds, universe.hiddenSections)) c[shelfOf(e)]++;
     return c;
-  }, [entries, kind, section, enabledKinds]);
+  }, [entries, kind, section, enabledKinds, universe.hiddenSections]);
   const ownedChapters = entries.reduce(
     (sum, e) => sum + (e.ownedChapterCount ?? (e.unit !== 'volume' ? (e.progress?.owned ?? 0) : 0)),
     0,
@@ -295,7 +302,7 @@ function Library() {
             ...librarySections.map((s) => ({ kind: k, section: s.id, name: s.name })),
             ...(entries.some(
               (e) => kindOfMedia(e.media) === 'extension' && !e.media.extensionSection,
-            ) || !librarySections.length
+            )
               ? [{ kind: k, section: NO_SECTION, name: null }]
               : []),
           ],

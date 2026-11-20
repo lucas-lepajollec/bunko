@@ -215,6 +215,7 @@ export function db(): Database.Database {
     migrateV30(connection);
     migrateV31(connection);
     migrateV32(connection);
+    migrateV33(connection);
     // Heal any self-referential work_links rows that could hide a root work from the library.
     connection.exec('DELETE FROM work_links WHERE member = root');
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
@@ -1669,6 +1670,24 @@ export function migrateV32(database: Database.Database) {
     if (!columns.some((c) => c.name === 'stash_link'))
       database.exec('ALTER TABLE tracked_media ADD COLUMN stash_link TEXT');
     database.pragma('user_version=32');
+  })();
+}
+/**
+ * What video extensions declared as their sections (their own kinds), remembered so they exist
+ * after a restart; seeded from the works already filed under one.
+ */
+export function migrateV33(database: Database.Database) {
+  database.transaction(() => {
+    database.exec(`CREATE TABLE IF NOT EXISTS extension_sections (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, adult INTEGER NOT NULL DEFAULT 0,
+      addons TEXT NOT NULL DEFAULT '[]', position INTEGER NOT NULL DEFAULT 0)`);
+    if (Number(database.pragma('user_version', { simple: true })) >= 33) return;
+    database.exec(`INSERT OR IGNORE INTO extension_sections(id,name,adult,addons)
+      SELECT json_extract(media_json,'$.extensionSection.id'), json_extract(media_json,'$.extensionSection.name'),
+        COALESCE(json_extract(media_json,'$.adult'),0), '[]'
+      FROM tracked_media WHERE json_extract(media_json,'$.extensionSection.id') IS NOT NULL
+        AND json_extract(media_json,'$.extensionSection.name') IS NOT NULL`);
+    database.pragma('user_version=33');
   })();
 }
 /** Parts of a catalog sheet that a followed work never stores. */

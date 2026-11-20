@@ -200,6 +200,8 @@ export interface KindScope {
   kind: DiscoverKind;
   section?: string | null;
   enabled?: readonly Kind[] | null;
+  /** Extension sections turned off in the settings: their works stay out like a kind turned off. */
+  hiddenSections?: readonly string[] | null;
 }
 /**
  * Whether a work belongs to a view. Every view (library, home, "pick up where you left off",
@@ -211,6 +213,8 @@ export function inKindScope(
   scope: KindScope,
 ): boolean {
   const own = kindOfMedia(media);
+  const section = own === 'extension' ? media.extensionSection?.id : undefined;
+  if (section && scope.hiddenSections?.includes(section) && scope.section !== section) return false;
   if (scope.kind === 'all') return !scope.enabled?.length || scope.enabled.includes(own);
   if (own !== scope.kind) return false;
   if (scope.kind !== 'extension' || !scope.section) return true;

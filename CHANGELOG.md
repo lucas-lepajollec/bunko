@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Extension sections are kinds of their own everywhere, while staying the extensions' own: their
+  names, ids and 18+ flags come only from the extensions (nothing is written in Bunko). Bunko
+  remembers what they declared (`extension_sections`, schema v33, in the extension's order) so
+  sections exist after a restart or while an extension is unreachable, and works filed under one
+  keep it; a section goes once no configured extension declares it and no work uses it.
+- Settings › Media types lists each section under Extensions, to turn on or off and reorder like
+  Bunko's own kinds (`hiddenSections`, `sectionOrder`; a newly declared section shows). Sections
+  turned off leave every view (`inKindScope` scope `hiddenSections`: library, home, planning,
+  catalog search).
+- Planning has a chip per section; the mixed home has one latest-releases shelf per section.
 - Works of one's own and the 18+ modes: creating a work from a server item has an 18+ switch,
   on by default in the 18+ mode and always on for a section its extension declares 18+, so the
   work shows where it was filed (the "18+ only" mode shows only works marked 18+; a work made

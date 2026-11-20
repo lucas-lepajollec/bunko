@@ -27,3 +27,13 @@ it('answers "does this work belong to this view" the same way for every view', (
   expect(inKindScope(jav, { kind: 'extension' })).toBe(true);
   expect(inKindScope(manga, { kind: 'anime' })).toBe(false);
 });
+
+it('leaves out works of an extension section turned off, like a kind turned off', () => {
+  expect(inKindScope(jav, { kind: 'all', hiddenSections: ['jav'] })).toBe(false);
+  expect(inKindScope(jav, { kind: 'extension', hiddenSections: ['jav'] })).toBe(false);
+  // Opened on purpose (its own chip), it still shows.
+  expect(inKindScope(jav, { kind: 'extension', section: 'jav', hiddenSections: ['jav'] })).toBe(
+    true,
+  );
+  expect(inKindScope(loose, { kind: 'all', hiddenSections: ['jav'] })).toBe(true);
+});

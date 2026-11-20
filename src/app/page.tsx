@@ -129,18 +129,41 @@ export default function HomePage() {
             <TopRow items={topItems.length ? topItems : undefined} />
           )}
         </section>
-        {shelves.map((k) => (
-          <section key={k} className="flex flex-col gap-4 md:gap-5">
-            <SectionHeading
-              num={++n}
-              title={t(`home.latestKind.${k}`)}
-              aside={t(asides.latest(k))}
-              href={`/catalog?view=chapters&kind=${k}`}
-              linkLabel={t('home.allReleases')}
-            />
-            <ReleaseRow items={feed.data?.latest?.[k]} label={t(`home.latestKind.${k}`)} />
-          </section>
-        ))}
+        {shelves.flatMap((k) =>
+          // The extension kind: one shelf per section its extensions declare (their names), in
+          // the user's order, sections turned off left out.
+          (k === 'extension' && universe.active === 'all' && universe.sections.length
+            ? universe.sections.map((sec) => ({
+                key: `${k}|${sec.id}`,
+                title: sec.name,
+                href: `/catalog?view=chapters&kind=${k}&section=${encodeURIComponent(sec.id)}`,
+                items: feed.data?.latest?.[k]?.filter(
+                  (r) => r.media.extensionSection?.id === sec.id,
+                ),
+              }))
+            : [
+                {
+                  key: k,
+                  title: t(`home.latestKind.${k}`),
+                  href: `/catalog?view=chapters&kind=${k}`,
+                  items: feed.data?.latest?.[k],
+                },
+              ]
+          )
+            .filter((shelf) => !feed.data || shelf.items?.length)
+            .map((shelf) => (
+              <section key={shelf.key} className="flex flex-col gap-4 md:gap-5">
+                <SectionHeading
+                  num={++n}
+                  title={shelf.title}
+                  aside={t(asides.latest(k))}
+                  href={shelf.href}
+                  linkLabel={t('home.allReleases')}
+                />
+                <ReleaseRow items={shelf.items} label={shelf.title} />
+              </section>
+            )),
+        )}
         {showcase && <CatalogShelf kind={showcase} num={++n} />}
         {quietAll.length > 0 && (
           <section className="border-line flex flex-wrap items-center gap-x-3 gap-y-2.5 border-t pt-6">

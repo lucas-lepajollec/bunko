@@ -47,8 +47,11 @@ export function useUniverse() {
   const data = settings.data;
   // Enabled kinds in the user's priority order (the switcher, menus and home shelves use it).
   const order = completeKindOrder(data?.kindOrder);
-  // Sections the account's extensions declare (names are theirs), for the current 18+ mode.
-  const sections = data?.extensionSections ?? [];
+  // Sections the account's extensions declare (names and 18+ flags are theirs), for the current
+  // 18+ mode: every one (`allSections`, for the settings), and the ones shown, in the user's order.
+  const allSections = sortSections(data?.extensionSections ?? [], data?.sectionOrder ?? []);
+  const hiddenSections = data?.hiddenSections ?? [];
+  const sections = allSections.filter((s) => !hiddenSections.includes(s.id));
   const visibility: KindVisibility = { extensionSections: sections };
   const visible = (kind: DiscoverKind) => kindVisible(kind, visibility);
   const enabled: Universe[] = byKindOrder(
@@ -119,7 +122,9 @@ export function useUniverse() {
     enabled,
     chosen,
     /** The view on screen as a scope: active kind, its section, the kinds chosen. */
-    scope: { kind: active, section, enabled: chosen } as KindScope,
+    scope: { kind: active, section, enabled: chosen, hiddenSections } as KindScope,
+    allSections,
+    hiddenSections,
     order,
     visible,
     visibility,
@@ -131,6 +136,21 @@ export function useUniverse() {
     ready: Boolean(data),
     set,
   };
+}
+
+/** Sections in the user's order; ones declared since keep the extension's order, after them. */
+export function sortSections<T extends { id: string }>(
+  sections: readonly T[],
+  order: readonly string[],
+) {
+  const at = (id: string) => {
+    const i = order.indexOf(id);
+    return i === -1 ? order.length : i;
+  };
+  return [...sections]
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => at(a.s.id) - at(b.s.id) || a.i - b.i)
+    .map((x) => x.s);
 }
 
 /** A work's kind (the registry's single rule, shared with the server). */
