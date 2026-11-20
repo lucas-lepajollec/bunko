@@ -243,6 +243,25 @@ export async function selectedCover(url: string, parentSignal?: AbortSignal) {
   ) {
     upstream = kavitaCoverEndpoint(parsed.searchParams.get('seriesId')!);
     headers = await kavitaHeaders(signal);
+  } else if (parsed.pathname === '/api/jellyfin/image') {
+    // A work made from a Jellyfin series or film: the server's poster.
+    const s = getSettings();
+    if (!s.jellyfinUrl || !s.jellyfinApiKey) return null;
+    upstream = endpoint(
+      s.jellyfinUrl,
+      `/Items/${parsed.searchParams.get('id')}/Images/Primary?maxWidth=600&quality=90`,
+    );
+    headers = { 'X-Emby-Token': s.jellyfinApiKey };
+  } else if (parsed.pathname === '/api/stash/image') {
+    // A work made from Stash: the group's cover, else its first scene's screenshot.
+    const s = getSettings();
+    const at =
+      s.stashUrl && s.stashApiKey
+        ? (await import('./stash')).stashImagePath(parsed.searchParams.get('id')!)
+        : null;
+    if (!at) return null;
+    upstream = endpoint(s.stashUrl, at);
+    headers = { ApiKey: s.stashApiKey };
   } else return null;
   const response = await fetch(upstream, { headers, signal, redirect: 'error' });
   const mime = response.headers.get('content-type')?.split(';')[0] ?? '';

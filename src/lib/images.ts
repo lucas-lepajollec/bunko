@@ -18,6 +18,8 @@ export function localImageUrl(value: string): boolean {
     const keys = [...url.searchParams.keys()];
     if (url.pathname === '/api/jellyfin/image')
       return keys.length === 1 && /^[0-9a-f]{32}$/i.test(url.searchParams.get('id') ?? '');
+    if (url.pathname === '/api/stash/image')
+      return keys.length === 1 && /^[gs]\d{1,12}$/.test(url.searchParams.get('id') ?? '');
     if (url.pathname === '/api/kavita/image' || url.pathname === '/api/metron/cover')
       return (
         keys.length === 1 &&

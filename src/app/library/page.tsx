@@ -1,13 +1,7 @@
 'use client';
 import { SlidingHighlight } from '@/components/sliding-highlight';
 import { ScrollStrip } from '@/components/scroll-strip';
-import {
-  KIND_IDS,
-  byKindOrder,
-  isVideoKind,
-  kindOfMedia,
-  type Kind as RegistryKind,
-} from '@/domain/kinds';
+import { KIND_IDS, isVideoKind, kindOfMedia, type Kind as RegistryKind } from '@/domain/kinds';
 import { OwnedInventory } from '@/components/owned-inventory';
 import { MediaLink } from '@/components/media-link';
 import { Select } from '@/components/select';
@@ -119,8 +113,20 @@ const caughtUp = (e: TrackedMedia) => {
 const shelfOf = (e: TrackedMedia): Shelf => (caughtUp(e) ? 'CAUGHT_UP' : e.status);
 const ALL_KINDS: Kind[] = ['all', ...KIND_IDS];
 /** One classification for the whole app: the kind registry (user's override first). */
-function ofKind(e: TrackedMedia, kind: Kind) {
-  return kind === 'all' || kindOfMedia(e.media) === kind;
+/**
+ * A work shown under a kind chip: "all" holds the kinds enabled in the settings (others stay out
+ * of the library), the extension kind one chip per declared section.
+ */
+function ofKind(
+  e: TrackedMedia,
+  kind: Kind,
+  section: string | null = null,
+  enabled: ReadonlySet<Kind> | null = null,
+) {
+  const own = kindOfMedia(e.media);
+  if (kind === 'all') return !enabled || enabled.has(own);
+  if (own !== kind) return false;
+  return kind !== 'extension' || !section || e.media.extensionSection?.id === section;
 }
 const PROGRESS_REFRESH_COOLDOWN_MS = 120_000;
 let lastProgressRefreshAt = 0;
@@ -178,8 +184,23 @@ function Library() {
   // The library keeps every kind one tap away, but opens on the current universe.
   const universe = useUniverse();
   const [chosenKind, setChosenKind] = useViewState<Kind | ''>('kind', '', ['', ...ALL_KINDS]);
+  const [chosenSection, setChosenSection] = useViewState<string>('section', '', [
+    '',
+    ...universe.sections.map((s) => s.id),
+  ]);
   const kind: Kind = chosenKind || universe.active;
-  const setKind = (k: Kind) => setChosenKind(k === universe.active ? '' : k);
+  // An extension's section (JAV, Videos…) is a kind of its own in the library.
+  const section = chosenKind ? chosenSection || null : universe.section;
+  const setKind = (k: Kind, sec: string | null = null) => {
+    setChosenKind(k === universe.active && sec === universe.section ? '' : k);
+    setChosenSection(sec ?? '');
+  };
+  // Kinds turned off in the settings stay out of the library ("all" included).
+  const enabledKinds = useMemo(
+    () => (universe.ready ? new Set<Kind>(universe.enabled) : null),
+    [universe.ready, universe.enabled],
+  );
+  const ofKindHere = (e: TrackedMedia) => ofKind(e, kind, section, enabledKinds);
   // Anime speaks of episodes and watching; every label follows the kind on screen.
   const video = isVideoKind(kind);
   const vt = (key: string, vars?: Record<string, string | number>) =>
@@ -227,15 +248,15 @@ function Library() {
       DROPPED: 0,
     };
     // Counted on the kind on screen, like the grid the filter applies to.
-    for (const e of entries) if (ofKind(e, kind)) c[shelfOf(e)]++;
+    for (const e of entries) if (ofKind(e, kind, section, enabledKinds)) c[shelfOf(e)]++;
     return c;
-  }, [entries, kind]);
+  }, [entries, kind, section, enabledKinds]);
   const ownedChapters = entries.reduce(
     (sum, e) => sum + (e.ownedChapterCount ?? (e.unit !== 'volume' ? (e.progress?.owned ?? 0) : 0)),
     0,
   );
   const ownedVolumes = entries.reduce((sum, e) => sum + (e.ownedVolumes?.length ?? 0), 0);
-  const ofKindNow = entries.filter((e) => ofKind(e, kind));
+  const ofKindNow = entries.filter(ofKindHere);
   const ownedCount = ofKindNow.filter((entry) => hasOwnedFiles(entry)).length;
   // Filters that would show nothing stay out of the menu (18+ only when such works are shown).
   const hasAdult = entries.some((e) => e.media.adult);
@@ -243,19 +264,26 @@ function Library() {
   // Works with something to fetch or watch: the count on the "New" tab.
   const newsCount = ofKindNow.filter(hasNews).length;
   // Works per kind: shown next to the total and on each kind chip.
+  const chips = universe.choices(universe.enabled);
+  const chipKey = (k: Kind, sec: string | null) => `${k}|${sec ?? ''}`;
   const kindCounts = useMemo(() => {
-    const c = new Map<Kind, number>();
+    const c = new Map<string, number>();
     for (const e of entries)
-      for (const k of ALL_KINDS) if (k !== 'all' && ofKind(e, k)) c.set(k, (c.get(k) ?? 0) + 1);
+      for (const chip of chips)
+        if (ofKind(e, chip.kind as Kind, chip.section))
+          c.set(
+            chipKey(chip.kind as Kind, chip.section),
+            (c.get(chipKey(chip.kind as Kind, chip.section)) ?? 0) + 1,
+          );
     return c;
-  }, [entries]);
+  }, [entries, chips]);
   // The header search filters this page (`?q=`, written by the search field).
   const filterText = (params.get('q') ?? '').trim();
   const filtered = entries
     .filter((entry) => shownShelf !== 'owned' || hasOwnedFiles(entry))
     .filter((e) => passes(e, status))
     .filter((e) => matchesFilter(e, filterText))
-    .filter((e) => ofKind(e, kind));
+    .filter(ofKindHere);
   const withoutSources = filtered.filter(
     (entry) => entry.type === 'MANGA' && !entry.sources.length,
   );
@@ -328,13 +356,15 @@ function Library() {
           library.data
             ? kind === 'all'
               ? vt('library.inventory', {
-                  series: n(entries.length),
+                  series: n(ofKindNow.length),
                   chapters: n(ownedChapters),
                   volumes: n(ownedVolumes),
                 })
               : t('library.kindCount', {
-                  count: n(kindCounts.get(kind) ?? 0),
-                  kind: t(`kind.${kind}`),
+                  count: n(kindCounts.get(chipKey(kind, section)) ?? 0),
+                  kind:
+                    (section && universe.sections.find((x) => x.id === section)?.name) ||
+                    t(`kind.${kind}`),
                   total: n(entries.length),
                 })
             : undefined
@@ -391,33 +421,29 @@ function Library() {
           className="toolbar-kinds gap-1 px-4 text-sm md:flex-wrap md:px-0"
         >
           <SlidingHighlight />
-          {[
-            'all',
-            ...byKindOrder(
-              KIND_IDS.filter((k) => universe.visible(k)),
-              universe.order,
-            ),
-          ]
-            .map((k) => k as Kind)
-            .map((k) => (
+          {[{ kind: 'all' as Kind, section: null, name: null }, ...chips].map((chip) => {
+            const k = chip.kind as Kind;
+            const on =
+              kind === k && (k !== 'extension' || !chip.section || section === chip.section);
+            const count = kindCounts.get(chipKey(k, chip.section)) ?? 0;
+            return (
               <button
-                key={k}
+                key={chipKey(k, chip.section)}
                 type="button"
-                aria-pressed={kind === k}
-                onClick={() => setKind(k)}
+                aria-pressed={on}
+                onClick={() => setKind(k, chip.section)}
                 className={cx(
                   'h-[34px] shrink-0 rounded-full px-3.5',
-                  kind === k ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
+                  on ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
                 )}
               >
-                {t(`kind.${k}`)}
-                {k !== 'all' && (kindCounts.get(k) ?? 0) > 0 && (
-                  <span className="text-muted ml-1.5 font-serif italic">
-                    {n(kindCounts.get(k)!)}
-                  </span>
+                {chip.name ?? t(`kind.${k}`)}
+                {k !== 'all' && count > 0 && (
+                  <span className="text-muted ml-1.5 font-serif italic">{n(count)}</span>
                 )}
               </button>
-            ))}
+            );
+          })}
         </ScrollStrip>
       )}
       {shownShelf === 'updates' ? (
