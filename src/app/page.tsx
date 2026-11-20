@@ -42,7 +42,8 @@ export default function HomePage() {
       ? null
       : universe.active === 'all'
         ? '/api/home'
-        : `/api/home?kind=${universe.active}`,
+        : // The section on screen is part of the address: switching section loads its own home.
+          `/api/home?kind=${universe.active}${universe.section ? `&section=${encodeURIComponent(universe.section)}` : ''}`,
     {
       refreshInterval: (d) => (d?.pending ? 1500 : 300_000),
       // A busy catalog (AniList limits) is temporary: try again instead of leaving an error.

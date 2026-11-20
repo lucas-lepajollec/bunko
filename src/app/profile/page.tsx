@@ -7,10 +7,10 @@ import { Suspense, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { AuthState, ContinueItem, TrackedMedia, WorkList } from '@/types/shared';
 import { useApi } from '@/lib/client/api';
-import { universeAsides, useUniverse } from '@/lib/client/universe';
+import { choiceLabel, universeAsides, useUniverse } from '@/lib/client/universe';
 import { useViewState } from '@/lib/client/view-state';
 import { useI18n } from '@/i18n/I18nProvider';
-import { kindOfMedia } from '@/domain/kinds';
+import { NO_SECTION, inKindScope } from '@/domain/kinds';
 import { ContinueCard, useContinue } from '@/components/reading';
 import { PosterCard } from '@/components/media';
 import { libraryMark } from '@/domain/library-mark';
@@ -49,7 +49,7 @@ export default function ProfilePage() {
   const universe = useUniverse();
   // The lists of the type on screen (and of the 18+ mode).
   const own = (lists.data ?? []).filter(
-    (l) => !l.system && listInUniverse(l, entries, universe.active),
+    (l) => !l.system && listInUniverse(l, entries, universe.scope),
   );
   const [creating, setCreating] = useState(false);
   // The profile's subtitle says reading, watching or both.
@@ -216,12 +216,27 @@ function Favorites({
   const look = useLook();
   const universe = useUniverse();
   const works = list ? listWorks(list, entries).map((w) => w.entry) : [];
-  const kinds = universe.order.filter((k) => works.some((w) => kindOfMedia(w.media) === k));
+  // One tab per kind, the extension kind one per section (as in the kind menu), plus one for
+  // its works filed under no section.
+  const keyOf = (c: { kind: string; section: string | null }) =>
+    c.section ? `${c.kind}:${c.section}` : c.kind;
+  const tabs = [
+    ...universe.choices(universe.order),
+    ...(universe.sections.length
+      ? [{ kind: 'extension' as const, section: NO_SECTION, name: null }]
+      : []),
+  ].filter((c) => works.some((w) => inKindScope(w.media, { kind: c.kind, section: c.section })));
   const [chosen, setChosen] = useViewState<string>('fav', '');
-  // Opens on the type on screen when it has favorites.
-  const kind =
-    kinds.find((k) => k === chosen) ?? kinds.find((k) => k === universe.active) ?? kinds[0];
-  const ofKind = works.filter((w) => kindOfMedia(w.media) === kind);
+  // Opens on the type (and section) on screen when it has favorites.
+  const tab =
+    tabs.find((c) => keyOf(c) === chosen) ??
+    tabs.find((c) => c.kind === universe.active && c.section === universe.section) ??
+    tabs.find((c) => c.kind === universe.active) ??
+    tabs[0];
+  const kind = tab ? keyOf(tab) : undefined;
+  const ofKind = tab
+    ? works.filter((w) => inKindScope(w.media, { kind: tab.kind, section: tab.section }))
+    : [];
   return (
     <section id="favorites" className="flex scroll-mt-28 flex-col gap-5">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -250,21 +265,21 @@ function Favorites({
           {t('favorites.emptyBody')}
         </Empty>
       )}
-      {kinds.length > 1 && (
+      {tabs.length > 1 && (
         <div className="relative flex flex-wrap items-center gap-1 text-sm">
           <SlidingHighlight />
-          {kinds.map((k) => (
+          {tabs.map((c) => (
             <button
-              key={k}
+              key={keyOf(c)}
               type="button"
-              aria-pressed={k === kind}
-              onClick={() => setChosen(k)}
+              aria-pressed={keyOf(c) === kind}
+              onClick={() => setChosen(keyOf(c))}
               className={cx(
                 'h-[34px] rounded-full px-3.5 transition-colors',
-                k === kind ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
+                keyOf(c) === kind ? 'bg-fg/15 text-white' : 'text-mid hover:text-white',
               )}
             >
-              {t(`kind.${k}`)}
+              {choiceLabel(t, c)}
             </button>
           ))}
         </div>
@@ -291,7 +306,7 @@ function Favorites({
             >
               {n(i + 1)}
             </span>
-            <PosterCard media={{ ...entry.media, mine: libraryMark(entry) }} badge={<></>} />
+            <PosterCard media={{ ...entry.media, mine: libraryMark(entry) }} />
           </li>
         ))}
       </ol>

@@ -16,7 +16,8 @@ import {
   X,
 } from 'lucide-react';
 import type { ListTier, TierRow, TrackedMedia, WorkList, WorkListItem } from '@/types/shared';
-import { kindOfMedia } from '@/domain/kinds';
+import { inKindScope } from '@/domain/kinds';
+import { useUniverse } from '@/lib/client/universe';
 import { formatRating, libraryMark } from '@/domain/library-mark';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -64,6 +65,7 @@ export default function ListPage() {
   const lists = useLists();
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const write = useListWrite();
+  const universe = useUniverse();
   const list = lists.data?.find((l) => l.id === Number(params.id));
   const entries = library.data ?? NONE;
   const works = useMemo(() => (list ? listWorks(list, entries) : []), [list, entries]);
@@ -163,7 +165,13 @@ export default function ListPage() {
             {listName(t, list)}
           </h1>
           <span className="text-muted font-serif text-[17px] italic md:text-[22px]">
-            {listMeta(t, n, list, works.length)}
+            {listMeta(
+              t,
+              n,
+              list,
+              works.length,
+              (id) => universe.allSections.find((s) => s.id === id)?.name,
+            )}
           </span>
         </div>
         {list.description && (
@@ -322,7 +330,7 @@ export default function ListPage() {
           {works.map((w, i) => (
             <article key={w.entry.id} className="flex min-w-0 flex-col gap-1">
               {list.ranked && <Rank n={i + 1} />}
-              <PosterCard media={{ ...w.entry.media, mine: libraryMark(w.entry) }} badge={<></>} />
+              <PosterCard media={{ ...w.entry.media, mine: libraryMark(w.entry) }} />
             </article>
           ))}
         </div>
@@ -366,7 +374,9 @@ export default function ListPage() {
         onClose={() => setAdding(false)}
         entries={entries.filter(
           (e) =>
-            !e.partOf && !ids.includes(e.id) && (!list.kind || kindOfMedia(e.media) === list.kind),
+            !e.partOf &&
+            !ids.includes(e.id) &&
+            (!list.kind || inKindScope(e.media, { kind: list.kind, section: list.section })),
         )}
         onAdd={async (work) => {
           const fresh = await write(list, { add: [work.id] });

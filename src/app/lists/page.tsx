@@ -34,7 +34,7 @@ function Lists() {
   const universe = useUniverse();
   const entries = library.data ?? NONE;
   // The lists of the type on screen (and of the 18+ mode).
-  const inView = (lists.data ?? []).filter((l) => listInUniverse(l, entries, universe.active));
+  const inView = (lists.data ?? []).filter((l) => listInUniverse(l, entries, universe.scope));
   const shown = inView.filter((l) => isTierList(l) === tier);
   return (
     <Page>

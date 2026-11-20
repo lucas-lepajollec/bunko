@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { z } from 'zod';
 import { body, json, route } from '@/lib/api';
 import { KIND_IDS } from '@/domain/kinds';
+import { extensionSection } from '@/lib/validation';
 import { deleteList, listLists, updateList } from '@/lib/lists';
 
 const tierId = z.string().regex(/^[A-Za-z0-9_-]{1,24}$/);
@@ -19,6 +20,7 @@ export const PATCH = route(async (r) => {
         name: z.string().trim().min(1).max(80).optional(),
         description: z.string().trim().max(500).optional(),
         kind: z.enum(KIND_IDS).nullable().optional(),
+        section: extensionSection.nullable().optional(),
         ranked: z.boolean().optional(),
         layout: z.enum(['list', 'grid', 'tiers']).optional(),
         tiers: z

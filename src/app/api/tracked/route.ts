@@ -23,7 +23,7 @@ import { trackBody, trackPatch } from '@/lib/validation';
 import { refreshProgressOnDemand } from '@/lib/progress-refresh';
 import { indexedSeriesById, matchKavita } from '@/lib/kavita-index';
 import { AppError } from '@/lib/errors';
-import { KINDS } from '@/domain/kinds';
+import { KINDS, kindOfMedia } from '@/domain/kinds';
 import { kavitaMedia } from '@/lib/kavita-track';
 import { suwayomiDetail } from '@/lib/catalog';
 import { storedMedia, trackedCoverOptions, syncTrackedCover } from '@/lib/tracked-covers';
@@ -121,8 +121,12 @@ export const PATCH = route(async (r) => {
     if (input.kindOverride !== undefined) {
       const current = getTracked(input.id)!;
       // A kind of the same family only: an anime may be counted as a film or a series, a
-      // manga as a manhwa, never a book as a series.
-      if (input.kindOverride && KINDS[input.kindOverride].mediaType !== current.type)
+      // manga as a manhwa or a light novel taken for a manga filed back, never a book as a series.
+      if (
+        input.kindOverride &&
+        KINDS[input.kindOverride].family !==
+          KINDS[kindOfMedia({ ...current.media, kindOverride: undefined })].family
+      )
         throw new AppError('VALIDATION_ERROR', 'This kind does not fit this work', 400);
       db()
         .prepare(

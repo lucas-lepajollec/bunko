@@ -153,6 +153,8 @@ export interface WorkList {
   name: string;
   description: string;
   kind: Exclude<DiscoverKind, 'all'> | null;
+  /** With the extension kind: the one section it is made for (`null`: every section). */
+  section: string | null;
   /** Numbered: its order is a ranking. */
   ranked: boolean;
   layout: ListLayout;
@@ -1204,10 +1206,12 @@ export interface SourceLinkStatus {
   /** Safe error code of the last check, if it failed. */
   error: string | null;
 }
-export type CoverChoice = 'auto' | { origin: 'catalog' | 'source' | 'kavita'; id: string };
+/** Where a cover comes from: the catalog, a reading source, or a server holding the work. */
+export type CoverOrigin = 'catalog' | 'source' | 'kavita' | 'jellyfin' | 'stash';
+export type CoverChoice = 'auto' | { origin: CoverOrigin; id: string };
 /** GET /api/tracked/covers?id= — every cover that can be chosen for a followed title. */
 export interface CoverOption {
-  origin: 'catalog' | 'source' | 'kavita';
+  origin: CoverOrigin;
   /** Stable id to send back in `TrackPatch.cover`. */
   id: string;
   /** Short label: provider, source name or volume. */

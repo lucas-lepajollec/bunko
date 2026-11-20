@@ -6,7 +6,8 @@ import { useMemo, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { Check, ListPlus, Plus } from 'lucide-react';
 import type { DiscoverKind, TrackedMedia, UnifiedMedia, WorkList } from '@/types/shared';
-import { KIND_IDS, kindOfMedia, type Kind } from '@/domain/kinds';
+import { KIND_IDS, inKindScope, type Kind, type KindScope } from '@/domain/kinds';
+import { useUniverse } from '@/lib/client/universe';
 import { DEFAULT_TIERS, tierOfRating } from '@/domain/tiers';
 import { send, useApi } from '@/lib/client/api';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -54,21 +55,44 @@ export function useListWrite() {
  * other list to every kind its works have (a list of manga and anime shows under both). An empty
  * list shows everywhere; a list whose works are all hidden by the 18+ mode shows nowhere.
  */
-export function listInUniverse(list: WorkList, entries: TrackedMedia[], active: DiscoverKind) {
+export function listInUniverse(
+  list: WorkList,
+  entries: TrackedMedia[],
+  view: DiscoverKind | KindScope,
+) {
+  const scope: KindScope = typeof view === 'string' ? { kind: view } : view;
   if (list.system) return true;
-  if (list.kind) return active === 'all' || list.kind === active;
+  if (list.kind) {
+    if (scope.kind === 'all') return true;
+    if (list.kind !== scope.kind) return false;
+    // Made for one section of the extension kind: under that section (or every section).
+    return !list.section || !scope.section || list.section === scope.section;
+  }
   const works = listWorks(list, entries);
   if (!works.length) return list.hidden === 0;
-  return active === 'all' || works.some((w) => kindOfMedia(w.entry.media) === active);
+  return (
+    scope.kind === 'all' ||
+    works.some((w) => inKindScope(w.entry.media, { ...scope, enabled: null }))
+  );
 }
 
 export const isTierList = (list: Pick<WorkList, 'layout'>) => list.layout === 'tiers';
 
-export function listMeta(t: T, n: (v: number) => string, list: WorkList, count: number) {
+export function listMeta(
+  t: T,
+  n: (v: number) => string,
+  list: WorkList,
+  count: number,
+  sectionName?: (id: string) => string | undefined,
+) {
   return [
     t('lists.count', { count: n(count) }),
     isTierList(list) ? t('lists.tierList') : list.ranked ? t('lists.ranked') : t('lists.unranked'),
-    list.kind ? t(`kind.${list.kind}`) : null,
+    list.section
+      ? (sectionName?.(list.section) ?? t(`kind.${list.kind}`))
+      : list.kind
+        ? t(`kind.${list.kind}`)
+        : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -78,6 +102,8 @@ export function ListCard({ list, entries }: { list: WorkList; entries: TrackedMe
   const { t, n } = useI18n();
   const look = useLook();
   const works = listWorks(list, entries);
+  const universe = useUniverse();
+  const sectionName = (id: string) => universe.allSections.find((s) => s.id === id)?.name;
   const cover = (i: number, className?: string) => {
     const w = works[i]?.entry;
     return w ? (
@@ -94,7 +120,7 @@ export function ListCard({ list, entries }: { list: WorkList; entries: TrackedMe
   const name = <span className="truncate font-semibold">{listName(t, list)}</span>;
   const meta = (
     <span className="text-muted -mt-1.5 truncate text-[13px]">
-      {listMeta(t, n, list, works.length)}
+      {listMeta(t, n, list, works.length, sectionName)}
     </span>
   );
   if (look === 'cine')
@@ -167,7 +193,12 @@ export function NewListDialog({
   const { mutate } = useSWRConfig();
   const library = useApi<TrackedMedia[]>(tier ? '/api/tracked' : null);
   const [name, setName] = useState('');
-  const [kind, setKind] = useState<Kind | ''>('');
+  // A kind, or one section of the extension kind (`extension:<section>`).
+  const [choice, setChoice] = useState('');
+  const [kind, section] = choice.startsWith('extension:')
+    ? (['extension', choice.slice('extension:'.length)] as const)
+    : ([choice as Kind | '', null] as const);
+  const universe = useUniverse();
   const [ranked, setRanked] = useState(true);
   const [fill, setFill] = useState<'rated' | 'all' | 'none'>('rated');
   const [place, setPlace] = useState(true);
@@ -176,7 +207,7 @@ export function NewListDialog({
   const from = (library.data ?? []).filter(
     (e) =>
       !e.partOf &&
-      (!kind || kindOfMedia(e.media) === kind) &&
+      (!kind || inKindScope(e.media, { kind, section })) &&
       (fill === 'all' || (fill === 'rated' && e.rating != null)),
   );
   const start = tier ? (fill === 'none' ? [] : from.slice(0, 500)) : (add ?? []);
@@ -204,6 +235,7 @@ export function NewListDialog({
                   {
                     name: name.trim(),
                     kind: kind || null,
+                    ...(section ? { section } : {}),
                     ranked: tier ? false : ranked,
                     ...(tier ? { layout: 'tiers' } : {}),
                     add: start.length
@@ -266,11 +298,20 @@ export function NewListDialog({
               )}
               <Select
                 label={t('catalog.kind')}
-                value={kind}
-                onChange={(v) => setKind(v as Kind | '')}
+                value={choice}
+                onChange={setChoice}
                 options={[
                   { value: '', label: t('kind.all') },
-                  ...KIND_IDS.map((k) => ({ value: k, label: t(`kind.${k}`) })),
+                  // The extension kind: every section, or one (named by its extension).
+                  ...KIND_IDS.flatMap((k) => [
+                    { value: k, label: t(`kind.${k}`) },
+                    ...(k === 'extension'
+                      ? universe.sections.map((s) => ({
+                          value: `extension:${s.id}`,
+                          label: s.name,
+                        }))
+                      : []),
+                  ]),
                 ]}
               />
             </div>

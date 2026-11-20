@@ -16,6 +16,7 @@ interface Row {
   name: string;
   description: string;
   kind: string | null;
+  section: string | null;
   ranked: number;
   layout: ListLayout;
   system: 'favorites' | null;
@@ -59,6 +60,7 @@ export function listLists(): WorkList[] {
     name: r.name,
     description: r.description,
     kind: r.kind && r.kind in KINDS ? (r.kind as Kind) : null,
+    section: r.kind === 'extension' ? (r.section ?? null) : null,
     ranked: r.ranked === 1,
     layout: r.layout,
     system: r.system,
@@ -79,6 +81,7 @@ export function createList(input: {
   name: string;
   description?: string;
   kind: Kind | null;
+  section?: string | null;
   ranked: boolean;
   layout?: ListLayout;
   add?: number[];
@@ -87,11 +90,12 @@ export function createList(input: {
     const now = new Date().toISOString();
     const id = Number(
       statement(
-        'INSERT INTO lists(name,description,kind,ranked,layout,created_at,updated_at) VALUES(?,?,?,?,?,?,?)',
+        'INSERT INTO lists(name,description,kind,section,ranked,layout,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',
       ).run(
         input.name,
         input.description ?? '',
         input.kind,
+        input.kind === 'extension' ? (input.section ?? null) : null,
         Number(input.ranked),
         input.layout ?? 'list',
         now,
@@ -196,6 +200,7 @@ export function updateList(
     name?: string;
     description?: string;
     kind?: Kind | null;
+    section?: string | null;
     ranked?: boolean;
     layout?: ListLayout;
     order?: number[];
@@ -217,8 +222,13 @@ export function updateList(
     }
     if (input.description !== undefined)
       statement('UPDATE lists SET description=? WHERE id=?').run(input.description, id);
-    if (input.kind !== undefined)
-      statement('UPDATE lists SET kind=? WHERE id=?').run(input.kind, id);
+    if (input.kind !== undefined || input.section !== undefined) {
+      const kind = input.kind !== undefined ? input.kind : (r.kind as Kind | null);
+      // A section only belongs to the extension kind.
+      const section =
+        kind === 'extension' ? (input.section !== undefined ? input.section : r.section) : null;
+      statement('UPDATE lists SET kind=?, section=? WHERE id=?').run(kind, section ?? null, id);
+    }
     if (input.layout !== undefined && input.layout !== r.layout) {
       // A tier list stays one, a list stays a list (shown as a list or a grid).
       if (input.layout === 'tiers' || r.layout === 'tiers')

@@ -695,6 +695,8 @@ export function CoverTab({
   const groups = [
     { origin: 'catalog' as const, title: t('match.origin.catalog') },
     { origin: 'kavita' as const, title: t('match.origin.kavita') },
+    { origin: 'jellyfin' as const, title: t('match.origin.jellyfin') },
+    { origin: 'stash' as const, title: t('match.origin.stash') },
     { origin: 'source' as const, title: t('match.origin.sources') },
   ];
   return (

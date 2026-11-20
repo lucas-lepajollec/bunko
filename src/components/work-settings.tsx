@@ -230,7 +230,9 @@ export function GeneralTab({
               },
               ...KIND_IDS.filter(
                 (k) =>
-                  KINDS[k].mediaType === entry.type &&
+                  // Any kind of the same family (a light novel taken for a manga can be filed back).
+                  KINDS[k].family ===
+                    KINDS[kindOfMedia({ ...entry.media, kindOverride: undefined })].family &&
                   (KINDS[k].catalog !== 'extension' ||
                     (entry.media.providers.includes('extension') && !sectionChoices.length)),
               ).map((k) => ({

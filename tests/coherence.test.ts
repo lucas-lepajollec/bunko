@@ -321,3 +321,18 @@ it('keeps the status in step with the episodes marked seen', async () => {
   await trackedRoute.PATCH(request('PATCH', { id: show.id, read: 5 }));
   expect(getTracked(show.id)!.status).toBe('READING');
 });
+
+it('files a reading work under another reading kind across manga and novels, never as video', async () => {
+  const work = track({
+    media: { ...emptyMedia('anilist:7001', 'Taken for a manga', 'MANGA'), format: 'MANGA' },
+    status: 'PLANNING',
+  });
+  expect(
+    (await trackedRoute.PATCH(request('PATCH', { id: work.id, kindOverride: 'lightnovel' })))
+      .status,
+  ).toBe(200);
+  expect(getTracked(work.id)?.media.kindOverride).toBe('lightnovel');
+  expect(
+    (await trackedRoute.PATCH(request('PATCH', { id: work.id, kindOverride: 'series' }))).status,
+  ).toBe(400);
+});
