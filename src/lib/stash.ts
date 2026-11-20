@@ -475,38 +475,26 @@ export function stashSceneStreams(mediaIdValue: string, episode: number): VideoS
   const key = followed ? stashKeyOf(followed) : own && isKey(own) ? own : null;
   const scene = key ? stashScenes(key)[episode - 1] : undefined;
   if (!scene) return { streams: [], subtitles: [], errors: [] };
-  const stream = (mode: 'direct' | 'mp4', webReady: boolean): VideoStream => {
-    const url = `/api/stash/stream/${scene.id}?mode=${mode}`;
-    return {
-      id: `stash:${scene.id}:${mode}`,
-      addon: 'Stash',
-      name: 'Stash',
-      title: mode === 'direct' ? 'Original' : 'MP4',
-      kind: 'direct',
-      url,
-      relayUrl: null,
-      externalUrl: null,
-      preferred: true,
-      version: null,
-      autoplay: true,
-      quality: null,
-      webReady,
-      subtitles: [],
-    };
-  };
-  // Stash's HLS starts in seconds whatever the codec (its own player's choice); the original
-  // file first when browsers decode it; the MP4 conversion as a last resort.
+  // Stash's HLS: what Stash's own player uses, starts in seconds and plays every codec. The
+  // original file and the full MP4 conversion failed in browsers, so they are not offered.
   const hls: VideoStream = {
-    ...stream('mp4', true),
     id: `stash:${scene.id}:hls`,
-    title: 'HLS',
+    addon: 'Stash',
+    name: 'Stash',
+    title: scene.title,
     kind: 'hls',
     url: `/api/stash/stream/${scene.id}/stream.m3u8`,
+    relayUrl: null,
+    externalUrl: null,
+    preferred: true,
+    version: null,
+    autoplay: true,
+    quality: null,
+    webReady: true,
+    subtitles: [],
   };
   return {
-    streams: scene.webReady
-      ? [stream('direct', true), hls, stream('mp4', true)]
-      : [hls, stream('mp4', true), stream('direct', false)],
+    streams: [hls],
     subtitles: [],
     errors: [],
   };

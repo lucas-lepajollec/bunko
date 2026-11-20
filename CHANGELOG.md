@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- One answer to "does this work belong to this view" (`inKindScope` in the kind registry):
+  library, home releases and top, "pick up where you left off" and the quick search all use it.
+  Kinds turned off in the settings stay out of every view ("all" included), and an extension's
+  section (JAV, Videos…) is a kind of its own everywhere.
+- Library: extension sections come from the works themselves too (a work keeps its section),
+  so they show before any extension catalog is read or outside the 18+ mode; works of the
+  extension kind filed under no section have their own chip. Work settings › Kind lists the
+  extension sections for every video work (`PATCH /api/tracked {kindOverride: 'extension',
+extensionSection}`).
+- "Pick up where you left off" accepts long extension section ids (a played work filed under a
+  section was refused). Stash plays through HLS only (the original file and the MP4 conversion
+  failed in browsers).
 - Library: kinds turned off in the settings no longer show (their chips and their works, "All"
   included), and each section of the extension kind (JAV, Videos…) has its own chip, so works
   filed under an extension section appear under it.

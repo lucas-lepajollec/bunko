@@ -8,10 +8,8 @@ import { getSettings } from '@/lib/settings';
 import { rewriteStashPlaylist } from '@/lib/stash';
 
 /**
- * A Stash scene's video through Bunko (the API key stays on the server):
- * - `/api/stash/stream/<id>?mode=direct`: the original file (seekable);
- * - `/api/stash/stream/<id>?mode=mp4`: Stash's MP4 conversion;
- * - `/api/stash/stream/<id>/stream.m3u8` and its segments: Stash's HLS (starts fast, any codec).
+ * A Stash scene's video through Bunko, as Stash's own player plays it: its HLS playlist and
+ * segments (`/api/stash/stream/<id>/stream.m3u8…`). The API key stays on the server.
  */
 export const GET = route(async (r) => {
   const url = new URL(r.url);
@@ -23,25 +21,14 @@ export const GET = route(async (r) => {
   const s = getSettings();
   if (!s.stashUrl || !s.stashApiKey)
     throw new AppError('SERVICE_NOT_CONFIGURED', 'Stash is not configured', 409);
-  let path: string;
-  if (!rest) {
-    const mode = z.enum(['direct', 'mp4']).parse(url.searchParams.get('mode') ?? 'direct');
-    path = mode === 'direct' ? `/scene/${id}/stream` : `/scene/${id}/stream.mp4`;
-  } else {
-    // Only Stash's own stream paths (playlists and segments), never anything else on the server.
-    if (!/^stream\.m3u8(?:\/[\w.-]{1,80})?$/.test(rest) || rest.includes('..'))
-      throw new AppError('VALIDATION_ERROR', 'Not a Stash stream path', 400);
-    const query = new URLSearchParams(url.searchParams);
-    query.delete('apikey');
-    path = `/scene/${id}/${rest}${query.size ? `?${query}` : ''}`;
-  }
-  const range = r.headers.get('range');
+  // Only Stash's own HLS paths (playlists and segments), never anything else on the server.
+  if (!/^stream\.m3u8(?:\/[\w.-]{1,80})?$/.test(rest) || rest.includes('..'))
+    throw new AppError('VALIDATION_ERROR', 'Not a Stash stream path', 400);
+  const query = new URLSearchParams(url.searchParams);
+  query.delete('apikey');
+  const path = `/scene/${id}/${rest}${query.size ? `?${query}` : ''}`;
   const upstream = await fetch(endpoint(s.stashUrl, path), {
-    headers: {
-      ApiKey: s.stashApiKey,
-      // Seeking inside the original file; conversions are produced on the fly.
-      ...(range && !rest && url.searchParams.get('mode') !== 'mp4' ? { Range: range } : {}),
-    },
+    headers: { ApiKey: s.stashApiKey },
     redirect: 'error',
     signal: r.signal,
   }).catch(() => {
