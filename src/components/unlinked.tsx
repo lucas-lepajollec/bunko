@@ -2,7 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type {
-  ExtensionSectionRef,
+  ExtensionSection,
   PublicSettings,
   SearchResponse,
   TrackedMedia,
@@ -243,12 +243,19 @@ function CreateSheet({ item, busy, onDone }: { item: UnlinkedItem; busy: boolean
   const settings = useApi<PublicSettings>('/api/settings');
   const video = isVideoKind(item.kind);
   const kinds = kindsOf(video ? 'video' : 'reading').filter((k) => k !== 'extension');
-  const sections: ExtensionSectionRef[] = video ? (settings.data?.extensionSections ?? []) : [];
+  // Sections the extensions declare (their names and their own 18+ flag), for video items.
+  const sections: ExtensionSection[] = video ? (settings.data?.extensionSections ?? []) : [];
   const [kind, setKind] = useState<Kind>(item.kind);
-  const [section, setSection] = useState<ExtensionSectionRef | null>(null);
+  const [section, setSection] = useState<ExtensionSection | null>(null);
   const [title, setTitle] = useState(item.name);
   const [year, setYear] = useState(item.year ? String(item.year) : '');
   const yearNumber = /^\d{4}$/.test(year) ? Number(year) : null;
+  // 18+: on by default in the 18+ mode (where it is made), and always for a section its extension
+  // declares 18+, so the work shows where it was filed.
+  const adultMode = Boolean(settings.data?.adultContent && settings.data?.adultMode);
+  const [adultChoice, setAdultChoice] = useState<boolean | null>(null);
+  const sectionAdult = kind === 'extension' && Boolean(section?.adult);
+  const adult = sectionAdult || (adultChoice ?? adultMode);
   const create = () =>
     void onDone(item, async () => {
       const entry = await send<TrackedMedia>('/api/unlinked', 'POST', {
@@ -257,7 +264,8 @@ function CreateSheet({ item, busy, onDone }: { item: UnlinkedItem; busy: boolean
         kind,
         title: title.trim(),
         year: yearNumber,
-        section: kind === 'extension' ? section : null,
+        section: kind === 'extension' && section ? { id: section.id, name: section.name } : null,
+        adult,
       });
       router.push(mediaHref(entry.media.id));
     });
@@ -284,7 +292,7 @@ function CreateSheet({ item, busy, onDone }: { item: UnlinkedItem; busy: boolean
               on={kind === 'extension' && section?.id === s.id}
               onClick={() => {
                 setKind('extension');
-                setSection({ id: s.id, name: s.name });
+                setSection(s);
               }}
             >
               {s.name}
@@ -315,6 +323,21 @@ function CreateSheet({ item, busy, onDone }: { item: UnlinkedItem; busy: boolean
           />
         </label>
       </div>
+      <label className="flex items-center justify-between gap-4 text-sm">
+        <span className="flex flex-col gap-0.5">
+          <span className="font-semibold">{t('unlinked.adult')}</span>
+          <span className="text-muted text-xs">
+            {sectionAdult ? t('unlinked.adultSection') : t('unlinked.adultHint')}
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={adult}
+          disabled={sectionAdult}
+          onChange={(e) => setAdultChoice(e.target.checked)}
+          className="accent-fg size-[18px] shrink-0"
+        />
+      </label>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="text-muted text-xs">
           {t(

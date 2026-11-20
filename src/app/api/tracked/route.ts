@@ -130,7 +130,7 @@ export const PATCH = route(async (r) => {
             : "UPDATE tracked_media SET media_json=json_remove(media_json,'$.kindOverride') WHERE id=?",
         )
         .run(...(input.kindOverride ? [input.kindOverride, input.id] : [input.id]));
-      // Filed under an extension's section (JAV, Videos…): the section goes with the kind. Out
+      // Filed under an extension's section (as an extension declares them): the section goes with the kind. Out
       // of the extension kind, a work of another catalog leaves its section behind.
       if (input.kindOverride === 'extension' && input.extensionSection)
         db()

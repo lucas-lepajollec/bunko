@@ -206,7 +206,7 @@ export function GeneralTab({
                 : (entry.media.kindOverride ?? '')
             }
             onChange={(kind) => {
-              // An extension's section (JAV, Videos…) is a kind of its own here.
+              // An extension's section (as an extension declares them) is a kind of its own here.
               const section = kind.startsWith('extension:')
                 ? sectionChoices.find((s) => `extension:${s.id}` === kind)
                 : undefined;

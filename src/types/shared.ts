@@ -1153,6 +1153,8 @@ export interface LibraryActivity {
   activeDownloads?: number;
   /** Followed titles currently hidden because 18+ content is off (never hidden silently). */
   hiddenAdult: number;
+  /** Works left out by the "18+ only" mode (not marked 18+). */
+  hiddenNotAdult?: number;
   /** Followed comics waiting for automatic source matching, and the one being searched now. */
   matching: { queued: number; current: string | null };
   /** Jellyfin anime still being added to the library (series handled / all). */

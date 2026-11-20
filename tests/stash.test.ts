@@ -195,3 +195,26 @@ it('sends a Stash HLS playlist back through Bunko without the API key', () => {
   expect(out).toContain('/api/stash/stream/7/stream.m3u8/1.ts');
   expect(out).toContain('URI="/api/stash/stream/7/stream.m3u8/key"');
 });
+
+it('makes a work 18+ when asked, so the 18+ only mode shows it', async () => {
+  await stash.syncStashIndex();
+  const entry = createSheet({
+    integration: 'stash',
+    id: 's3',
+    kind: 'movies',
+    title: 'Kept for 18+',
+    year: null,
+    section: null,
+    adult: true,
+  });
+  expect(entry.media.adult).toBe(true);
+  const plain = createSheet({
+    integration: 'stash',
+    id: 'g1',
+    kind: 'series',
+    title: 'Not 18+',
+    year: null,
+    section: null,
+  });
+  expect(plain.media.adult).toBe(false);
+});

@@ -133,6 +133,8 @@ export function libraryActivity(): LibraryActivity {
     },
     // Only the 18+ hidden from a normal account is announced (18+ only mode hides by choice).
     hiddenAdult: adultScope() === 'off' ? entries.length - visible.length : 0,
+    // …and the works the "18+ only" mode leaves out, so none vanishes without a word.
+    hiddenNotAdult: adultScope() === 'only' ? entries.length - visible.length : 0,
     jellyfinImport: jellyfin,
     matching: {
       queued,

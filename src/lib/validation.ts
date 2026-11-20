@@ -400,7 +400,7 @@ export const trackPatch = z
     favorite: z.boolean().optional(),
     /** The user's kind for this work (`null` = the catalog's); same family as the work. */
     kindOverride: z.enum(KIND_IDS).nullable().optional(),
-    /** With the extension kind: the section the work is filed under (JAV, Videos…). */
+    /** With the extension kind: the section the work is filed under (as an extension declares them). */
     extensionSection: z
       .object({ id: z.string().min(1).max(200), name: z.string().min(1).max(200) })
       .strict()
