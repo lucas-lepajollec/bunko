@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Plug-in contract (step 6): `tests/integrations-contract.test.ts` fails when a service misses one
+  of the places every service needs (settings page and texts in every language, logo, server
+  side, state, owned mark and images for media servers, image route for server providers), and
+  `docs/architecture.md` explains how to add a kind, an extension section, a provider or an
+  integration through the registries.
 - Playback sources and reading progress (plug-in step 5): the player takes the streams of the
   servers holding a work (Stash…) first, beside the extensions' streams instead of in their place
   (a catalog work linked to Stash keeps its extension streams as fallbacks); a work made from Stash
