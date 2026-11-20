@@ -1,4 +1,5 @@
 'use client';
+import { setVideoServer } from '@/i18n/video-server';
 import { SlidingHighlight } from './sliding-highlight';
 import { TypesPanel, UniverseMenu, UniverseTab, activeLabel } from './universe-switch';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -293,6 +294,9 @@ const NAV = [
 
 function useActivity() {
   const settings = useApi<PublicSettings>('/api/settings');
+  // Texts and logos name the video server actually connected (Jellyfin or Emby).
+  const videoServer = settings.data?.videoServer;
+  useEffect(() => setVideoServer(videoServer), [videoServer]);
   const batches = useApi<DownloadBatch[]>('/api/downloads/batches', {
     refreshInterval: batchesInterval,
   });

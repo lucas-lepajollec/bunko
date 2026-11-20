@@ -390,3 +390,26 @@ it('lists what no work is linked to, ignores it, and makes it a work of its own'
     extensionSection: { id: 'videos', name: 'Videos' },
   });
 });
+
+it('tells an Emby server from Jellyfin and links to its own web pages', async () => {
+  expect(jellyfin.videoServerOf({ ProductName: 'Jellyfin Server', Version: '10.11.0' })).toBe(
+    'jellyfin',
+  );
+  expect(jellyfin.videoServerOf({ Version: '10.8.13' })).toBe('jellyfin');
+  expect(jellyfin.videoServerOf({ Version: '4.8.10.0' })).toBe('emby');
+  expect(jellyfin.videoServerOf({ ProductName: 'Emby Server', Version: '4.9.1' })).toBe('emby');
+  // The fixture is Jellyfin 10.11: Jellyfin links.
+  await jellyfin.jellyfinInfo();
+  expect(publicSettings().videoServer).toBe('jellyfin');
+  expect(jellyfin.videoServerItemUrl('http://jf', 'abc')).toBe('http://jf/web/#/details?id=abc');
+  db()
+    .prepare("INSERT OR REPLACE INTO worker_state(key,value) VALUES('video_server','emby')")
+    .run();
+  db()
+    .prepare("INSERT OR REPLACE INTO worker_state(key,value) VALUES('video_server_id','srv1')")
+    .run();
+  expect(publicSettings().videoServer).toBe('emby');
+  expect(jellyfin.videoServerItemUrl('http://emby', 'abc')).toBe(
+    'http://emby/web/index.html#!/item?id=abc&serverId=srv1',
+  );
+});

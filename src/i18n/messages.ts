@@ -1519,7 +1519,7 @@ const en: Dictionary = {
 
   'settings.service.jellyfin': 'Jellyfin',
   'settings.service.jellyfinTip':
-    'Your video library. Bunko finds your anime there, shows owned episodes, reads what you watched and follows new shows automatically. Create an API key in Jellyfin → Dashboard → API keys.',
+    'Your video library. Bunko finds your anime there, shows owned episodes, reads what you watched and follows new shows automatically. Create an API key in Jellyfin → Dashboard → API keys. Emby servers work too (same connection).',
   'settings.jellyfinUser': 'Jellyfin user (watched state)',
   'jellyfin.open': 'Open in Jellyfin',
   'jellyfin.owned': '{n} in Jellyfin',
@@ -3559,7 +3559,7 @@ const fr: Dictionary = {
 
   'settings.service.jellyfin': 'Jellyfin',
   'settings.service.jellyfinTip':
-    'Ta vidéothèque. Bunko y retrouve tes animes, montre les épisodes possédés, reprend ce que tu as vu et suit automatiquement les nouvelles séries. Crée une clé d’API dans Jellyfin → Tableau de bord → Clés d’API.',
+    'Ta vidéothèque. Bunko y retrouve tes animes, montre les épisodes possédés, reprend ce que tu as vu et suit automatiquement les nouvelles séries. Crée une clé d’API dans Jellyfin → Tableau de bord → Clés d’API. Les serveurs Emby marchent aussi (même connexion).',
   'settings.jellyfinUser': 'Utilisateur Jellyfin (épisodes vus)',
   'jellyfin.open': 'Ouvrir dans Jellyfin',
   'jellyfin.owned': '{n} dans Jellyfin',
@@ -5594,7 +5594,7 @@ const es: Dictionary = {
 
   'settings.service.jellyfin': 'Jellyfin',
   'settings.service.jellyfinTip':
-    'Tu videoteca. Bunko encuentra allí tus animes, muestra los episodios que tienes, recoge lo que has visto y sigue automáticamente las series nuevas. Crea una clave de API en Jellyfin → Panel → Claves de API.',
+    'Tu videoteca. Bunko encuentra allí tus animes, muestra los episodios que tienes, recoge lo que has visto y sigue automáticamente las series nuevas. Crea una clave de API en Jellyfin → Panel → Claves de API. Los servidores Emby también funcionan (misma conexión).',
   'settings.jellyfinUser': 'Usuario de Jellyfin (episodios vistos)',
   'jellyfin.open': 'Abrir en Jellyfin',
   'jellyfin.owned': '{n} en Jellyfin',
@@ -7636,7 +7636,7 @@ const de: Dictionary = {
 
   'settings.service.jellyfin': 'Jellyfin',
   'settings.service.jellyfinTip':
-    'Deine Videothek. Bunko findet dort deine Anime, zeigt vorhandene Folgen, übernimmt, was du gesehen hast, und folgt neuen Serien automatisch. Erstelle einen API-Schlüssel unter Jellyfin → Dashboard → API-Schlüssel.',
+    'Deine Videothek. Bunko findet dort deine Anime, zeigt vorhandene Folgen, übernimmt, was du gesehen hast, und folgt neuen Serien automatisch. Erstelle einen API-Schlüssel unter Jellyfin → Dashboard → API-Schlüssel. Emby-Server funktionieren ebenso (gleiche Verbindung).',
   'settings.jellyfinUser': 'Jellyfin-Benutzer (gesehene Folgen)',
   'jellyfin.open': 'In Jellyfin öffnen',
   'jellyfin.owned': '{n} in Jellyfin',
@@ -9673,7 +9673,7 @@ const it: Dictionary = {
 
   'settings.service.jellyfin': 'Jellyfin',
   'settings.service.jellyfinTip':
-    'La tua videoteca. Bunko vi ritrova i tuoi anime, mostra gli episodi posseduti, riprende ciò che hai visto e segue automaticamente le nuove serie. Crea una chiave API in Jellyfin → Dashboard → Chiavi API.',
+    'La tua videoteca. Bunko vi ritrova i tuoi anime, mostra gli episodi posseduti, riprende ciò che hai visto e segue automaticamente le nuove serie. Crea una chiave API in Jellyfin → Dashboard → Chiavi API. Anche i server Emby funzionano (stessa connessione).',
   'settings.jellyfinUser': 'Utente Jellyfin (episodi visti)',
   'jellyfin.open': 'Apri in Jellyfin',
   'jellyfin.owned': '{n} in Jellyfin',

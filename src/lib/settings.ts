@@ -224,6 +224,11 @@ export function publicSettings(): PublicSettings {
   return {
     ...safe,
     secretsConfigured,
+    videoServer:
+      settings.jellyfinUrl &&
+      statement("SELECT value FROM worker_state WHERE key='video_server'").pluck().get() === 'emby'
+        ? 'emby'
+        : 'jellyfin',
     extensionSections: visibleExtensionSections(
       Boolean(settings.adultContent && settings.adultMode),
     ),

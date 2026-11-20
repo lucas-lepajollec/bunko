@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { BCP47, interpolate, messages, type UiLanguage } from './messages';
 import { getUiLanguage, setUiLanguage, subscribeLanguage } from './language';
+import { forVideoServer, useVideoServer } from './video-server';
 
 type Translate = (key: string, variables?: Record<string, string | number>) => string;
 interface I18nValue {
@@ -25,6 +26,8 @@ const I18nContext = createContext<I18nValue | null>(null);
 export function I18nProvider({ children }: { children: ReactNode }) {
   const language = useSyncExternalStore(subscribeLanguage, getUiLanguage, () => 'en' as UiLanguage);
   const setLanguage = setUiLanguage;
+  // Texts naming Jellyfin name Emby when that is the server connected.
+  const server = useVideoServer();
   useEffect(() => {
     document.documentElement.lang = language;
   }, [language]);
@@ -35,10 +38,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       locale,
       setLanguage,
       t: (key, variables) =>
-        interpolate(messages[language][key] ?? messages.en[key] ?? key, variables),
+        forVideoServer(
+          interpolate(messages[language][key] ?? messages.en[key] ?? key, variables),
+          server,
+        ),
       n: (value, options) => numberFormat(locale, options).format(value),
     };
-  }, [language, setLanguage]);
+  }, [language, setLanguage, server]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
