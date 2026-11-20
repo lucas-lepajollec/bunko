@@ -603,12 +603,17 @@ export async function extensionStreams(
   language = 'en',
   episode?: number,
   signal?: AbortSignal,
+  season?: number,
 ): Promise<VideoStreams> {
   const decoded = decodeExtensionMediaId(mediaId);
   if (!decoded) return { streams: [], subtitles: [], errors: [] };
   const addon = await addonFor(decoded.addonId, signal);
   if (!addon) return { streams: [], subtitles: [], errors: [] };
-  const query = episode && episode > 0 ? `?episode=${Math.floor(episode)}` : '';
+  // `season` only for works with several seasons: extensions with one season never see it.
+  const query =
+    episode && episode > 0
+      ? `?episode=${Math.floor(episode)}${season !== undefined && season >= 0 ? `&season=${Math.floor(season)}` : ''}`
+      : '';
   const path = `/stream/extvideo/${pathSegment(decoded.metaId)}.json${query}`;
   try {
     const data = await remembered(`stream:${addon.id}:${path}`, 5 * 60_000, () =>

@@ -30,7 +30,7 @@ export const GET = route(async (r) => {
       lang: z.enum(['en', 'fr', 'es', 'de', 'it']).default('en'),
     })
     .parse(Object.fromEntries(new URL(r.url).searchParams));
-  if (q.ext) return json(await extensionStreams(q.ext, q.lang, q.episode, r.signal));
+  if (q.ext) return json(await extensionStreams(q.ext, q.lang, q.episode, r.signal, q.season));
   if (q.anilist && q.episode)
     return json(await episodeStreams(q.anilist, q.episode, q.lang, r.signal, q.film === '1'));
   if (q.imdb || q.tmdb)

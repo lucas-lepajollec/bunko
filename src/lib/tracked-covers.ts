@@ -4,6 +4,8 @@ import type { CoverOption, TrackedMedia, UnifiedMedia } from '@/types/shared';
 import { statement, getTracked, listTracked, writeVersion } from './db';
 import { tenantState } from './tenant-context';
 import { matchKavita } from './kavita-index';
+import { jellyfinIndex, jellyfinPresence } from './jellyfin';
+import { stashConfigured } from './stash';
 import { requestJson } from './http';
 import { AppError, errorCode } from './errors';
 import { selectedCover, syncSeriesCover } from './kavita-cover';
@@ -44,6 +46,28 @@ export function localCoverOptions(t: TrackedMedia): CoverOption[] {
       label: series.libraryName,
       url: `/api/kavita/image?seriesId=${series.seriesId}`,
     });
+  // Video servers holding the work: each series (a season can be one of its own), the Stash item.
+  if (t.type === 'ANIME') {
+    const presence = jellyfinPresence(media, t.jellyfinLink);
+    const index = presence ? jellyfinIndex() : null;
+    for (const seriesId of presence
+      ? [...new Set([presence.seriesId, ...(presence.seriesIds ?? [])])]
+      : [])
+      options.push({
+        origin: 'jellyfin',
+        id: seriesId,
+        label: index?.byId.get(seriesId)?.name ?? presence!.name,
+        url: `/api/jellyfin/image?id=${seriesId}`,
+      });
+    const stash = t.stashLink ?? (media.id.startsWith('stash:') ? media.id.slice(6) : null);
+    if (stash && stashConfigured())
+      options.push({
+        origin: 'stash',
+        id: stash,
+        label: 'Stash',
+        url: `/api/stash/image?id=${stash}`,
+      });
+  }
   return options;
 }
 export async function trackedCoverOptions(

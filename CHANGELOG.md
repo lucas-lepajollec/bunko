@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Remaining gaps of the architecture audit: Jellyfin series and the Stash item are offered in
+  Images (cover choice) for video works; the top of the week, lists, profile favorites and source
+  pages show the same card marks as every other card; the library header totals what the view
+  shows; the home of an extension section is addressed by its section (`/api/home?section=`);
+  the extension kind counts its releases in episodes like its catalog and planning; a work can be
+  filed under any kind of its family (a light novel taken for a manga, and back); extension
+  streams carry `&season=` for works with several seasons (their resume position too). Dev
+  dependency update for the minimatch advisory.
 - Review fixes after the plug-in refactor: unmarking episodes syncs every Jellyfin series of a
   work; library ownership and "new" use the same season-by-season presence as the sheet;
   `?play=next` waits for the work's progress; playback positions keep their season key when Stash

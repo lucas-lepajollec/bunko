@@ -405,7 +405,7 @@ export const trackPatch = z
         z.literal('auto'),
         z
           .object({
-            origin: z.enum(['catalog', 'source', 'kavita']),
+            origin: z.enum(['catalog', 'source', 'kavita', 'jellyfin', 'stash']),
             id: z.string().min(1).max(300),
           })
           .strict(),

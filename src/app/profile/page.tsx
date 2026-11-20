@@ -291,7 +291,7 @@ function Favorites({
             >
               {n(i + 1)}
             </span>
-            <PosterCard media={{ ...entry.media, mine: libraryMark(entry) }} badge={<></>} />
+            <PosterCard media={{ ...entry.media, mine: libraryMark(entry) }} />
           </li>
         ))}
       </ol>

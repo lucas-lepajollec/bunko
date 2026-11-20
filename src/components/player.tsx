@@ -149,10 +149,15 @@ export const positionKey = (e: PlayerEpisode) => {
     }`;
   // A work of its own (extension, Stash): its id and the episode.
   if (e.streamsUrl || e.localStreamsUrl) {
+    // Several seasons: episode numbers restart in each, so the season is part of the key.
+    const season = e.streamsUrl
+      ? new URL(e.streamsUrl, 'http://x').searchParams.get('season')
+      : null;
+    const at = season && /^\d{1,3}$/.test(season) ? `${season}:${e.episode}` : `${e.episode}`;
     if (e.resume?.media.id && /^[\w.:-]+$/.test(e.resume.media.id))
-      return `${e.resume.media.id}:${e.episode}`;
+      return `${e.resume.media.id}:${at}`;
     const ext = e.streamsUrl ? new URL(e.streamsUrl, 'http://x').searchParams.get('ext') : null;
-    return ext && /^[\w.:-]+$/.test(ext) ? `${ext}:${e.episode}` : null;
+    return ext && /^[\w.:-]+$/.test(ext) ? `${ext}:${at}` : null;
   }
   return null;
 };

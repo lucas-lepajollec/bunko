@@ -199,12 +199,16 @@ export function TopRow({ items }: { items: UnifiedMedia[] | undefined }) {
           >
             {i + 1}
           </span>
-          <Cover
-            src={m.coverUrl}
-            priority={i < 5}
-            alt={m.title}
-            className="relative w-[92px] transition-transform duration-300 group-hover:-translate-y-1 md:w-[128px]"
-          />
+          <span className="relative block w-[92px] transition-transform duration-300 group-hover:-translate-y-1 md:w-[128px]">
+            <Cover src={m.coverUrl} priority={i < 5} alt={m.title} />
+            {/* The same marks as every other card (in library, owned, progress). */}
+            <WorkMarks
+              mark={m.mine}
+              inLibrary={m.trackedId !== null}
+              owned={Boolean(m.kavita)}
+              video={m.type === 'ANIME'}
+            />
+          </span>
           <span
             className="col-start-2 w-[92px] truncate text-xs leading-snug font-medium md:w-[128px] md:text-[13px]"
             title={m.title}

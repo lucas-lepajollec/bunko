@@ -409,7 +409,7 @@ const indexState = tenantState(() => ({ value: undefined as JellyfinIndex | unde
  * The Jellyfin index, decoded once per sync and kept with lookup tables: matching a work is a
  * map lookup instead of re-reading and scanning every series (it was V × J per pass).
  */
-function jellyfinIndex(): JellyfinIndex {
+export function jellyfinIndex(): JellyfinIndex {
   const row = statement(
     "SELECT COUNT(*) AS n, MAX(rowid) AS last, (SELECT value FROM worker_state WHERE key='jellyfin_synced_at') AS at FROM jellyfin_series",
   ).get() as { n: number; last: number | null; at: string | null };

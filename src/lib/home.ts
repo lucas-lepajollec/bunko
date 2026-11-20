@@ -135,8 +135,8 @@ function fillHero(home: HomeFeed): HomeFeed {
   };
 }
 /** The extension kind has no persisted home: everything is read in memory. */
-async function extensionHome(): Promise<HomeFeed> {
-  const target = sectionTarget(getSettings().extensionSection);
+async function extensionHome(section?: string): Promise<HomeFeed> {
+  const target = sectionTarget(section ?? getSettings().extensionSection);
   const page = await extensionCatalogPage(target, { kind: 'extension', sort: 'trending' }, 1);
   const releases = await extensionReleases(
     new Date(Date.now() - 30 * 86400_000),
@@ -146,9 +146,12 @@ async function extensionHome(): Promise<HomeFeed> {
   const home = fillHero(normalizeHome(composeHome(heroArtwork(releases), page.items, 'extension')));
   return { ...home, pending: page.pending };
 }
-export async function homeFeed(kind?: Exclude<DiscoverKind, 'all'>): Promise<HomeFeed> {
+export async function homeFeed(
+  kind?: Exclude<DiscoverKind, 'all'>,
+  section?: string,
+): Promise<HomeFeed> {
   // No metadata_cache entry is written for extension works.
-  if (kind && KINDS[kind].catalog === 'extension') return extensionHome();
+  if (kind && KINDS[kind].catalog === 'extension') return extensionHome(section);
   const video = isVideoKind(kind);
   // Reading releases are not video: those homes never start their ingestion.
   if (!video) void refreshReleases().catch(() => {});

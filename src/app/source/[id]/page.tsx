@@ -1,4 +1,5 @@
 'use client';
+import { WorkMarks } from '@/components/work-marks';
 import { SourcesUniverseGate } from '@/components/universe-sources';
 import { ManagedImage } from '@/components/managed-image';
 import { Select } from '@/components/select';
@@ -197,11 +198,7 @@ function SourcePageContent() {
               >
                 <span className="relative block transition-transform duration-300 group-hover:-translate-y-1">
                   <Cover src={it.thumbnailUrl} />
-                  {it.trackedId !== null && (
-                    <span className="bg-bg/85 absolute top-1.5 right-1.5 flex h-6 items-center rounded-full px-2 text-[11px] font-semibold">
-                      ✓
-                    </span>
-                  )}
+                  <WorkMarks mark={null} inLibrary={it.trackedId !== null} />
                 </span>
                 <span className="line-clamp-2 text-xs leading-snug font-medium md:text-[13px]">
                   {it.title}

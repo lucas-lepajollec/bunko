@@ -322,7 +322,7 @@ export default function ListPage() {
           {works.map((w, i) => (
             <article key={w.entry.id} className="flex min-w-0 flex-col gap-1">
               {list.ranked && <Rank n={i + 1} />}
-              <PosterCard media={{ ...w.entry.media, mine: libraryMark(w.entry) }} badge={<></>} />
+              <PosterCard media={{ ...w.entry.media, mine: libraryMark(w.entry) }} />
             </article>
           ))}
         </div>

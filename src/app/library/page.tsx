@@ -274,12 +274,13 @@ function Library() {
       if (ofKind(e, kind, section, enabledKinds, universe.hiddenSections)) c[shelfOf(e)]++;
     return c;
   }, [entries, kind, section, enabledKinds, universe.hiddenSections]);
-  const ownedChapters = entries.reduce(
+  const ofKindNow = entries.filter(ofKindHere);
+  // Totals of what the view shows (kinds turned off and hidden sections stay out).
+  const ownedChapters = ofKindNow.reduce(
     (sum, e) => sum + (e.ownedChapterCount ?? (e.unit !== 'volume' ? (e.progress?.owned ?? 0) : 0)),
     0,
   );
-  const ownedVolumes = entries.reduce((sum, e) => sum + (e.ownedVolumes?.length ?? 0), 0);
-  const ofKindNow = entries.filter(ofKindHere);
+  const ownedVolumes = ofKindNow.reduce((sum, e) => sum + (e.ownedVolumes?.length ?? 0), 0);
   const ownedCount = ofKindNow.filter((entry) => hasOwnedFiles(entry)).length;
   // Filters that would show nothing stay out of the menu (18+ only when such works are shown).
   const hasAdult = entries.some((e) => e.media.adult);

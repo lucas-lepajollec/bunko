@@ -129,7 +129,8 @@ export const KINDS: Record<Kind, KindDef> = {
     search: 'MOVIE',
     catalog: 'extension',
     releases: 'extension',
-    unit: 'film',
+    // Its releases are episodes (films and series alike), as its catalog and planning report them.
+    unit: 'episode',
     sources: false,
     datedReleases: true,
   },

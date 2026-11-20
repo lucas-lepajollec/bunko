@@ -192,7 +192,8 @@ the interface shows them under the extension's own names.
   catalog whose id contains `latest` or `trending` serves that sort, else the first one that
   does not require a search. `genre` and `tag` extras become the catalog filters.
 - Bunko reads `/catalog/extvideo/<id>[/<extras>].json`, `/meta/extvideo/<id>.json` and
-  `/stream/extvideo/<id>.json` (with `?episode=` for series).
+  `/stream/extvideo/<id>.json` (with `?episode=` for series, and `&season=` when the work has
+  several seasons, episode numbers then restarting in each).
 - `behaviorHints.adult: true` (Stremio's own flag) makes every section of the extension 18+:
   they exist only in the account's full 18+ mode (catalog, home, planning, releases, search,
   sheet, player), and every list that keeps works (pick up, library, notifications…) drops them
