@@ -10,10 +10,10 @@ import { db, listTracked, getTracked } from './db';
 import { coverContext } from './cover-state';
 import { endpoint } from './http';
 import { getSettings } from './settings';
-import { kavitaHeaders, kavitaCoverEndpoint, kavitaAdmin, scanKavitaFolder } from './kavita-client';
+import { kavitaHeaders, kavitaAdmin, scanKavitaFolder } from './kavita-client';
 import { storedCover, readStoredCover, storeCover } from './stored-covers';
-import { imagePath, localImageUrl } from './images';
-import { suwayomiHeaders } from './suwayomi';
+import { localImageUrl } from './images';
+import { integrationOfImage } from './integrations';
 import { sharedConcurrencyGate } from './concurrency';
 import { AppError } from './errors';
 import { invalidateKavitaImage, type CachedImage } from './image-cache';
@@ -227,43 +227,20 @@ export async function selectedCover(url: string, parentSignal?: AbortSignal) {
     const saved = storedCover(Number(parsed.pathname.split('/').at(-1)));
     return saved && saved.hash === parsed.searchParams.get('v') ? readStoredCover(saved) : null;
   }
-  let upstream: string;
-  let headers: Record<string, string>;
   const signal = AbortSignal.any([
     ...(parentSignal ? [parentSignal] : []),
     AbortSignal.timeout(15_000),
   ]);
-  if (parsed.pathname === '/api/suwayomi/image') {
-    const relative = imagePath(parsed.searchParams.get('path') ?? '');
-    upstream = endpoint(getSettings().suwayomiUrl, relative);
-    headers = suwayomiHeaders();
-  } else if (
-    parsed.pathname === '/api/kavita/image' &&
-    /^[1-9]\d{0,9}$/.test(parsed.searchParams.get('seriesId') ?? '')
-  ) {
-    upstream = kavitaCoverEndpoint(parsed.searchParams.get('seriesId')!);
-    headers = await kavitaHeaders(signal);
-  } else if (parsed.pathname === '/api/jellyfin/image') {
-    // A work made from a Jellyfin series or film: the server's poster.
-    const s = getSettings();
-    if (!s.jellyfinUrl || !s.jellyfinApiKey) return null;
-    upstream = endpoint(
-      s.jellyfinUrl,
-      `/Items/${parsed.searchParams.get('id')}/Images/Primary?maxWidth=600&quality=90`,
-    );
-    headers = { 'X-Emby-Token': s.jellyfinApiKey };
-  } else if (parsed.pathname === '/api/stash/image') {
-    // A work made from Stash: the group's cover, else its first scene's screenshot.
-    const s = getSettings();
-    const at =
-      s.stashUrl && s.stashApiKey
-        ? (await import('./stash')).stashImagePath(parsed.searchParams.get('id')!)
-        : null;
-    if (!at) return null;
-    upstream = endpoint(s.stashUrl, at);
-    headers = { ApiKey: s.stashApiKey };
-  } else return null;
-  const response = await fetch(upstream, { headers, signal, redirect: 'error' });
+  // An image of a connected service (Suwayomi, Kavita, Jellyfin, Stash…): the registry knows
+  // where it is upstream and how to ask for it.
+  const owner = integrationOfImage(parsed.pathname);
+  const upstreamOf = owner ? await owner.image!(parsed.searchParams, signal) : null;
+  if (!upstreamOf) return null;
+  const response = await fetch(upstreamOf.url, {
+    headers: upstreamOf.headers,
+    signal,
+    redirect: 'error',
+  });
   const mime = response.headers.get('content-type')?.split(';')[0] ?? '';
   if (!response.ok || !/^image\/(?:jpeg|png|webp|gif|avif)$/i.test(mime)) {
     await response.body?.cancel();

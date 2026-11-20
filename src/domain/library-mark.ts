@@ -1,6 +1,7 @@
 import { numberFormat } from '@/lib/intl';
 import type { LibraryMark, TrackedMedia } from '@/types/shared';
 import { workProgress } from './progress';
+import { ownedByIntegration } from './integrations';
 
 /**
  * What the user holds and has done with a work, as the small marks on its cards show it.
@@ -10,12 +11,8 @@ export const ownsFiles = (entry: TrackedMedia) =>
   (entry.ownedChapterCount ?? 0) > 0 ||
   (entry.ownedVolumes?.length ?? 0) > 0 ||
   (entry.progress?.owned ?? 0) > 0 ||
-  // A book or novel in Kavita (one file, no chapter numbers), a work in Jellyfin.
-  Boolean(entry.inKavita) ||
-  (entry.jellyfinOwned ?? 0) > 0 ||
-  // A work held by Stash (made from it, or linked to one of its groups or scenes).
-  Boolean(entry.stashLink) ||
-  Boolean(entry.media?.id.startsWith('stash:'));
+  // Any connected service holding its files (Kavita, Jellyfin, Stash…: see the registry).
+  ownedByIntegration(entry);
 
 /** `done`: everything out is seen; `partial`: started, even a single chapter or episode. */
 export function seenState(entry: TrackedMedia): LibraryMark['seen'] {
