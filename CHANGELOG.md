@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Integration registry (plug-in step 3): `src/domain/integrations.ts` (names, categories,
+  whether a service holds a work) and `src/lib/integrations.ts` (configured, connection state,
+  images, "open in" pages). The status page, the worker's "anything to do" check, the cover job's
+  image fetching, the owned mark on cards and the sheet's "Open in…" buttons go through it, so a
+  service is one entry instead of a branch in each of those places.
 - Provider registry (`src/domain/providers.ts`): every provider's id prefix, key format and
   origin (catalog or server) in one place. API validation of work ids, the sheet loaders, the
   "work of one's own" identity, library-to-catalog association and the local search use it

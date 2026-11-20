@@ -44,6 +44,7 @@ import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
 import { processTranslations, translationsWaiting } from './translations';
 import { jellyfinConfigured, jellyfinImportProgress, maybeSyncJellyfin } from './jellyfin';
 import { maybeSyncStash, stashConfigured } from './stash';
+import { anyIntegrationConfigured } from './integrations';
 import { measured } from './job-stats';
 import { recorded } from './job-runs';
 import { tenantId } from './tenant-context';
@@ -732,15 +733,8 @@ export async function runTenantWorkers() {
       // Blank instances have no upstream work. Local requests/batches still wake their own tick.
       try {
         const s = getSettings();
-        if (
-          !s.suwayomiUrl &&
-          !s.kavitaUrl &&
-          !s.jellyfinUrl &&
-          !s.stashUrl &&
-          !listTracked().length &&
-          !listBatches().length
-        )
-          return;
+        // Nothing to work with: no connected service (the registry), no work, no download.
+        if (!anyIntegrationConfigured(s) && !listTracked().length && !listBatches().length) return;
         await workerTick();
       } catch {
         // One failed/deleted tenant must not prevent the remaining instances from running.

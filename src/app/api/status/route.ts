@@ -2,100 +2,38 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 import type { ServicesStatus } from '@/types/shared';
 import { json, route } from '@/lib/api';
-import { graphql } from '@/lib/suwayomi';
 import { getSettings } from '@/lib/settings';
-import { kavitaAdmin } from '@/lib/kavita-client';
-import { endpoint } from '@/lib/http';
-import { tradocInfo } from '@/lib/translations';
-import { jellyfinInfo } from '@/lib/jellyfin';
-import { stashInfo } from '@/lib/stash';
-import { arrConfigured, arrInfo } from '@/lib/media-requests';
-import { qbittorrentConfigured, qbittorrentVersion } from '@/lib/qbittorrent';
-/** Reachability of the services the interface depends on; never returns upstream details. */
+import { INTEGRATION_MODULES } from '@/lib/integrations';
+
+/**
+ * Reachability of every connected service (the integration registry); never returns upstream
+ * details. A service not configured reads `unconfigured`, one that fails `error`.
+ */
 export const GET = route(async (r) => {
   const settings = getSettings();
-  const status: ServicesStatus = {
-    suwayomi: { state: 'unconfigured', version: null },
-    kavita: { state: 'unconfigured', admin: null },
-    tradoc: { state: 'unconfigured', version: null },
-    jellyfin: { state: 'unconfigured', version: null },
-    stash: { state: 'unconfigured', version: null },
-    sonarr: { state: 'unconfigured', version: null },
-    radarr: { state: 'unconfigured', version: null },
-    prowlarr: { state: 'unconfigured', version: null },
-    qbittorrent: { state: 'unconfigured', version: null },
-  };
-  await Promise.all([
-    (async () => {
-      if (!settings.suwayomiUrl) return;
+  const status = Object.fromEntries(
+    INTEGRATION_MODULES.map((m) => [
+      m.id,
+      m.id === 'kavita'
+        ? { state: 'unconfigured', admin: null }
+        : { state: 'unconfigured', version: null },
+    ]),
+  ) as unknown as ServicesStatus;
+  await Promise.all(
+    INTEGRATION_MODULES.filter((m) => m.status && m.configured(settings)).map(async (m) => {
+      let state: Record<string, unknown>;
       try {
-        const data = await graphql<{ aboutServer: { version: string } }>(
-          'query { aboutServer { version } }',
-          {},
-          4000,
-          r.signal,
-        );
-        status.suwayomi = { state: 'ok', version: data.aboutServer.version };
+        const answer = await m.status!(r.signal);
+        state =
+          m.id === 'kavita'
+            ? { state: answer.state, admin: answer.admin ?? null }
+            : { state: answer.state, version: answer.version };
       } catch {
-        status.suwayomi = { state: 'error', version: null };
+        state =
+          m.id === 'kavita' ? { state: 'error', admin: null } : { state: 'error', version: null };
       }
-    })(),
-    (async () => {
-      if (!settings.kavitaUrl) return;
-      try {
-        const response = await fetch(endpoint(settings.kavitaUrl, '/api/health'), {
-          signal: AbortSignal.any([r.signal, AbortSignal.timeout(4000)]),
-          redirect: 'error',
-        });
-        await response.body?.cancel();
-        status.kavita = { state: response.ok ? 'ok' : 'error', admin: await kavitaAdmin(r.signal) };
-      } catch {
-        status.kavita = { state: 'error', admin: null };
-      }
-    })(),
-    (async () => {
-      if (!settings.jellyfinUrl || !settings.jellyfinApiKey) return;
-      try {
-        const info = await jellyfinInfo(r.signal);
-        status.jellyfin = { state: 'ok', version: info.Version ?? null };
-      } catch {
-        status.jellyfin = { state: 'error', version: null };
-      }
-    })(),
-    (async () => {
-      if (!settings.stashUrl || !settings.stashApiKey) return;
-      try {
-        status.stash = { state: 'ok', version: (await stashInfo(r.signal)).version };
-      } catch {
-        status.stash = { state: 'error', version: null };
-      }
-    })(),
-    (async () => {
-      if (!settings.tradocUrl || !settings.tradocApiKey) return;
-      try {
-        const info = await tradocInfo(r.signal);
-        status.tradoc = { state: 'ok', version: info.version ?? null };
-      } catch {
-        status.tradoc = { state: 'error', version: null };
-      }
-    })(),
-    (async () => {
-      if (!qbittorrentConfigured()) return;
-      try {
-        status.qbittorrent = { state: 'ok', version: await qbittorrentVersion() };
-      } catch {
-        status.qbittorrent = { state: 'error', version: null };
-      }
-    })(),
-    ...(['sonarr', 'radarr', 'prowlarr'] as const).map(async (service) => {
-      if (!arrConfigured(service)) return;
-      try {
-        const info = await arrInfo(service, r.signal);
-        status[service] = { state: 'ok', version: info.version ?? null };
-      } catch {
-        status[service] = { state: 'error', version: null };
-      }
+      (status as unknown as Record<string, unknown>)[m.id] = state;
     }),
-  ]);
+  );
   return json(status);
 });

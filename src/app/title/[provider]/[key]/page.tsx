@@ -21,6 +21,7 @@ import { batchesInterval, libraryKeys, mediaHref, send, useApi } from '@/lib/cli
 import { useSourceScan } from '@/lib/client/use-source-scan';
 import { trackedFor } from '@/lib/client/tracked-entry';
 import { useI18n } from '@/i18n/I18nProvider';
+import { useIntegrationName } from '@/components/integration-logo';
 import { rankSourceCandidates } from '@/lib/client/source-ranking';
 import { Backdrop } from '@/components/backdrop';
 import { ChapterTable, missingForUnit, preferredVariant } from '@/components/chapters';
@@ -131,6 +132,7 @@ function Title({
   onRefresh: () => Promise<void>;
 }) {
   const { t, n, language } = useI18n();
+  const integrationName = useIntegrationName();
   const library = useApi<TrackedMedia[]>('/api/tracked');
   const batches = useApi<DownloadBatch[]>('/api/downloads/batches', {
     refreshInterval: batchesInterval,
@@ -612,32 +614,23 @@ function Title({
                   : t('title.noSource')}
         </button>
       )}
-      {video && media.jellyfin && (
-        <a
-          href={media.jellyfin.url}
-          target="_blank"
-          rel="noreferrer"
-          className={cx(ghostButton, 'gap-2')}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-            <path d="M7 4v16l13-8Z" />
-          </svg>
-          {t('jellyfin.open')}
-        </a>
-      )}
-      {video && media.stash && (
-        <a
-          href={media.stash.url}
-          target="_blank"
-          rel="noreferrer"
-          className={cx(ghostButton, 'gap-2')}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-            <path d="M7 4v16l13-8Z" />
-          </svg>
-          {t('stash.open')}
-        </a>
-      )}
+      {video &&
+        media.openIn?.map((o) => (
+          <a
+            key={o.integration}
+            href={o.url}
+            target="_blank"
+            rel="noreferrer"
+            className={cx(ghostButton, 'gap-2')}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <path d="M7 4v16l13-8Z" />
+            </svg>
+            {t('integration.openIn', {
+              name: integrationName(o.integration as 'jellyfin' | 'kavita' | 'stash'),
+            })}
+          </a>
+        ))}
       {video && <MediaDownload media={media} />}
       <Select
         label={t('title.readingStatus')}

@@ -9,6 +9,8 @@ import { linkedRoot, seasonRef } from '@/lib/anime-franchise';
 import { animeIdsLoaded, firstSeason, idsOfAnilist } from '@/lib/anime-ids';
 import { emptyMedia } from '@/lib/media';
 import { withLiveInfo } from '@/lib/work-info';
+import { INTEGRATION_MODULES } from '@/lib/integrations';
+import type { MediaDetail } from '@/types/shared';
 import { stashConfigured, stashKeyOf, stashWebUrl } from '@/lib/stash';
 export const GET = route(async (r) => {
   const id = mediaId.parse(new URL(r.url).searchParams.get('id'));
@@ -50,9 +52,17 @@ export const GET = route(async (r) => {
     : detail.id.startsWith('stash:')
       ? detail.id.slice('stash:'.length)
       : null;
-  return json({
+  const withPresence: MediaDetail = {
     ...detail,
     jellyfin: jellyfinPresence(detail, tracked?.jellyfinLink),
     stash: stashKey && stashConfigured() ? { url: stashWebUrl(stashKey) } : null,
-  });
+  };
+  // "Open in…": every video service holding the work, from the integration registry.
+  const openIn = INTEGRATION_MODULES.filter((m) => m.category === 'video' && m.openIn).flatMap(
+    (m) => {
+      const url = m.openIn!(withPresence, tracked);
+      return url ? [{ integration: m.id, url }] : [];
+    },
+  );
+  return json({ ...withPresence, openIn });
 });

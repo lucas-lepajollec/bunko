@@ -375,6 +375,8 @@ export interface MediaDetail extends UnifiedMedia, LoadState {
   jellyfin?: JellyfinPresence | null;
   /** The Stash group or scene holding this work: its page in Stash. */
   stash?: { url: string } | null;
+  /** The work's page in each service holding it (integration registry). */
+  openIn?: { integration: import('@/domain/integrations').IntegrationId; url: string }[];
   /** This id is a later season of another work: the client opens that work instead. */
   workOf?: { id: string; season: number };
   tags: string[];
