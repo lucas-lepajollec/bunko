@@ -332,6 +332,10 @@ export const PATCH = route(async (r) => {
         db()
           .prepare('UPDATE tracked_media SET jellyfin_link=? WHERE id=?')
           .run(input.jellyfinLink === null ? null : JSON.stringify(input.jellyfinLink), input.id);
+      if (input.stashLink !== undefined)
+        db()
+          .prepare('UPDATE tracked_media SET stash_link=? WHERE id=?')
+          .run(input.stashLink, input.id);
       if (input.kavitaMap !== undefined)
         db()
           .prepare('UPDATE tracked_media SET kavita_map=? WHERE id=?')
@@ -371,6 +375,12 @@ export const PATCH = route(async (r) => {
         .then((m) => m.syncWatchedToJellyfin(saved.media, saved.jellyfinLink, input.read ?? null))
         .catch(() => {
           /* Jellyfin unreachable: Bunko keeps the mark; the next change tries again. */
+        });
+    if (saved?.type === 'ANIME')
+      void import('@/lib/stash')
+        .then((m) => m.syncWatchedToStash(saved, input.read ?? null))
+        .catch(() => {
+          /* Stash unreachable: Bunko keeps the mark; the next change tries again. */
         });
   }
   await syncTrackedCover(

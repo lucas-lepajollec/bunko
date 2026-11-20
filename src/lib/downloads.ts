@@ -43,6 +43,7 @@ import { sharedConcurrencyGate } from './concurrency';
 import { kavitaSyncRequested, syncKavitaIndex } from './kavita-index';
 import { processTranslations, translationsWaiting } from './translations';
 import { jellyfinConfigured, jellyfinImportProgress, maybeSyncJellyfin } from './jellyfin';
+import { maybeSyncStash, stashConfigured } from './stash';
 import { measured } from './job-stats';
 import { recorded } from './job-runs';
 import { tenantId } from './tenant-context';
@@ -618,6 +619,10 @@ async function workerTickBackground() {
             longMaintenance = true;
             await job('jellyfin', () => maybeSyncJellyfin(signal)).catch(() => undefined);
           }
+          if (!signal.aborted && ownsLease() && animeEnabled() && stashConfigured()) {
+            longMaintenance = true;
+            await job('stash', () => maybeSyncStash(signal)).catch(() => undefined);
+          }
           longMaintenance = false;
           if (!signal.aborted && ownsLease())
             await job('catalog-linking', () => linkCatalog(signal)).catch(() => undefined);
@@ -647,7 +652,9 @@ async function workerTickBackground() {
       // A source request can arrive after an empty initial queue, during slow maintenance/transfers.
       startMatching();
       startTranslations();
-      let pending = [matching, maintenance, translations, finalCovers].filter((task) => task?.running);
+      let pending = [matching, maintenance, translations, finalCovers].filter(
+        (task) => task?.running,
+      );
       if (!pending.length) {
         // Only run a follow-up cover pass if this tick actually added/modified tracked content.
         if (finalCovers || writeVersion('content') === contentStart) break;

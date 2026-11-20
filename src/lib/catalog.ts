@@ -104,7 +104,7 @@ export function withTracking<T extends UnifiedMedia>(items: T[]): T[] {
     const associated = own;
     const t =
       associated &&
-      (sameMedia(associated.media, m) || /^(kavita|suwayomi|local|jellyfin):/.test(m.id))
+      (sameMedia(associated.media, m) || /^(kavita|suwayomi|local|jellyfin|stash):/.test(m.id))
         ? associated
         : undefined;
     const enriched = withKavita(
@@ -780,6 +780,8 @@ async function loadDetail(id: string, signal?: AbortSignal): Promise<MediaDetail
     ).tmdbDetail(provider === 'tmdbtv' ? 'tv' : 'movie', Number(key));
   else if (provider === 'jellyfin' && /^[0-9a-f]{32}$/i.test(key))
     detail = (await import('./jellyfin')).jellyfinMedia(key);
+  else if (provider === 'stash' && /^[gs]\d{1,12}$/.test(key))
+    detail = (await import('./stash')).stashMedia(key);
   else if (provider === 'mangadex' && /^[0-9a-f-]{36}$/i.test(key))
     detail = await mangadexDetail(key, signal);
   else if (provider === 'mangaupdates' && /^\d{1,20}$/.test(key))

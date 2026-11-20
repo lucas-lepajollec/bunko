@@ -54,7 +54,16 @@ const GROUPS = [
   // Integrations: an overview, then one page per service.
   {
     id: 'services',
-    sections: ['integrations', 'suwayomi', 'kavita', 'jellyfin', 'emby', 'arr', 'translation'],
+    sections: [
+      'integrations',
+      'suwayomi',
+      'kavita',
+      'jellyfin',
+      'emby',
+      'stash',
+      'arr',
+      'translation',
+    ],
   },
   { id: 'content', sections: ['catalogs', 'extensions'] },
 ] as const;
@@ -66,6 +75,7 @@ const INTEGRATION_PAGES: readonly SectionId[] = [
   'kavita',
   'jellyfin',
   'emby',
+  'stash',
   'arr',
   'translation',
 ];
@@ -74,6 +84,7 @@ const PAGE_LOGO: Partial<Record<SectionId, LogoId>> = {
   kavita: 'kavita',
   jellyfin: 'jellyfin',
   emby: 'emby',
+  stash: 'stash',
   arr: 'sonarr',
 };
 /** Earlier links (#connections, #downloads…) open the section that now holds them. */
@@ -295,6 +306,15 @@ export default function SettingsPage() {
                 />
               </Section>
             ))}
+            <Section open={open} visible={visible} id="stash" onBack={go}>
+              <Connection
+                service="stash"
+                settings={settings.data}
+                status={status.data}
+                onSaved={reload}
+              />
+              {status.data?.stash?.state === 'ok' && <StashOptions />}
+            </Section>
             <Section open={open} visible={visible} id="arr" onBack={go}>
               <p className="text-mid text-sm leading-relaxed">{t('arr.intro')}</p>
               {(['sonarr', 'radarr'] as const).map((service) => (
@@ -355,7 +375,8 @@ function ServiceDot({
   videoServer?: VideoServer;
 }) {
   const key = section === 'translation' ? 'tradoc' : section === 'emby' ? 'jellyfin' : section;
-  if (!['suwayomi', 'kavita', 'jellyfin', 'tradoc', 'arr'].includes(key) || !status) return null;
+  if (!['suwayomi', 'kavita', 'jellyfin', 'stash', 'tradoc', 'arr'].includes(key) || !status)
+    return null;
   // One connection serves Jellyfin or Emby: the dot sits on the server actually connected.
   if ((section === 'jellyfin' || section === 'emby') && (videoServer ?? 'jellyfin') !== section)
     return null;
@@ -468,6 +489,7 @@ function Connection({
     | 'tradoc'
     | 'jellyfin'
     | 'emby'
+    | 'stash'
     | 'sonarr'
     | 'radarr'
     | 'prowlarr'
@@ -484,6 +506,7 @@ function Connection({
       | 'tradoc'
       | 'jellyfin'
       | 'emby'
+      | 'stash'
       | 'sonarr'
       | 'radarr'
       | 'prowlarr'
@@ -541,6 +564,20 @@ function Connection({
           secret: 'jellyfinApiKey',
         },
         { name: 'jellyfinUser', label: t('settings.jellyfinUser') },
+      ],
+    },
+    {
+      key: 'stash',
+      state: status?.stash?.state,
+      detail: status?.stash?.version ? `v${status.stash.version}` : null,
+      fields: [
+        { name: 'stashUrl', label: t('settings.address'), type: 'url' },
+        {
+          name: 'stashApiKey',
+          label: t('settings.apiKey'),
+          type: 'password',
+          secret: 'stashApiKey',
+        },
       ],
     },
     // Emby answers the same API through the same connection (one Jellyfin or Emby server).
@@ -661,6 +698,40 @@ function VideoServerPage({
   );
 }
 
+/** Re-read Stash now; what it holds waits in Library › Unlinked. */
+function StashOptions() {
+  const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="flex flex-col items-start gap-3">
+      <p className="text-mid text-sm leading-relaxed">{t('stash.optionsHint')}</p>
+      <span className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          className={smallButton}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await send('/api/stash/sync', 'POST', {});
+              toast({ tone: 'ok', text: t('stash.synced') });
+            } catch (e) {
+              toast({ tone: 'bad', text: errorText(t, e) });
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? t('common.working') : t('stash.syncNow')}
+        </button>
+        <Link href="/library?view=unlinked" className={smallButton}>
+          {t('library.unlinked')} →
+        </Link>
+      </span>
+    </div>
+  );
+}
+
 /** Every integration at a glance, by what it brings; each opens its own page. */
 function IntegrationsOverview({
   settings,
@@ -701,7 +772,7 @@ function IntegrationsOverview({
   };
   const categories: { id: string; pages: SectionId[] }[] = [
     { id: 'reading', pages: ['suwayomi', 'kavita'] },
-    { id: 'video', pages: ['jellyfin', 'emby'] },
+    { id: 'video', pages: ['jellyfin', 'emby', 'stash'] },
     { id: 'downloads', pages: ['arr'] },
     { id: 'translation', pages: ['translation'] },
   ];
@@ -942,6 +1013,7 @@ function ServiceCard({
     | 'tradoc'
     | 'jellyfin'
     | 'emby'
+    | 'stash'
     | 'sonarr'
     | 'radarr'
     | 'prowlarr'

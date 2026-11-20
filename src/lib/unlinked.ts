@@ -10,6 +10,7 @@ import {
   matchJellyfin,
 } from './jellyfin';
 import { kavitaSummaries } from './kavita-index';
+import { applyStashProgress, stashUnlinked, stashWork } from './stash';
 import { kavitaMedia } from './kavita-track';
 
 /**
@@ -77,7 +78,7 @@ function kavitaUnlinked(): UnlinkedItem[] {
 }
 
 export function unlinkedItems(): UnlinkedItem[] {
-  return [...jellyfinUnlinked(), ...kavitaUnlinked()];
+  return [...jellyfinUnlinked(), ...stashUnlinked(ignoredIds('stash')), ...kavitaUnlinked()];
 }
 
 export function setUnlinkedIgnored(integration: Integration, id: string, ignored: boolean) {
@@ -145,6 +146,19 @@ export function createSheet(input: {
     );
     // What was already watched in Jellyfin counts at once.
     applyJellyfinProgress();
+    return getTracked(entry.id)!;
+  }
+  if (input.integration === 'stash') {
+    const media = sheetMedia(
+      stashWork(input.id),
+      input.kind,
+      input.title,
+      input.year,
+      input.section,
+    );
+    const entry = track({ media, status: 'PLANNING' });
+    statement('UPDATE tracked_media SET off_catalog=1 WHERE id=?').run(entry.id);
+    applyStashProgress();
     return getTracked(entry.id)!;
   }
   const seriesId = Number(input.id);

@@ -373,6 +373,8 @@ export interface MediaDetail extends UnifiedMedia, LoadState {
   /** A work from a video extension catalog: the type its own metadata declares. */
   extension?: { type: 'movie' | 'series' };
   jellyfin?: JellyfinPresence | null;
+  /** The Stash group or scene holding this work: its page in Stash. */
+  stash?: { url: string } | null;
   /** This id is a later season of another work: the client opens that work instead. */
   workOf?: { id: string; season: number };
   tags: string[];
@@ -761,6 +763,9 @@ export interface Settings {
   jellyfinUrl: string;
   jellyfinApiKey: string;
   jellyfinUser: string;
+  /** Stash server address and API key (Settings → Security → API key in Stash). */
+  stashUrl: string;
+  stashApiKey: string;
   /** Video extensions: Stremio addon manifest URLs (stored encrypted, never sent to the browser). */
   videoAddons: string[];
   /** Version tried first: original audio with subtitles, or dubbed. */
@@ -842,6 +847,7 @@ export type SecretSetting =
   | 'qbittorrentApiKey'
   | 'tradocApiKey'
   | 'jellyfinApiKey'
+  | 'stashApiKey'
   | 'googleBooksApiKey'
   | 'tmdbApiKey'
   | 'metronApiToken'
@@ -926,7 +932,7 @@ export interface JellyfinItem {
 }
 /** Something an integration holds that no work of the library is linked to. */
 export interface UnlinkedItem {
-  integration: 'jellyfin' | 'kavita';
+  integration: 'jellyfin' | 'kavita' | 'stash';
   /** The item's id in that integration (Jellyfin series/film id, Kavita series id). */
   id: string;
   name: string;
@@ -982,6 +988,8 @@ export interface JellyfinSeriesSummary {
 export interface TrackedMedia {
   id: number;
   jellyfinLink?: JellyfinLink | null;
+  /** The Stash group (`g<id>`) or scene (`s<id>`) linked to this work by hand. */
+  stashLink?: string;
   /** Kavita entries linked by hand to chapters or volumes of the work (absent: as Kavita numbers them). */
   kavitaMap?: KavitaMap | null;
   /** A Kavita series holds this work's files (even a single book with no chapter numbers). */
@@ -1104,12 +1112,13 @@ export type BackgroundJobId =
   | 'source-matching'
   | 'kavita-index'
   | 'jellyfin'
+  | 'stash'
   | 'catalog-linking'
   | 'covers'
   | 'translations';
 /** What a background job works with: the activity panel groups jobs by it. */
 export type BackgroundJobGroup =
-  'suwayomi' | 'kavita' | 'jellyfin' | 'catalogs' | 'bunko' | 'tradoc';
+  'suwayomi' | 'kavita' | 'jellyfin' | 'stash' | 'catalogs' | 'bunko' | 'tradoc';
 /** One background job of the account, as the activity panel shows it. */
 export interface BackgroundJob {
   id: BackgroundJobId;
@@ -1252,6 +1261,8 @@ export interface ServicesStatus {
   };
   /** Jellyfin media server; `version` when reachable. */
   jellyfin: { state: ServiceState; version: string | null };
+  /** Stash video server; `version` when reachable. */
+  stash?: { state: ServiceState; version: string | null };
   /** TraDoc translation engine; `version` is TraDoc's own version when reachable. */
   tradoc: { state: ServiceState; version: string | null };
   /** Sonarr (series, anime) and Radarr (films). */

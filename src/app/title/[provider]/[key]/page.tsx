@@ -625,6 +625,19 @@ function Title({
           {t('jellyfin.open')}
         </a>
       )}
+      {video && media.stash && (
+        <a
+          href={media.stash.url}
+          target="_blank"
+          rel="noreferrer"
+          className={cx(ghostButton, 'gap-2')}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <path d="M7 4v16l13-8Z" />
+          </svg>
+          {t('stash.open')}
+        </a>
+      )}
       {video && <MediaDownload media={media} />}
       <Select
         label={t('title.readingStatus')}

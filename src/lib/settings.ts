@@ -32,6 +32,7 @@ export const secretKeys: SecretSetting[] = [
   'qbittorrentApiKey',
   'tradocApiKey',
   'jellyfinApiKey',
+  'stashApiKey',
   'googleBooksApiKey',
   'tmdbApiKey',
   'metronApiToken',
@@ -118,6 +119,8 @@ function serverSettings(): Settings {
     jellyfinUrl: '',
     jellyfinApiKey: '',
     jellyfinUser: '',
+    stashUrl: '',
+    stashApiKey: '',
     autoImportJellyfin: true,
     jellyfinLibraries: {},
     videoAddons: [],
@@ -295,6 +298,11 @@ export function updateSettings(patch: SettingsPatch) {
         db().exec(
           "DELETE FROM jellyfin_series; UPDATE tracked_media SET jellyfin_link=NULL; DELETE FROM worker_state WHERE key='jellyfin_synced_at' OR key LIKE 'jellyfin_import_tried:%';",
         );
+      if (patch.stashUrl !== undefined && patch.stashUrl !== current.stashUrl)
+        // Scene and group ids belong to the previous server.
+        db().exec(
+          "DELETE FROM stash_items; UPDATE tracked_media SET stash_link=NULL; DELETE FROM worker_state WHERE key='stash_synced_at';",
+        );
       if (patch.suwayomiUrl !== undefined && patch.suwayomiUrl !== current.suwayomiUrl) {
         // Chapter IDs from the previous server could name other chapters: forget source positions.
         db().exec('DELETE FROM reader_progress WHERE chapter_id>0');
@@ -360,6 +368,8 @@ function seedEnvironment() {
           qbittorrentApiKey: 'QBITTORRENT_API_KEY',
           jellyfinUrl: 'JELLYFIN_URL',
           jellyfinApiKey: 'JELLYFIN_API_KEY',
+          stashUrl: 'STASH_URL',
+          stashApiKey: 'STASH_API_KEY',
           tradocUrl: 'TRADOC_URL',
           tradocApiKey: 'TRADOC_API_KEY',
           tmdbApiKey: 'TMDB_API_KEY',

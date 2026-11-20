@@ -25,7 +25,7 @@ const NAMES = {
 /** Every service Bunko connects to that has a logo. */
 export type LogoId = keyof typeof LOGOS;
 /** Integrations that hold works (the unlinked inbox, links): `jellyfin` is the Jellyfin or Emby connection. */
-export type IntegrationId = 'jellyfin' | 'kavita';
+export type IntegrationId = 'jellyfin' | 'kavita' | 'stash';
 /** The connected server's own name (the Jellyfin connection may be an Emby server). */
 export function useIntegrationName() {
   const server = useVideoServer();

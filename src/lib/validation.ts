@@ -139,7 +139,7 @@ export const mediaId = z
   .string()
   .max(800)
   .regex(
-    /^(?:(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary|googlebooks|bnf|metron|hardcover|rakuten|jellyfin|tmdbtv|tmdbmovie):[0-9a-zA-Z_-]+|ext:[0-9a-f]{12}:[A-Za-z0-9_-]+)$/,
+    /^(?:(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary|googlebooks|bnf|metron|hardcover|rakuten|jellyfin|stash|tmdbtv|tmdbmovie):[0-9a-zA-Z_-]+|ext:[0-9a-f]{12}:[A-Za-z0-9_-]+)$/,
     'Unknown media identifier',
   );
 export const adultOverrideBody = z.object({
@@ -223,6 +223,8 @@ export const settingsPatch = z
     jellyfinUrl: z.union([httpUrl, z.literal('')]).optional(),
     jellyfinApiKey: z.string().max(2000).optional(),
     jellyfinUser: z.string().trim().max(100).optional(),
+    stashUrl: z.union([httpUrl, z.literal('')]).optional(),
+    stashApiKey: z.string().max(2000).optional(),
     autoImportJellyfin: z.boolean().optional(),
     // Configured addon addresses carry their options (often base64) in the path: long.
     videoAddons: z.array(z.string().url().max(4000)).max(20).optional(),
@@ -426,6 +428,12 @@ export const trackPatch = z
       .optional(),
     /** Set progress by hand (episodes watched for anime); may go back. */
     read: z.number().min(0).max(100_000).nullable().optional(),
+    /** The Stash group (`g<id>`) or scene (`s<id>`) linked to this work (`null`: none). */
+    stashLink: z
+      .string()
+      .regex(/^[gs]\d{1,12}$/)
+      .nullable()
+      .optional(),
     /** A work of one's own takes its facts from this catalog work (`null`: its own again). */
     metadataFrom: mediaId.nullable().optional(),
     /** Kavita entries linked by hand (`null`: every entry as Kavita numbers it). */

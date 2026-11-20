@@ -9,6 +9,7 @@ import { linkedRoot, seasonRef } from '@/lib/anime-franchise';
 import { animeIdsLoaded, firstSeason, idsOfAnilist } from '@/lib/anime-ids';
 import { emptyMedia } from '@/lib/media';
 import { withLiveInfo } from '@/lib/work-info';
+import { stashConfigured, stashKeyOf, stashWebUrl } from '@/lib/stash';
 export const GET = route(async (r) => {
   const id = mediaId.parse(new URL(r.url).searchParams.get('id'));
   // A later season already known to belong to a work: open the work right away.
@@ -43,5 +44,15 @@ export const GET = route(async (r) => {
   if (detail.type !== 'ANIME') return json(detail);
   // Anime: what the Jellyfin library holds for it (local index, no network).
   const tracked = trackedForMedia(detail, listTracked());
-  return json({ ...detail, jellyfin: jellyfinPresence(detail, tracked?.jellyfinLink) });
+  // The Stash item holding it (a work made from Stash, or linked by hand).
+  const stashKey = tracked
+    ? stashKeyOf(tracked)
+    : detail.id.startsWith('stash:')
+      ? detail.id.slice('stash:'.length)
+      : null;
+  return json({
+    ...detail,
+    jellyfin: jellyfinPresence(detail, tracked?.jellyfinLink),
+    stash: stashKey && stashConfigured() ? { url: stashWebUrl(stashKey) } : null,
+  });
 });

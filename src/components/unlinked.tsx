@@ -40,7 +40,7 @@ export function UnlinkedInbox({
   const shown = (items ?? []).filter(
     (i) => (integration === 'all' || i.integration === integration) && i.ignored === showIgnored,
   );
-  const integrations = (['jellyfin', 'kavita'] as const).filter((x) =>
+  const integrations = (['jellyfin', 'stash', 'kavita'] as const).filter((x) =>
     (items ?? []).some((i) => i.integration === x),
   );
   const count = (x: UnlinkedItem['integration']) =>
@@ -218,7 +218,9 @@ function LinkToWork({ item, busy, onDone }: { item: UnlinkedItem; busy: boolean;
         media: m,
         status: 'PLANNING',
       });
-      if (item.integration === 'jellyfin') {
+      if (item.integration === 'stash')
+        await send('/api/tracked', 'PATCH', { id: entry.id, stashLink: item.id });
+      else if (item.integration === 'jellyfin') {
         await send('/api/tracked', 'PATCH', {
           id: entry.id,
           jellyfinLink: { seriesId: item.id, season: 1 },
