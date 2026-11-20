@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Settings › Integrations: an overview of every service by what it brings (reading, video,
+  downloads, translation) with its logo and state, and one page per service underneath (shown
+  indented with its logo in the menu, a way back to the overview on each page). Jellyfin and Emby
+  have their own pages; the page of the server not connected says which one is (one Jellyfin or
+  Emby connection at a time).
 - Emby: the Jellyfin connection also takes an Emby server (Jellyfin's parent project, same API).
   Bunko tells which one it is from the server itself (`ProductName`, version 10.x for Jellyfin,
   4.x for Emby) on every status check and sync; interface texts, logos and "Open in" links then
