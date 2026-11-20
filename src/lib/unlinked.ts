@@ -7,7 +7,7 @@ import {
   jellyfinConfigured,
   jellyfinIndexedSeries,
   jellyfinWorkOf,
-  matchJellyfin,
+  jellyfinSeriesInUse,
 } from './jellyfin';
 import { kavitaSummaries } from './kavita-index';
 import { applyStashProgress, stashUnlinked, stashWork } from './stash';
@@ -35,14 +35,8 @@ function ignoredIds(integration: Integration) {
 /** Jellyfin series and films that no followed work is linked to. */
 function jellyfinUnlinked(): UnlinkedItem[] {
   if (!jellyfinConfigured()) return [];
-  const linked = new Set(
-    listTracked()
-      .filter((t) => t.type === 'ANIME')
-      .flatMap((t) => {
-        const m = matchJellyfin(t.media, t.jellyfinLink);
-        return m ? [m.series.id] : [];
-      }),
-  );
+  // Every series a work holds, one per season when its seasons are separate series.
+  const linked = jellyfinSeriesInUse(listTracked().filter((t) => t.type === 'ANIME'));
   const ignored = ignoredIds('jellyfin');
   return jellyfinIndexedSeries()
     .filter((s) => !linked.has(s.id))

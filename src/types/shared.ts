@@ -908,6 +908,12 @@ export type JellyfinLink =
        * Jellyfin item that holds it (`null`: none). When set, it replaces `order` entirely.
        */
       episodes?: Record<string, string | null>;
+      /**
+       * Where each season of the work is in Jellyfin, chosen by hand: the work's season number →
+       * a Jellyfin series and its season (`null`: not in Jellyfin). Other seasons are found by
+       * themselves (their own series, as Jellyfin identifies it, or the same season number).
+       */
+      seasons?: Record<string, { seriesId: string; season: number } | null>;
     }
   | 'none';
 /**
@@ -930,6 +936,9 @@ export interface KavitaEntry {
 /** One video item of a Jellyfin series (episode, or the film itself), for linking by hand. */
 export interface JellyfinItem {
   id: string;
+  /** The series holding it (a work may draw on several). */
+  seriesId?: string;
+  seriesName?: string;
   /** Jellyfin season (0 = specials) and episode number; numbers Jellyfin lacked are given in order. */
   season: number;
   n: number;
@@ -971,6 +980,10 @@ export interface JellyfinPresence {
   manual: boolean;
   /** Linked "in order": one list (season 0) numbered across the whole series. */
   absolute?: boolean;
+  /** Every Jellyfin series holding part of the work (a work whose seasons are separate series). */
+  seriesIds?: string[];
+  /** Where each season of the work was found (work season number → series and season). */
+  seasonSources?: Record<string, { seriesId: string; season: number; manual: boolean } | null>;
 }
 /** Jellyfin, or Emby (Jellyfin's parent project, same API): detected from the server itself. */
 export type VideoServer = 'jellyfin' | 'emby';
