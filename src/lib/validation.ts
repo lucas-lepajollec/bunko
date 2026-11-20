@@ -1,3 +1,4 @@
+import { isWorkId } from '@/domain/providers';
 import { z } from 'zod';
 import { KIND_IDS } from '@/domain/kinds';
 import { localImageUrl } from './images';
@@ -135,13 +136,8 @@ export const media = z.object({
     .nullable()
     .default(null),
 });
-export const mediaId = z
-  .string()
-  .max(800)
-  .regex(
-    /^(?:(?:anilist|mangadex|mangaupdates|suwayomi|kavita|openlibrary|googlebooks|bnf|metron|hardcover|rakuten|jellyfin|stash|tmdbtv|tmdbmovie):[0-9a-zA-Z_-]+|ext:[0-9a-f]{12}:[A-Za-z0-9_-]+)$/,
-    'Unknown media identifier',
-  );
+/** A work id of a known provider (see `domain/providers.ts`). */
+export const mediaId = z.string().max(800).refine(isWorkId, 'Unknown media identifier');
 export const adultOverrideBody = z.object({
   id: z
     .string()

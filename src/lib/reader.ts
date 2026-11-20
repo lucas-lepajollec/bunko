@@ -28,6 +28,7 @@ import {
   type ReaderSourceChapter,
 } from './reader-archives';
 import { cbzPage, cbzPages } from './cbz-reader';
+import { KINDS, kindOfMedia } from '@/domain/kinds';
 import type { ReaderChapter, ReaderProgressUpdate, UnifiedMedia } from '@/types/shared';
 import { tenantState } from './tenant-context';
 import { tenantSignal } from './tenant-lifecycle';
@@ -35,17 +36,26 @@ interface ChapterData {
   chapter: ReaderSourceChapter;
   urls: string[];
 }
+/**
+ * The reading direction of a work's kind (the kind chosen for it first: a manga filed as a manhwa
+ * reads as one long strip); a webtoon reads vertically whatever its kind says.
+ */
 export function readerDirection(
-  media?: Pick<UnifiedMedia, 'format' | 'genres'>,
+  media?: Pick<UnifiedMedia, 'format' | 'genres'> &
+    Partial<Pick<UnifiedMedia, 'type' | 'origin' | 'kindOverride'>>,
 ): ReaderChapter['direction'] {
-  if (media?.format === 'COMIC') return 'ltr';
-  if (
-    media?.format === 'MANHWA' ||
-    media?.format === 'MANHUA' ||
-    media?.genres.some((g) => /webtoon/i.test(g))
-  )
-    return 'vertical';
-  return 'rtl';
+  if (!media) return 'rtl';
+  const own =
+    KINDS[
+      kindOfMedia({
+        type: media.type ?? 'MANGA',
+        format: media.format,
+        origin: media.origin ?? null,
+        kindOverride: media.kindOverride,
+      })
+    ].direction;
+  if (own !== 'ltr' && media.genres.some((g) => /webtoon/i.test(g))) return 'vertical';
+  return own ?? 'rtl';
 }
 async function chapterData(id: number, signal?: AbortSignal): Promise<ChapterData> {
   const namespace = readerNamespace();
