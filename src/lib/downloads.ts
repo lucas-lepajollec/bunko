@@ -736,6 +736,7 @@ export async function runTenantWorkers() {
           !s.suwayomiUrl &&
           !s.kavitaUrl &&
           !s.jellyfinUrl &&
+          !s.stashUrl &&
           !listTracked().length &&
           !listBatches().length
         )

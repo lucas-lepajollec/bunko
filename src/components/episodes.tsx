@@ -143,12 +143,6 @@ export function EpisodeList({
   const watchedHere = Math.min(Math.max(0, read - offset), season.list.length);
   // `?play=<season index>.<episode>` (from "Pick up where you left off") opens that episode.
   const params = useSearchParams();
-  const [playing, setPlaying] = useState<{ season: number; episode: number } | null>(() => {
-    const m = /^(\d{1,3})\.(\d{1,5})$/.exec(params.get('play') ?? '');
-    if (!m) return null;
-    const at = { season: Number(m[1]), episode: Number(m[2]) };
-    return seasons[at.season] && at.episode >= 1 ? at : null;
-  });
   // Resume: the episode after the last one watched (across the work).
   const resumeAt = (() => {
     const next = read + 1;
@@ -160,6 +154,14 @@ export function EpisodeList({
       }
     return null;
   })();
+  // `?play=next` (a work picked up from Jellyfin or Stash progress) opens the next episode.
+  const [playing, setPlaying] = useState<{ season: number; episode: number } | null>(() => {
+    if (params.get('play') === 'next') return resumeAt;
+    const m = /^(\d{1,3})\.(\d{1,5})$/.exec(params.get('play') ?? '');
+    if (!m) return null;
+    const at = { season: Number(m[1]), episode: Number(m[2]) };
+    return seasons[at.season] && at.episode >= 1 ? at : null;
+  });
   const episodeFor = (at: { season: number; episode: number }): PlayerEpisode => {
     const s = seasons[at.season];
     const jf = jellyfinSeason(s, jellyfin, offsets[at.season] ?? 0);
