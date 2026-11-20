@@ -167,15 +167,9 @@ it('names untitled scenes after their file, pictures groups by their first scene
   // The group has only Stash's placeholder cover: its first scene's screenshot.
   expect(stash.stashImagePath('g1')).toBe('/scene/2/screenshot?t=99');
   expect(stash.stashImagePath('s3')).toBe('/scene/3/screenshot?t=99');
-  // Episode 2 of the group is scene 1 (MP4/H.264: the original first); episode 1 is HEVC.
-  const second = stash.stashSceneStreams('stash:g1', 2).streams.map((x) => [x.url, x.webReady]);
-  expect(second[0]).toEqual(['/api/stash/stream/1?mode=direct', true]);
-  // HEVC/MKV: Stash's HLS first (starts in seconds), then its MP4, the original last.
-  const first = stash.stashSceneStreams('stash:g1', 1).streams.map((x) => [x.url, x.webReady]);
-  expect(first).toEqual([
-    ['/api/stash/stream/2/stream.m3u8', true],
-    ['/api/stash/stream/2?mode=mp4', true],
-    ['/api/stash/stream/2?mode=direct', false],
+  // Every scene plays through Stash's HLS (what Stash's own player uses).
+  expect(stash.stashSceneStreams('stash:g1', 2).streams.map((x) => [x.kind, x.url])).toEqual([
+    ['hls', '/api/stash/stream/1/stream.m3u8'],
   ]);
   expect(stash.stashSceneStreams('stash:g1', 9).streams).toEqual([]);
 });

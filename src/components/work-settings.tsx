@@ -9,6 +9,7 @@ import { DisplayTitle } from './matches';
 import { InfoBubble, toast } from './notify';
 import { RatingButton } from './rating';
 import { KINDS, KIND_IDS, kindOfMedia } from '@/domain/kinds';
+import { useUniverse } from '@/lib/client/universe';
 import { Select } from './select';
 
 const STATUSES: ReadingStatus[] = ['PLANNING', 'READING', 'PAUSED', 'COMPLETED', 'DROPPED'];
@@ -102,6 +103,16 @@ export function GeneralTab({
   const detectedVolumes = entry.ownedAsVolumes ? 0 : (entry.ownedVolumes?.length ?? 0);
   const ownsFiles = (entry.ownedChapterCount ?? 0) > 0 || Boolean(entry.ownedAsVolumes);
   const video = media.type === 'ANIME';
+  // Extension sections a video work can be filed under: the ones extensions declare now, and
+  // the work's own (kept with it while the extension's catalog is not read yet).
+  const universe = useUniverse();
+  const sectionChoices = [
+    ...universe.sections,
+    ...(entry.media.extensionSection &&
+    !universe.sections.some((s) => s.id === entry.media.extensionSection!.id)
+      ? [entry.media.extensionSection]
+      : []),
+  ];
   return (
     <div className="flex flex-col gap-8">
       <Group title={t('settings.work.tracking')}>
@@ -189,8 +200,27 @@ export function GeneralTab({
         <Row title={t('settings.work.kind')} hint={t('settings.work.kindHint')}>
           <Select
             label={t('settings.work.kind')}
-            value={entry.media.kindOverride ?? ''}
-            onChange={(kind) => void run(() => patch({ kindOverride: kind || null }))}
+            value={
+              entry.media.kindOverride === 'extension' && entry.media.extensionSection
+                ? `extension:${entry.media.extensionSection.id}`
+                : (entry.media.kindOverride ?? '')
+            }
+            onChange={(kind) => {
+              // An extension's section (JAV, Videos…) is a kind of its own here.
+              const section = kind.startsWith('extension:')
+                ? sectionChoices.find((s) => `extension:${s.id}` === kind)
+                : undefined;
+              void run(() =>
+                patch(
+                  section
+                    ? {
+                        kindOverride: 'extension',
+                        extensionSection: { id: section.id, name: section.name },
+                      }
+                    : { kindOverride: kind || null },
+                ),
+              );
+            }}
             options={[
               {
                 value: '',
@@ -201,11 +231,15 @@ export function GeneralTab({
               ...KIND_IDS.filter(
                 (k) =>
                   KINDS[k].mediaType === entry.type &&
-                  (KINDS[k].catalog !== 'extension' || entry.media.providers.includes('extension')),
+                  (KINDS[k].catalog !== 'extension' ||
+                    (entry.media.providers.includes('extension') && !sectionChoices.length)),
               ).map((k) => ({
                 value: k,
                 label: t(`kind.${k}`),
               })),
+              ...(entry.type === 'ANIME'
+                ? sectionChoices.map((s) => ({ value: `extension:${s.id}`, label: s.name }))
+                : []),
             ]}
           />
         </Row>

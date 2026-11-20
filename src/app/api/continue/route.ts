@@ -18,7 +18,7 @@ const continueMedia = z
     color: z.string().max(20).nullable(),
     kindOverride: z.string().max(20).optional(),
     extensionSection: z
-      .object({ id: z.string().min(1).max(40), name: z.string().min(1).max(60) })
+      .object({ id: z.string().min(1).max(200), name: z.string().min(1).max(200) })
       .strict()
       .optional(),
   })

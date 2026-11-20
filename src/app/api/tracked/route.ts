@@ -112,7 +112,7 @@ export const PATCH = route(async (r) => {
     return json(await linkWorkInfo(input.id, input.metadataFrom, r.signal));
   }
   // Personal marks (like, score, kind) change nothing else: no identity or source work.
-  const marks = ['favorite', 'rating', 'kindOverride'] as const;
+  const marks = ['favorite', 'rating', 'kindOverride', 'extensionSection'] as const;
   if (
     marks.some((key) => input[key] !== undefined) &&
     Object.keys(input).every((key) => key === 'id' || (marks as readonly string[]).includes(key))
@@ -130,6 +130,20 @@ export const PATCH = route(async (r) => {
             : "UPDATE tracked_media SET media_json=json_remove(media_json,'$.kindOverride') WHERE id=?",
         )
         .run(...(input.kindOverride ? [input.kindOverride, input.id] : [input.id]));
+      // Filed under an extension's section (JAV, Videos…): the section goes with the kind. Out
+      // of the extension kind, a work of another catalog leaves its section behind.
+      if (input.kindOverride === 'extension' && input.extensionSection)
+        db()
+          .prepare(
+            "UPDATE tracked_media SET media_json=json_set(media_json,'$.extensionSection',json(?)) WHERE id=?",
+          )
+          .run(JSON.stringify(input.extensionSection), input.id);
+      else if (!current.media.id.startsWith('ext:'))
+        db()
+          .prepare(
+            "UPDATE tracked_media SET media_json=json_remove(media_json,'$.extensionSection') WHERE id=?",
+          )
+          .run(input.id);
     }
     if (input.favorite !== undefined)
       db()

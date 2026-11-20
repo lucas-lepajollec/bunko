@@ -190,6 +190,34 @@ export function kindOfMedia(media: {
   if (['CN', 'HK', 'TW'].includes(media.origin ?? '')) return 'manhua';
   return 'manga';
 }
+/** Works of the extension kind filed under no section (a scope's `section`). */
+export const NO_SECTION = '-';
+/**
+ * What a view shows: one kind (an extension kind's section, `NO_SECTION`, or every section), or
+ * every kind chosen in the settings (`enabled`; empty or absent: every kind).
+ */
+export interface KindScope {
+  kind: DiscoverKind;
+  section?: string | null;
+  enabled?: readonly Kind[] | null;
+}
+/**
+ * Whether a work belongs to a view. Every view (library, home, "pick up where you left off",
+ * search, catalog) asks this one question the same way: a new kind, or an extension's section,
+ * shows everywhere at once.
+ */
+export function inKindScope(
+  media: Parameters<typeof kindOfMedia>[0] & { extensionSection?: { id: string } | null },
+  scope: KindScope,
+): boolean {
+  const own = kindOfMedia(media);
+  if (scope.kind === 'all') return !scope.enabled?.length || scope.enabled.includes(own);
+  if (own !== scope.kind) return false;
+  if (scope.kind !== 'extension' || !scope.section) return true;
+  return scope.section === NO_SECTION
+    ? !media.extensionSection
+    : media.extensionSection?.id === scope.section;
+}
 /** Provider media type searched for a kind (`all`: every provider's default). */
 export function searchTypeOf(kind: DiscoverKind | undefined): SearchType | undefined {
   return !kind || kind === 'all' ? undefined : KINDS[kind].search;

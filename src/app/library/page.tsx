@@ -1,7 +1,14 @@
 'use client';
 import { SlidingHighlight } from '@/components/sliding-highlight';
 import { ScrollStrip } from '@/components/scroll-strip';
-import { KIND_IDS, isVideoKind, kindOfMedia, type Kind as RegistryKind } from '@/domain/kinds';
+import {
+  KIND_IDS,
+  NO_SECTION,
+  inKindScope,
+  isVideoKind,
+  kindOfMedia,
+  type Kind as RegistryKind,
+} from '@/domain/kinds';
 import { OwnedInventory } from '@/components/owned-inventory';
 import { MediaLink } from '@/components/media-link';
 import { Select } from '@/components/select';
@@ -113,20 +120,18 @@ const caughtUp = (e: TrackedMedia) => {
 const shelfOf = (e: TrackedMedia): Shelf => (caughtUp(e) ? 'CAUGHT_UP' : e.status);
 const ALL_KINDS: Kind[] = ['all', ...KIND_IDS];
 /** One classification for the whole app: the kind registry (user's override first). */
-/**
- * A work shown under a kind chip: "all" holds the kinds enabled in the settings (others stay out
- * of the library), the extension kind one chip per declared section.
- */
+/** A work shown under a kind chip: the scope every view shares (see `inKindScope`). */
 function ofKind(
   e: TrackedMedia,
   kind: Kind,
   section: string | null = null,
   enabled: ReadonlySet<Kind> | null = null,
 ) {
-  const own = kindOfMedia(e.media);
-  if (kind === 'all') return !enabled || enabled.has(own);
-  if (own !== kind) return false;
-  return kind !== 'extension' || !section || e.media.extensionSection?.id === section;
+  return inKindScope(e.media, {
+    kind,
+    section,
+    enabled: enabled ? ([...enabled] as RegistryKind[]) : null,
+  });
 }
 const PROGRESS_REFRESH_COOLDOWN_MS = 120_000;
 let lastProgressRefreshAt = 0;
@@ -184,9 +189,19 @@ function Library() {
   // The library keeps every kind one tap away, but opens on the current universe.
   const universe = useUniverse();
   const [chosenKind, setChosenKind] = useViewState<Kind | ''>('kind', '', ['', ...ALL_KINDS]);
+  // Sections of the extension kind: the ones extensions declare now, and the ones the library's
+  // works were filed under (kept with each work, so they show before any catalog is read).
+  const librarySections = useMemo(() => {
+    const out = new Map(universe.sections.map((s) => [s.id, s.name]));
+    for (const e of library.data ?? [])
+      if (e.media.extensionSection && !out.has(e.media.extensionSection.id))
+        out.set(e.media.extensionSection.id, e.media.extensionSection.name);
+    return [...out].map(([id, name]) => ({ id, name }));
+  }, [universe.sections, library.data]);
   const [chosenSection, setChosenSection] = useViewState<string>('section', '', [
     '',
-    ...universe.sections.map((s) => s.id),
+    NO_SECTION,
+    ...librarySections.map((s) => s.id),
   ]);
   const kind: Kind = chosenKind || universe.active;
   // An extension's section (JAV, Videos…) is a kind of its own in the library.
@@ -197,8 +212,8 @@ function Library() {
   };
   // Kinds turned off in the settings stay out of the library ("all" included).
   const enabledKinds = useMemo(
-    () => (universe.ready ? new Set<Kind>(universe.enabled) : null),
-    [universe.ready, universe.enabled],
+    () => (universe.ready ? new Set<Kind>(universe.chosen) : null),
+    [universe.ready, universe.chosen],
   );
   const ofKindHere = (e: TrackedMedia) => ofKind(e, kind, section, enabledKinds);
   // Anime speaks of episodes and watching; every label follows the kind on screen.
@@ -264,7 +279,27 @@ function Library() {
   // Works with something to fetch or watch: the count on the "New" tab.
   const newsCount = ofKindNow.filter(hasNews).length;
   // Works per kind: shown next to the total and on each kind chip.
-  const chips = universe.choices(universe.enabled);
+  // One chip per kind chosen in the settings; the extension kind one per section, plus one for
+  // its works filed under no section.
+  const chips = universe.chosen
+    .filter(
+      (k) =>
+        k !== 'extension' ||
+        entries.some((e) => kindOfMedia(e.media) === 'extension') ||
+        universe.sections.length,
+    )
+    .flatMap((k): { kind: string; section: string | null; name: string | null }[] =>
+      k !== 'extension'
+        ? [{ kind: k, section: null, name: null }]
+        : [
+            ...librarySections.map((s) => ({ kind: k, section: s.id, name: s.name })),
+            ...(entries.some(
+              (e) => kindOfMedia(e.media) === 'extension' && !e.media.extensionSection,
+            ) || !librarySections.length
+              ? [{ kind: k, section: NO_SECTION, name: null }]
+              : []),
+          ],
+    );
   const chipKey = (k: Kind, sec: string | null) => `${k}|${sec ?? ''}`;
   const kindCounts = useMemo(() => {
     const c = new Map<string, number>();
@@ -363,7 +398,7 @@ function Library() {
               : t('library.kindCount', {
                   count: n(kindCounts.get(chipKey(kind, section)) ?? 0),
                   kind:
-                    (section && universe.sections.find((x) => x.id === section)?.name) ||
+                    (section && librarySections.find((x) => x.id === section)?.name) ||
                     t(`kind.${kind}`),
                   total: n(entries.length),
                 })

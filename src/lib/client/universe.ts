@@ -8,9 +8,11 @@ import {
   KINDS,
   byKindOrder,
   completeKindOrder,
+  inKindScope,
   kindOfMedia,
   kindVisible,
   type Kind,
+  type KindScope,
   type KindVisibility,
 } from '@/domain/kinds';
 
@@ -51,6 +53,12 @@ export function useUniverse() {
   const visible = (kind: DiscoverKind) => kindVisible(kind, visibility);
   const enabled: Universe[] = byKindOrder(
     (data?.universes?.length ? data.universes : UNIVERSES).filter(visible),
+    order,
+  );
+  // Kinds chosen in the settings, whether or not they can be browsed right now (an extension's
+  // sections are known once its catalog has been read): the library keeps their works.
+  const chosen: Universe[] = byKindOrder(
+    data?.universes?.length ? data.universes : UNIVERSES,
     order,
   );
   const allowAll = data?.showAllUniverse ?? true;
@@ -109,6 +117,9 @@ export function useUniverse() {
     sections,
     choices,
     enabled,
+    chosen,
+    /** The view on screen as a scope: active kind, its section, the kinds chosen. */
+    scope: { kind: active, section, enabled: chosen } as KindScope,
     order,
     visible,
     visibility,
@@ -128,11 +139,15 @@ export function kindOf(
 ): Universe {
   return kindOfMedia(media);
 }
-/** Whether a work belongs to the active universe (`all` keeps everything). */
+/**
+ * Whether a work belongs to a view: a kind alone (`all` keeps everything), or a whole scope
+ * (section, kinds chosen in the settings). See `inKindScope`.
+ */
 export const inUniverse = (
-  active: DiscoverKind,
-  media: Pick<UnifiedMedia, 'type' | 'format' | 'origin'>,
-) => active === 'all' || kindOf(media) === active;
+  scope: DiscoverKind | KindScope,
+  media: Pick<UnifiedMedia, 'type' | 'format' | 'origin'> &
+    Partial<Pick<UnifiedMedia, 'kindOverride' | 'extensionSection' | 'id'>>,
+) => inKindScope(media, typeof scope === 'string' ? { kind: scope } : scope);
 
 export { searchTypeOf, type SearchType } from '@/domain/kinds';
 

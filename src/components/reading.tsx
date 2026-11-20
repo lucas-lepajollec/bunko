@@ -60,7 +60,7 @@ export function useContinue(limit?: number) {
     revalidateOnMount: true,
     dedupingInterval: 0,
   });
-  const shown = (items.data ?? []).filter((i) => inUniverse(universe.active, i.media));
+  const shown = (items.data ?? []).filter((i) => inUniverse(universe.scope, i.media));
   return { ...items, shown: limit ? shown.slice(0, limit) : shown };
 }
 

@@ -64,7 +64,7 @@ export function QuickSearch({
   );
   const items = scope
     ? []
-    : (results.data?.results ?? []).filter((m) => inUniverse(universe.active, m)).slice(0, 6);
+    : (results.data?.results ?? []).filter((m) => inUniverse(universe.scope, m)).slice(0, 6);
   useEffect(() => {
     if (!scope || !touched.current) return;
     const url = new URL(window.location.href);
