@@ -38,13 +38,13 @@ it('gives every integration its settings page, texts in every language and logo'
 
 it('gives every integration its server side, state and, when it holds works, ownership and images', () => {
   for (const meta of INTEGRATIONS) {
-    const module = INTEGRATION_MODULES.find((m) => m.id === meta.id);
-    expect(module, `server module of ${meta.id}`).toBeTruthy();
-    expect(module!.status, `status of ${meta.id}`).toBeTypeOf('function');
+    const server = INTEGRATION_MODULES.find((m) => m.id === meta.id);
+    expect(server, `server module of ${meta.id}`).toBeTruthy();
+    expect(server!.status, `status of ${meta.id}`).toBeTypeOf('function');
     // A media server whose works are followed: owned mark, images for covers.
     if (['kavita', 'jellyfin', 'stash'].includes(meta.id)) {
       expect(meta.owns, `owned mark of ${meta.id}`).toBeTypeOf('function');
-      expect(module!.image, `images of ${meta.id}`).toBeTypeOf('function');
+      expect(server!.image, `images of ${meta.id}`).toBeTypeOf('function');
     }
   }
 });
