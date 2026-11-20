@@ -219,6 +219,7 @@ export function db(): Database.Database {
     migrateV32(connection);
     migrateV33(connection);
     migrateV34(connection);
+    migrateV35(connection);
     // Heal any self-referential work_links rows that could hide a root work from the library.
     connection.exec('DELETE FROM work_links WHERE member = root');
     // Replace older trigger definitions atomically: every route bundle observes settings writes.
@@ -1718,6 +1719,18 @@ export function migrateV34(database: Database.Database) {
       database.exec(`INSERT OR IGNORE INTO integration_links(tracked_id,integration,value)
         SELECT id,'stash',json_quote(stash_link) FROM tracked_media WHERE stash_link IS NOT NULL`);
     database.pragma('user_version=34');
+  })();
+}
+/** A list made for one section of the extension kind (as its extension declares it). */
+export function migrateV35(database: Database.Database) {
+  database.transaction(() => {
+    if (Number(database.pragma('user_version', { simple: true })) >= 35) return;
+    const columns = (database.prepare('PRAGMA table_info(lists)').all() as { name: string }[]).map(
+      (c) => c.name,
+    );
+    if (columns.length && !columns.includes('section'))
+      database.exec('ALTER TABLE lists ADD COLUMN section TEXT');
+    database.pragma('user_version=35');
   })();
 }
 /** Parts of a catalog sheet that a followed work never stores. */

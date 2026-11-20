@@ -284,6 +284,7 @@ it('shows a list under the kinds of its works, an empty one everywhere', async (
     layout: 'list' as const,
     system: null,
     tiers: [] as WorkList['tiers'],
+    section: null,
     createdAt: '',
     updatedAt: '',
   } satisfies Partial<WorkList>;
@@ -301,5 +302,26 @@ it('shows a list under the kinds of its works, an empty one everywhere', async (
   expect([
     listInUniverse(typed, entries, 'anime'),
     listInUniverse(typed, entries, 'manga'),
-  ]).toEqual([true, false]);
+  ]).toEqual([true, false]); // Made for one section of the extension kind: under that section or every section only.
+  const clips = { ...base, kind: 'extension' as const, section: 'clips', items: [], hidden: 0 };
+  expect([
+    listInUniverse(clips, entries, { kind: 'extension', section: 'clips' }),
+    listInUniverse(clips, entries, { kind: 'extension', section: null }),
+    listInUniverse(clips, entries, { kind: 'extension', section: 'films' }),
+    listInUniverse(clips, entries, { kind: 'anime' }),
+  ]).toEqual([true, true, false, false]);
+});
+
+it('keeps a list made for one extension section, and drops the section with the kind', async () => {
+  const { createList, updateList, listLists } = await import('@/lib/lists');
+  const id = createList({ name: 'Clips', kind: 'extension', section: 'clips', ranked: false });
+  expect(listLists().find((l) => l.id === id)).toMatchObject({
+    kind: 'extension',
+    section: 'clips',
+  });
+  updateList(id, { kind: 'anime' });
+  expect(listLists().find((l) => l.id === id)).toMatchObject({ kind: 'anime', section: null });
+  // A section never sticks to another kind.
+  const other = createList({ name: 'Anime', kind: 'anime', section: 'clips', ranked: false });
+  expect(listLists().find((l) => l.id === other)?.section).toBeNull();
 });

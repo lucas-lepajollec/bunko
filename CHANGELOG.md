@@ -10,6 +10,10 @@
   filed under any kind of its family (a light novel taken for a manga, and back); extension
   streams carry `&season=` for works with several seasons (their resume position too). Dev
   dependency update for the minimatch advisory.
+- Lists and favorites per extension section: a list can be made for one section of the extension
+  kind (schema v35, `lists.section`; `POST/PATCH /api/lists {kind, section}`), shows under that
+  section and offers only its works; profile favorites have one tab per section, like the kind
+  menu.
 - Review fixes after the plug-in refactor: unmarking episodes syncs every Jellyfin series of a
   work; library ownership and "new" use the same season-by-season presence as the sheet;
   `?play=next` waits for the work's progress; playback positions keep their season key when Stash

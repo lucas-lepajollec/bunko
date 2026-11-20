@@ -153,6 +153,8 @@ export interface WorkList {
   name: string;
   description: string;
   kind: Exclude<DiscoverKind, 'all'> | null;
+  /** With the extension kind: the one section it is made for (`null`: every section). */
+  section: string | null;
   /** Numbered: its order is a ranking. */
   ranked: boolean;
   layout: ListLayout;
