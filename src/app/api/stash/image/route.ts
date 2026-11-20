@@ -17,26 +17,15 @@ export const GET = route(async (r) => {
   const s = getSettings();
   if (!s.stashUrl || !s.stashApiKey)
     throw new AppError('SERVICE_NOT_CONFIGURED', 'Stash is not configured', 409);
-  return cachedImageResponse(r, `stash:${id}`, async () => {
-    const signal = AbortSignal.timeout(15_000);
-    try {
-      return await fetchImage(
-        endpoint(s.stashUrl, stashImagePath(id)),
-        { ApiKey: s.stashApiKey },
-        undefined,
-        false,
-        signal,
-      );
-    } catch (error) {
-      // Stash before 0.27 names groups "movies".
-      if (!id.startsWith('g')) throw error;
-      return fetchImage(
-        endpoint(s.stashUrl, stashImagePath(id, 'movies')),
-        { ApiKey: s.stashApiKey },
-        undefined,
-        false,
-        AbortSignal.timeout(15_000),
-      );
-    }
-  });
+  const at = stashImagePath(id);
+  if (!at) throw new AppError('NOT_FOUND', 'No picture for this Stash item', 404);
+  return cachedImageResponse(r, `stash:${id}:${at}`, () =>
+    fetchImage(
+      endpoint(s.stashUrl, at),
+      { ApiKey: s.stashApiKey },
+      undefined,
+      false,
+      AbortSignal.timeout(15_000),
+    ),
+  );
 });

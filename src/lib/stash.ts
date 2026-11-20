@@ -10,6 +10,8 @@ import type {
   TrackedMedia,
   UnifiedMedia,
   UnlinkedItem,
+  VideoStream,
+  VideoStreams,
 } from '@/types/shared';
 import { cadence } from './presence';
 import { db, listTracked, statement } from './db';
@@ -26,6 +28,10 @@ const PAGE = 500;
 export interface StashScene {
   id: string;
   title: string;
+  /** Path (on the Stash server) of its screenshot. */
+  image?: string | null;
+  /** The original file plays in browsers as it is. */
+  webReady?: boolean;
   code: string | null;
   date: string | null;
   details: string | null;
@@ -39,6 +45,8 @@ export interface StashScene {
 export interface StashGroup {
   id: string;
   name: string;
+  /** Path (on the Stash server) of its cover, when it has its own. */
+  image?: string | null;
   date: string | null;
   synopsis: string | null;
   /** Scene ids in the group's order. */
@@ -116,7 +124,8 @@ const scenesQuery = (groups: 'groups' | 'movies') => `
       count
       scenes {
         id title code date details play_count
-        files { duration }
+        files { basename duration format video_codec }
+        paths { screenshot }
         studio { name }
         performers { name }
         ${groups === 'groups' ? 'groups { group { id } scene_index }' : 'movies { movie { id } scene_index }'}
@@ -131,7 +140,17 @@ const sceneSchema = z
     date: z.string().nullable().optional(),
     details: z.string().nullable().optional(),
     play_count: z.number().nullable().optional(),
-    files: z.array(z.object({ duration: z.number().nullable().optional() })).optional(),
+    files: z
+      .array(
+        z.object({
+          basename: z.string().nullable().optional(),
+          duration: z.number().nullable().optional(),
+          format: z.string().nullable().optional(),
+          video_codec: z.string().nullable().optional(),
+        }),
+      )
+      .optional(),
+    paths: z.object({ screenshot: z.string().nullable().optional() }).nullable().optional(),
     studio: z.object({ name: z.string() }).nullable().optional(),
     performers: z.array(z.object({ name: z.string() })).optional(),
     groups: z
@@ -148,6 +167,7 @@ const groupSchema = z
     name: z.string(),
     date: z.string().nullable().optional(),
     synopsis: z.string().nullable().optional(),
+    front_image_path: z.string().nullable().optional(),
   })
   .passthrough();
 
@@ -179,8 +199,8 @@ async function fetchScenes(signal?: AbortSignal) {
 async function fetchGroups(flavour: 'groups' | 'movies', signal?: AbortSignal) {
   const query =
     flavour === 'groups'
-      ? 'query { findGroups(filter: { per_page: -1 }) { groups { id name date synopsis } } }'
-      : 'query { findMovies(filter: { per_page: -1 }) { movies { id name date synopsis } } }';
+      ? 'query { findGroups(filter: { per_page: -1 }) { groups { id name date synopsis front_image_path } } }'
+      : 'query { findMovies(filter: { per_page: -1 }) { movies { id name date synopsis front_image_path } } }';
   const data = await stash<Record<string, Record<string, unknown[]>>>(query, {}, signal, 60_000);
   const list = flavour === 'groups' ? data.findGroups.groups : data.findMovies.movies;
   return z.array(groupSchema).parse(list);
@@ -202,7 +222,17 @@ export async function syncStashIndex(signal?: AbortSignal) {
       `s${s.id}`,
       {
         id: s.id,
-        title: s.title || s.code || `#${s.id}`,
+        // Untitled scenes: Stash shows the file name, so does Bunko.
+        title:
+          s.title?.trim() ||
+          s.files?.[0]?.basename?.replace(/\.[a-z0-9]{2,4}$/i, '').trim() ||
+          s.code ||
+          `#${s.id}`,
+        image: s.paths?.screenshot ? imagePath(s.paths.screenshot) : null,
+        // Browsers decode MP4/WebM in H.264, VP8/9 or AV1: other files go through Stash's MP4.
+        webReady:
+          /^(mp4|m4v|mov|webm)$/i.test(s.files?.[0]?.format ?? '') &&
+          /^(h264|avc1?|vp8|vp9|av1)$/i.test(s.files?.[0]?.video_codec ?? ''),
         code: s.code ?? null,
         date: s.date ?? null,
         details: s.details ?? null,
@@ -222,6 +252,11 @@ export async function syncStashIndex(signal?: AbortSignal) {
         name: g.name,
         date: g.date ?? null,
         synopsis: g.synopsis ?? null,
+        // A group without its own cover gets Stash's placeholder: its first scene's picture instead.
+        image:
+          g.front_image_path && !/[?&]default=true/.test(g.front_image_path)
+            ? imagePath(g.front_image_path)
+            : null,
         scenes: (members.get(g.id) ?? [])
           .sort((a, b) => a.index - b.index || Number(a.id) - Number(b.id))
           .map((m) => m.id),
@@ -408,8 +443,62 @@ export function stashUnlinked(ignored: Set<string>): UnlinkedItem[] {
   );
 }
 
-/** Image of a scene (screenshot) or group (front cover), fetched with the key server-side. */
-export function stashImagePath(key: string, flavour: 'groups' | 'movies' = 'groups') {
-  if (key.startsWith('s')) return `/scene/${key.slice(1)}/screenshot`;
-  return `/${flavour === 'groups' ? 'group' : 'movie'}/${key.slice(1)}/frontimage`;
+/** The path and query of an image URL Stash gave (fetched again from the configured server). */
+function imagePath(url: string) {
+  try {
+    const u = new URL(url, 'http://stash.invalid');
+    return `${u.pathname}${u.search}`;
+  } catch {
+    return null;
+  }
+}
+/**
+ * Where an item's picture is on the Stash server: a scene's screenshot; a group's own cover,
+ * else the screenshot of its first scene (as Stash shows a group without one).
+ */
+export function stashImagePath(key: string): string | null {
+  if (key.startsWith('s')) {
+    const s = item<StashScene>(key);
+    return s?.image ?? `/scene/${key.slice(1)}/screenshot`;
+  }
+  const g = item<StashGroup>(key);
+  if (g?.image) return g.image;
+  const first = g?.scenes[0];
+  if (!first) return null;
+  return item<StashScene>(`s${first}`)?.image ?? `/scene/${first}/screenshot`;
+}
+
+/** The streams of one episode: the original file when browsers read it, Stash's MP4 always. */
+export function stashSceneStreams(mediaIdValue: string, episode: number): VideoStreams {
+  const own = mediaIdValue.startsWith('stash:') ? mediaIdValue.slice('stash:'.length) : null;
+  const followed = listTracked().find((t) => t.media.id === mediaIdValue);
+  const key = followed ? stashKeyOf(followed) : own && isKey(own) ? own : null;
+  const scene = key ? stashScenes(key)[episode - 1] : undefined;
+  if (!scene) return { streams: [], subtitles: [], errors: [] };
+  const stream = (mode: 'direct' | 'mp4', webReady: boolean): VideoStream => {
+    const url = `/api/stash/stream/${scene.id}?mode=${mode}`;
+    return {
+      id: `stash:${scene.id}:${mode}`,
+      addon: 'Stash',
+      name: 'Stash',
+      title: mode === 'direct' ? 'Original' : 'MP4',
+      kind: 'direct',
+      url,
+      relayUrl: null,
+      externalUrl: null,
+      preferred: true,
+      version: null,
+      autoplay: true,
+      quality: null,
+      webReady,
+      subtitles: [],
+    };
+  };
+  return {
+    streams: scene.webReady
+      ? [stream('direct', true), stream('mp4', true)]
+      : [stream('mp4', true), stream('direct', false)],
+    subtitles: [],
+    errors: [],
+  };
 }

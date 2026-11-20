@@ -35,6 +35,7 @@ export function EpisodeList({
   anilistId,
   video,
   jellyfin,
+  stash = false,
   entry,
   busy,
   onWatched,
@@ -54,6 +55,8 @@ export function EpisodeList({
   video: VideoDetail;
   /** What the Jellyfin library holds for this season (owned, watched, item ids). */
   jellyfin?: JellyfinPresence | null;
+  /** The work is held by Stash: episodes play its scenes. */
+  stash?: boolean;
   entry: TrackedMedia | undefined;
   busy: boolean;
   /** New number of episodes watched (null = none). */
@@ -162,6 +165,7 @@ export function EpisodeList({
     const jf = jellyfinSeason(s, jellyfin, offsets[at.season] ?? 0);
     // Generic extension catalog work: its own streams endpoint replaces id-based lookups.
     const extension = media?.id.startsWith('ext:') ?? false;
+    const stashHeld = stash;
     const partFilm = isPartFilm(s);
     const partTitle = s.label && s.title ? s.title : title;
     const partAnilistId = extension ? null : (s.anilistId ?? anilistId);
@@ -193,6 +197,12 @@ export function EpisodeList({
       ...(extension && media
         ? {
             streamsUrl: `/api/video/streams?ext=${encodeURIComponent(media.id)}&episode=${at.episode}`,
+          }
+        : {}),
+      // Held by Stash: its scenes play through Bunko (episode numbers across the whole work).
+      ...(stashHeld && media
+        ? {
+            streamsUrl: `/api/stash/streams?id=${encodeURIComponent(media.id)}&episode=${(offsets[at.season] ?? 0) + at.episode}`,
           }
         : {}),
       episode: at.episode,

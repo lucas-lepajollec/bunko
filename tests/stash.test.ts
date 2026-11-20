@@ -26,7 +26,15 @@ const scene = (id: string, title: string, groupIndex: number | null) => ({
   date: '2024-03-0' + id,
   details: null,
   play_count: plays.get(id) ?? 0,
-  files: [{ duration: 1800 }],
+  files: [
+    {
+      duration: 1800,
+      basename: `File ${id}.mkv`,
+      format: id === '1' ? 'mp4' : 'matroska',
+      video_codec: id === '1' ? 'h264' : 'hevc',
+    },
+  ],
+  paths: { screenshot: `http://stash.local/scene/${id}/screenshot?t=99` },
   studio: { name: 'Studio' },
   performers: [{ name: 'Someone' }],
   ...(old
@@ -54,15 +62,17 @@ const server: Server = createServer((req, res) => {
         data: {
           findScenes: {
             count: 3,
-            scenes: [
-              scene('1', 'Part two', 2),
-              scene('2', 'Part one', 1),
-              scene('3', 'Alone', null),
-            ],
+            scenes: [scene('1', 'Part two', 2), scene('2', 'Part one', 1), scene('3', '', null)],
           },
         },
       });
-    const group = { id: '1', name: 'A Group', date: '2024-03-01', synopsis: 'Grouped.' };
+    const group = {
+      id: '1',
+      name: 'A Group',
+      date: '2024-03-01',
+      synopsis: 'Grouped.',
+      front_image_path: 'http://stash.local/group/1/frontimage?t=1&default=true',
+    };
     if (query.includes('findGroups')) return send({ data: { findGroups: { groups: [group] } } });
     if (query.includes('findMovies')) return send({ data: { findMovies: { movies: [group] } } });
     if (query.includes('sceneAddPlay')) {
@@ -148,4 +158,22 @@ it('links a scene to a catalog work by hand, and reads older servers (movies)', 
     }),
   ).toBe('s3');
   expect(stash.stashKeyOf({ media: { id: 'anilist:1' } as never, stashLink: 'x' })).toBeNull();
+});
+
+it('names untitled scenes after their file, pictures groups by their first scene, and plays scenes', async () => {
+  await stash.syncStashIndex();
+  // Scene 3 has no title in Stash: its file name, as Stash shows it.
+  expect(stash.stashScenes('s3')[0].title).toBe('File 3');
+  // The group has only Stash's placeholder cover: its first scene's screenshot.
+  expect(stash.stashImagePath('g1')).toBe('/scene/2/screenshot?t=99');
+  expect(stash.stashImagePath('s3')).toBe('/scene/3/screenshot?t=99');
+  // Episode 2 of the group is scene 1 (MP4/H.264: the original first); episode 1 is HEVC.
+  const second = stash.stashSceneStreams('stash:g1', 2).streams.map((x) => [x.url, x.webReady]);
+  expect(second[0]).toEqual(['/api/stash/stream/1?mode=direct', true]);
+  const first = stash.stashSceneStreams('stash:g1', 1).streams.map((x) => [x.url, x.webReady]);
+  expect(first).toEqual([
+    ['/api/stash/stream/2?mode=mp4', true],
+    ['/api/stash/stream/2?mode=direct', false],
+  ]);
+  expect(stash.stashSceneStreams('stash:g1', 9).streams).toEqual([]);
 });
