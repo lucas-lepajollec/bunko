@@ -15,7 +15,7 @@ export const ownsFiles = (entry: TrackedMedia) =>
   (entry.jellyfinOwned ?? 0) > 0 ||
   // A work held by Stash (made from it, or linked to one of its groups or scenes).
   Boolean(entry.stashLink) ||
-  entry.media.id.startsWith('stash:');
+  Boolean(entry.media?.id.startsWith('stash:'));
 
 /** `done`: everything out is seen; `partial`: started, even a single chapter or episode. */
 export function seenState(entry: TrackedMedia): LibraryMark['seen'] {
