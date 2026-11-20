@@ -80,9 +80,14 @@ export function JellyfinTab({
   const list = useApi<JellyfinSeriesSummary[]>(
     picking ? `/api/jellyfin/series?q=${encodeURIComponent(q)}` : null,
   );
+  // Every series the work draws on (one per season when they are separate series).
+  const itemSeries = current?.seriesIds?.length ? current.seriesIds : seriesId ? [seriesId] : [];
   const items = useApi<JellyfinItem[]>(
-    seriesId ? `/api/jellyfin/items?seriesId=${encodeURIComponent(seriesId)}` : null,
+    itemSeries.length
+      ? `/api/jellyfin/items?seriesId=${encodeURIComponent(itemSeries.join(','))}`
+      : null,
   );
+  const several = itemSeries.length > 1;
   const part = (s: AnimeSeason) =>
     s.label ?? (s.isFilm ? s.title : t('jellyfin.seasonN', { n: n(s.display ?? s.number) }));
   const episodes = workEpisodes(media, part);
@@ -100,6 +105,8 @@ export function JellyfinTab({
   const base = (id: string): Linked => ({
     seriesId: id,
     season: linked?.seriesId === id ? linked.season : 1,
+    // Seasons placed by hand stay placed.
+    ...(linked?.seriesId === id && linked.seasons ? { seasons: linked.seasons } : {}),
   });
   const mapOf = (choose: (e: WorkEpisode) => string | null) =>
     Object.fromEntries(episodes.map((e) => [String(e.absolute), choose(e)]));
@@ -137,6 +144,7 @@ export function JellyfinTab({
       : 'seasons';
   const itemLabel = (i: JellyfinItem) =>
     [
+      several ? i.seriesName : null,
       i.season === 0
         ? t('jellyfin.special', { n: n(i.n) })
         : t('jellyfin.episodeCode', { s: n(i.season), e: n(i.n) }),
@@ -251,6 +259,15 @@ export function JellyfinTab({
         </div>
       )}
 
+      {seriesId && manual !== 'none' && (media.video?.seasons?.length ?? 0) > 1 && (
+        <SeasonSources
+          media={media}
+          linked={linked}
+          seriesId={seriesId}
+          sources={current?.seasonSources ?? null}
+          onLink={onLink}
+        />
+      )}
       {seriesId && manual !== 'none' && (
         <section className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -363,5 +380,127 @@ export function JellyfinTab({
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * Where each season of the work is in Jellyfin: found by Bunko (its own series, as Jellyfin
+ * identifies it, or the same season number), or chosen here (another series, its specials, or
+ * not in Jellyfin at all).
+ */
+function SeasonSources({
+  media,
+  linked,
+  seriesId,
+  sources,
+  onLink,
+}: {
+  media: MediaDetail;
+  linked: Linked | null;
+  seriesId: string;
+  sources: NonNullable<MediaDetail['jellyfin']>['seasonSources'] | null;
+  onLink: (link: JellyfinLink | null) => void;
+}) {
+  const { t, n } = useI18n();
+  const [query, setQuery] = useState(media.title.split(/[:;]/)[0].trim());
+  const [q, setQ] = useState(query);
+  const found = useApi<JellyfinSeriesSummary[]>(`/api/jellyfin/series?q=${encodeURIComponent(q)}`);
+  const seasons = [...(media.video?.seasons ?? [])].sort((a, b) => a.number - b.number);
+  const chosen = linked?.seasons ?? {};
+  const candidates = found.data ?? [];
+  const name = (id: string) => candidates.find((c) => c.id === id)?.name ?? id.slice(0, 8);
+  const seasonName = (season: number) =>
+    season === 0 ? t('jellyfin.specials') : t('jellyfin.seasonN', { n: n(season) });
+  const set = (work: number, value: string) => {
+    const next = { ...chosen };
+    if (value === 'auto') delete next[String(work)];
+    else if (value === 'none') next[String(work)] = null;
+    else {
+      const [id, season] = value.split('|');
+      next[String(work)] = { seriesId: id, season: Number(season) };
+    }
+    onLink({
+      seriesId,
+      season: linked?.season ?? 1,
+      ...(linked?.order ? { order: linked.order } : {}),
+      ...(Object.keys(next).length ? { seasons: next } : {}),
+    });
+  };
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-col gap-0.5">
+        <h2 className="text-lg font-bold">{t('jellyfin.seasonsTitle')}</h2>
+        <span className="text-muted text-sm">{t('jellyfin.seasonsHint')}</span>
+      </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setQ(query.trim());
+        }}
+        className="flex gap-2"
+      >
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label={t('jellyfin.search')}
+          placeholder={t('jellyfin.search')}
+          maxLength={200}
+          className="border-line bg-raised h-10 min-w-0 flex-1 rounded-full border px-4 text-sm"
+        />
+        <button type="submit" className={smallButton}>
+          {t('extsearch.run')}
+        </button>
+      </form>
+      <div className="flex flex-col overflow-hidden rounded-2xl bg-white/[0.03]">
+        {seasons.map((s) => {
+          const key = String(s.number);
+          const choice = chosen[key];
+          const value =
+            choice === undefined
+              ? 'auto'
+              : choice === null
+                ? 'none'
+                : `${choice.seriesId}|${choice.season}`;
+          const now = sources?.[key];
+          return (
+            <div
+              key={s.number}
+              className="flex flex-wrap items-center gap-3 border-t border-white/[0.05] px-4 py-2.5 first:border-t-0"
+            >
+              <span className="flex min-w-[12rem] flex-1 flex-col">
+                <span className="font-semibold">
+                  {s.label ?? t('jellyfin.seasonN', { n: n(s.display ?? s.number) })}
+                </span>
+                <span className="text-muted truncate text-xs">
+                  {s.title}
+                  {now && ` · ${name(now.seriesId)} · ${seasonName(now.season)}`}
+                </span>
+              </span>
+              <select
+                value={value}
+                onChange={(e) => set(s.number, e.target.value)}
+                aria-label={t('jellyfin.seasonFor', { name: s.title })}
+                className="bg-raised border-line h-10 max-w-full rounded-xl border px-3 text-sm"
+              >
+                <option value="auto">{t('jellyfin.seasonAuto')}</option>
+                <option value="none">{t('jellyfin.seasonNone')}</option>
+                {choice && !candidates.some((c) => c.id === choice.seriesId) && (
+                  <option value={value}>
+                    {name(choice.seriesId)} · {seasonName(choice.season)}
+                  </option>
+                )}
+                {candidates.flatMap((c) =>
+                  c.seasons.map((season) => (
+                    <option key={`${c.id}|${season}`} value={`${c.id}|${season}`}>
+                      {c.name} · {seasonName(season)}
+                    </option>
+                  )),
+                )}
+              </select>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }

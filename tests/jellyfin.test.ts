@@ -14,6 +14,22 @@ vi.mock('@/lib/anime-franchise', async (original) => {
   return {
     ...real,
     prefetchNodes: async () => {},
+    // A two-season work: season 2 lives elsewhere in Jellyfin.
+    knownSeasons: (id: number) =>
+      id === 50
+        ? [1, 2].map((n) => ({
+            number: n,
+            anilistId: 49 + n,
+            title: n === 1 ? 'Fixture Quest' : 'Fixture Quest: Second',
+            year: 2023,
+            status: 'FINISHED',
+            episodes: 3,
+            aired: 3,
+            duration: 24,
+            nextEpisode: null,
+            list: [1, 2, 3].map((e) => ({ number: e, title: null, thumbnail: null })),
+          }))
+        : real.knownSeasons(id),
     franchise: async (id: number) => ({
       root: { ...emptyMedia(`anilist:${id}`, 'Plugin Work', 'ANIME'), anilistId: id },
       seasons: [],
@@ -412,4 +428,39 @@ it('tells an Emby server from Jellyfin and links to its own web pages', async ()
   expect(jellyfin.videoServerItemUrl('http://emby', 'abc')).toBe(
     'http://emby/web/index.html#!/item?id=abc&serverId=srv1',
   );
+});
+
+it('takes each season of a work from where it is in Jellyfin, chosen by hand or found', async () => {
+  const work = { ...anime(50, 'Fixture Quest'), anilistId: 50 };
+  const followed = track({ media: work, status: 'PLANNING' });
+  await jellyfin.syncJellyfinIndex();
+  const media = getTracked(followed.id)!.media;
+  // Season 2 by hand: the episodes of another series.
+  const presence = jellyfin.jellyfinPresence(media, {
+    seriesId: 'A',
+    season: 1,
+    seasons: { '2': { seriesId: 'C', season: 1 } },
+  });
+  expect(presence).toMatchObject({ absolute: true, manual: true, seriesIds: ['A', 'C'] });
+  expect(presence!.bySeason[0].episodeIds).toEqual({
+    1: 'a1e1',
+    2: 'a1e2',
+    3: 'a1e3',
+    4: 'c1',
+    5: 'c2',
+    6: 'c3',
+  });
+  expect(presence!.bySeason[0].played).toEqual([1, 2, 4]);
+  // The other series counts as linked: it leaves the unlinked inbox.
+  const { unlinkedItems } = await import('@/lib/unlinked');
+  db()
+    .prepare('UPDATE tracked_media SET jellyfin_link=? WHERE id=?')
+    .run(
+      JSON.stringify({ seriesId: 'A', season: 1, seasons: { '2': { seriesId: 'C', season: 1 } } }),
+      followed.id,
+    );
+  expect(unlinkedItems().some((i) => i.id === 'C')).toBe(false);
+  // Without a choice, both seasons of series A are its seasons 1 and 2 (plain mapping).
+  const plain = jellyfin.jellyfinPresence(media, null);
+  expect(plain?.absolute).toBeUndefined();
 });

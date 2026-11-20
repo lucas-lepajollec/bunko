@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Jellyfin, season by season: a work whose seasons are separate Jellyfin series (or filed
+  elsewhere, such as a sequel kept in a series' specials) is no longer limited to one series.
+  Each season of the work is found where it is: its own series as Jellyfin identifies it (the
+  AniList plugin's id, the TVDB series and season of the offline id map), a series named like the
+  season, or the same season number. Work settings › Links has a Seasons table to place any season
+  by hand (another series, its specials, not in Jellyfin: `jellyfinLink.seasons`). Every series a
+  work draws on counts as linked (out of Library › Unlinked, not imported again), its episodes
+  play from Jellyfin and its watched state syncs; the episode table lists the items of every series.
 - Extension sections are kinds of their own everywhere, while staying the extensions' own: their
   names, ids and 18+ flags come only from the extensions (nothing is written in Bunko). Bunko
   remembers what they declared (`extension_sections`, schema v33, in the extension's order) so

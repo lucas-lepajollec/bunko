@@ -7,6 +7,7 @@ import type {
   JellyfinLibrary,
   JellyfinRole,
   JellyfinItem,
+  TrackedMedia,
   VideoServer,
   JellyfinLink,
   JellyfinPresence,
@@ -395,8 +396,12 @@ interface JellyfinIndex {
   byAniList: Map<string, IndexedJellyfinSeries>;
   /** TMDB id → series. */
   byTmdb: Map<string, IndexedJellyfinSeries>;
+  /** TVDB id → series. */
+  byTvdb: Map<string, IndexedJellyfinSeries>;
   /** Normalized name → series carrying it. */
   byName: Map<string, IndexedJellyfinSeries[]>;
+  /** Every episode (or film) by its item id. */
+  items: Map<string, { n: number; id: string; played: boolean }>;
 }
 const indexState = tenantState(() => ({ value: undefined as JellyfinIndex | undefined }));
 /**
@@ -419,13 +424,17 @@ function jellyfinIndex(): JellyfinIndex {
     byId: new Map(),
     byAniList: new Map(),
     byTmdb: new Map(),
+    byTvdb: new Map(),
     byName: new Map(),
+    items: new Map(),
   };
   for (const s of rows) {
     index.byId.set(s.id, s);
+    for (const list of Object.values(s.seasons)) for (const e of list) index.items.set(e.id, e);
     for (const [key, value] of Object.entries(s.providerIds)) {
       if (key.toLowerCase() === 'anilist') index.byAniList.set(value, s);
       if (key.toLowerCase() === 'tmdb') index.byTmdb.set(value, s);
+      if (key.toLowerCase() === 'tvdb') index.byTvdb.set(value, s);
     }
     for (const name of new Set(s.names.map(normalizeTitle).filter(Boolean))) {
       const list = index.byName.get(name);
@@ -448,6 +457,117 @@ export function seasonOf(title: string): { base: string; season: number | null }
     title.match(/^(.*?)[\s:-]*(\d+)(?:st|nd|rd|th)\s+season\b/i);
   return m ? { base: m[1].trim(), season: Number(m[2]) } : { base: title, season: null };
 }
+/**
+ * Where one season of a work is in Jellyfin: chosen by hand, else its own series as Jellyfin
+ * identifies it (the AniList plugin's id, or the TVDB series and season of the offline id map),
+ * else a series named exactly like the season, else the same season number in the work's series.
+ */
+function seasonSource(
+  s: AnimeSeason,
+  primary: IndexedJellyfinSeries,
+  link: Exclude<JellyfinLink, 'none'> | null,
+): { series: IndexedJellyfinSeries; season: number; manual: boolean } | null {
+  const index = jellyfinIndex();
+  const chosen = link?.seasons?.[String(s.number)];
+  if (chosen === null) return null;
+  if (chosen) {
+    const series = index.byId.get(chosen.seriesId);
+    return series ? { series, season: chosen.season, manual: true } : null;
+  }
+  const firstOf = (x: IndexedJellyfinSeries) => seasonNumbers(x)[0] ?? null;
+  const display = s.display ?? s.number;
+  if (s.anilistId) {
+    const plugin = index.byAniList.get(String(s.anilistId));
+    if (plugin && plugin.id !== primary.id && firstOf(plugin) !== null)
+      return { series: plugin, season: firstOf(plugin)!, manual: false };
+    const ids = idsOfAnilist(s.anilistId);
+    const tvdb = ids?.tvdb ? index.byTvdb.get(String(ids.tvdb)) : undefined;
+    if (tvdb && ids?.tvdbSeason && ids.tvdbSeason >= 1 && tvdb.seasons[String(ids.tvdbSeason)])
+      return { series: tvdb, season: ids.tvdbSeason, manual: false };
+  }
+  if (!primary.seasons[String(display)] || display > 1) {
+    const named = (index.byName.get(normalizeTitle(s.title)) ?? []).filter(
+      (x) => x.id !== primary.id && (x.role ?? 'anime') === primary.role,
+    );
+    if (named.length === 1 && firstOf(named[0]) !== null)
+      return { series: named[0], season: firstOf(named[0])!, manual: false };
+  }
+  return primary.seasons[String(display)]
+    ? { series: primary, season: display, manual: false }
+    : null;
+}
+/**
+ * A work whose seasons are not all the same-numbered seasons of one series (separate series per
+ * season, a season filed elsewhere, chosen by hand): one list numbered like the work's episodes,
+ * each season taken from where it is. `null` when the plain season mapping applies.
+ */
+function seasonsAcrossSeries(
+  media: UnifiedMedia,
+  primary: IndexedJellyfinSeries,
+  link: JellyfinLink | null | undefined,
+  base: string,
+): JellyfinPresence | null {
+  const linked = link && link !== 'none' ? link : null;
+  if (linked?.episodes || linked?.order === 'absolute' || !media.anilistId) return null;
+  const seasons = knownSeasons(media.anilistId);
+  if (!seasons || seasons.length < 2) return null;
+  const plan = seasons.map((s) => ({ s, src: seasonSource(s, primary, linked) }));
+  const plain = plan.every(
+    (p) =>
+      !p.src ||
+      (p.src.series.id === primary.id &&
+        !p.src.manual &&
+        p.src.season === (p.s.display ?? p.s.number)),
+  );
+  if (plain) return null;
+  const flat: { n: number; id: string; played: boolean }[] = [];
+  for (const { s, src } of plan) {
+    if (!src) continue;
+    const start = seasonStart(seasons, s.number);
+    const size = Math.max(s.episodes ?? 0, s.aired ?? 0, s.list.length) || Infinity;
+    // A part continuing its season inside the same series starts after the earlier parts.
+    const offset =
+      src.series.id === primary.id && !src.manual && src.season === (s.display ?? s.number)
+        ? (s.partOffset ?? 0)
+        : 0;
+    for (const e of [...(src.series.seasons[String(src.season)] ?? [])].sort((a, b) => a.n - b.n)) {
+      const local = e.n - offset;
+      if (local >= 1 && local <= size) flat.push({ n: start + local, id: e.id, played: e.played });
+    }
+  }
+  const season = {
+    season: 0,
+    owned: flat.map((e) => e.n),
+    played: flat.filter((e) => e.played).map((e) => e.n),
+    episodeIds: Object.fromEntries(flat.map((e) => [e.n, e.id])),
+  };
+  return {
+    seriesId: primary.id,
+    name: primary.name,
+    bySeason: [season],
+    ownedCount: season.owned.length,
+    playedCount: season.played.length,
+    url: videoServerItemUrl(base, primary.id),
+    manual: plan.some((p) => p.src?.manual),
+    absolute: true,
+    seriesIds: [...new Set(plan.flatMap((p) => (p.src ? [p.src.series.id] : [])))],
+    seasonSources: Object.fromEntries(
+      plan.map((p) => [
+        String(p.s.number),
+        p.src ? { seriesId: p.src.series.id, season: p.src.season, manual: p.src.manual } : null,
+      ]),
+    ),
+  };
+}
+/** Jellyfin series some followed work holds (every season's series, not only the first). */
+export function jellyfinSeriesInUse(tracked: Pick<TrackedMedia, 'media' | 'jellyfinLink'>[]) {
+  const used = new Set<string>();
+  for (const t of tracked) {
+    const presence = jellyfinPresence(t.media, t.jellyfinLink);
+    if (presence) for (const id of presence.seriesIds ?? [presence.seriesId]) used.add(id);
+  }
+  return used;
+}
 /** Every episode of a series in watching order: seasons from 1 up, specials (season 0) last. */
 function orderedItems(series: IndexedJellyfinSeries) {
   const numbers = Object.keys(series.seasons)
@@ -465,6 +585,8 @@ export function jellyfinItems(seriesId: string): JellyfinItem[] {
   if (!series) throw new AppError('NOT_FOUND', 'Jellyfin series is not indexed', 404);
   return orderedItems(series).map((e) => ({
     id: e.id,
+    seriesId: series.id,
+    seriesName: series.name,
     season: e.season,
     n: e.n,
     name: e.name ?? null,
@@ -540,16 +662,15 @@ export function jellyfinPresence(
   const match = matchJellyfin(media, link);
   if (!match) return null;
   const base = getSettings().jellyfinUrl.replace(/\/+$/, '');
+  const multi = seasonsAcrossSeries(media, match.series, link, base);
+  if (multi) return { ...multi, manual: multi.manual || match.manual };
   // Linked by hand episode by episode, or "in order": one list numbered like the work's
   // episodes (absolute numbers), every season of the series one after another.
   if (link && link !== 'none' && (link.episodes || link.order === 'absolute')) {
     let flat: { n: number; id: string; played: boolean }[];
     if (link.episodes) {
-      const items = new Map(
-        Object.values(match.series.seasons)
-          .flat()
-          .map((e) => [e.id, e]),
-      );
+      // Items of every indexed series: an episode may be chosen from another series.
+      const items = jellyfinIndex().items;
       flat = Object.entries(link.episodes)
         .flatMap(([n, id]) => {
           const e = id ? items.get(id) : undefined;
@@ -789,12 +910,7 @@ async function catalogWork(s: IndexedJellyfinSeries, signal?: AbortSignal) {
  */
 export async function importJellyfinAnime(signal?: AbortSignal) {
   const tracked = listTracked().filter((t) => t.type === 'ANIME');
-  const linked = new Set(
-    tracked.flatMap((t) => {
-      const m = matchJellyfin(t.media, t.jellyfinLink);
-      return m ? [m.series.id] : [];
-    }),
-  );
+  const linked = jellyfinSeriesInUse(tracked);
   const tried = new Set(
     (
       statement("SELECT key FROM worker_state WHERE key LIKE 'jellyfin_import_tried:%'").all() as {

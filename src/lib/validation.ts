@@ -468,6 +468,18 @@ export const trackPatch = z
             seriesId: z.string().min(1).max(100),
             season: z.number().int().min(0).max(1000),
             order: z.enum(['seasons', 'absolute']).optional(),
+            seasons: z
+              .record(
+                z.string().regex(/^\d{1,4}$/),
+                z
+                  .object({
+                    seriesId: z.string().min(1).max(100),
+                    season: z.number().int().min(0).max(1000),
+                  })
+                  .strict()
+                  .nullable(),
+              )
+              .optional(),
             episodes: z
               .record(z.string().regex(/^[1-9]\d{0,5}$/), z.string().min(1).max(100).nullable())
               .refine((v) => Object.keys(v).length <= 5000, 'Too many episodes')
