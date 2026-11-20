@@ -137,6 +137,9 @@ function ChapterReader({ chapter, media }: { chapter: string; media: string | nu
           origin: m.origin,
           adult: Boolean(m.adult),
           color: m.color,
+          // Its kind and section as filed, so "pick up where you left off" shows it in that view.
+          ...(m.kindOverride ? { kindOverride: m.kindOverride } : {}),
+          ...(m.extensionSection ? { extensionSection: m.extensionSection } : {}),
         },
         kind: 'read',
         label,

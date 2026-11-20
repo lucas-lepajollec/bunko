@@ -94,6 +94,30 @@ function sendMetrics(
     errorType: m.error,
   }).catch(() => undefined);
 }
+/** One list of streams from several sources: the first ones first, loading until all answer. */
+function mergeStreams(
+  local: { data?: VideoStreams; isLoading: boolean },
+  remote: { data?: VideoStreams; isLoading: boolean },
+  hasLocal: boolean,
+): { data?: VideoStreams; isLoading: boolean } {
+  const parts = [hasLocal ? local.data : undefined, remote.data].filter((p): p is VideoStreams =>
+    Boolean(p),
+  );
+  // A work with server sources plays as soon as they answer, without waiting for extensions.
+  const ready = hasLocal
+    ? Boolean(local.data?.streams.length) || Boolean(remote.data)
+    : Boolean(remote.data);
+  return {
+    data: ready
+      ? {
+          streams: parts.flatMap((p) => p.streams),
+          subtitles: parts.flatMap((p) => p.subtitles),
+          errors: parts.flatMap((p) => p.errors),
+        }
+      : undefined,
+    isLoading: !ready && (local.isLoading || remote.isLoading),
+  };
+}
 export const streamsPath = (episode: PlayerEpisode, language: string) =>
   episode.streamsUrl
     ? `${episode.streamsUrl}${episode.streamsUrl.includes('?') ? '&' : '?'}lang=${language}`
@@ -112,10 +136,10 @@ export const streamsPath = (episode: PlayerEpisode, language: string) =>
 
 /** Key of an episode's saved position (`anilist:21:3`, `tt0944947:1:2`, `tmdb:550`, `ext:…:1`). */
 export const positionKey = (e: PlayerEpisode) => {
-  if (e.streamsUrl) {
+  if (e.streamsUrl || e.localStreamsUrl) {
     if (e.resume?.media.id && /^[\w.:-]+$/.test(e.resume.media.id))
       return `${e.resume.media.id}:${e.episode}`;
-    const ext = new URL(e.streamsUrl, 'http://x').searchParams.get('ext');
+    const ext = e.streamsUrl ? new URL(e.streamsUrl, 'http://x').searchParams.get('ext') : null;
     return ext && /^[\w.:-]+$/.test(ext) ? `${ext}:${e.episode}` : null;
   }
   return e.seasonAnilistId
@@ -143,6 +167,8 @@ export interface PlayerEpisode {
   imdb?: { id: string | null; tmdb?: number | null; season: number | null } | null;
   /** Streams endpoint for a generic catalog work (video extension); overrides the id lookups. */
   streamsUrl?: string | null;
+  /** Streams of the servers holding the work (Stash…), offered first beside the others. */
+  localStreamsUrl?: string | null;
   /** Episode number inside its season. */
   episode: number;
   /** Jellyfin item of this episode, when the library has it. */
@@ -201,9 +227,16 @@ export function Player({
   const [auto, setAuto] = useState(false);
   const [tried, setTried] = useState<string[]>([]);
   const [showTorrents, setShowTorrents] = useState(false);
-  const streams = useApi<VideoStreams>(
-    picking || !episode.jellyfinItemId ? streamsPath(episode, language) : null,
+  const wanted = picking || !episode.jellyfinItemId;
+  const remote = useApi<VideoStreams>(wanted ? streamsPath(episode, language) : null);
+  // Sources of the servers holding the work (Stash…) come first, beside the extensions' streams
+  // rather than in their place.
+  const local = useApi<VideoStreams>(
+    wanted && episode.localStreamsUrl
+      ? `${episode.localStreamsUrl}${episode.localStreamsUrl.includes('?') ? '&' : '?'}lang=${language}`
+      : null,
   );
+  const streams = mergeStreams(local, remote, Boolean(episode.localStreamsUrl));
   const metrics = useRef<PlaybackMetrics>(newMetrics());
   const [failedAll, setFailedAll] = useState<StreamError | null>(null);
   // A new episode (next) starts from its own best source.
@@ -333,7 +366,12 @@ export function Player({
               streams={shown}
               torrents={showTorrents ? 0 : torrents.length}
               onShowTorrents={() => setShowTorrents(true)}
-              hasIds={Boolean(episode.seasonAnilistId || episode.imdb || episode.streamsUrl)}
+              hasIds={Boolean(
+                episode.seasonAnilistId ||
+                episode.imdb ||
+                episode.streamsUrl ||
+                episode.localStreamsUrl,
+              )}
               tried={tried}
               current={source}
               best={bestStream(list)?.id ?? null}

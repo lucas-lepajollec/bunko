@@ -442,4 +442,10 @@ export async function saveBookProgress(value: BookProgressUpdate, signal?: Abort
      last_read_at=?, volume_read=CASE WHEN ? THEN MAX(COALESCE(volume_read,0),?) ELSE volume_read END
      WHERE id=?`,
   ).run(new Date(now).toISOString(), finished ? 1 : 0, file.volume, tracked.id);
+  // A book that is one file with no volume number (a novel, an essay): reaching its end is
+  // having read it. Several unnumbered files say nothing about the whole work.
+  if (value.fraction >= 0.995 && file.volume === null && files.length === 1)
+    statement(
+      "UPDATE tracked_media SET status='COMPLETED' WHERE id=? AND status IN ('PLANNING','READING','PAUSED')",
+    ).run(tracked.id);
 }
