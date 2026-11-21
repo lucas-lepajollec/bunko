@@ -8,6 +8,7 @@ import { useSearchParams } from 'next/navigation';
 import type {
   AnimeSeason,
   ContinueMedia,
+  JellyfinExtraSeason,
   JellyfinPresence,
   TrackedMedia,
   VideoDetail,
@@ -35,6 +36,7 @@ export function EpisodeList({
   anilistId,
   video,
   jellyfin,
+  extras,
   stash = false,
   entry,
   busy,
@@ -55,6 +57,8 @@ export function EpisodeList({
   video: VideoDetail;
   /** What the Jellyfin library holds for this season (owned, watched, item ids). */
   jellyfin?: JellyfinPresence | null;
+  /** Seasons the media server holds beyond the catalog's: their own tabs, outside progress. */
+  extras?: JellyfinExtraSeason[];
   /** The work is held by Stash: episodes play its scenes. */
   stash?: boolean;
   entry: TrackedMedia | undefined;
@@ -90,7 +94,7 @@ export function EpisodeList({
     </button>
   );
   // One work, several seasons: episodes are numbered per season, progress across the work.
-  const seasons: AnimeSeason[] = video.seasons?.length
+  const catalogSeasons: AnimeSeason[] = video.seasons?.length
     ? video.seasons
     : [
         {
@@ -106,16 +110,50 @@ export function EpisodeList({
           list: video.list,
         },
       ];
+  // Seasons the media server holds beyond the catalog's (a side story filed apart, a season the
+  // catalog has not listed yet): tabs after the work's own, by the server's name, played from the
+  // server. Outside the work's progress: their marks are the server's, resume never lands there.
+  const catalogCount = catalogSeasons.length;
+  const seasons: AnimeSeason[] = [
+    ...catalogSeasons,
+    ...(extras ?? []).map((x) => ({
+      number: x.season,
+      display: x.season,
+      ...(x.name ? { label: x.name } : {}),
+      anilistId: null,
+      title: x.name ?? '',
+      year: null,
+      status: null,
+      episodes: x.episodes.length,
+      aired: x.episodes.length,
+      duration: video.duration,
+      nextEpisode: null,
+      list: x.episodes.map((e) => ({
+        number: e.n,
+        title: e.name,
+        thumbnail: `/api/jellyfin/image?id=${encodeURIComponent(e.id)}`,
+      })),
+    })),
+  ];
+  const extraAt = (i: number) => (i >= catalogCount ? (extras?.[i - catalogCount] ?? null) : null);
+  const extraJellyfin = (x: JellyfinExtraSeason) => ({
+    season: x.season,
+    owned: x.episodes.map((e) => e.n),
+    played: x.episodes.filter((e) => e.played).map((e) => e.n),
+    episodeIds: Object.fromEntries(x.episodes.map((e) => [e.n, e.id])) as Record<number, string>,
+  });
   const offsets = seasons.map((_, i) =>
-    seasons
-      .slice(0, i)
-      .reduce((sum, x) => sum + Math.max(x.episodes ?? 0, x.aired ?? 0, x.list.length), 0),
+    i >= catalogCount
+      ? Infinity
+      : seasons
+          .slice(0, i)
+          .reduce((sum, x) => sum + Math.max(x.episodes ?? 0, x.aired ?? 0, x.list.length), 0),
   );
   const film = filmProp ?? video.ids?.kind === 'movie';
   // Each part knows whether it is a film (AniList MOVIE, or a 1-entry film sheet without TV seasons).
   const isPartFilm = (s: AnimeSeason) =>
     Boolean(s.isFilm) || (film && s.list.length <= 1 && !s.display);
-  const totalParts = seasons.reduce(
+  const totalParts = catalogSeasons.reduce(
     (sum, x) => sum + Math.max(x.episodes ?? 0, x.aired ?? 0, x.list.length, isPartFilm(x) ? 1 : 0),
     0,
   );
@@ -137,10 +175,13 @@ export function EpisodeList({
     (video.focus && video.focus > 1 && video.focus <= seasons.length ? video.focus - 1 : resume);
   const season = seasons[index] ?? seasons[0];
   const offset = offsets[index] ?? 0;
-  const inJf = jellyfinSeason(season, jellyfin, offsets[index] ?? 0);
+  const extra = extraAt(index);
+  const inJf = extra ? extraJellyfin(extra) : jellyfinSeason(season, jellyfin, offsets[index] ?? 0);
   const played = new Set(inJf?.played ?? []);
   const owned = new Set(inJf?.owned ?? []);
-  const watchedHere = Math.min(Math.max(0, read - offset), season.list.length);
+  const watchedHere = extra
+    ? played.size
+    : Math.min(Math.max(0, read - offset), season.list.length);
   // `?play=<season index>.<episode>` (from "Pick up where you left off") opens that episode.
   const params = useSearchParams();
   // Resume: the episode after the last one watched (across the work).
@@ -171,13 +212,17 @@ export function EpisodeList({
   }
   const episodeFor = (at: { season: number; episode: number }): PlayerEpisode => {
     const s = seasons[at.season];
-    const jf = jellyfinSeason(s, jellyfin, offsets[at.season] ?? 0);
+    const extraHere = extraAt(at.season);
+    const jf = extraHere
+      ? extraJellyfin(extraHere)
+      : jellyfinSeason(s, jellyfin, offsets[at.season] ?? 0);
     // Generic extension catalog work: its own streams endpoint replaces id-based lookups.
-    const extension = media?.id.startsWith('ext:') ?? false;
-    const stashHeld = stash;
+    // A season only the media server holds plays from it alone.
+    const extension = !extraHere && (media?.id.startsWith('ext:') ?? false);
+    const stashHeld = stash && !extraHere;
     const partFilm = isPartFilm(s);
     const partTitle = s.label && s.title ? s.title : title;
-    const partAnilistId = extension ? null : (s.anilistId ?? anilistId);
+    const partAnilistId = extension || extraHere ? null : (s.anilistId ?? anilistId);
     const differentAnilist = Boolean(partAnilistId && anilistId && partAnilistId !== anilistId);
     return {
       title: partTitle,
@@ -194,7 +239,7 @@ export function EpisodeList({
       seasonAnilistId: partAnilistId,
       isFilm: partFilm,
       imdb:
-        extension || differentAnilist
+        extension || differentAnilist || extraHere
           ? null
           : video.ids?.imdb || video.ids?.tmdb
             ? {
@@ -226,6 +271,8 @@ export function EpisodeList({
     const s = seasons[at.season];
     if (at.episode < (s.aired ?? s.list.length))
       return { season: at.season, episode: at.episode + 1 };
+    // The work's last season never runs on into a season of the server's own.
+    if (at.season + 1 === catalogCount) return null;
     const following = seasons[at.season + 1];
     return following && (following.aired ?? following.list.length) > 0
       ? { season: at.season + 1, episode: 1 }
@@ -240,6 +287,7 @@ export function EpisodeList({
       })()}
       onClose={() => setPlaying(null)}
       onFinished={() => {
+        if (extraAt(playing.season)) return;
         const absolute = offsets[playing.season] + playing.episode;
         if (entry && absolute > read) onWatched(absolute);
       }}
@@ -263,7 +311,7 @@ export function EpisodeList({
   const rows = newestFirst ? [...season.list].reverse() : season.list;
   // Season names: when other seasons go by their names, the first one by its own subtitle too
   // ("The First Gate" beside "The Northern Crown"), not "Season 1".
-  const names = seasons.map((x) => seasonName(x, seasons[0].title));
+  const names = seasons.map((x, i) => (i < catalogCount ? seasonName(x, seasons[0].title) : null));
   if (names.some(Boolean) && !names[0]) {
     const subtitle = seasons[0].title
       .split(/[:：]\s*/)
@@ -288,7 +336,7 @@ export function EpisodeList({
       <SlidingHighlight />
       {seasons.map((x, i) => (
         <button
-          key={x.anilistId ?? x.number}
+          key={i >= catalogCount ? `server-${x.number}` : (x.anilistId ?? x.number)}
           type="button"
           role="tab"
           aria-selected={i === index}
@@ -480,7 +528,7 @@ export function EpisodeList({
       <ul className="grid max-h-[620px] grid-cols-2 gap-3 overflow-y-auto pt-4 pr-1 sm:grid-cols-3 xl:grid-cols-4">
         {rows.slice(0, limit).map((e) => {
           const absolute = offset + e.number;
-          const seen = entry ? absolute <= read : played.has(e.number);
+          const seen = extra || !entry ? played.has(e.number) : absolute <= read;
           const inJellyfin = owned.has(e.number);
           const upcoming = e.number > aired;
           const state =
@@ -553,7 +601,7 @@ export function EpisodeList({
                 </button>
                 <WatchMark
                   seen={seen}
-                  hidden={upcoming}
+                  hidden={upcoming || Boolean(extra)}
                   disabled={busy}
                   label={t('episodes.markWatched', { n: n(e.number) })}
                   onToggle={() => onWatched(seen ? (absolute > 1 ? absolute - 1 : null) : absolute)}

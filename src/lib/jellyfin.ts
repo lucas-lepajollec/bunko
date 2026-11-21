@@ -11,8 +11,10 @@ import type {
   VideoServer,
   JellyfinLink,
   JellyfinPresence,
+  JellyfinExtraSeason,
   JellyfinSeriesSummary,
   UnifiedMedia,
+  VideoDetail,
 } from '@/types/shared';
 import { db, listTracked, statement, track, untrack, writeVersion } from './db';
 import { AppError } from './errors';
@@ -38,6 +40,8 @@ export interface IndexedJellyfinSeries {
   providerIds: Record<string, string>;
   /** season → episodes (number, item id, played by the chosen user). */
   seasons: Record<string, { n: number; id: string; played: boolean; name?: string }[]>;
+  /** season → the name the server gives it ("Season 2", or a name of its own). */
+  seasonNames?: Record<string, string>;
 }
 const SYNC_EVERY_MS = 15 * 60_000;
 const IMPORTS_PER_SYNC = 10;
@@ -252,6 +256,16 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
     library: string;
   })[] = [];
   const episodes: z.infer<typeof episodeSchema> = [];
+  const seasonSchema = z.array(
+    z
+      .object({
+        SeriesId: z.string().nullable().optional(),
+        IndexNumber: z.number().nullable().optional(),
+        Name: z.string().nullable().optional(),
+      })
+      .passthrough(),
+  );
+  const seasonNames = new Map<string, Record<string, string>>();
   for (const library of libraries) {
     if (library.role === 'movies' || library.role === 'animation') {
       // A film is a one-episode "series": the player and presence treat it the same way.
@@ -292,6 +306,20 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
         ),
       ),
     );
+    // Season names: a season filed apart (a side story, a special numbered on its own) keeps
+    // the name it has on the server. Optional: an index without them still works.
+    const seasons = await allItems(uid, `ParentId=${library.id}&IncludeItemTypes=Season`, signal)
+      .then((items) => seasonSchema.parse(items))
+      .catch((error: unknown) => {
+        if (signal?.aborted) throw error;
+        return [];
+      });
+    for (const s of seasons) {
+      if (!s.SeriesId || s.IndexNumber == null || !s.Name) continue;
+      const names = seasonNames.get(s.SeriesId) ?? {};
+      names[String(s.IndexNumber)] = s.Name;
+      seasonNames.set(s.SeriesId, names);
+    }
   }
   const bySeries = new Map<string, IndexedJellyfinSeries['seasons']>();
   // Episodes Jellyfin could not number ("unknown" episodes: films or parts filed as one series,
@@ -352,6 +380,7 @@ export async function syncJellyfinIndex(signal?: AbortSignal) {
           Object.entries(s.ProviderIds ?? {}).filter((e): e is [string, string] => Boolean(e[1])),
         ),
         seasons: bySeries.get(s.Id) ?? {},
+        ...(seasonNames.has(s.Id) ? { seasonNames: seasonNames.get(s.Id) } : {}),
       };
       insert.run(s.Id, JSON.stringify(row));
     }
@@ -769,6 +798,62 @@ function computeJellyfinPresence(
     url: videoServerItemUrl(base, match.series.id),
     manual: match.manual,
   };
+}
+/** A season name that only numbers it ("Season 2", "Saison 2", "Staffel 2"…). */
+const NUMBERED_SEASON =
+  /^\s*(?:season|saison|staffel|temporada|stagione|seizoen|sezon|series|s[ée]rie)\s*\d+\s*$/i;
+/**
+ * Seasons of the work's series on the server that no season of the catalog accounts for: a side
+ * story filed as its own season, a season the catalog has not listed yet. Linked "in order" or
+ * episode by episode, every season is already the work's: none.
+ *
+ * A long work the catalog keeps as one season but the server splits in many (seasons 2, 3…
+ * holding the rest of its episodes) is not one with extra seasons: when the seasons the work
+ * claims hold well under half of what has aired, the seasons right after them are its own.
+ */
+export function jellyfinExtraSeasons(
+  presence: JellyfinPresence | null,
+  video: Pick<VideoDetail, 'seasons' | 'aired' | 'episodes' | 'list'> | undefined,
+  link: JellyfinLink | null | undefined,
+): JellyfinExtraSeason[] {
+  if (!presence || (link && link !== 'none' && (link.episodes || link.order === 'absolute')))
+    return [];
+  const series = currentIndex().byId.get(presence.seriesId);
+  if (!series) return [];
+  const claimed = new Set<number>();
+  if (presence.seasonSources) {
+    for (const src of Object.values(presence.seasonSources))
+      if (src?.seriesId === series.id) claimed.add(src.season);
+  } else if (presence.absolute) return [];
+  else
+    for (const s of video?.seasons?.length ? video.seasons : [{ number: 1 }])
+      claimed.add((s as { display?: number }).display ?? s.number);
+  const numbers = seasonNumbers(series);
+  const unclaimed = numbers.filter((n) => !claimed.has(n));
+  if (!unclaimed.length) return [];
+  const held = (n: number) => new Set((series.seasons[String(n)] ?? []).map((e) => e.n)).size;
+  // The run of seasons right after the last claimed one: the rest of a split work, or new ones.
+  const last = Math.max(0, ...claimed);
+  const run = new Set<number>();
+  for (let n = last + 1; unclaimed.includes(n); n++) run.add(n);
+  const aired = video?.seasons?.length
+    ? video.seasons.reduce((sum, s) => sum + (s.aired ?? s.episodes ?? s.list.length), 0)
+    : (video?.aired ?? video?.episodes ?? video?.list.length ?? 0);
+  const inClaimed = [...claimed].reduce((sum, n) => sum + held(n), 0);
+  const split = run.size > 0 && aired > 0 && inClaimed < aired / 2;
+  return unclaimed
+    .filter((n) => !(split && run.has(n)))
+    .map((season) => {
+      const name = series.seasonNames?.[String(season)]?.trim() || null;
+      return {
+        season,
+        name: name && !NUMBERED_SEASON.test(name) ? name : null,
+        episodes: [...(series.seasons[String(season)] ?? [])]
+          .sort((a, b) => a.n - b.n)
+          .map((e) => ({ n: e.n, id: e.id, played: e.played, name: e.name ?? null })),
+      };
+    })
+    .filter((s) => s.episodes.length > 0);
 }
 /**
  * Absolute episodes watched in a work: the last watched episode of the latest season with one,

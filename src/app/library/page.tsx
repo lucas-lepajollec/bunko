@@ -392,26 +392,44 @@ function Library() {
     observer.observe(moreRef.current);
     return () => observer.disconnect();
   }, [hasMoreShown, viewKey, limit]);
+  const inventory = library.data
+    ? kind === 'all'
+      ? vt('library.inventory', {
+          series: n(ofKindNow.length),
+          chapters: n(ownedChapters),
+          volumes: n(ownedVolumes),
+        })
+      : t('library.kindCount', {
+          count: n(kindCounts.get(chipKey(kind, section)) ?? 0),
+          kind:
+            (section && librarySections.find((x) => x.id === section)?.name) || t(`kind.${kind}`),
+          total: n(entries.length),
+        })
+    : undefined;
+  const hidden = [
+    { count: activity.data?.hiddenNotAdult ?? 0, key: 'library.hiddenNotAdult' },
+    { count: activity.data?.hiddenAdult ?? 0, key: 'library.hiddenAdult' },
+  ].filter((h) => h.count > 0);
+  const hiddenNotices = hidden.map((h) => (
+    <span key={h.key}>
+      {' · '}
+      {t(h.key, { count: h.count })}{' '}
+      <Link href="/settings#account" className="underline hover:text-white">
+        {t('library.hiddenAdultShow')}
+      </Link>
+    </span>
+  ));
   return (
     <Page className="pb-16">
       <PageTitle
         title={t('library.title')}
         aside={
-          library.data
-            ? kind === 'all'
-              ? vt('library.inventory', {
-                  series: n(ofKindNow.length),
-                  chapters: n(ownedChapters),
-                  volumes: n(ownedVolumes),
-                })
-              : t('library.kindCount', {
-                  count: n(kindCounts.get(chipKey(kind, section)) ?? 0),
-                  kind:
-                    (section && librarySections.find((x) => x.id === section)?.name) ||
-                    t(`kind.${kind}`),
-                  total: n(entries.length),
-                })
-            : undefined
+          // Works hidden by the 18+ choice: said beside the title (a line arriving later above
+          // the shelves pushed them down once the activity answered).
+          <span>
+            {inventory}
+            {hiddenNotices}
+          </span>
         }
       />
       <LoadNotice
@@ -425,26 +443,10 @@ function Library() {
           refreshFailed || library.error || (shownShelf === 'unlinked' && unlinked.error),
         )}
       />
-      {(activity.data?.hiddenNotAdult ?? 0) > 0 && (
-        <p className="text-mid -mt-2 flex flex-wrap items-center gap-x-2 text-sm">
-          {t('library.hiddenNotAdult', { count: activity.data!.hiddenNotAdult! })}
-          <Link href="/settings#account" className="underline hover:text-white">
-            {t('library.hiddenAdultShow')}
-          </Link>
-        </p>
-      )}
-      {(activity.data?.hiddenAdult ?? 0) > 0 && (
-        <p className="text-mid -mt-2 flex flex-wrap items-center gap-x-2 text-sm">
-          {t('library.hiddenAdult', { count: activity.data!.hiddenAdult })}
-          <Link href="/settings#account" className="underline hover:text-white">
-            {t('library.hiddenAdultShow')}
-          </Link>
-        </p>
-      )}
       <Tabs
         value={shownShelf}
         onChange={setShelf}
-        label={t('library.statusLabel')}
+        label={vt('library.statusLabel')}
         items={[
           { id: 'all' as View, label: t('library.all'), count: ofKindNow.length },
           { id: 'owned' as View, label: t('library.ownedTab'), count: ownedCount },
@@ -645,7 +647,7 @@ function Library() {
                 </Link>
               }
             >
-              {t('library.emptyBody')}
+              {vt('library.emptyBody')}
             </Empty>
           )}
           {library.data && entries.length > 0 && shown.length === 0 && (

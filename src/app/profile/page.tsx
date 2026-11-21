@@ -53,7 +53,7 @@ export default function ProfilePage() {
   );
   const [creating, setCreating] = useState(false);
   // The profile's subtitle says reading, watching or both.
-  const recent = universeAsides(universe.active, universe.enabled).recent;
+  const asides = universeAsides(universe.active, universe.enabled);
   return (
     <Page className={cx('pb-16', look === 'cine' && 'gap-14 md:gap-20')}>
       {look === 'bunko' ? (
@@ -117,11 +117,11 @@ export default function ProfilePage() {
         </section>
       )}
       <section id="continue" className="flex scroll-mt-28 flex-col gap-5">
-        <SectionHeading title={t('home.resume')} aside={t(recent)} />
+        <SectionHeading title={t('home.resume')} aside={t(asides.recent)} />
         {resume.error && <ErrorNote error={resume.error} />}
         {!resume.data && !resume.error && <Skeleton className="h-36 rounded-2xl" />}
         {resume.data && !resume.shown.length && (
-          <Empty title={t('profile.empty')}>{t('profile.emptyBody')}</Empty>
+          <Empty title={t(asides.empty)}>{t(asides.emptyBody)}</Empty>
         )}
         <ResumeGrid items={resume.shown} />
       </section>

@@ -34,6 +34,7 @@ import {
   ListOrdered,
   LogOut,
   Menu,
+  Newspaper,
   Puzzle,
   Settings2,
   UserRound,
@@ -289,6 +290,7 @@ const NAV = [
   { href: '/catalog', key: 'nav.catalog' },
   { href: '/library', key: 'nav.library' },
   { href: '/planning', key: 'nav.planning' },
+  { href: '/news', key: 'nav.news' },
   { href: '/lists', key: 'nav.lists' },
 ];
 
@@ -801,6 +803,7 @@ function MobileMenu() {
   const badge = activity.active + activity.failed;
   const links = [
     { href: '/profile', label: t('profile.title'), Icon: UserRound },
+    { href: '/news', label: t('nav.news'), Icon: Newspaper },
     { href: '/lists', label: t('nav.lists'), Icon: ListOrdered },
     { href: '/downloads', label: t('nav.downloads'), badge, Icon: Download },
     { href: '/sources', label: t('nav.sources'), Icon: Puzzle },

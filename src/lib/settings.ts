@@ -124,6 +124,7 @@ function serverSettings(): Settings {
     autoImportJellyfin: true,
     jellyfinLibraries: {},
     videoAddons: [],
+    newsFeeds: [],
     videoAudio: 'original',
     videoAnyLanguage: false,
     tradocUrl: '',

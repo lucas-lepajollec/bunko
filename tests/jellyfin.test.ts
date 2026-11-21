@@ -68,6 +68,29 @@ const episodes = [
     UserData: { Played: false },
   })),
   { Id: 'b1e1', SeriesId: 'B', ParentIndexNumber: 1, IndexNumber: 1, UserData: { Played: true } },
+  // Series D: seasons 1 and 2, and a side story filed as season 99.
+  ...[1, 2].flatMap((season) =>
+    [1, 2].map((n) => ({
+      Id: `d${season}e${n}`,
+      SeriesId: 'D',
+      ParentIndexNumber: season,
+      IndexNumber: n,
+      UserData: { Played: false },
+    })),
+  ),
+  {
+    Id: 'd99e1',
+    SeriesId: 'D',
+    ParentIndexNumber: 99,
+    IndexNumber: 1,
+    Name: 'The Detour',
+    UserData: { Played: true },
+  },
+];
+const seasonItems = [
+  { SeriesId: 'D', IndexNumber: 1, Name: 'Season 1' },
+  { SeriesId: 'D', IndexNumber: 2, Name: 'Season 2' },
+  { SeriesId: 'D', IndexNumber: 99, Name: 'Side Story' },
 ];
 // Series C: films filed freely, Jellyfin could not number them ("unknown" episodes).
 const unnumbered = [
@@ -126,6 +149,8 @@ const server: Server = createServer((req, res) => {
               ? [{ Id: 'C', Name: 'Office Drama', ProductionYear: 2005, ProviderIds: {} }]
               : [],
       });
+    if (url.searchParams.get('IncludeItemTypes') === 'Season')
+      return send({ Items: parent === 'L1' ? seasonItems : [] });
     return send({ Items: parent === 'L1' ? episodes : parent === 'L2' ? unnumbered : [] });
   }
   res.writeHead(404);
@@ -479,6 +504,52 @@ it('works presences out once per index, and again once episodes are marked', asy
   jellyfin.forgetJellyfinPresence();
   expect(jellyfin.jellyfinPresence(media, link)).not.toBe(first);
   expect(jellyfin.jellyfinPresence(media, link)).toEqual(first);
+});
+
+it('shows the seasons a series holds beyond the work, by their own names', async () => {
+  await jellyfin.syncJellyfinIndex();
+  const work = anime(901, 'Mapped Show');
+  const link = { seriesId: 'D', season: 1 } as const;
+  const presence = jellyfin.jellyfinPresence(work, link);
+  const season = (number: number, aired: number) => ({
+    number,
+    anilistId: null,
+    title: '',
+    year: null,
+    status: null,
+    episodes: aired,
+    aired,
+    duration: null,
+    nextEpisode: null,
+    list: [],
+  });
+  const video = (seasons: ReturnType<typeof season>[]) => ({
+    seasons,
+    aired: null,
+    episodes: null,
+    list: [],
+  });
+  // Two seasons in the catalog: the side story alone is extra, by the server's name.
+  const extras = jellyfin.jellyfinExtraSeasons(presence, video([season(1, 2), season(2, 2)]), link);
+  expect(extras).toEqual([
+    {
+      season: 99,
+      name: 'Side Story',
+      episodes: [{ n: 1, id: 'd99e1', played: true, name: 'The Detour' }],
+    },
+  ]);
+  // One season in the catalog, fully held: season 2 is a season it has not listed yet.
+  expect(
+    jellyfin.jellyfinExtraSeasons(presence, video([season(1, 2)]), link).map((x) => x.season),
+  ).toEqual([2, 99]);
+  // One long season the server splits: season 2 is the rest of it, not an extra.
+  expect(
+    jellyfin.jellyfinExtraSeasons(presence, video([season(1, 40)]), link).map((x) => x.season),
+  ).toEqual([99]);
+  // Linked "in order": every season is the work's.
+  expect(
+    jellyfin.jellyfinExtraSeasons(presence, video([season(1, 2)]), { ...link, order: 'absolute' }),
+  ).toEqual([]);
 });
 
 it('keeps every integration link in one table, one per work and integration', async () => {

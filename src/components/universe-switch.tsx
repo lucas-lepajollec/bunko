@@ -314,39 +314,42 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
       cancelAnimationFrame(second);
     };
   }, []);
-  // What the library holds per kind: how many works, and the one that stands for it — a favorite,
-  // else the best rated, else the one read or watched last.
+  // What the library holds per kind: how many works, and the covers that stand for it, best
+  // first — favorites, then the best rated, then the ones read or watched last. Several, so a
+  // cover that fails to load (a server offline, an expired link) gives way to the next one.
   const byKind = useMemo(() => {
-    const map = new Map<
-      string,
-      { count: number; best: TrackedMedia; rank: [number, number, number] }
-    >();
-    const rankOf = (e: TrackedMedia): [number, number, number] => [
-      e.favorite ? 1 : 0,
-      e.rating ?? -1,
-      Date.parse(e.lastReadAt ?? e.createdAt) || 0,
-    ];
+    const map = new Map<string, { count: number; ranked: [TrackedMedia, number[]][] }>();
     for (const e of library.data ?? []) {
       if (!(e.coverUrl ?? e.media.coverUrl)) continue;
       const k = kindOfMedia(e.media);
-      const rank = rankOf(e);
-      const known = map.get(k);
-      if (!known) map.set(k, { count: 1, best: e, rank });
-      else {
-        known.count++;
-        const better =
-          rank[0] !== known.rank[0]
-            ? rank[0] > known.rank[0]
-            : rank[1] !== known.rank[1]
-              ? rank[1] > known.rank[1]
-              : rank[2] > known.rank[2];
-        if (better) {
-          known.best = e;
-          known.rank = rank;
-        }
-      }
+      const rank = [
+        e.favorite ? 1 : 0,
+        e.rating ?? -1,
+        Date.parse(e.lastReadAt ?? e.createdAt) || 0,
+      ];
+      const known = map.get(k) ?? { count: 0, ranked: [] };
+      known.count++;
+      known.ranked.push([e, rank]);
+      map.set(k, known);
     }
-    return map;
+    const byRank = (a: number[], b: number[]) => b[0] - a[0] || b[1] - a[1] || b[2] - a[2];
+    return new Map(
+      [...map].map(([k, { count, ranked }]) => [
+        k,
+        {
+          count,
+          covers: [
+            ...new Set(
+              ranked
+                .sort((a, b) => byRank(a[1], b[1]))
+                .slice(0, 6)
+                .flatMap(([e]) => [e.coverUrl, e.media.coverUrl])
+                .filter((u): u is string => Boolean(u)),
+            ),
+          ].slice(0, 4),
+        },
+      ]),
+    );
   }, [library.data]);
   // Fallback covers strictly from already-cached home/discover responses: zero network cost.
   const cachedCovers = useMemo(() => {
@@ -373,6 +376,21 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
     }
     return map;
   }, [cache, universe.enabled]);
+  // The last cover each kind showed, kept in this browser: a kind with nothing followed and no
+  // feed cached right now still shows the cover it had last time instead of none.
+  const [remembered] = useState(readKindCovers);
+  useEffect(() => {
+    const next = { ...remembered };
+    let changed = false;
+    for (const k of universe.enabled) {
+      const cover = byKind.get(k)?.covers[0] ?? cachedCovers.get(k);
+      if (cover && next[k] !== cover) {
+        next[k] = cover;
+        changed = true;
+      }
+    }
+    if (changed) writeKindCovers(next);
+  }, [byKind, cachedCovers, remembered, universe.enabled]);
   if (!universe.ready) return null;
   const reading = universe.enabled.filter((k) => !isVideoKind(k));
   const video = universe.enabled.filter(isVideoKind);
@@ -382,17 +400,20 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
   };
   const tile = (c: UniverseChoice) => {
     const info = byKind.get(c.kind);
-    const cover =
-      (info ? (info.best.coverUrl ?? info.best.media.coverUrl) : null) ??
-      cachedCovers.get(c.kind) ??
-      null;
+    const covers = [
+      ...new Set(
+        [...(info?.covers ?? []), cachedCovers.get(c.kind), remembered[c.kind]].filter(
+          (u): u is string => Boolean(u),
+        ),
+      ),
+    ];
     return (
       <KindTile
         key={`${c.kind}:${c.section ?? ''}`}
         choice={c}
         on={isActive(universe, c)}
         count={info?.count ?? 0}
-        cover={showCovers ? cover : null}
+        covers={showCovers ? covers : []}
         onPick={() => pick(c)}
       />
     );
@@ -402,12 +423,7 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
   // "Everything": the work that stands for each kind, in the user's order.
   const mosaic = showCovers
     ? universe.order
-        .map(
-          (k) =>
-            byKind.get(k)?.best?.coverUrl ??
-            byKind.get(k)?.best?.media.coverUrl ??
-            cachedCovers.get(k),
-        )
+        .map((k) => byKind.get(k)?.covers[0] ?? cachedCovers.get(k) ?? remembered[k])
         .filter((src): src is string => Boolean(src))
         .slice(0, 6)
     : [];
@@ -487,7 +503,13 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
             style={{ gridTemplateColumns: `repeat(${Math.max(mosaic.length, 1)}, minmax(0, 1fr))` }}
           >
             {mosaic.map((src, i) => (
-              <Cover key={i} src={src} alt="" className="!aspect-auto size-full !rounded-none" />
+              <Cover
+                key={i}
+                src={src}
+                priority
+                alt=""
+                className="!aspect-auto size-full !rounded-none"
+              />
             ))}
           </span>
           <span
@@ -530,21 +552,49 @@ export function TypesPanel({ onDone }: { onDone: () => void }) {
   );
 }
 
+const KIND_COVERS_KEY = 'bunko:kind-covers:v1';
+/** Covers each kind last showed in the type menu (this browser only; absent storage = none). */
+function readKindCovers(): Record<string, string> {
+  try {
+    const value: unknown = JSON.parse(window.localStorage.getItem(KIND_COVERS_KEY) ?? '{}');
+    if (!value || typeof value !== 'object') return {};
+    return Object.fromEntries(
+      Object.entries(value).filter(
+        (e): e is [string, string] => typeof e[1] === 'string' && e[1].length < 2000,
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+function writeKindCovers(covers: Record<string, string>) {
+  try {
+    window.localStorage.setItem(KIND_COVERS_KEY, JSON.stringify(covers));
+  } catch {
+    /* Storage unavailable: the menu simply has no memory. */
+  }
+}
+
 /** One kind in the type menu: cover from library or cached feeds, zero extra network calls. */
 function KindTile({
   choice,
   on,
   count,
-  cover,
+  covers,
   onPick,
 }: {
   choice: UniverseChoice;
   on: boolean;
   count: number;
-  cover: string | null;
+  /** Candidate covers, best first: each one that fails gives way to the next. */
+  covers: string[];
   onPick: () => void;
 }) {
   const { t, n } = useI18n();
+  // Every candidate failed: no tile cover rather than a tilted "no cover" card.
+  const [dead, setDead] = useState('');
+  const key = covers.join('|');
+  const cover = key && dead !== key ? covers[0] : null;
   return (
     <button
       type="button"
@@ -561,6 +611,9 @@ function KindTile({
       {cover ? (
         <Cover
           src={cover}
+          fallbacks={covers.slice(1)}
+          onUnavailable={() => setDead(key)}
+          priority
           alt=""
           className="absolute -top-2 -right-3.5 w-[62px] rotate-[8deg] !rounded-[8px] opacity-95 shadow-[-6px_8px_20px_rgba(0,0,0,0.5)] transition-transform duration-300 group-hover:rotate-[4deg]"
         />

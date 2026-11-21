@@ -39,9 +39,24 @@ An extension stream starts again where it stopped (saved per account every 15 s,
 close, forgotten once 90 % is watched). On iPhone, full screen is the video's own (native
 controls, subtitles included): iOS gives web pages no other.
 
-The player keeps pause, seeking (±10 s, timeline), volume, full screen, subtitle choice (the
-stream's own subtitles and up to 20 from subtitle extensions: interface language, then English), audio and subtitle tracks carried by HLS, and
-the source list.
+The player keeps pause, seeking (±10 s, timeline), volume, full screen, one subtitle menu, audio
+tracks carried by HLS, and the source list. The subtitle menu lists every subtitle with where it
+comes from: the media server's own (a Jellyfin or Emby copy), the tracks of the stream's playlist,
+the stream's own files and up to 20 from subtitle extensions (interface language, then English).
+A media server copy is offered the subtitle extensions' subtitles too (`GET /api/video/streams`
+with `only=subtitles` asks them alone, without streams). Everything from extensions starts off,
+playlist tracks included (streams often carry burned-in subtitles); the media server's keep their
+default and the interface-language choice. CC turns subtitles on in one click, interface language
+first.
+
+## Per-source health
+
+An extension may publish `{manifest base}/health.json`: `{schema:1, summary:{total?,ok,warning,down,off},
+sources:[{name, status:"ok"|"warning"|"down", enabled?, success?, empty?, errors?, lastSeen?}]}`
+(`lastSeen` in milliseconds since 1970; the counters cover the extension's own recent window).
+Optional and read-only: absent or invalid means no health, never an error. Settings → Extensions
+lists each extension's sources from it, like the reading sources: state, what each found lately,
+when it last answered.
 
 ## Configuration
 

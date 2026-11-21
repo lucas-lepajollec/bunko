@@ -244,6 +244,10 @@ export interface VideoAddonSource {
   name: string;
   status: 'ok' | 'warning' | 'down';
   enabled: boolean;
+  /** Lookups over the extension's recent window: streams found, nothing found, failed. */
+  counts?: { success: number; empty: number; errors: number };
+  /** When the source last answered (ISO date). */
+  lastSeen?: string;
 }
 /** Optional per-source health an extension may publish next to its manifest. */
 export interface VideoAddonHealth {
@@ -375,6 +379,8 @@ export interface MediaDetail extends UnifiedMedia, LoadState {
   /** A work from a video extension catalog: the type its own metadata declares. */
   extension?: { type: 'movie' | 'series' };
   jellyfin?: JellyfinPresence | null;
+  /** Seasons the media server holds beyond the catalog's own (a side story, a newer season). */
+  jellyfinExtras?: JellyfinExtraSeason[];
   /** The Stash group or scene holding this work: its page in Stash. */
   stash?: { url: string } | null;
   /** The work's page in each service holding it (integration registry). */
@@ -479,6 +485,44 @@ export interface ChapterRelease {
   trackedId: number | null;
   /** Not a release: a catalog title shown in the hero of a kind without recent releases. */
   featured?: true;
+}
+/**
+ * News of a kind: works just announced, coming soon (with their trailer when there is one), new
+ * editions out, and articles from the news feeds the user follows.
+ */
+export type NewsType = 'announced' | 'upcoming' | 'edition' | 'article';
+export interface NewsItem {
+  id: string;
+  type: NewsType;
+  kind: Exclude<DiscoverKind, 'all'>;
+  /** The work it is about, when Bunko can open it. */
+  media: UnifiedMedia | null;
+  title: string;
+  /** An article's headline, an edition's label ("Vol. 12"). */
+  headline: string | null;
+  summary: string | null;
+  imageUrl: string | null;
+  /** Publication date of an article or an edition (ISO). */
+  date: string | null;
+  /** Release date of a work to come, as precise as known (YYYY, YYYY-MM or YYYY-MM-DD). */
+  releaseDate: string | null;
+  /** A trailer on YouTube (its video id). */
+  trailer: string | null;
+  /** The article or the work's page elsewhere. */
+  url: string | null;
+  /** Where it comes from (a catalog, a feed's title). */
+  source: string;
+}
+/** GET /api/news?kind=&section= */
+export interface NewsPage extends LoadState {
+  items: NewsItem[];
+  /** Feeds or catalogs that could not be read this time (their names). */
+  failed: string[];
+}
+/** A news feed (RSS or Atom) followed for one kind. */
+export interface NewsFeed {
+  url: string;
+  kind: Exclude<DiscoverKind, 'all'>;
 }
 /** GET /api/releases?kind=&genre=&library=1&cursor= */
 export interface ReleasesPage extends LoadState {
@@ -772,6 +816,8 @@ export interface Settings {
   stashApiKey: string;
   /** Video extensions: Stremio addon manifest URLs (stored encrypted, never sent to the browser). */
   videoAddons: string[];
+  /** News feeds (RSS or Atom) followed per kind, read by the News page. */
+  newsFeeds: NewsFeed[];
   /** Version tried first: original audio with subtitles, or dubbed. */
   videoAudio: 'original' | 'dubbed';
   /** Also start other languages by themselves when nothing matches (default false). */
@@ -966,6 +1012,17 @@ export interface UnlinkedItem {
   ignored: boolean;
 }
 /** What Jellyfin holds for an anime (owned and watched episodes of the linked season). */
+/**
+ * A season of the work's media server series that no season of the catalog accounts for: a side
+ * story filed under its own season number, a season the catalog has not listed yet. Shown beside
+ * the work's seasons, played from the server, outside the work's progress.
+ */
+export interface JellyfinExtraSeason {
+  season: number;
+  /** The server's own name for it, when it is more than "Season N". */
+  name: string | null;
+  episodes: { n: number; id: string; played: boolean; name: string | null }[];
+}
 export interface JellyfinPresence {
   seriesId: string;
   name: string;

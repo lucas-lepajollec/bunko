@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- News page (`/news`, `GET /api/news`): per kind, or every kind at once, works just announced
+  and coming soon with their trailer (AniList, TMDB when a key is set), new volumes from the
+  release sources, and the articles of RSS or Atom feeds the user follows per kind
+  (`Settings.newsFeeds`). Trailers play in place.
+- Seasons a Jellyfin series holds beyond the catalog's (a side story filed under its own season
+  number, a season the catalog has not listed yet) show as extra tabs on the work, by the
+  server's season name, played from the server and outside the work's progress
+  (`MediaDetail.jellyfinExtras`); the index keeps season names.
+- One subtitle menu in the player: the media server's subtitles, the stream playlist's tracks
+  and the extensions' files, each with its origin. A media server copy is offered the subtitle
+  extensions' subtitles too (`/api/video/streams?only=subtitles`). Everything from extensions
+  starts off, playlist tracks included.
+- Settings → Extensions lists each video extension's sources from its optional `health.json`
+  (state, found / empty / failed lately, last answer), like the reading sources.
+- Video wording: a video sheet still loading its episodes never shows reading buttons first;
+  status, profile, library and recommendation texts follow the kind (watching words for video,
+  neutral ones when both families mix).
+- The type menu tries several covers per kind and remembers the last one each kind showed, so
+  tiles keep a cover when one fails or no feed is cached; the library's 18+ notice sits beside
+  the title instead of pushing the shelves down once it loads.
 - Regressions and polish: the library and the catalog's marks work out each work's Jellyfin
   presence once per index change instead of on every request (a 600-anime library took ~0.5 s
   per load since presences span several series; now ~25 ms), the sync and the inbox read the
