@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Regressions and polish: the library and the catalog's marks work out each work's Jellyfin
+  presence once per index change instead of on every request (a 600-anime library took ~0.5 s
+  per load since presences span several series; now ~25 ms), the sync and the inbox read the
+  index once per pass; going back waits up to 10 s for a slow list before giving up on the
+  position; seasons with a name of their own show it on their tab instead of "Season N" (a
+  spin-off, a sequel titled apart; numbered titles keep "Season N"); episodes without a catalog
+  still show the media server's own episode image, else their season's artwork rather than the
+  main work's; the sliding highlight sits centred inside bordered groups (the header menu).
 - Remaining gaps of the architecture audit: Jellyfin series and the Stash item are offered in
   Images (cover choice) for video works; the top of the week, lists, profile favorites and source
   pages show the same card marks as every other card; the library header totals what the view

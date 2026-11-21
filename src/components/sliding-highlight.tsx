@@ -27,9 +27,10 @@ export function SlidingHighlight({ variant = 'pill' }: { variant?: 'pill' | 'lin
       if (!active) return setBox(null);
       const a = active.getBoundingClientRect();
       const h = host.getBoundingClientRect();
+      // Positioned inside the group's border (its padding box): the border is not part of it.
       const next = {
-        x: a.left - h.left + host.scrollLeft,
-        y: a.top - h.top + host.scrollTop,
+        x: a.left - h.left - host.clientLeft + host.scrollLeft,
+        y: a.top - h.top - host.clientTop + host.scrollTop,
         w: a.width,
         h: a.height,
       };

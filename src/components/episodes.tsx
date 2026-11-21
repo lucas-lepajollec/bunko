@@ -13,7 +13,7 @@ import type {
   VideoDetail,
 } from '@/types/shared';
 import { mediaHref } from '@/lib/client/api';
-import { jellyfinSeason } from '@/domain/seasons';
+import { jellyfinSeason, seasonName } from '@/domain/seasons';
 import { seenUpTo, workProgress } from '@/domain/progress';
 import { useI18n } from '@/i18n/I18nProvider';
 import { cx } from './ui';
@@ -261,6 +261,23 @@ export function EpisodeList({
     minute: '2-digit',
   });
   const rows = newestFirst ? [...season.list].reverse() : season.list;
+  // Season names: when other seasons go by their names, the first one by its own subtitle too
+  // ("The First Gate" beside "The Northern Crown"), not "Season 1".
+  const names = seasons.map((x) => seasonName(x, seasons[0].title));
+  if (names.some(Boolean) && !names[0]) {
+    const subtitle = seasons[0].title
+      .split(/[:：]\s*/)
+      .slice(1)
+      .join(': ')
+      .trim();
+    if (subtitle.length >= 4) names[0] = subtitle;
+  }
+  // An episode's still: the catalog's, else the media server's own (its real episode image);
+  // without one, the season's own artwork (a spin-off is not shown with the main work's).
+  const still = (e: { number: number; thumbnail: string | null }) =>
+    e.thumbnail ??
+    (inJf?.episodeIds[e.number] ? `/api/jellyfin/image?id=${inJf.episodeIds[e.number]}` : null);
+  const seasonArt = season.bannerUrl ?? season.coverUrl ?? artwork;
   const tabs = seasons.length > 1 && (
     <ScrollStrip
       role="tablist"
@@ -286,7 +303,9 @@ export function EpisodeList({
               : 'text-mid bg-white/[0.06] hover:text-white',
           )}
         >
+          {/* Its own name when it has one (a spin-off, a sequel titled apart), else its number. */}
           {x.label ??
+            names[i] ??
             (x.part
               ? t('episodes.seasonPart', { n: n(x.display ?? x.number), part: n(x.part) })
               : t('episodes.seasonN', { n: n(x.display ?? x.number) }))}
@@ -485,21 +504,30 @@ export function EpisodeList({
                   title={upcoming ? undefined : t('player.playEpisode', { n: n(e.number) })}
                   className="relative block aspect-video w-full disabled:cursor-default"
                 >
-                  {e.thumbnail || artwork ? (
+                  {still(e) || seasonArt ? (
                     // eslint-disable-next-line @next/next/no-img-element -- public stills, lazy and decorative
                     <img
-                      src={(e.thumbnail ?? artwork)!}
+                      src={(still(e) ?? seasonArt)!}
                       alt=""
                       loading="lazy"
                       referrerPolicy="no-referrer"
+                      // A server still that does not exist: the season's artwork instead.
+                      onError={(event) => {
+                        const img = event.currentTarget;
+                        if (seasonArt && img.dataset.fallback !== '1') {
+                          img.dataset.fallback = '1';
+                          img.src = seasonArt;
+                          img.classList.add('brightness-[0.45]');
+                        }
+                      }}
                       className={cx(
                         'size-full object-cover',
-                        !e.thumbnail && 'brightness-[0.45]',
+                        !still(e) && 'brightness-[0.45]',
                         seen && 'opacity-50',
                       )}
                     />
                   ) : null}
-                  {!e.thumbnail && look !== 'cine' && (
+                  {!still(e) && look !== 'cine' && (
                     <span
                       aria-hidden
                       className={cx(

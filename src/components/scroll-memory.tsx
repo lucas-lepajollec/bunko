@@ -3,8 +3,11 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 
 const STORE = 'bunko:scroll';
-/** Long enough for a list fetched again to render, short enough never to jump late. */
-const RESTORE_FOR_MS = 4000;
+/**
+ * Long enough for a list fetched again to render on a busy server (a large library answers in
+ * seconds). The room is kept meanwhile, so nothing jumps; any wheel, touch or key ends it.
+ */
+const RESTORE_FOR_MS = 10_000;
 const MAX_ENTRIES = 60;
 
 /**

@@ -39,3 +39,74 @@ export function seasonStart(seasons: AnimeSeason[], number: number) {
     .filter((s) => s.number < number)
     .reduce((sum, s) => sum + Math.max(s.episodes ?? 0, s.aired ?? 0, s.list.length), 0);
 }
+
+const GENERIC = new Set([
+  'season',
+  'saison',
+  'temporada',
+  'staffel',
+  'stagione',
+  'part',
+  'partie',
+  'cour',
+  'the',
+  'st',
+  'nd',
+  'rd',
+  'th',
+]);
+const ROMAN: Record<string, number> = {
+  ii: 2,
+  iii: 3,
+  iv: 4,
+  v: 5,
+  vi: 6,
+  vii: 7,
+  viii: 8,
+  ix: 9,
+  x: 10,
+};
+const plain = (word: string) =>
+  word
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '');
+/**
+ * A season's own name when it has one worth showing: "The Northern Crown" or "Tales of the
+ * Captain" rather than "Season 2" / "Season 3", "Orbit Zero" rather than "Season 2". `null` when
+ * its title only numbers it ("Title Season 2", "Title 2nd Season Part 2", "Title II"): the
+ * numbered tab says the same thing shorter.
+ */
+export function seasonName(
+  season: Pick<AnimeSeason, 'title' | 'display' | 'number' | 'part'>,
+  root: string,
+) {
+  const words = season.title.trim().split(/\s+/);
+  const rootWords = root.trim().split(/\s+/);
+  // The words the work's title and the season's share, cut at a colon when there is one
+  // ("Realm:" in "Realm: The Northern Crown"), so the name keeps its own article.
+  let common = 0;
+  while (
+    common < words.length &&
+    common < rootWords.length &&
+    plain(words[common]) === plain(rootWords[common])
+  )
+    common++;
+  // The work's own title (its first season).
+  if (common === words.length) return null;
+  const colon = words.slice(0, common).findLastIndex((w) => /[:：]$/.test(w));
+  const cut = colon >= 0 && colon < common - 1 ? colon + 1 : common;
+  const rest = words.slice(cut);
+  const tokens = rest.flatMap((w) => plain(w).split(/(?<=\d)(?=\D)|(?<=\D)(?=\d)/)).filter(Boolean);
+  const numbers = [season.display ?? season.number, season.part ?? 1];
+  const generic = tokens.every((tok) =>
+    GENERIC.has(tok) || /^\d+$/.test(tok)
+      ? !/^\d+$/.test(tok) || numbers.includes(Number(tok))
+      : ROMAN[tok] !== undefined && numbers.includes(ROMAN[tok]),
+  );
+  if (generic) return null;
+  const name = rest.join(' ').replace(/^[\s:：\-–—]+/, '');
+  // A short remainder ("Zero" of "Orbit Zero") reads better as the whole title.
+  return name.length >= 4 && !/^\d/.test(name) ? name : season.title;
+}
