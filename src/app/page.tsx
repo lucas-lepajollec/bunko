@@ -107,7 +107,7 @@ export default function HomePage() {
               title={t('home.resume')}
               aside={t(asides.recent)}
               href="/profile#continue"
-              linkLabel={t('profile.allReading')}
+              linkLabel={t(asides.allResume)}
             />
             <ScrollRow>
               {resume.map((item) => (

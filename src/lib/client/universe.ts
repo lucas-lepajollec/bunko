@@ -182,9 +182,14 @@ export function universeAsides(active: DiscoverKind, enabled: readonly Universe[
     enabled.some((k) => KINDS[k].family === 'video') &&
     enabled.some((k) => KINDS[k].family === 'reading');
   const onlyVideo = active === 'all' && enabled.every((k) => KINDS[k].family === 'video');
+  const family = (key: string) =>
+    video || onlyVideo ? `${key}.video` : mixed ? `${key}.all` : key;
   return {
-    recent:
-      video || onlyVideo ? 'profile.recent.video' : mixed ? 'profile.recent.all' : 'profile.recent',
+    recent: family('profile.recent'),
+    /** "All my reading / watching" link to the profile's resume list. */
+    allResume: family('profile.allReading'),
+    empty: family('profile.empty'),
+    emptyBody: family('profile.emptyBody'),
     top: active === 'all' ? 'home.topWeekAside' : video ? 'home.topAside.video' : 'home.topAside',
     latest: (k: Universe) =>
       KINDS[k].unit === 'film'

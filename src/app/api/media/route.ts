@@ -4,7 +4,7 @@ import { json, route } from '@/lib/api';
 import { mediaId } from '@/lib/validation';
 import { mediaDetail } from '@/lib/catalog';
 import { listTracked, trackedForMedia } from '@/lib/db';
-import { jellyfinPresence } from '@/lib/jellyfin';
+import { jellyfinExtraSeasons, jellyfinPresence } from '@/lib/jellyfin';
 import { linkedRoot, seasonRef } from '@/lib/anime-franchise';
 import { animeIdsLoaded, firstSeason, idsOfAnilist } from '@/lib/anime-ids';
 import { emptyMedia } from '@/lib/media';
@@ -52,9 +52,12 @@ export const GET = route(async (r) => {
     : detail.id.startsWith('stash:')
       ? detail.id.slice('stash:'.length)
       : null;
+  const jellyfin = jellyfinPresence(detail, tracked?.jellyfinLink);
+  const extras = jellyfinExtraSeasons(jellyfin, detail.video, tracked?.jellyfinLink);
   const withPresence: MediaDetail = {
     ...detail,
-    jellyfin: jellyfinPresence(detail, tracked?.jellyfinLink),
+    jellyfin,
+    ...(extras.length ? { jellyfinExtras: extras } : {}),
     stash: stashKey && stashConfigured() ? { url: stashWebUrl(stashKey) } : null,
   };
   // "Open in…": every video service holding the work, from the integration registry.

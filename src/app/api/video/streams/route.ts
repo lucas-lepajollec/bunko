@@ -28,11 +28,21 @@ export const GET = route(async (r) => {
       episode: z.coerce.number().int().positive().max(5000).optional(),
       film: z.enum(['0', '1']).optional(),
       lang: z.enum(['en', 'fr', 'es', 'de', 'it']).default('en'),
+      /** Only the subtitle extensions' subtitles (an episode played from a media server). */
+      only: z.literal('subtitles').optional(),
     })
     .parse(Object.fromEntries(new URL(r.url).searchParams));
-  if (q.ext) return json(await extensionStreams(q.ext, q.lang, q.episode, r.signal, q.season));
+  const subtitlesOnly = q.only === 'subtitles';
+  if (q.ext)
+    return json(
+      subtitlesOnly
+        ? { streams: [], subtitles: [], errors: [] }
+        : await extensionStreams(q.ext, q.lang, q.episode, r.signal, q.season),
+    );
   if (q.anilist && q.episode)
-    return json(await episodeStreams(q.anilist, q.episode, q.lang, r.signal, q.film === '1'));
+    return json(
+      await episodeStreams(q.anilist, q.episode, q.lang, r.signal, q.film === '1', subtitlesOnly),
+    );
   if (q.imdb || q.tmdb)
     return json(
       await titleStreams(
@@ -40,6 +50,7 @@ export const GET = route(async (r) => {
         q.season !== undefined && q.episode ? { season: q.season, episode: q.episode } : null,
         q.lang,
         r.signal,
+        subtitlesOnly,
       ),
     );
   return json({ streams: [], subtitles: [], errors: [] });

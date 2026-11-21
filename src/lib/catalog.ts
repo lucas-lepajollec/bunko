@@ -77,7 +77,11 @@ import {
   type DexManga,
   type UpdatesRecord,
 } from './media';
-async function anilist<T>(query: string, variables: Record<string, unknown>, signal?: AbortSignal) {
+export async function anilist<T>(
+  query: string,
+  variables: Record<string, unknown>,
+  signal?: AbortSignal,
+) {
   const result = await requestJson<{ data?: T; errors?: unknown[] }>(
     'https://graphql.anilist.co',
     {

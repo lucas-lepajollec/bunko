@@ -157,6 +157,11 @@ const healthSchema = z
             name: z.string().max(80),
             status: z.enum(['ok', 'warning', 'down']),
             enabled: z.boolean().optional(),
+            // Optional counters over the extension's recent window, and when it last answered.
+            success: z.number().int().nonnegative().optional().catch(undefined),
+            empty: z.number().int().nonnegative().optional().catch(undefined),
+            errors: z.number().int().nonnegative().optional().catch(undefined),
+            lastSeen: z.number().nonnegative().max(8.64e15).nullable().optional().catch(undefined),
           })
           .passthrough(),
       )
@@ -233,6 +238,10 @@ async function addonHealth(url: string, signal?: AbortSignal) {
           name: s.name,
           status: s.status,
           enabled: s.enabled !== false,
+          ...(s.success !== undefined || s.empty !== undefined || s.errors !== undefined
+            ? { counts: { success: s.success ?? 0, empty: s.empty ?? 0, errors: s.errors ?? 0 } }
+            : {}),
+          ...(s.lastSeen ? { lastSeen: new Date(s.lastSeen).toISOString() } : {}),
         })),
       };
     } catch {
@@ -625,10 +634,11 @@ export async function episodeStreams(
   language: string,
   signal?: AbortSignal,
   film = false,
+  subtitlesOnly = false,
 ) {
   await ensureAnimeIds();
   void signal;
-  return remembered(episodeIds(anilistId, episode, film), language);
+  return remembered(episodeIds(anilistId, episode, film), language, subtitlesOnly);
 }
 /**
  * Series and films (TMDB): addons know them by IMDb id or by TMDB id (`tmdb:1399:1:2`), with the
@@ -639,6 +649,7 @@ export async function titleStreams(
   target: { season: number; episode: number } | null,
   language: string,
   signal?: AbortSignal,
+  subtitlesOnly = false,
 ) {
   const at = target ? `:${target.season}:${target.episode}` : '';
   const types = [target ? 'series' : 'movie'];
@@ -647,16 +658,22 @@ export async function titleStreams(
     ...(title.tmdb ? [{ id: `tmdb:${title.tmdb}${at}`, prefix: 'tmdb', types }] : []),
   ];
   void signal;
-  return remembered(ids, language);
+  return remembered(ids, language, subtitlesOnly);
 }
 
+/**
+ * `subtitlesOnly`: what the subtitle extensions have for it, without asking for streams (an
+ * episode played from the media server, offered the extensions' subtitles beside its own).
+ */
 function remembered(
   ids: { id: string; prefix: string; types: string[] }[],
   language: string,
+  subtitlesOnly = false,
 ): Promise<VideoStreams> {
   const settings = getSettings();
   const key = [
     tenantId(),
+    subtitlesOnly ? 'subtitles' : 'all',
     ids.map((i) => i.id).join(','),
     language,
     settings.videoAudio,
@@ -668,14 +685,14 @@ function remembered(
   const hit = recent.get(key);
   if (hit) return hit.value;
   // Not tied to the first caller's request: a second caller may still want the answer.
-  const value = streamsFor(ids, language).catch((error) => {
+  const value = streamsFor(ids, language, subtitlesOnly).catch((error) => {
     recent.delete(key);
     throw error;
   });
   // Only complete answers are kept: after a failed or empty lookup, asking again asks again.
   void value.then(
     (r) => {
-      if (r.errors.length || !r.streams.length) recent.delete(key);
+      if (r.errors.length || (!subtitlesOnly && !r.streams.length)) recent.delete(key);
     },
     () => undefined,
   );
@@ -700,6 +717,7 @@ const QUALITY_RANK: Record<number, number> = {
 async function streamsFor(
   ids: { id: string; prefix: string; types: string[] }[],
   language: string,
+  subtitlesOnly = false,
 ): Promise<VideoStreams> {
   const started = performance.now();
   const errors: string[] = [];
@@ -742,9 +760,9 @@ async function streamsFor(
         return last;
       };
       const [streamData, subtitleData] = await Promise.all([
-        ask('stream').then(
+        (subtitlesOnly ? Promise.resolve(null) : ask('stream')).then(
           (data) => {
-            noteResult(url, true);
+            if (!subtitlesOnly) noteResult(url, true);
             return data;
           },
           (error) => {

@@ -33,6 +33,7 @@ import type { EnhanceState } from '@/lib/client/enhance/playback';
 import Link from 'next/link';
 import { Spinner, cx } from './ui';
 import { EnhanceLayer, type EnhanceChoice } from './video-enhance';
+import { useIntegrationName } from './integration-logo';
 
 /** ISO 639 codes Jellyfin uses for each interface language. */
 const LANGUAGE_CODES: Record<string, string[]> = {
@@ -248,6 +249,12 @@ export function Player({
       : null,
   );
   const streams = mergeStreams(local, remote, Boolean(episode.localStreamsUrl));
+  // Played from the media server: the subtitle extensions' subtitles too, beside its own.
+  const serverSubsPath = source?.kind === 'jellyfin' ? streamsPath(episode, language) : null;
+  const serverExtensionSubs = useApi<VideoStreams>(
+    serverSubsPath ? `${serverSubsPath}&only=subtitles` : null,
+    { revalidateOnFocus: false },
+  );
   const metrics = useRef<PlaybackMetrics>(newMetrics());
   const [failedAll, setFailedAll] = useState<StreamError | null>(null);
   // A new episode (next) starts from its own best source.
@@ -347,6 +354,7 @@ export function Player({
               : null
           }
           metrics={metrics}
+          extensionSubtitles={serverExtensionSubs.data?.subtitles ?? []}
           nextLabel={next?.label}
           episode={episode}
           onClose={onClose}
@@ -743,6 +751,7 @@ function Screen({
   onUnplayable,
   failure,
   metrics,
+  extensionSubtitles,
   nextLabel,
 }: {
   source: PlaySource;
@@ -759,13 +768,18 @@ function Screen({
   /** Every automatic try failed: what happened and why. */
   failure?: { title: string; reason: string } | null;
   metrics?: RefObject<PlaybackMetrics>;
+  /** Subtitles from the subtitle extensions for a media server copy (its own come with it). */
+  extensionSubtitles: VideoSubtitle[];
   /** The next episode's label ("Ép. 7") for its button. */
   nextLabel?: string | null;
 }) {
   const { t, language } = useI18n();
+  const integrationName = useIntegrationName();
   const video = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const hls = useRef<Hls | null>(null);
+  // A subtitle track of the playlist chosen by hand: until then, a stream's own tracks stay off.
+  const hlsSubChosen = useRef(false);
   // Jellyfin: what to play comes from PlaybackInfo; a change of audio, burned subtitles or
   // quality asks again from the current position.
   const [request, setRequest] = useState<{
@@ -957,27 +971,24 @@ function Screen({
     };
   });
   const firstFrame = useRef(false);
-  // Subtitles of an extension stream: VOSTFR by default when the stream is not in the
-  // interface language (a VO stream plus subtitles from a subtitle extension).
+  // Subtitles from extensions: an extension stream's own and the subtitle extensions' ones, or
+  // the subtitle extensions' ones beside a media server copy's.
   const streamSubs =
     source.kind === 'stream'
       ? [
           ...source.stream.subtitles,
           ...source.subtitles.filter((s) => !source.stream.subtitles.some((x) => x.id === s.id)),
         ]
-      : [];
-  // Extensions frequently carry burned-in or embedded subtitles already: keep Bunko's external
-  // subtitle overlay off by default so tracks never double up; users can toggle CC in one click.
+      : extensionSubtitles;
+  // Everything from extensions starts off: streams often carry burned-in subtitles already, and
+  // tracks never double up. One click on CC (or the menu) turns them on.
   const [streamSub, setStreamSub] = useState<string | null>(null);
   const streamSubId = streamSub;
-  const shownTrack =
-    source.kind === 'jellyfin'
-      ? subtitleIndex === null
-        ? null
-        : `sub-${subtitleIndex}`
-      : streamSubId
-        ? `xsub-${streamSubId}`
-        : null;
+  const shownTrack = streamSubId
+    ? `xsub-${streamSubId}`
+    : source.kind === 'jellyfin' && subtitleIndex !== null
+      ? `sub-${subtitleIndex}`
+      : null;
   const languageName = (code: string | null) => {
     if (!code) return t('player.unknownLanguage');
     try {
@@ -997,11 +1008,15 @@ function Screen({
     if (!el) return;
     for (let i = 0; i < el.textTracks.length; i++) {
       const track = el.textTracks[i];
-      // Tracks hls.js adds itself (no id) follow its own subtitle choice.
-      if (!track.id) continue;
+      // Tracks hls.js adds itself (no id) follow its own subtitle choice; tracks a file carries
+      // itself stay off, like every other subtitle from an extension.
+      if (!track.id) {
+        if (source.kind === 'stream' && !hls.current) track.mode = 'disabled';
+        continue;
+      }
       track.mode = track.id === shownTrack ? 'showing' : 'disabled';
     }
-  }, [shownTrack, p, streamSubs.length]);
+  }, [shownTrack, p, streamSubs.length, source.kind]);
   // Subtitles sit a little above the bottom edge (browsers put the last line right on it).
   // Cues are placed two lines up unless the file positions them itself.
   useEffect(() => {
@@ -1144,12 +1159,25 @@ function Screen({
             h.startLevel = top;
             h.nextLevel = top;
           }
-          if (source.kind === 'stream') syncTracks();
+          if (source.kind === 'stream') {
+            if (!hlsSubChosen.current) h.subtitleTrack = -1;
+            syncTracks();
+          }
           void el.play().catch(() => undefined);
         });
         h.on(HlsJs.Events.AUDIO_TRACK_SWITCHED, syncTracks);
         h.on(HlsJs.Events.LEVEL_SWITCHED, syncTracks);
-        h.on(HlsJs.Events.SUBTITLE_TRACK_SWITCH, syncTracks);
+        // hls.js turns a playlist's default subtitles on by itself: off until one is chosen.
+        h.on(HlsJs.Events.SUBTITLE_TRACKS_UPDATED, () => {
+          if (source.kind === 'stream' && !hlsSubChosen.current && h.subtitleTrack !== -1)
+            h.subtitleTrack = -1;
+          syncTracks();
+        });
+        h.on(HlsJs.Events.SUBTITLE_TRACK_SWITCH, () => {
+          if (source.kind === 'stream' && !hlsSubChosen.current && h.subtitleTrack !== -1)
+            h.subtitleTrack = -1;
+          syncTracks();
+        });
         h.loadSource(url);
         h.attachMedia(el);
       });
@@ -1290,41 +1318,63 @@ function Screen({
     if (willBurn) reopen({ burn: next });
     else if (burned) reopen({ burn: null });
   };
-  // Subtitles on or off in one click (the interface language first), whatever their origin.
+  // Every subtitle in one list, each with where it comes from: the media server's own, the
+  // stream's playlist, the extensions'. One choice at a time, whatever its origin.
   const jellyfinSubs = source.kind === 'jellyfin' ? (p?.subtitles ?? []) : [];
-  const hlsSubs = hlsTracks?.subtitles ?? [];
-  const captionsFrom = jellyfinSubs.length
-    ? 'jellyfin'
-    : streamSubs.length
-      ? 'stream'
-      : hlsSubs.length
-        ? 'hls'
-        : null;
-  const captionsOn =
-    captionsFrom === 'jellyfin'
-      ? subtitleIndex !== null
-      : captionsFrom === 'stream'
-        ? streamSubId != null
-        : captionsFrom === 'hls' && hlsTracks?.subtitleId !== -1;
-  const captionsLabel =
-    captionsFrom === 'jellyfin'
-      ? (jellyfinSubs.find((s) => s.index === subtitleIndex)?.label ?? '')
-      : captionsFrom === 'stream'
-        ? languageName(streamSubs.find((s) => s.id === streamSubId)?.lang ?? null)
-        : (hlsSubs.find((s) => s.id === hlsTracks?.subtitleId)?.name ?? '');
-  const toggleCaptions = () => {
-    if (captionsFrom === 'jellyfin') {
-      const first =
-        jellyfinSubs.find((s) => s.text && s.language?.startsWith(language)) ??
-        jellyfinSubs.find((s) => s.text) ??
-        jellyfinSubs[0];
-      pickJellyfinSub(captionsOn ? 'off' : String(first.index));
-    } else if (captionsFrom === 'stream') {
-      const first = streamSubs.find((s) => s.lang === language) ?? streamSubs[0];
-      setStreamSub(captionsOn ? null : first.id);
-    } else if (captionsFrom === 'hls' && hls.current)
-      hls.current.subtitleTrack = captionsOn ? -1 : hlsSubs[0].id;
+  const hlsSubs = source.kind === 'stream' ? (hlsTracks?.subtitles ?? []) : [];
+  const streamOrigin = source.kind === 'stream' ? source.stream.addon : '';
+  const subtitleOptions: { value: string; label: string; hint: string }[] = [
+    ...jellyfinSubs.map((s) => ({
+      value: `jf:${s.index}`,
+      label: s.label,
+      hint: integrationName('jellyfin'),
+    })),
+    ...hlsSubs.map((s) => ({ value: `hls:${s.id}`, label: s.name, hint: streamOrigin })),
+    ...streamSubs.map((s) => ({ value: `x:${s.id}`, label: languageName(s.lang), hint: s.source })),
+  ];
+  const subtitleValue = streamSubId
+    ? `x:${streamSubId}`
+    : source.kind === 'jellyfin'
+      ? subtitleIndex === null
+        ? 'off'
+        : `jf:${subtitleIndex}`
+      : hlsTracks && hlsTracks.subtitleId !== -1
+        ? `hls:${hlsTracks.subtitleId}`
+        : 'off';
+  const pickSubtitle = (v: string) => {
+    const at = v.indexOf(':');
+    const kind = at < 0 ? 'off' : v.slice(0, at);
+    const id = v.slice(at + 1);
+    setStreamSub(kind === 'x' ? id : null);
+    if (source.kind === 'jellyfin') {
+      if (kind === 'jf') pickJellyfinSub(id);
+      else if (subtitleIndex !== null) pickJellyfinSub('off');
+    }
+    if (source.kind === 'stream' && hls.current) {
+      hlsSubChosen.current = kind === 'hls';
+      hls.current.subtitleTrack = kind === 'hls' ? Number(id) : -1;
+    }
   };
+  const captionsOn = subtitleValue !== 'off';
+  const captionsLabel = subtitleOptions.find((o) => o.value === subtitleValue)?.label ?? '';
+  // On in one click: the interface language first (the server's text tracks, then the
+  // extensions'), else the first one offered.
+  const toggleCaptions = () => {
+    if (captionsOn) return pickSubtitle('off');
+    const first =
+      jellyfinSubs.find((s) => s.text && s.language?.startsWith(language)) ??
+      jellyfinSubs.find((s) => s.text && codes.includes((s.language ?? '').toLowerCase()));
+    const ext = streamSubs.find((s) => s.lang === language);
+    pickSubtitle(first ? `jf:${first.index}` : ext ? `x:${ext.id}` : subtitleOptions[0].value);
+  };
+  const subtitleChoice = subtitleOptions.length > 0 && (
+    <Choice
+      label={t('player.subtitles')}
+      value={subtitleValue}
+      options={[{ value: 'off', label: t('player.off') }, ...subtitleOptions]}
+      onChange={pickSubtitle}
+    />
+  );
   // Where the picture comes from, in the top bar (opens the sources).
   const sourceLabel = [
     source.kind === 'jellyfin' ? 'Jellyfin' : source.stream.name,
@@ -1724,7 +1774,7 @@ function Screen({
             {clock(time)} <span className="text-white/50">/ {clock(duration)}</span>
           </span>
           <span className="flex-1" />
-          {captionsFrom && (
+          {subtitleOptions.length > 0 && (
             <button
               type="button"
               aria-pressed={captionsOn}
@@ -1776,15 +1826,7 @@ function Screen({
                         options={p.audio.map((a) => ({ value: String(a.index), label: a.label }))}
                         onChange={(v) => reopen({ audio: Number(v) })}
                       />
-                      <Choice
-                        label={t('player.subtitles')}
-                        value={subtitleIndex === null ? 'off' : String(subtitleIndex)}
-                        options={[
-                          { value: 'off', label: t('player.off') },
-                          ...p.subtitles.map((s) => ({ value: String(s.index), label: s.label })),
-                        ]}
-                        onChange={pickJellyfinSub}
-                      />
+                      {subtitleChoice}
                       <Choice
                         label={t('player.quality')}
                         value={String(request.bitrate)}
@@ -1834,20 +1876,7 @@ function Screen({
                           }}
                         />
                       )}
-                      {streamSubs.length > 0 && (
-                        <Choice
-                          label={t('player.subtitles')}
-                          value={streamSubId ?? 'off'}
-                          options={[
-                            { value: 'off', label: t('player.off') },
-                            ...streamSubs.map((s) => ({
-                              value: s.id,
-                              label: `${languageName(s.lang)} · ${s.source}`,
-                            })),
-                          ]}
-                          onChange={(v) => setStreamSub(v === 'off' ? null : v)}
-                        />
-                      )}
+                      {subtitleChoice}
                       {hlsTracks && hlsTracks.audio.length > 1 && (
                         <Choice
                           label={t('player.audio')}
@@ -1858,22 +1887,6 @@ function Screen({
                           }))}
                           onChange={(v) => {
                             if (hls.current) hls.current.audioTrack = Number(v);
-                          }}
-                        />
-                      )}
-                      {hlsTracks && hlsTracks.subtitles.length > 0 && (
-                        <Choice
-                          label={t('player.subtitles')}
-                          value={String(hlsTracks.subtitleId)}
-                          options={[
-                            { value: '-1', label: t('player.off') },
-                            ...hlsTracks.subtitles.map((s) => ({
-                              value: String(s.id),
-                              label: s.name,
-                            })),
-                          ]}
-                          onChange={(v) => {
-                            if (hls.current) hls.current.subtitleTrack = Number(v);
                           }}
                         />
                       )}
@@ -2026,7 +2039,8 @@ function Choice({
 }: {
   label: string;
   value: string;
-  options: { value: string; label: string }[];
+  /** `hint`: where the option comes from, shown beside it. */
+  options: { value: string; label: string; hint?: string }[];
   onChange: (value: string) => void;
 }) {
   const { t } = useI18n();
@@ -2104,7 +2118,12 @@ function Choice({
                 : 'border-2 border-white/30',
             )}
           />
-          <span className="truncate">{o.label}</span>
+          <span className="min-w-0 flex-1 truncate">{o.label}</span>
+          {o.hint && (
+            <span className="max-w-[45%] shrink-0 truncate text-[12px] text-white/50">
+              {o.hint}
+            </span>
+          )}
         </button>
       ))}
     </div>

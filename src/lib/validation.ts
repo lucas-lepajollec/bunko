@@ -15,6 +15,19 @@ export const sourceId = z
 export const mediaType = z.enum(['MANGA', 'NOVEL', 'ANIME']);
 /** Search adds TMDB's series (TV) and films (MOVIE). */
 export const searchType = z.enum(['MANGA', 'NOVEL', 'ANIME', 'TV', 'MOVIE']);
+/** A news feed address: http(s), no credentials; a query string is fine (`?format=rss`). */
+const feedUrl = z
+  .string()
+  .trim()
+  .max(2000)
+  .refine((v) => {
+    try {
+      const u = new URL(v);
+      return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password;
+    } catch {
+      return false;
+    }
+  }, 'Invalid feed address');
 const httpUrl = z
   .string()
   .max(2048)
@@ -207,6 +220,10 @@ export const settingsPatch = z
     // Configured addon addresses carry their options (often base64) in the path: long.
     videoAddons: z.array(z.string().url().max(4000)).max(20).optional(),
     videoAudio: z.enum(['original', 'dubbed']).optional(),
+    newsFeeds: z
+      .array(z.object({ url: feedUrl, kind: z.enum(KIND_IDS) }))
+      .max(60)
+      .optional(),
     videoAnyLanguage: z.boolean().optional(),
     jellyfinLibraries: z
       .record(

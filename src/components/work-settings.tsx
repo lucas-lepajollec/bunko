@@ -116,9 +116,9 @@ export function GeneralTab({
   return (
     <div className="flex flex-col gap-8">
       <Group title={t('settings.work.tracking')}>
-        <Row title={t('title.readingStatus')}>
+        <Row title={t(video ? 'title.readingStatus.video' : 'title.readingStatus')}>
           <Select
-            label={t('title.readingStatus')}
+            label={t(video ? 'title.readingStatus.video' : 'title.readingStatus')}
             value={entry.status}
             onChange={(status) => void run(() => patch({ status }))}
             options={STATUSES.map((x) => ({

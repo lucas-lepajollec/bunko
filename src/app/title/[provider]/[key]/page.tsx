@@ -149,7 +149,10 @@ function Title({
   const [choice, setChoice] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const isComic = media.type === 'MANGA';
-  const video = media.type === 'ANIME' ? media.video : undefined;
+  // Watched rather than read. Decided by the work's type, not by its episodes: a sheet still
+  // loading its episodes never shows reading buttons first.
+  const isVideo = media.type === 'ANIME';
+  const video = isVideo ? media.video : undefined;
   const extension = media.providers.includes('extension');
   // A film (live action or animated) is watched as a film, not browsed by TV episode — changing
   // its display/library category (`kindOverride`, e.g. filing an anime film under Animes) never
@@ -269,8 +272,8 @@ function Title({
     unread: 0,
     readSource: 'none' as const,
   };
-  const released = video
-    ? (video.aired ?? video.episodes ?? video.seasons?.length ?? null)
+  const released = isVideo
+    ? (video?.aired ?? video?.episodes ?? video?.seasons?.length ?? null)
     : entry?.unit === 'volume'
       ? (entry.progress?.released ?? media.volumes)
       : chapterReleased;
@@ -614,7 +617,7 @@ function Title({
                   : t('title.noSource')}
         </button>
       )}
-      {video &&
+      {isVideo &&
         media.openIn?.map((o) => (
           <a
             key={o.integration}
@@ -631,23 +634,23 @@ function Title({
             })}
           </a>
         ))}
-      {video && <MediaDownload media={media} />}
+      {isVideo && <MediaDownload media={media} />}
       <Select
-        label={t('title.readingStatus')}
+        label={t(isVideo ? 'title.readingStatus.video' : 'title.readingStatus')}
         value={entry?.status ?? 'NONE'}
         onChange={(v) => setStatus(v as ReadingStatus | 'NONE')}
         options={[
           { value: 'NONE', label: t('title.notInLibrary') },
           ...STATUSES.map((x) => ({
             value: x,
-            label: t(video ? `watchStatus.${x}` : `status.${x}`),
+            label: t(isVideo ? `watchStatus.${x}` : `status.${x}`),
           })),
         ]}
         size="lg"
         className="h-12 justify-center gap-3 bg-white/[0.14] px-5 sm:justify-between"
       />
       <ReadButton
-        bunko={readTarget}
+        bunko={isVideo ? null : readTarget}
         kavita={
           media.kavita?.url
             ? {
@@ -670,25 +673,27 @@ function Title({
                 n: progress.read !== null ? n(progress.read) : '—',
                 total: released !== null ? n(released) : '—',
               })
-            : t(video ? 'episodes.watchedCount' : vol('title.read'), {
+            : t(isVideo ? 'episodes.watchedCount' : vol('title.read'), {
                 n: progress.read !== null ? n(progress.read) : '—',
               })}
         </span>
-        {!video && <OwnedInventory entry={entry} />}
-        {video && media.jellyfin && (
+        {!isVideo && <OwnedInventory entry={entry} />}
+        {isVideo && media.jellyfin && (
           <span>{t('jellyfin.owned', { n: n(media.jellyfin.ownedCount) })}</span>
         )}
         {media.kavita && <KavitaRefresh trackedId={entry.id} />}
         {!multiFilmSheet && (
           <span>
-            {video
-              ? t('episodes.airedCount', { n: video.aired !== null ? n(video.aired) : '—' })
+            {isVideo
+              ? t('episodes.airedCount', {
+                  n: video && video.aired !== null ? n(video.aired) : '—',
+                })
               : t(vol('title.released'), {
                   n: progress.released !== null ? n(progress.released) : '—',
                 })}
           </span>
         )}
-        {!video && (
+        {!isVideo && (
           <InfoBubble label={t('title.progressInfo')}>
             {progress.readSource === 'suwayomi'
               ? t('title.readFromSuwayomi')
@@ -718,7 +723,7 @@ function Title({
           items={[
             {
               id: 'chapters',
-              label: video
+              label: isVideo
                 ? t('episodes.title')
                 : isComic
                   ? t('title.tab.chapters')
@@ -766,6 +771,7 @@ function Title({
               anilistId={media.anilistId}
               video={seasonParam ? { ...video, focus: seasonParam } : video}
               jellyfin={media.jellyfin}
+              extras={media.jellyfinExtras}
               stash={Boolean(media.stash)}
               entry={entry}
               busy={false}
@@ -975,7 +981,7 @@ function Title({
           <SectionHeading
             num={2 + Number(joinedParts.length > 0) + Number(media.relations.length > 0)}
             title={t('title.recommendations')}
-            aside={t('title.recommendationsAside')}
+            aside={t(isVideo ? 'title.recommendationsAside.video' : 'title.recommendationsAside')}
           />
           <div className="no-scrollbar -mx-4 -my-2 flex gap-3.5 overflow-x-auto px-4 py-2 md:mx-0 md:overflow-visible md:grid md:grid-cols-6 md:gap-6 md:px-0 xl:grid-cols-8">
             {media.recommendations.slice(0, 8).map((m) => (
