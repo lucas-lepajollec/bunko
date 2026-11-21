@@ -409,6 +409,9 @@ const indexState = tenantState(() => ({ value: undefined as JellyfinIndex | unde
  * The Jellyfin index, decoded once per sync and kept with lookup tables: matching a work is a
  * map lookup instead of re-reading and scanning every series (it was V × J per pass).
  */
+/** The index a batch already read (see `jellyfinPresences`): no stamp query per work. */
+let batchIndex: JellyfinIndex | null = null;
+const currentIndex = () => batchIndex ?? jellyfinIndex();
 export function jellyfinIndex(): JellyfinIndex {
   const row = statement(
     "SELECT COUNT(*) AS n, MAX(rowid) AS last, (SELECT value FROM worker_state WHERE key='jellyfin_synced_at') AS at FROM jellyfin_series",
@@ -468,7 +471,7 @@ function seasonSource(
   primary: IndexedJellyfinSeries,
   link: Exclude<JellyfinLink, 'none'> | null,
 ): { series: IndexedJellyfinSeries; season: number; manual: boolean } | null {
-  const index = jellyfinIndex();
+  const index = currentIndex();
   const chosen = link?.seasons?.[String(s.number)];
   if (chosen === null) return null;
   if (chosen) {
@@ -563,10 +566,8 @@ function seasonsAcrossSeries(
 /** Jellyfin series some followed work holds (every season's series, not only the first). */
 export function jellyfinSeriesInUse(tracked: Pick<TrackedMedia, 'media' | 'jellyfinLink'>[]) {
   const used = new Set<string>();
-  for (const t of tracked) {
-    const presence = jellyfinPresence(t.media, t.jellyfinLink);
+  for (const presence of jellyfinPresences(tracked))
     if (presence) for (const id of presence.seriesIds ?? [presence.seriesId]) used.add(id);
-  }
   return used;
 }
 /** Every episode of a series in watching order: seasons from 1 up, specials (season 0) last. */
@@ -606,7 +607,7 @@ const seasonNumbers = (s: IndexedJellyfinSeries) =>
  */
 export function matchJellyfin(media: UnifiedMedia, link?: JellyfinLink | null) {
   if (media.type !== 'ANIME' || link === 'none') return null;
-  const index = jellyfinIndex();
+  const index = currentIndex();
   if (link) {
     const s = index.byId.get(link.seriesId);
     return s ? { series: s, manual: true } : null;
@@ -655,14 +656,68 @@ export function matchJellyfin(media: UnifiedMedia, link?: JellyfinLink | null) {
   const series = byProvider ?? (byTitle.length === 1 ? byTitle[0] : undefined);
   return series ? { series, manual: false } : null;
 }
+/**
+ * Presences computed since the index last changed: the library, the catalog's marks and the
+ * sync ask for every work on each pass, and working out seasons across series for hundreds of
+ * works cost half a second each time. An entry is reused while the index, the server address,
+ * the work's link and its known seasons are the same; marking episodes forgets them all.
+ */
+const presenceMemo = tenantState(() => ({
+  stamp: '',
+  works: new Map<string, { seasons: unknown; value: JellyfinPresence | null }>(),
+}));
+export function forgetJellyfinPresence() {
+  presenceMemo().works.clear();
+}
 export function jellyfinPresence(
   media: UnifiedMedia,
   link?: JellyfinLink | null,
 ): JellyfinPresence | null {
-  if (!jellyfinConfigured()) return null;
+  return jellyfinPresences([{ media, jellyfinLink: link }])[0];
+}
+/**
+ * The presence of many works at once (the library, the sync): the settings and the index are
+ * read once for the whole list rather than once per work.
+ */
+export function jellyfinPresences(
+  works: readonly { media: UnifiedMedia; jellyfinLink?: JellyfinLink | null }[],
+): (JellyfinPresence | null)[] {
+  const settings = getSettings();
+  if (!settings.jellyfinUrl || !settings.jellyfinApiKey) return works.map(() => null);
+  const memo = presenceMemo();
+  const index = jellyfinIndex();
+  const stamp = `${index.stamp}|${settings.jellyfinUrl}`;
+  if (memo.stamp !== stamp) {
+    memo.stamp = stamp;
+    memo.works.clear();
+  }
+  const base = settings.jellyfinUrl.replace(/\/+$/, '');
+  const outer = batchIndex;
+  batchIndex = index;
+  try {
+    return works.map(({ media, jellyfinLink: link }) => {
+      if (media.type !== 'ANIME' || link === 'none') return null;
+      // The same array while the work's seasons are unchanged (see `knownSeasons`).
+      const seasons = media.anilistId ? knownSeasons(media.anilistId) : null;
+      const key = `${media.id}|${media.format}|${media.anilistId}|${media.title}|${JSON.stringify(link ?? null)}`;
+      const hit = memo.works.get(key);
+      if (hit && hit.seasons === seasons) return hit.value;
+      const value = computeJellyfinPresence(media, link, base);
+      if (memo.works.size > 20_000) memo.works.clear();
+      memo.works.set(key, { seasons, value });
+      return value;
+    });
+  } finally {
+    batchIndex = outer;
+  }
+}
+function computeJellyfinPresence(
+  media: UnifiedMedia,
+  link: JellyfinLink | null | undefined,
+  base: string,
+): JellyfinPresence | null {
   const match = matchJellyfin(media, link);
   if (!match) return null;
-  const base = getSettings().jellyfinUrl.replace(/\/+$/, '');
   const multi = seasonsAcrossSeries(media, match.series, link, base);
   if (multi) return { ...multi, manual: multi.manual || match.manual };
   // Linked by hand episode by episode, or "in order": one list numbered like the work's
@@ -671,7 +726,7 @@ export function jellyfinPresence(
     let flat: { n: number; id: string; played: boolean }[];
     if (link.episodes) {
       // Items of every indexed series: an episode may be chosen from another series.
-      const items = jellyfinIndex().items;
+      const items = currentIndex().items;
       flat = Object.entries(link.episodes)
         .flatMap(([n, id]) => {
           const e = id ? items.get(id) : undefined;
@@ -841,11 +896,13 @@ export function applyJellyfinProgress() {
   // A count past everything aired (an older season mapping, absolute episode numbers) is
   // brought back to the work's length: watched never exceeds what exists.
   const cap = statement('UPDATE tracked_media SET last_read=? WHERE id=? AND last_read>?');
-  for (const t of listTracked().filter((t) => t.type === 'ANIME')) {
+  const anime = listTracked().filter((t) => t.type === 'ANIME');
+  const presences = jellyfinPresences(anime);
+  for (const [i, t] of anime.entries()) {
     const seasons = t.anilistId ? (knownSeasons(t.anilistId) ?? undefined) : undefined;
     const aired = seasons ? workAired(seasons) : null;
     if (aired && (t.progress.read ?? 0) > aired) cap.run(aired, t.id, aired);
-    const presence = jellyfinPresence(t.media, t.jellyfinLink);
+    const presence = presences[i];
     if (!presence) continue;
     const watched = Math.min(watchedInWork(presence, seasons), aired ?? Infinity);
     if (watched > 0) update.run(watched, t.id, watched);
@@ -1168,6 +1225,8 @@ export async function syncWatchedToJellyfin(
             touched.add(series.id);
           }
   }
+  // Presences hold the played episodes: worked out again from the updated index.
+  if (touched.size) forgetJellyfinPresence();
   for (const series of held)
     if (touched.has(series.id))
       statement('UPDATE jellyfin_series SET payload=? WHERE series_id=?').run(

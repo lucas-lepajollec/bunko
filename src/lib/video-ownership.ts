@@ -3,7 +3,7 @@ import { isFilm } from '@/domain/progress';
 import {
   jellyfinConfigured,
   jellyfinEpisodesOfWork,
-  jellyfinPresence,
+  jellyfinPresences,
   resetJellyfinProgress,
   workAired,
 } from './jellyfin';
@@ -165,14 +165,16 @@ export function videoNews(
 
 export function withVideoOwnership(entries: TrackedMedia[]): TrackedMedia[] {
   const jellyfin = jellyfinConfigured();
-  return entries.map((e) => {
+  // Every work's presence in one pass (settings and index read once).
+  const presences = jellyfin ? jellyfinPresences(entries) : [];
+  return entries.map((e, i) => {
     if (e.type !== 'ANIME') return e;
     // Media mechanics (film vs episodic) follow the underlying format, never the user's kindOverride.
     const film = isFilm(e);
     let jellyfinOwned = 0;
     const seasons = e.media.anilistId ? knownSeasons(e.media.anilistId) : null;
     // What the sheet shows: every series holding the work (a season can be a series of its own).
-    const presence = jellyfin ? jellyfinPresence(e.media, e.jellyfinLink) : null;
+    const presence = presences[i] ?? null;
     const owned =
       presence && !film ? new Set(jellyfinEpisodesOfWork(presence, seasons).keys()) : null;
     if (presence) jellyfinOwned = film ? 1 : owned!.size || 1;

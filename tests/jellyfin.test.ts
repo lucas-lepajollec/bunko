@@ -465,6 +465,22 @@ it('takes each season of a work from where it is in Jellyfin, chosen by hand or 
   expect(plain?.absolute).toBeUndefined();
 });
 
+it('works presences out once per index, and again once episodes are marked', async () => {
+  const work = track({ media: { ...anime(70, 'Kept Work'), anilistId: 70 }, status: 'READING' });
+  await jellyfin.syncJellyfinIndex();
+  const link = { seriesId: 'A', season: 1 } as const;
+  const media = getTracked(work.id)!.media;
+  const first = jellyfin.jellyfinPresence(media, link);
+  // The library asks for every work on each pass: the same answer, not worked out again.
+  expect(jellyfin.jellyfinPresences([{ media, jellyfinLink: link }])[0]).toBe(first);
+  // Another link is another answer.
+  expect(jellyfin.jellyfinPresence(media, null)).not.toBe(first);
+  // Marking episodes changes what is played: the next answer is fresh.
+  jellyfin.forgetJellyfinPresence();
+  expect(jellyfin.jellyfinPresence(media, link)).not.toBe(first);
+  expect(jellyfin.jellyfinPresence(media, link)).toEqual(first);
+});
+
 it('keeps every integration link in one table, one per work and integration', async () => {
   const { setIntegrationLink, integrationLinks } = await import('@/lib/integration-links');
   const work = track({ media: anime(60, 'Linked Twice'), status: 'PLANNING' });
