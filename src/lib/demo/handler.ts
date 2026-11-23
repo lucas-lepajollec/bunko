@@ -44,8 +44,83 @@ import {
   createInitialSettings,
   createInitialTracked,
 } from './catalog';
+import { sanitizeDemoImageUrl, type DemoCatalogPatch } from './live-catalog';
 
-export const DEMO_STATE_KEY = 'bunko-demo-state-v1';
+let liveCatalogPromise: Promise<void> | null = null;
+let liveCatalogPatches: Record<string, DemoCatalogPatch> | null = null;
+
+function applyPatchToWork(work: UnifiedMedia, patch: DemoCatalogPatch) {
+  if (patch.title) work.title = patch.title;
+  if (patch.altTitles && patch.altTitles.length > 0) work.altTitles = patch.altTitles;
+  if (typeof patch.year === 'number') work.year = patch.year;
+  if (typeof patch.score === 'number') work.score = patch.score;
+  if (typeof patch.popularity === 'number') work.popularity = patch.popularity;
+  if (typeof patch.chapters === 'number') work.chapters = patch.chapters;
+  if (typeof patch.volumes === 'number') work.volumes = patch.volumes;
+  if (typeof patch.episodes === 'number') work.episodes = patch.episodes;
+  if (patch.color) work.color = patch.color;
+  if (patch.genres && patch.genres.length > 0) work.genres = patch.genres;
+  if (patch.authors && patch.authors.length > 0) work.authors = patch.authors;
+  if (patch.synopsis) work.synopsis = patch.synopsis;
+  const safeCover = sanitizeDemoImageUrl(patch.coverUrl);
+  if (safeCover) work.coverUrl = safeCover;
+  const safeBanner = sanitizeDemoImageUrl(patch.bannerUrl);
+  if (safeBanner) work.bannerUrl = safeBanner;
+}
+
+export function applyLiveDemoCatalog(patches: Record<string, DemoCatalogPatch>) {
+  liveCatalogPatches = patches;
+  for (const work of DEMO_WORKS) {
+    const patch = patches[work.id];
+    if (!patch) continue;
+    applyPatchToWork(work, patch);
+  }
+  if (memoryState) {
+    for (const entry of memoryState.tracked) {
+      const live = WORK_BY_ID.get(entry.media.id);
+      if (!live) continue;
+      entry.title = live.title;
+      entry.coverUrl = live.coverUrl;
+      entry.media = { ...entry.media, ...live, trackedId: entry.id };
+    }
+    for (const item of memoryState.continueItems) {
+      const live = WORK_BY_ID.get(item.media.id);
+      if (!live) continue;
+      item.media = {
+        ...item.media,
+        title: live.title,
+        coverUrl: live.coverUrl,
+        color: live.color,
+      };
+    }
+    saveDemoState(memoryState);
+  }
+}
+
+async function ensureDemoCatalogHydrated(): Promise<void> {
+  if (typeof window === 'undefined' || process.env.NODE_ENV === 'test') return;
+  if (liveCatalogPatches) return;
+  if (!liveCatalogPromise) {
+    liveCatalogPromise = (async () => {
+      try {
+        const res = await fetch('/api/demo/catalog', {
+          headers: { Accept: 'application/json' },
+          signal: AbortSignal.timeout(4500),
+        });
+        if (!res.ok) return;
+        const body = (await res.json()) as { items?: Record<string, DemoCatalogPatch> };
+        if (body.items && typeof body.items === 'object') {
+          applyLiveDemoCatalog(body.items);
+        }
+      } catch {
+        /* Fallback cleanly to local demo SVG artwork when offline. */
+      }
+    })();
+  }
+  await liveCatalogPromise;
+}
+
+export const DEMO_STATE_KEY = 'bunko-demo-state-v2';
 export const DEMO_INTRO_KEY = 'lh-demo-intro-seen';
 
 export interface DemoState {
@@ -336,19 +411,19 @@ export async function demoApiResponse(
       ? init.method
       : (init as RequestInit | undefined)?.method ?? 'GET'
   ).toUpperCase();
-  const state = loadDemoState();
-  const trackedByMedia = new Map(state.tracked.map((t) => [t.media.id, t]));
 
-  // Health
+  // Health & reset do not need catalog hydration.
   if (pathname === '/api/health') {
     return jsonRes({ status: 'ok', version: '1.0.0', demo: true });
   }
-
-  // Demo reset
   if (pathname === '/api/demo/reset' && method === 'POST') {
     resetDemoState();
     return jsonRes({ ok: true });
   }
+
+  await ensureDemoCatalogHydrated();
+  const state = loadDemoState();
+  const trackedByMedia = new Map(state.tracked.map((t) => [t.media.id, t]));
 
   // Auth & Account
   if (pathname === '/api/auth') {

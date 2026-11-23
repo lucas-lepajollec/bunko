@@ -5,8 +5,10 @@ import { isDemoMode } from '@/lib/demo-mode';
 import robots from '@/app/robots';
 import nextConfig from '../next.config';
 import { DEMO_WORKS } from '@/lib/demo/catalog';
-import { demoApiResponse, resetDemoState } from '@/lib/demo/handler';
+import { applyLiveDemoCatalog, demoApiResponse, resetDemoState } from '@/lib/demo/handler';
 import { POST as demoResetPost } from '@/app/api/demo/reset/route';
+import { GET as demoCatalogGet } from '@/app/api/demo/catalog/route';
+import { sanitizeDemoImageUrl } from '@/lib/demo/live-catalog';
 
 const originalDemo = process.env.BUNKO_DEMO_MODE;
 const originalPublicDemo = process.env.NEXT_PUBLIC_BUNKO_DEMO;
@@ -177,8 +179,42 @@ describe('zero-SQLite demo API handler', () => {
     delete process.env.BUNKO_DEMO_MODE;
     delete process.env.NEXT_PUBLIC_BUNKO_DEMO;
     expect(demoResetPost().status).toBe(404);
+    expect((await demoCatalogGet()).status).toBe(404);
 
     process.env.BUNKO_DEMO_MODE = 'true';
     expect(demoResetPost().status).toBe(200);
+  });
+
+  it('sanitizes live public catalog image hosts and applies live patches safely', async () => {
+    expect(sanitizeDemoImageUrl('https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154587.jpg')).toBe(
+      'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154587.jpg',
+    );
+    expect(sanitizeDemoImageUrl('https://covers.openlibrary.org/b/id/11481354-L.jpg')).toBe(
+      'https://covers.openlibrary.org/b/id/11481354-L.jpg',
+    );
+    expect(sanitizeDemoImageUrl('http://s4.anilist.co/insecure.jpg')).toBeNull();
+    expect(sanitizeDemoImageUrl('https://evil.example/poster.jpg')).toBeNull();
+
+    const originalTitle = DEMO_WORKS.find((w) => w.id === 'anilist:900701')!.title;
+    const originalCover = DEMO_WORKS.find((w) => w.id === 'anilist:900701')!.coverUrl;
+    try {
+      applyLiveDemoCatalog({
+        'anilist:900701': {
+          title: 'Frieren: Beyond Journey’s End',
+          coverUrl: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154587-qQTzQnEJJ3oB.jpg',
+          bannerUrl: 'https://evil.example/blocked.jpg',
+        },
+      });
+      const detail = await (await demoApiResponse('/api/media?id=anilist:900701')).json();
+      expect(detail.title).toBe('Frieren: Beyond Journey’s End');
+      expect(detail.coverUrl).toBe(
+        'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154587-qQTzQnEJJ3oB.jpg',
+      );
+      expect(detail.bannerUrl).not.toContain('evil.example');
+    } finally {
+      const w = DEMO_WORKS.find((item) => item.id === 'anilist:900701')!;
+      w.title = originalTitle;
+      w.coverUrl = originalCover;
+    }
   });
 });

@@ -506,6 +506,7 @@ it('authenticates the complete route inventory and concurrently exercises every 
         pathname === '/api/health' ||
         pathname === '/api/auth/setup' ||
         pathname === '/api/demo/reset' ||
+        pathname === '/api/demo/catalog' ||
         (pathname === '/api/auth' && method !== 'DELETE')
       )
         continue;
