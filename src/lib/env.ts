@@ -2,3 +2,6 @@
 export function env(name: string): string | undefined {
   return process.env[`BUNKO_${name}`] ?? process.env[`KAVISEERR_${name}`];
 }
+export function envBool(name: string): boolean {
+  return env(name) === 'true';
+}

@@ -26,6 +26,7 @@ const context = await import('@/lib/tenant-context');
 const settings = await import('@/lib/settings');
 const mediaModule = await import('@/lib/media');
 const token = settings.persistentSecret('access.token', 32).toString('hex');
+const sessionKey = settings.persistentSecret('session.key', 32).toString('hex');
 context.inTenant(1, () =>
   settings.updateSettings({
     suwayomiUrl: 'http://old-suwayomi.test',
@@ -69,6 +70,7 @@ async function fixture(name: string, v9: boolean, legacyName = false) {
   cpSync(templateFile, filename);
   cpSync(path.join(directory, 'template', 'settings.key'), path.join(volume, 'settings.key'));
   writeFileSync(path.join(volume, 'access.token'), token, { mode: 0o600 });
+  writeFileSync(path.join(volume, 'session.key'), sessionKey, { mode: 0o600 });
   const old = new Database(filename);
   old.pragma('foreign_keys=ON');
   // Build actual pre-v14 tables; the template now contains the current schema.
@@ -253,7 +255,7 @@ for (const v9 of [false, true])
       );
     }
     const cookieValue = `v2.1.${Date.now() + 86400_000}.retained-session-epoch`;
-    const signature = createHmac('sha256', token).update(cookieValue).digest('hex');
+    const signature = createHmac('sha256', sessionKey).update(cookieValue).digest('hex');
     expect(
       state.auth.authenticate(
         new Request('http://fixture.test', {
@@ -261,6 +263,15 @@ for (const v9 of [false, true])
         }),
       ).id,
     ).toBe(1);
+    // Cookies signed with access.token (Bearer key) are no longer accepted.
+    const tokenSignature = createHmac('sha256', token).update(cookieValue).digest('hex');
+    expect(() =>
+      state.auth.authenticate(
+        new Request('http://fixture.test', {
+          headers: { Cookie: `bunko_session=${cookieValue}.${tokenSignature}` },
+        }),
+      ),
+    ).toThrow('Authentication');
     if (v9) {
       const second = state.tenant.inTenant(2, state.lib.db);
       handles.push(second);

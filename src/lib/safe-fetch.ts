@@ -152,12 +152,15 @@ const refused = () =>
   new AppError('DESTINATION_REFUSED', 'This address is on a private network', 403);
 
 /** DNS lookup that only returns addresses the policy allows (used by the socket itself). */
-function guardedLookup(trusted: boolean): LookupFunction {
+function guardedLookup(trusted: boolean, allowConfigured: boolean): LookupFunction {
   return (hostname, options, callback) => {
     dnsLookup(hostname, { ...options, all: true }, (error, addresses) => {
       if (error) return callback(error, '', 0);
       const list = (addresses as LookupAddress[]).filter(
-        (a) => trusted || isPublicAddress(a.address) || addressAllowed(a.address),
+        (a) =>
+          trusted ||
+          isPublicAddress(a.address) ||
+          (allowConfigured && addressAllowed(a.address)),
       );
       if (!list.length) return callback(refused() as NodeJS.ErrnoException, '', 0);
       if ((options as { all?: boolean }).all)
@@ -184,15 +187,26 @@ export interface SafeFetchOptions {
   /** Silence allowed while reading the body. Default 60 s. */
   idleMs?: number;
   maxRedirects?: number;
+  /**
+   * When true, honors `BUNKO_VIDEO_ALLOWED_HOSTS` (reserved strictly for video extensions so
+   * member-editable RSS feeds cannot probe internal hosts allowed for video streaming).
+   */
+  allowConfiguredHosts?: boolean;
 }
 
 const CREDENTIALS = /^(authorization|cookie|proxy-authorization)$/i;
 
 function once(url: URL, options: SafeFetchOptions): Promise<SafeResponse> {
   return new Promise((resolve, reject) => {
-    const trusted = hostAllowed(url);
+    const allowConfigured = Boolean(options.allowConfiguredHosts);
+    const trusted = allowConfigured && hostAllowed(url);
     const host = url.hostname.replace(/^\[|\]$/g, '');
-    if (isIP(host) && !trusted && !isPublicAddress(host) && !addressAllowed(host))
+    if (
+      isIP(host) &&
+      !trusted &&
+      !isPublicAddress(host) &&
+      !(allowConfigured && addressAllowed(host))
+    )
       return reject(refused());
     const client = url.protocol === 'https:' ? https : http;
     const request = client.request(
@@ -200,7 +214,7 @@ function once(url: URL, options: SafeFetchOptions): Promise<SafeResponse> {
       {
         method: 'GET',
         headers: { 'User-Agent': 'Bunko', Accept: '*/*', ...(options.headers ?? {}) },
-        lookup: guardedLookup(trusted),
+        lookup: guardedLookup(trusted, allowConfigured),
         agent: false,
         signal: options.signal,
       },

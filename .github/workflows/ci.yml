@@ -60,5 +60,14 @@ jobs:
           cache-from: type=gha,scope=bunko-amd64,timeout=2m
           cache-to: type=gha,scope=bunko-amd64,mode=max,timeout=2m,ignore-error=true
 
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        with:
+          image-ref: bunko:ci
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
       - name: Smoke-test the image
         run: scripts/container-smoke.sh bunko:ci

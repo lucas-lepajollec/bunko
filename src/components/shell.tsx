@@ -185,7 +185,7 @@ function AuthScreen({
       await send(setup ? '/api/auth/setup' : '/api/auth', 'POST', {
         username: username.trim(),
         password,
-        ...(setup && recovery ? { recoveryCode: code.trim() } : {}),
+        ...(setup ? (recovery ? { recoveryCode: code.trim() } : { setupCode: code.trim() }) : {}),
       });
       await onDone();
     } catch (err) {
@@ -241,17 +241,20 @@ function AuthScreen({
           />
           {setup && <span className="text-faint text-xs">{t('auth.passwordRule')}</span>}
         </label>
-        {setup && recovery && (
+        {setup && (
           <label className="text-muted flex flex-col gap-2 text-sm">
-            {t('auth.recoveryCode')}
+            {recovery ? t('auth.recoveryCode') : t('auth.setupCode')}
             <input
               required
               autoComplete="one-time-code"
+              placeholder={recovery ? undefined : 'XXXX-XXXX-XXXX'}
               value={code}
               onChange={(e) => setCode(e.target.value)}
               className={cx(field, 'h-12 text-base tracking-[0.2em]')}
             />
-            <span className="text-faint text-xs">{t('auth.recoveryHint')}</span>
+            <span className="text-faint text-xs">
+              {recovery ? t('auth.recoveryHint') : t('auth.setupCodeHint')}
+            </span>
           </label>
         )}
         {setup && (
@@ -274,7 +277,7 @@ function AuthScreen({
         )}
         <button
           type="submit"
-          disabled={busy || !username.trim() || !password}
+          disabled={busy || !username.trim() || !password || (setup && !code.trim())}
           className={primaryButton}
         >
           {busy ? t('login.signingIn') : setup ? t('auth.create') : t('login.signIn')}

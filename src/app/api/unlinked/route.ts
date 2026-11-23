@@ -2,7 +2,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 import { z } from 'zod';
 import { body, json, route } from '@/lib/api';
+import { requirePermission } from '@/lib/auth';
 import { KIND_IDS } from '@/domain/kinds';
+import { statement } from '@/lib/db';
 import { wakeWorker } from '@/lib/worker-events';
 import { createSheet, setUnlinkedIgnored, unlinkedItems } from '@/lib/unlinked';
 
@@ -39,8 +41,18 @@ export const POST = route(async (r) => {
       })
       .strict(),
   );
+  const sectionAdult =
+    input.section?.id &&
+    Boolean(
+      (
+        statement('SELECT adult FROM extension_sections WHERE id=?').get(input.section.id) as
+          { adult: number } | undefined
+      )?.adult,
+    );
+  if (input.adult === true || sectionAdult) requirePermission('adult');
   const entry = createSheet({
     ...input,
+    adult: Boolean(input.adult || sectionAdult),
     year: input.year ?? null,
     section: input.section ?? null,
   });

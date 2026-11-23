@@ -268,3 +268,17 @@ it('leaves helpers safe on hostile input', () => {
     '<a href="y">z</a>',
   );
 });
+
+it('rejects EPUB zip bombs with oversized declared entries or spoofed headers', async () => {
+  // 1. Spoofed-header deflate bomb: declared size is 16 bytes, actual inflated output is 256 KiB.
+  const bombZip = new AdmZip();
+  bombZip.addFile('bomb.xhtml', Buffer.alloc(256 * 1024, 0x41));
+  const entry = bombZip.getEntry('bomb.xhtml')!;
+  entry.header.size = 16;
+  expect(() => books.readZipEntry(entry, 4096)).toThrow(/too large/i);
+
+  // 2. Oversized declared entry in an EPUB archive (> 20 MiB) is rejected before decompression.
+  const hugeZip = new AdmZip(epub());
+  hugeZip.addFile('OEBPS/huge.xhtml', Buffer.alloc(21 * 1024 * 1024, 0x20));
+  expect(() => books.indexEpub(hugeZip)).toThrow(/too large/i);
+});

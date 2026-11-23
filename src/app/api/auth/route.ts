@@ -1,6 +1,6 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-import { login, authState, credentials } from '@/lib/auth';
+import { login, authState, clearSessionCookie, credentials } from '@/lib/auth';
 import { body, json, route } from '@/lib/api';
 export const POST = route(async (r) => {
   const cookie = await login(r, await body(r, credentials));
@@ -12,11 +12,11 @@ export const POST = route(async (r) => {
 }, false);
 export const GET = route((r) => json(authState(r)), false);
 export const DELETE = route(
-  () =>
+  (r) =>
     new Response(null, {
       status: 204,
       headers: {
-        'Set-Cookie': 'bunko_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
+        'Set-Cookie': clearSessionCookie(r),
         'Cache-Control': 'no-store',
       },
     }),

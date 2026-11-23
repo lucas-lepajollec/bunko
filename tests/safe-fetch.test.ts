@@ -158,15 +158,28 @@ it('refuses loopback, LAN and metadata addresses, however they are written', asy
 });
 
 it('checks every redirect and drops credentials when leaving the origin', async () => {
-  // Only server A is allowed (by host:port): its redirects must not open the rest.
+  // Only server A is allowed (by host:port) when allowConfiguredHosts is enabled:
+  // its redirects must not open the rest, and callers without allowConfiguredHosts (like RSS feeds)
+  // cannot reach even allowlisted internal hosts.
   process.env.BUNKO_VIDEO_ALLOWED_HOSTS = `127.0.0.1:${a}`;
-  await expect(net.safeFetch(`http://127.0.0.1:${a}/to-b`)).rejects.toMatchObject(refused);
-  await expect(net.safeFetch(`http://127.0.0.1:${a}/to-localhost`)).rejects.toMatchObject(refused);
-  await expect(net.safeFetch(`http://127.0.0.1:${a}/to-metadata`)).rejects.toMatchObject(refused);
-  await expect(net.safeFetch(`http://127.0.0.1:${a}/to-file`)).rejects.toMatchObject({
+  await expect(net.safeFetch(`http://127.0.0.1:${a}/echo`)).rejects.toMatchObject(refused);
+  await expect(
+    net.safeFetch(`http://127.0.0.1:${a}/to-b`, { allowConfiguredHosts: true }),
+  ).rejects.toMatchObject(refused);
+  await expect(
+    net.safeFetch(`http://127.0.0.1:${a}/to-localhost`, { allowConfiguredHosts: true }),
+  ).rejects.toMatchObject(refused);
+  await expect(
+    net.safeFetch(`http://127.0.0.1:${a}/to-metadata`, { allowConfiguredHosts: true }),
+  ).rejects.toMatchObject(refused);
+  await expect(
+    net.safeFetch(`http://127.0.0.1:${a}/to-file`, { allowConfiguredHosts: true }),
+  ).rejects.toMatchObject({
     code: 'VALIDATION_ERROR',
   });
-  await expect(net.safeFetch(`http://127.0.0.1:${a}/loop`)).rejects.toMatchObject({
+  await expect(
+    net.safeFetch(`http://127.0.0.1:${a}/loop`, { allowConfiguredHosts: true }),
+  ).rejects.toMatchObject({
     code: 'STREAM_UNREACHABLE',
   });
   expect(calls.some((c) => c.startsWith('B '))).toBe(false);
@@ -174,22 +187,28 @@ it('checks every redirect and drops credentials when leaving the origin', async 
   process.env.BUNKO_VIDEO_ALLOWED_HOSTS = `127.0.0.1:${a},127.0.0.1:${b}`;
   const json = (await net.safeJson(`http://127.0.0.1:${a}/to-b`, {
     headers: { Authorization: 'Bearer addon-secret', Referer: 'https://player.example/' },
+    allowConfiguredHosts: true,
   })) as { headers: Record<string, string> };
   expect(json.headers.authorization).toBeUndefined();
   expect(json.headers.referer).toBe('https://player.example/');
   expect(json.headers.cookie).toBeUndefined();
-  // A CIDR allows a range.
+  // A CIDR allows a range when opted in, and stays blocked by default.
   process.env.BUNKO_VIDEO_ALLOWED_HOSTS = '127.0.0.0/8';
-  expect(await net.safeJson(`http://127.0.0.1:${a}/echo`)).toMatchObject({ headers: {} });
+  await expect(net.safeFetch(`http://127.0.0.1:${a}/echo`)).rejects.toMatchObject(refused);
+  expect(
+    await net.safeJson(`http://127.0.0.1:${a}/echo`, { allowConfiguredHosts: true }),
+  ).toMatchObject({ headers: {} });
 });
 
 it('caps sizes and time', async () => {
   process.env.BUNKO_VIDEO_ALLOWED_HOSTS = '127.0.0.1';
-  await expect(net.safeJson(`http://127.0.0.1:${a}/huge`)).rejects.toMatchObject({
+  await expect(
+    net.safeJson(`http://127.0.0.1:${a}/huge`, { allowConfiguredHosts: true }),
+  ).rejects.toMatchObject({
     code: 'PAYLOAD_TOO_LARGE',
   });
   await expect(
-    net.safeFetch(`http://127.0.0.1:${a}/hang`, { timeoutMs: 200 }),
+    net.safeFetch(`http://127.0.0.1:${a}/hang`, { timeoutMs: 200, allowConfiguredHosts: true }),
   ).rejects.toMatchObject({ code: 'STREAM_TIMEOUT' });
 });
 

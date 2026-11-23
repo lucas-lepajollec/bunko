@@ -1690,8 +1690,8 @@ export interface AuthState {
 export type UserRole = 'admin' | 'member';
 /** GET /api/users (admin). */
 /**
- * What a member may do (admins can do everything). New accounts get every permission; an admin
- * takes away what a member should not do.
+ * What a member may do (admins can do everything). New member accounts start with least privilege
+ * (`downloads`, `translate`); an admin enables `services`, `extensions`, or `adult` explicitly.
  */
 export const PERMISSIONS = ['services', 'extensions', 'downloads', 'translate', 'adult'] as const;
 export type Permission = (typeof PERMISSIONS)[number];
@@ -1711,6 +1711,8 @@ export interface UserCreate {
   username: string;
   password: string;
   role: UserRole;
+  /** Optional initial permissions for members (defaults to `['downloads', 'translate']`). */
+  permissions?: Permission[];
 }
 /** PATCH /api/users (admin): change role or set a new password; DELETE /api/users {id}. */
 export interface UserPatch {

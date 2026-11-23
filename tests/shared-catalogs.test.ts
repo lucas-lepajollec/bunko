@@ -7,8 +7,10 @@ import fixture from './fixtures/optional-catalogs.json';
 import { catalogSettingKeys } from '@/types/shared';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'bunko-shared-catalogs-'));
+const setupCode = 'SHARED-CAT-2026';
 process.env.BUNKO_DATA_DIR = dir;
 process.env.BUNKO_WORKER = 'false';
+process.env.BUNKO_SETUP_CODE = setupCode;
 const { accountsDb } = await import('@/lib/accounts-store');
 const { db, closeTenant } = await import('@/lib/db');
 const { inTenant, tenantPath } = await import('@/lib/tenant-context');
@@ -40,14 +42,19 @@ const patch = (value: unknown, cookie = admin) =>
   settings.PATCH(request('/api/settings', 'PATCH', value, cookie));
 beforeAll(async () => {
   const result = await setup.POST(
-    request('/api/auth/setup', 'POST', { username: 'Admin', password }),
+    request('/api/auth/setup', 'POST', { username: 'Admin', password, setupCode }),
   );
   expect(result.status).toBe(200);
   admin = result.headers.get('set-cookie')!.split(';')[0];
   expect(
     (
       await users.POST(
-        request('/api/users', 'POST', { username: 'Member', password, role: 'member' }),
+        request('/api/users', 'POST', {
+          username: 'Member',
+          password,
+          role: 'member',
+          permissions: ['services', 'extensions', 'downloads', 'translate', 'adult'],
+        }),
       )
     ).status,
   ).toBe(201);

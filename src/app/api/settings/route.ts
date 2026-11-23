@@ -52,7 +52,12 @@ export const PATCH = route(async (r) => {
   const patch = await body(r, settingsPatch);
   if (Object.keys(patch).some((k) => SERVICE_KEYS.includes(k))) requirePermission('services');
   if (patch.extensionRepos) requirePermission('extensions');
-  if (patch.adultContent === true || patch.adultMode === true) requirePermission('adult');
+  if (
+    patch.adultContent !== undefined ||
+    patch.adultMode !== undefined ||
+    patch.hideNsfwSources === false
+  )
+    requirePermission('adult');
   if (patch.adultContent === false && patch.adultMode === undefined) patch.adultMode = false;
   const result = updateSettings(patch);
   if (patch.extensionRepos) await configureRepos(patch.extensionRepos);

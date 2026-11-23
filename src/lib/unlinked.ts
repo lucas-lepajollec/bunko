@@ -1,5 +1,6 @@
 import type { ExtensionSectionRef, TrackedMedia, UnifiedMedia, UnlinkedItem } from '@/types/shared';
 import { KINDS, kindOfMedia, type Kind } from '@/domain/kinds';
+import { requirePermission } from './auth';
 import { getTracked, listTracked, statement, track } from './db';
 import { AppError } from './errors';
 import {
@@ -185,6 +186,7 @@ export function createSheet(input: {
     input.section,
     input.adult,
   );
+  if (media.adult) requirePermission('adult');
   const entry = track({ media, status: inventory.status ?? 'PLANNING' });
   inventory.adopt(entry.id, input.id);
   return getTracked(entry.id)!;

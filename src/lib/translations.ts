@@ -332,15 +332,43 @@ const languageTag = (code: string) =>
     .toUpperCase()
     .slice(0, 12);
 
+/** Reads a Fetch response stream with a hard byte ceiling so oversized bodies abort immediately. */
+export async function readResponseCapped(
+  response: Response,
+  limit = MAX_UPLOAD,
+): Promise<Uint8Array> {
+  const declared = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > limit) {
+    await response.body?.cancel();
+    throw new AppError('TRADOC_ERROR', 'TraDoc returned an unusable file', 502);
+  }
+  const reader = response.body?.getReader();
+  if (!reader) throw new AppError('TRADOC_ERROR', 'TraDoc returned an unusable file', 502);
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const part = await reader.read();
+      if (part.done) break;
+      total += part.value.byteLength;
+      if (total > limit)
+        throw new AppError('TRADOC_ERROR', 'TraDoc returned an unusable file', 502);
+      chunks.push(part.value);
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  if (!total) throw new AppError('TRADOC_ERROR', 'TraDoc returned an unusable file', 502);
+  return new Uint8Array(Buffer.concat(chunks, total));
+}
+
 async function install(job: Row) {
   const response = await tradoc(
     `/translations/${encodeURIComponent(job.remote_id!)}/result`,
     {},
     10 * 60_000,
   );
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (!bytes.length || bytes.length > MAX_UPLOAD)
-    throw new AppError('TRADOC_ERROR', 'TraDoc returned an unusable file', 502);
+  const bytes = await readResponseCapped(response, MAX_UPLOAD);
   const original = await localKavitaFile(job.kavita_path);
   let output: string;
   let backup: string | null = job.backup_path;

@@ -205,6 +205,7 @@ async function manifest(url: string, signal?: AbortSignal): Promise<Manifest> {
     const data = await safeJson(`${base(url)}/manifest.json`, {
       timeoutMs: 8000,
       signal: AbortSignal.any([AbortSignal.timeout(10_000), ...(signal ? [signal] : [])]),
+      allowConfiguredHosts: true,
     });
     return manifestSchema.parse(data);
   });
@@ -224,6 +225,7 @@ async function addonHealth(url: string, signal?: AbortSignal) {
       const data = await safeJson(`${base(url)}/health.json`, {
         timeoutMs: 3000,
         signal: AbortSignal.any([AbortSignal.timeout(4000), ...(signal ? [signal] : [])]),
+        allowConfiguredHosts: true,
       });
       const parsed = healthSchema.parse(data);
       return {
@@ -589,6 +591,7 @@ function addonJson(url: string, path: string, signal?: AbortSignal, timeoutMs = 
   return safeJson(`${base(url)}${path}`, {
     timeoutMs,
     signal: AbortSignal.any([AbortSignal.timeout(timeoutMs + 2000), ...(signal ? [signal] : [])]),
+    allowConfiguredHosts: true,
   });
 }
 /** A slow answer is not a broken extension: it is not put to rest for it. */

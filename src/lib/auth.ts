@@ -2,12 +2,13 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { credentials, passwordChange } from './account-validation';
 export { credentials, passwordChange } from './account-validation';
 import { persistentSecret } from './settings';
-import { accountsDb as db } from './accounts-store';
+import { accountsDb as db, ensureSetupCode, normalizeSetupCode } from './accounts-store';
 import { accountsDir, inTenant } from './tenant-context';
 import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { getSettings } from './settings';
 import { AppError } from './errors';
+import { env, envBool } from './env';
 import { hashPassword, verifyPassword } from './passwords';
 import { currentUser } from './user-context';
 import type { UserRole, AuthState, Credentials, PasswordChange, Permission } from '@/types/shared';
@@ -37,15 +38,30 @@ export function equal(a: string, b: string) {
   const y = Buffer.from(b);
   return x.length === y.length && timingSafeEqual(x, y);
 }
-function secret() {
+function accessSecret() {
   return persistentSecret('access.token', 32).toString('hex');
 }
+function sessionSecret() {
+  return persistentSecret('session.key', 32).toString('hex');
+}
 function sign(value: string) {
-  return createHmac('sha256', secret()).update(value).digest('hex');
+  return createHmac('sha256', sessionSecret()).update(value).digest('hex');
+}
+export function isSecureRequest(request: Request): boolean {
+  if (envBool('SECURE_COOKIES')) return true;
+  if (new URL(request.url).protocol === 'https:') return true;
+  if (envBool('TRUST_PROXY')) {
+    const forwarded = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
+    if (forwarded === 'https') return true;
+  }
+  return false;
+}
+export function clearSessionCookie(request: Request): string {
+  return `bunko_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${isSecureRequest(request) ? '; Secure' : ''}`;
 }
 export function authenticate(request: Request) {
   const auth = request.headers.get('authorization');
-  if (auth?.startsWith('Bearer ') && equal(auth.slice(7), secret())) {
+  if (auth?.startsWith('Bearer ') && equal(auth.slice(7), accessSecret())) {
     const row = db().prepare("SELECT value FROM account_state WHERE key='token_user'").get() as
       { value: string } | undefined;
     const owner = row ? account(Number(row.value)) : undefined;
@@ -126,6 +142,10 @@ export function requireAdmin() {
     throw new AppError('FORBIDDEN', 'Administrator access required', 403);
 }
 export function checkOrigin(request: Request) {
+  const isBearer = Boolean(request.headers.get('authorization')?.startsWith('Bearer '));
+  const fetchSite = request.headers.get('sec-fetch-site')?.trim().toLowerCase();
+  if (!isBearer && fetchSite === 'cross-site')
+    throw new AppError('FORBIDDEN', 'Cross-site request rejected', 403);
   const origin = request.headers.get('origin');
   if (origin) {
     let valid = false;
@@ -140,21 +160,35 @@ export function checkOrigin(request: Request) {
     if (!valid) throw new AppError('FORBIDDEN', 'Cross-origin request rejected', 403);
   }
 }
-function limit(username: string) {
+function clientRateKey(request?: Request): string {
+  if (request && envBool('TRUST_PROXY')) {
+    const raw =
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip')?.trim();
+    if (raw) return `ip:${raw.toLowerCase().slice(0, 64)}`;
+  }
+  return 'ip:direct';
+}
+function limit(username: string, request?: Request) {
   const database = db();
+  const ipKey = clientRateKey(request);
   database
     .transaction(() => {
       const now = Date.now();
       database.prepare('DELETE FROM login_attempts WHERE start<=?').run(now - 60_000);
-      // Per account only: a shared counter would let anyone lock every user out.
-      for (const [key, maximum] of [[username, 10]] as const) {
+      // Per account (10/min) plus per-IP / bounded direct fallback (30/min) to stop username spray DoS.
+      const budgets = [
+        [username, 10],
+        [ipKey, 30],
+      ] as const;
+      for (const [key, maximum] of budgets) {
         const row = database
           .prepare('SELECT total FROM login_attempts WHERE username=?')
           .get(key) as { total: number } | undefined;
         if ((row?.total ?? 0) >= maximum)
           throw new AppError('RATE_LIMITED', 'Try again in one minute', 429);
       }
-      for (const key of [username])
+      for (const [key] of budgets)
         database
           .prepare(
             `INSERT INTO login_attempts VALUES(?,?,1)
@@ -169,7 +203,7 @@ function invalidCredentials(): never {
 }
 function sessionCookie(request: Request, userId: number, sessionEpoch: string) {
   const value = `v2.${userId}.${Date.now() + sessionSeconds * 1000}.${sessionEpoch}`;
-  return `bunko_session=${value}.${sign(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${sessionSeconds}${new URL(request.url).protocol === 'https:' ? '; Secure' : ''}`;
+  return `bunko_session=${value}.${sign(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${sessionSeconds}${isSecureRequest(request) ? '; Secure' : ''}`;
 }
 /** A recovery (existing admin, emptied password) needs the one-time code from the data volume. */
 function checkRecoveryCode(code: string | undefined) {
@@ -182,16 +216,42 @@ function checkRecoveryCode(code: string | undefined) {
   if (!timingSafeEqual(given, Buffer.from(row.value, 'hex')))
     throw new AppError('RECOVERY_CODE_INVALID', 'The recovery code is not valid', 401);
 }
-export async function setup(request: Request, input: Credentials & { recoveryCode?: string }) {
+/** Initial setup needs the one-time setup code from startup logs / `/data/setup.code` or `BUNKO_SETUP_CODE`. */
+function checkSetupCode(code: string | undefined) {
+  const configured = env('SETUP_CODE')?.trim();
+  let expectedHex: string | undefined;
+  if (configured) {
+    expectedHex = createHash('sha256').update(normalizeSetupCode(configured)).digest('hex');
+  } else {
+    ensureSetupCode(db());
+    const row = db().prepare("SELECT value FROM account_state WHERE key='setup_code'").get() as
+      { value: string } | undefined;
+    expectedHex = row?.value;
+  }
+  if (!expectedHex)
+    throw new AppError('SETUP_CODE_INVALID', 'The setup code is not valid', 401);
+  const given = createHash('sha256')
+    .update(normalizeSetupCode(code ?? ''))
+    .digest();
+  if (!timingSafeEqual(given, Buffer.from(expectedHex, 'hex')))
+    throw new AppError('SETUP_CODE_INVALID', 'The setup code is not valid', 401);
+}
+export async function setup(
+  request: Request,
+  input: Credentials & { recoveryCode?: string; setupCode?: string },
+) {
   checkOrigin(request);
   const first = firstAdmin();
   if (first?.password_hash)
     throw new AppError('ALREADY_SET_UP', 'Administrator account already exists', 409);
-  if (first) {
-    limit('recovery');
-    checkRecoveryCode(input.recoveryCode);
-  }
   const value = credentials.parse({ username: input.username, password: input.password });
+  if (first) {
+    limit('recovery', request);
+    checkRecoveryCode(input.recoveryCode);
+  } else {
+    limit('setup', request);
+    checkSetupCode(input.setupCode);
+  }
   const hash = await hashPassword(value.password);
   const sessionEpoch = epoch();
   const id = db()
@@ -208,6 +268,7 @@ export async function setup(request: Request, input: Credentials & { recoveryCod
         db().prepare("DELETE FROM account_state WHERE key='recovery_code'").run();
         return existing.id;
       }
+      checkSetupCode(input.setupCode);
       const result = db()
         .prepare(
           `INSERT INTO users(username,role,password_hash,session_epoch,created_at)
@@ -216,10 +277,11 @@ export async function setup(request: Request, input: Credentials & { recoveryCod
         .run(value.username, hash, sessionEpoch, new Date().toISOString());
       const id = Number(result.lastInsertRowid);
       db().prepare("INSERT OR IGNORE INTO account_state VALUES('token_user',?)").run(String(id));
+      db().prepare("DELETE FROM account_state WHERE key='setup_code'").run();
       return id;
     })
     .immediate();
-  if (first) rmSync(path.join(accountsDir, 'recovery.code'), { force: true });
+  rmSync(path.join(accountsDir, first ? 'recovery.code' : 'setup.code'), { force: true });
   inTenant(id, () => getSettings());
   return sessionCookie(request, id, sessionEpoch);
 }
@@ -229,7 +291,7 @@ export async function login(request: Request, input: Credentials) {
     throw new AppError('SETUP_REQUIRED', 'Create the administrator account first', 409);
   const value = credentials.parse(input);
   const username = value.username.toLowerCase();
-  limit(username);
+  limit(username, request);
   const current = db()
     .prepare('SELECT * FROM users WHERE username=? COLLATE NOCASE')
     .get(username) as Account | undefined;
@@ -253,7 +315,7 @@ export async function changePassword(request: Request, input: PasswordChange) {
   const value = passwordChange.parse(input);
   const current = account(identity.id);
   if (!current) throw new AppError('SETUP_REQUIRED', 'Create the administrator account first', 409);
-  limit(current.username.toLowerCase());
+  limit(current.username.toLowerCase(), request);
   if (!(await verifyPassword(value.currentPassword, current.password_hash))) invalidCredentials();
   const hash = await hashPassword(value.newPassword);
   const sessionEpoch = epoch();

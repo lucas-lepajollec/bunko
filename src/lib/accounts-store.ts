@@ -27,6 +27,46 @@ function syncDirectory(directory: string) {
     closeSync(fd);
   }
 }
+const SETUP_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export function normalizeSetupCode(code: string) {
+  return code.trim().toUpperCase().replace(/[\s-]+/g, '');
+}
+export function generateSetupCode() {
+  const bytes = randomBytes(12);
+  let raw = '';
+  for (let i = 0; i < 12; i++) raw += SETUP_ALPHABET[bytes[i] & 31];
+  return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+}
+/**
+ * First start with no administrator generates a one-time setup code (`XXXX-XXXX-XXXX`), persists
+ * its SHA-256 hash and writes it to `<data>/setup.code` (0600) so an exposed fresh instance
+ * cannot be claimed by a drive-by visitor. Operators can also set `BUNKO_SETUP_CODE`.
+ */
+export function ensureSetupCode(database: Database.Database): string | null {
+  if (database.prepare("SELECT 1 FROM users WHERE role='admin' LIMIT 1").get()) return null;
+  const configured = env('SETUP_CODE')?.trim();
+  if (configured) {
+    const hash = createHash('sha256').update(normalizeSetupCode(configured)).digest('hex');
+    database
+      .prepare(
+        "INSERT INTO account_state(key,value) VALUES('setup_code',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      )
+      .run(hash);
+    return null;
+  }
+  if (database.prepare("SELECT 1 FROM account_state WHERE key='setup_code'").get()) return null;
+  const code = generateSetupCode();
+  const hash = createHash('sha256').update(normalizeSetupCode(code)).digest('hex');
+  const inserted = database
+    .prepare("INSERT OR IGNORE INTO account_state(key,value) VALUES('setup_code',?)")
+    .run(hash);
+  if (!inserted.changes) return null;
+  const file = path.join(accountsDir, 'setup.code');
+  rmSync(file, { force: true });
+  writeFileSync(file, `${code}\n`, { flag: 'wx', mode: 0o600 });
+  console.info(`Bunko: first-start setup code: ${code} (saved in ${file})`);
+  return code;
+}
 export function accountsDb(): Database.Database {
   if (connection?.open) return connection;
   mkdirSync(accountsDir, { recursive: true, mode: 0o700 });
@@ -155,6 +195,7 @@ export function accountsDb(): Database.Database {
         `Bunko: first administrator password and sessions reset. Enter the one-time code from ${file} on the setup screen.`,
       );
     }
+    ensureSetupCode(database);
     migrateMediaRoots(database);
     migrateCatalogSettings(database);
     cleanupDeletedTenants(database);

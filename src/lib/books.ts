@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { inflateRawSync } from 'node:zlib';
 import type { BookFile, BookManifest, BookProgressUpdate, BookTocEntry } from '@/types/shared';
 import { listTracked, statement } from './db';
 import { AppError } from './errors';
@@ -19,6 +20,10 @@ import { tenantState } from './tenant-context';
  */
 const FORMATS = new Set(['.epub', '.pdf']);
 const MAX_EPUB = 300 * 1024 * 1024;
+export const MAX_EPUB_ENTRIES = 10_000;
+export const MAX_EPUB_ENTRY_BYTES = 20 * 1024 * 1024;
+export const MAX_EPUB_METADATA_BYTES = 5 * 1024 * 1024;
+export const MAX_EPUB_TOTAL_UNCOMPRESSED = 512 * 1024 * 1024;
 const FILES_TTL = 60_000;
 
 export const fileKey = (kavitaPath: string) =>
@@ -178,12 +183,58 @@ export function archivePath(base: string, href: string): string | null {
   return joined.startsWith('../') || joined === '..' || joined.startsWith('/') ? null : joined;
 }
 
+/** Checks archive-level entry count and declared uncompressed total to defeat zip bombs. */
+function validateEpubArchive(zip: AdmZip) {
+  const entries = zip.getEntries();
+  if (entries.length > MAX_EPUB_ENTRIES)
+    throw new AppError('BOOK_INVALID', 'This EPUB has too many entries', 422);
+  let totalUncompressed = 0;
+  for (const entry of entries) {
+    if (entry.isDirectory) continue;
+    const size = entry.header.size;
+    if (!Number.isFinite(size) || size < 0 || size > MAX_EPUB_ENTRY_BYTES)
+      throw new AppError('FILE_TOO_LARGE', 'This book entry is too large', 413);
+    totalUncompressed += size;
+    if (totalUncompressed > MAX_EPUB_TOTAL_UNCOMPRESSED)
+      throw new AppError('FILE_TOO_LARGE', 'This book is too large', 413);
+  }
+}
+
+/**
+ * Decompresses one ZIP entry with a hard byte ceiling (both declared size and actual inflated
+ * output via zlib `maxOutputLength`), so a crafted zip bomb with a spoofed header cannot OOM Node.
+ */
+export function readZipEntry(entry: AdmZip.IZipEntry, maxBytes = MAX_EPUB_ENTRY_BYTES): Buffer {
+  const declared = entry.header.size;
+  if (!Number.isFinite(declared) || declared < 0 || declared > maxBytes)
+    throw new AppError('FILE_TOO_LARGE', 'This book entry is too large', 413);
+  const method = entry.header.method;
+  const compressed = entry.getCompressedData();
+  if (method === 0) {
+    if (compressed.byteLength > maxBytes)
+      throw new AppError('FILE_TOO_LARGE', 'This book entry is too large', 413);
+    return compressed;
+  }
+  if (method === 8) {
+    try {
+      return inflateRawSync(compressed, { maxOutputLength: maxBytes });
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ERR_BUFFER_TOO_LARGE' || error instanceof RangeError)
+        throw new AppError('FILE_TOO_LARGE', 'This book entry is too large', 413);
+      throw new AppError('BOOK_INVALID', 'This EPUB entry could not be read', 422);
+    }
+  }
+  throw new AppError('BOOK_INVALID', 'Unsupported EPUB compression method', 422);
+}
+
 function entryText(zip: AdmZip, name: string) {
   const entry = zip.getEntry(name);
-  return entry ? entry.getData().toString('utf8') : null;
+  return entry ? readZipEntry(entry, MAX_EPUB_METADATA_BYTES).toString('utf8') : null;
 }
 
 export function indexEpub(zip: AdmZip): EpubIndex {
+  validateEpubArchive(zip);
   const container = entryText(zip, 'META-INF/container.xml');
   const opfPath =
     (container && /<rootfile\b[^>]*full-path\s*=\s*["']([^"']+)["']/i.exec(container)?.[1]) ??
@@ -373,7 +424,7 @@ export async function bookResource(request: Request, mediaId: string, key: strin
   const type = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(rawType)
     ? rawType
     : 'application/octet-stream';
-  let bytes: Buffer = entry.getData();
+  let bytes: Buffer = readZipEntry(entry, MAX_EPUB_ENTRY_BYTES);
   if (/html|xml|svg/.test(type)) bytes = Buffer.from(stripScripts(bytes.toString('utf8')), 'utf8');
   return new Response(new Uint8Array(bytes), {
     headers: {

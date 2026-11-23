@@ -7,8 +7,10 @@ import type Database from 'better-sqlite3';
 const directory = mkdtempSync(path.join(tmpdir(), 'bunko-reset-'));
 const connections: Database.Database[] = [];
 const resetRuntime = globalThis as typeof globalThis & { __bunkoAccountReset?: Set<string> };
+const setupCode = 'RESET-TEST-2026';
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_WORKER = 'false';
+process.env.BUNKO_SETUP_CODE = setupCode;
 async function boot(reset: string | undefined) {
   vi.resetModules();
   if (reset === undefined) delete process.env.BUNKO_RESET_ACCOUNT;
@@ -59,7 +61,7 @@ it('resets account and sessions at startup once across module bundles, preservin
   first.settings.updateSettings({ kavitaUrl: 'http://fixture.invalid' });
   const credentials = { username: 'Reader', password: 'synthetic-password' };
   const request = new Request('http://reader.test');
-  const oldCookie = (await first.auth.setup(request, credentials)).split(';')[0];
+  const oldCookie = (await first.auth.setup(request, { ...credentials, setupCode })).split(';')[0];
   const token = first.settings.persistentSecret('access.token', 32).toString('hex');
   const { emptyMedia } = await import('@/lib/media');
   first
@@ -163,7 +165,11 @@ it.each([undefined, 'false', 'TRUE', '1'])(
       );
     const request = new Request('http://reader.test');
     const session = (
-      await first.auth.setup(request, { username: 'Reader', password: 'synthetic-password' })
+      await first.auth.setup(request, {
+        username: 'Reader',
+        password: 'synthetic-password',
+        setupCode,
+      })
     ).split(';')[0];
     const second = await boot(flag);
     expect(second.auth.authState(new Request(request, { headers: { Cookie: session } }))).toEqual({

@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 import { body, json, route } from '@/lib/api';
+import { requirePermission } from '@/lib/auth';
 import { adultOverrideBody } from '@/lib/validation';
 import { mediaDetail } from '@/lib/catalog';
 import { rememberAdultIdentities, setAdultOverride } from '@/lib/adult';
@@ -8,6 +9,7 @@ import { db, statement } from '@/lib/db';
 import { rememberIdentities } from '@/lib/metadata-cache';
 
 export const PATCH = route(async (r) => {
+  requirePermission('adult');
   const input = await body(r, adultOverrideBody);
   const media = await mediaDetail(input.id, r.signal);
   db().transaction(() => {

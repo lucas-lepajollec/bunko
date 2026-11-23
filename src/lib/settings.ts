@@ -45,7 +45,7 @@ export const secretKeys: SecretSetting[] = [
 const LATER_KINDS: Exclude<DiscoverKind, 'all'>[] = ['series', 'movies', 'animation', 'extension'];
 const ALL_KINDS: Exclude<DiscoverKind, 'all'>[] = [...KIND_IDS];
 export function persistentSecret(name: string, bytes: number): Buffer {
-  if (!['access.token', 'settings.key'].includes(name))
+  if (!['access.token', 'settings.key', 'session.key'].includes(name))
     throw new Error('Unknown persistent secret');
   mkdirSync(accountsDir, { recursive: true, mode: 0o700 });
   const file = path.join(accountsDir, name);
