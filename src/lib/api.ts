@@ -9,6 +9,8 @@ import { AppError } from './errors';
 import { startWorker } from './downloads';
 import { withSourceLanguage } from './source-preferences';
 import { sourceLanguage } from './source-language';
+import { isDemoMode } from './demo-mode';
+import { demoApiResponse } from './demo/handler';
 export function json(value: unknown, status = 200) {
   return Response.json(value, {
     status,
@@ -38,6 +40,7 @@ export function failure(e: unknown) {
 }
 export function route(handler: (r: Request) => Promise<Response> | Response, protect = true) {
   return async (r: Request) => {
+    if (isDemoMode()) return await demoApiResponse(r.url, r);
     const done = trackRequest(new URL(r.url).pathname);
     try {
       const user = protect ? authenticate(r) : undefined;

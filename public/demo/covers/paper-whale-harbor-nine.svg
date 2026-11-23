@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600" viewBox="0 0 400 600" role="img" aria-label="The Paper Whale of Harbor Nine">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#114d52"/>
+      <stop offset="52%" stop-color="#06191a"/>
+      <stop offset="100%" stop-color="#05070a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="55%" cy="32%" r="60%">
+      <stop offset="0%" stop-color="#2dd4bf" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#06191a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#05070a" stop-opacity="0"/>
+      <stop offset="58%" stop-color="#05070a" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#05070a" stop-opacity="0.92"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="600" fill="url(#bg)"/>
+  <rect width="400" height="600" fill="url(#glow)"/>
+  <g opacity="0.14" stroke="#ccfbf1" stroke-width="0.6">
+    <line x1="28" y1="0" x2="28" y2="600"/>
+    <line x1="372" y1="0" x2="372" y2="600"/>
+    <line x1="0" y1="68" x2="400" y2="68"/>
+  </g>
+  
+        <circle cx="208" cy="186" r="84.96" fill="none" stroke="#2dd4bf" stroke-opacity="0.35" stroke-width="1.5"/>
+        <circle cx="208" cy="186" r="51.92" fill="#2dd4bf" fill-opacity="0.14"/>
+        <path d="M0 372 Q112.00000000000001 336.00000000000006 224.00000000000003 372 T400 348 L400 600 L0 600 Z" fill="#2dd4bf" fill-opacity="0.12"/>
+        <path d="M107.7 360 L184.4 171 L261.1 360 Z" fill="#ccfbf1" fill-opacity="0.09" stroke="#2dd4bf" stroke-opacity="0.32" stroke-width="1.2"/>
+        <line x1="208" y1="106" x2="208" y2="384" stroke="#ccfbf1" stroke-opacity="0.32" stroke-width="1.4"/>
+      
+  <rect width="400" height="600" fill="url(#fade)"/>
+  <rect x="24" y="24" width="352" height="552" rx="8" fill="none" stroke="#ccfbf1" stroke-opacity="0.14" stroke-width="1"/>
+  <rect x="36" y="38" width="96" height="22" rx="11" fill="#2dd4bf" fill-opacity="0.18" stroke="#2dd4bf" stroke-opacity="0.45" stroke-width="1"/>
+  <text x="84" y="53" text-anchor="middle" fill="#ccfbf1" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="9.5" font-weight="700" letter-spacing="1.6">ANIMATION</text>
+  <rect x="36" y="398" width="34" height="3" rx="1.5" fill="#2dd4bf"/>
+  <text x="36" y="438" fill="#f8fafc" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="31" font-weight="800" letter-spacing="-0.6">
+    <tspan x="36" dy="0">The Paper Whale</tspan><tspan x="36" dy="35">of Harbor Nine</tspan>
+  </text>
+  <text x="36" y="556" fill="#ccfbf1" fill-opacity="0.7" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" letter-spacing="2.2">ATELIER KUMO</text>
+</svg>

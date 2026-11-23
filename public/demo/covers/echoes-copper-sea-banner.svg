@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-label="Echoes of the Copper Sea">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1c0a17"/>
+      <stop offset="48%" stop-color="#5c1a47"/>
+      <stop offset="100%" stop-color="#05080d"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="72%" cy="38%" r="52%">
+      <stop offset="0%" stop-color="#f472b6" stop-opacity="0.42"/>
+      <stop offset="60%" stop-color="#f472b6" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#1c0a17" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="24%" cy="76%" r="48%">
+      <stop offset="0%" stop-color="#fce7f3" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#1c0a17" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <rect width="1600" height="900" fill="url(#glow1)"/>
+  <rect width="1600" height="900" fill="url(#glow2)"/>
+  <g opacity="0.1" stroke="#fce7f3" stroke-width="1">
+    <line x1="0" y1="180" x2="1600" y2="180"/>
+    <line x1="0" y1="720" x2="1600" y2="720"/>
+    <line x1="960" y1="0" x2="960" y2="900"/>
+    <line x1="1380" y1="0" x2="1380" y2="900"/>
+  </g>
+  
+        <circle cx="1088" cy="384" r="134.4" fill="#f472b6" fill-opacity="0.2" stroke="#fce7f3" stroke-opacity="0.4" stroke-width="1.2"/>
+        <path d="M0 432 Q400 378 800 432 T1600 432" fill="none" stroke="#f472b6" stroke-opacity="0.45" stroke-width="2.2"/><path d="M0 503.99999999999994 Q400 450 800 503.99999999999994 T1600 503.99999999999994" fill="none" stroke="#fce7f3" stroke-opacity="0.37" stroke-width="1.9000000000000001"/><path d="M0 576 Q400 522 800 576 T1600 576" fill="none" stroke="#f472b6" stroke-opacity="0.29000000000000004" stroke-width="1.6"/><path d="M0 648 Q400 593.9999999999999 800 648 T1600 648" fill="none" stroke="#fce7f3" stroke-opacity="0.21000000000000002" stroke-width="1.3000000000000003"/>
+      
+  <g opacity="0.4">
+    <circle cx="1290" cy="170" r="3" fill="#fce7f3"/>
+    <circle cx="1370" cy="240" r="2" fill="#f472b6"/>
+    <circle cx="1180" cy="130" r="2.5" fill="#fce7f3"/>
+    <circle cx="1440" cy="340" r="3" fill="#fce7f3"/>
+    <circle cx="1060" cy="220" r="2" fill="#f472b6"/>
+  </g>
+</svg>

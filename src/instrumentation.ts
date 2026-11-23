@@ -1,4 +1,7 @@
+import { isDemoMode } from './lib/demo-mode';
+
 export async function register() {
+  if (isDemoMode()) return;
   if (
     process.env.NEXT_RUNTIME === 'nodejs' &&
     process.env.NEXT_PHASE !== 'phase-production-build'

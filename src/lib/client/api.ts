@@ -2,6 +2,8 @@
 import useSWR, { type SWRConfiguration } from 'swr';
 import type { ApiError, SearchResponse } from '@/types/shared';
 import { getUiLanguage } from '@/i18n/language';
+import { isDemoMode } from '@/lib/demo-mode';
+import { demoApiResponse, openDemoStream } from '@/lib/demo/handler';
 
 /** A failed API call; `code` is the backend's stable error code, translated by the UI. */
 export class ApiFailure extends Error {
@@ -32,12 +34,14 @@ export async function api<T>(
   try {
     const { timeoutMs: _timeout, ...rest } = init;
     void _timeout;
-    response = await fetch(path, {
-      ...rest,
-      credentials: 'same-origin',
-      headers,
-      signal,
-    });
+    response = isDemoMode()
+      ? await demoApiResponse(path, { ...rest, headers })
+      : await fetch(path, {
+          ...rest,
+          credentials: 'same-origin',
+          headers,
+          signal,
+        });
   } catch (e) {
     if (signal.aborted && !init.signal?.aborted) throw new ApiFailure('UPSTREAM_TIMEOUT', 0);
     if ((e as Error).name === 'AbortError') throw e;
@@ -88,6 +92,7 @@ export function openStream(
   onFailure?: () => void,
   options: { reconnect?: boolean } = {},
 ): () => void {
+  if (isDemoMode()) return openDemoStream(path, handlers);
   // EventSource cannot set Accept-Language; carry the same explicit interface choice in the URL.
   const [pathname, query] = path.split('?');
   const params = new URLSearchParams(query);

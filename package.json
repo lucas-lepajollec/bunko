@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "next dev -H 127.0.0.1 -p 2498",
     "dev:lan": "next dev -H 0.0.0.0 -p 2498",
+    "demo": "BUNKO_DEMO_MODE=true NEXT_PUBLIC_BUNKO_DEMO=true next dev -H 127.0.0.1 -p 2498",
+    "demo:capture": "node scripts/capture-demo-screenshots.mjs",
     "build": "next build",
     "start": "next start -H 127.0.0.1 -p 2512",
     "typecheck": "tsc --noEmit --incremental false",

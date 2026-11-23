@@ -1,0 +1,245 @@
+/* ---------- Public demo: Pass 9 welcome dialog and floating chip ---------- */
+.bk-demo-dialog {
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  overflow-y: auto;
+  color: var(--color-fg);
+  background: color-mix(in oklab, var(--color-panel) 88%, transparent);
+  border: 1px solid var(--color-line-strong);
+  border-radius: 22px;
+  box-shadow: 0 32px 96px rgb(0 0 0 / 0.65);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  backdrop-filter: blur(28px) saturate(140%);
+}
+.bk-demo-dialog::backdrop {
+  background: rgb(4 7 11 / 0.62);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.bk-demo-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 26px 28px 22px;
+}
+
+.bk-demo-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.bk-demo-brand img {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+.bk-demo-badge {
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-line);
+  background: rgb(255 255 255 / 0.08);
+  color: var(--color-fg);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bk-demo-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3.6vw, 2.25rem);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  outline: none;
+}
+
+.bk-demo-lead {
+  margin: -6px 0 0;
+  color: var(--color-mid);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.bk-demo-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bk-demo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--color-line);
+  background: rgb(255 255 255 / 0.04);
+}
+.bk-demo-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-fg);
+}
+.bk-demo-card p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  line-height: 1.48;
+}
+
+.bk-demo-looks {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-line);
+}
+.bk-demo-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.bk-demo-look-list {
+  display: flex;
+  gap: 6px;
+}
+.bk-demo-look {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.04);
+  color: var(--color-mid);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: border-color 150ms, color 150ms, background-color 150ms;
+}
+.bk-demo-look:hover {
+  color: var(--color-fg);
+  background: rgb(255 255 255 / 0.08);
+}
+.bk-demo-look[aria-checked='true'] {
+  border-color: var(--color-fg);
+  background: var(--color-fg);
+  color: var(--color-bg);
+  font-weight: 600;
+}
+
+.bk-demo-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-line);
+}
+.bk-demo-links {
+  display: flex;
+  gap: 16px;
+}
+.bk-demo-links a {
+  color: var(--color-mid);
+  font-size: 0.8rem;
+  text-decoration: none;
+  transition: color 150ms;
+}
+.bk-demo-links a:hover {
+  color: var(--color-fg);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.bk-demo-continue {
+  height: 38px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-fg);
+  color: var(--color-bg);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 150ms;
+}
+.bk-demo-continue:hover {
+  opacity: 0.9;
+}
+
+/* Compact bottom-right floating chip */
+.bk-demo-chip {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-panel) 84%, transparent);
+  color: var(--color-fg);
+  box-shadow: 0 12px 34px rgb(0 0 0 / 0.45);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+}
+.bk-demo-chip.is-hidden {
+  visibility: hidden;
+}
+.bk-demo-chip button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--color-mid);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 150ms, background-color 150ms;
+}
+.bk-demo-chip button:hover {
+  color: var(--color-fg);
+  background: rgb(255 255 255 / 0.08);
+}
+.bk-demo-chip-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--color-line);
+}
+
+@media (max-width: 767px) {
+  .bk-demo-cards {
+    grid-template-columns: 1fr;
+  }
+  .bk-demo-inner {
+    padding: 20px 18px 18px;
+  }
+  .bk-demo-chip {
+    right: 12px;
+    bottom: calc(max(env(safe-area-inset-bottom), 12px) + 68px);
+  }
+}

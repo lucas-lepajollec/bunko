@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600" viewBox="0 0 400 600" role="img" aria-label="Monsoon Courier">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#164d2b"/>
+      <stop offset="52%" stop-color="#07190e"/>
+      <stop offset="100%" stop-color="#05070a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="55%" cy="32%" r="60%">
+      <stop offset="0%" stop-color="#4ade80" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#07190e" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#05070a" stop-opacity="0"/>
+      <stop offset="58%" stop-color="#05070a" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#05070a" stop-opacity="0.92"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="600" fill="url(#bg)"/>
+  <rect width="400" height="600" fill="url(#glow)"/>
+  <g opacity="0.14" stroke="#dcfce7" stroke-width="0.6">
+    <line x1="28" y1="0" x2="28" y2="600"/>
+    <line x1="372" y1="0" x2="372" y2="600"/>
+    <line x1="0" y1="68" x2="400" y2="68"/>
+  </g>
+  
+        <line x1="24" y1="40" x2="-12" y2="180" stroke="#dcfce7" stroke-opacity="0.18" stroke-width="1.8"/><line x1="52.57142857142857" y1="95" x2="16.57142857142857" y2="235" stroke="#4ade80" stroke-opacity="0.3" stroke-width="1.1"/><line x1="81.14285714285714" y1="150" x2="45.14285714285714" y2="290" stroke="#4ade80" stroke-opacity="0.42" stroke-width="1.1"/><line x1="109.71428571428572" y1="205" x2="73.71428571428572" y2="345" stroke="#dcfce7" stroke-opacity="0.18" stroke-width="1.8"/><line x1="138.28571428571428" y1="40" x2="102.28571428571428" y2="180" stroke="#4ade80" stroke-opacity="0.3" stroke-width="1.1"/><line x1="166.85714285714286" y1="95" x2="130.85714285714286" y2="235" stroke="#4ade80" stroke-opacity="0.42" stroke-width="1.1"/><line x1="195.42857142857144" y1="150" x2="159.42857142857144" y2="290" stroke="#dcfce7" stroke-opacity="0.18" stroke-width="1.8"/><line x1="224" y1="205" x2="188" y2="345" stroke="#4ade80" stroke-opacity="0.3" stroke-width="1.1"/><line x1="252.57142857142858" y1="40" x2="216.57142857142858" y2="180" stroke="#4ade80" stroke-opacity="0.42" stroke-width="1.1"/><line x1="281.14285714285717" y1="95" x2="245.14285714285717" y2="235" stroke="#dcfce7" stroke-opacity="0.18" stroke-width="1.8"/><line x1="309.7142857142857" y1="150" x2="273.7142857142857" y2="290" stroke="#4ade80" stroke-opacity="0.3" stroke-width="1.1"/><line x1="338.2857142857143" y1="205" x2="302.2857142857143" y2="345" stroke="#4ade80" stroke-opacity="0.42" stroke-width="1.1"/><line x1="366.8571428571429" y1="40" x2="330.8571428571429" y2="180" stroke="#dcfce7" stroke-opacity="0.18" stroke-width="1.8"/><line x1="395.42857142857144" y1="95" x2="359.42857142857144" y2="235" stroke="#4ade80" stroke-opacity="0.3" stroke-width="1.1"/>
+        <circle cx="208" cy="216" r="70.8" fill="#4ade80" fill-opacity="0.16" stroke="#dcfce7" stroke-opacity="0.35" stroke-width="1.2"/>
+      
+  <rect width="400" height="600" fill="url(#fade)"/>
+  <rect x="24" y="24" width="352" height="552" rx="8" fill="none" stroke="#dcfce7" stroke-opacity="0.14" stroke-width="1"/>
+  <rect x="36" y="38" width="96" height="22" rx="11" fill="#4ade80" fill-opacity="0.18" stroke="#4ade80" stroke-opacity="0.45" stroke-width="1"/>
+  <text x="84" y="53" text-anchor="middle" fill="#dcfce7" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="9.5" font-weight="700" letter-spacing="1.6">MANHWA</text>
+  <rect x="36" y="432" width="34" height="3" rx="1.5" fill="#4ade80"/>
+  <text x="36" y="472" fill="#f8fafc" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="31" font-weight="800" letter-spacing="-0.6">
+    <tspan x="36" dy="0">Monsoon Courier</tspan>
+  </text>
+  <text x="36" y="556" fill="#dcfce7" fill-opacity="0.7" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" letter-spacing="2.2">D. PARK</text>
+</svg>

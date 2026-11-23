@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-label="Iron Botanist">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#061712"/>
+      <stop offset="48%" stop-color="#124637"/>
+      <stop offset="100%" stop-color="#05080d"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="72%" cy="38%" r="52%">
+      <stop offset="0%" stop-color="#34d399" stop-opacity="0.42"/>
+      <stop offset="60%" stop-color="#34d399" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#061712" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="24%" cy="76%" r="48%">
+      <stop offset="0%" stop-color="#d1fae5" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#061712" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <rect width="1600" height="900" fill="url(#glow1)"/>
+  <rect width="1600" height="900" fill="url(#glow2)"/>
+  <g opacity="0.1" stroke="#d1fae5" stroke-width="1">
+    <line x1="0" y1="180" x2="1600" y2="180"/>
+    <line x1="0" y1="720" x2="1600" y2="720"/>
+    <line x1="960" y1="0" x2="960" y2="900"/>
+    <line x1="1380" y1="0" x2="1380" y2="900"/>
+  </g>
+  
+        <path d="M1088 648 C1078 464 1008 394 1078 210" fill="none" stroke="#d1fae5" stroke-opacity="0.45" stroke-width="1.8"/>
+        <path d="M1064 430 C990 410 990 350 1062 360 Z" fill="#34d399" fill-opacity="0.22" stroke="#34d399" stroke-opacity="0.5" stroke-width="1.2"/>
+        <path d="M1080 402 C1164 378 1170 316 1090 336 Z" fill="#34d399" fill-opacity="0.18" stroke="#d1fae5" stroke-opacity="0.45" stroke-width="1.2"/>
+        <circle cx="1088" cy="404" r="211.2" fill="none" stroke="#34d399" stroke-opacity="0.22" stroke-width="1"/>
+      
+  <g opacity="0.4">
+    <circle cx="1290" cy="170" r="3" fill="#d1fae5"/>
+    <circle cx="1370" cy="240" r="2" fill="#34d399"/>
+    <circle cx="1180" cy="130" r="2.5" fill="#d1fae5"/>
+    <circle cx="1440" cy="340" r="3" fill="#d1fae5"/>
+    <circle cx="1060" cy="220" r="2" fill="#34d399"/>
+  </g>
+</svg>

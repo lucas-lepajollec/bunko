@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1350" viewBox="0 0 900 1350" role="img" aria-label="Demo manga page 1">
+  <defs>
+    <pattern id="tone" width="8" height="8" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.1" fill="#18202c" opacity="0.22"/>
+    </pattern>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#142235"/>
+      <stop offset="100%" stop-color="#3b5f82"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1350" fill="#f5f3ee"/>
+  <rect x="38" y="38" width="824" height="1274" fill="#ffffff" stroke="#111318" stroke-width="4"/>
+  <!-- Panel 1 -->
+  <rect x="64" y="64" width="772" height="420" fill="url(#sky)" stroke="#111318" stroke-width="4"/>
+  <rect x="64" y="64" width="772" height="420" fill="url(#tone)"/>
+  <circle cx="670" cy="210" r="78" fill="#bae6fd" opacity="0.85"/><path d="M64 380 L280 260 L440 340 L630 220 L836 360 L836 484 L64 484 Z" fill="#0f172a"/>
+  <rect x="92" y="92" width="320" height="62" rx="4" fill="#ffffff" stroke="#111318" stroke-width="2.5"/>
+  <text x="112" y="130" fill="#111318" font-family="ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="700">DAWN OVER GLASS HARBOR.</text>
+  <!-- Panel 2 & 3 -->
+  <rect x="64" y="510" width="372" height="370" fill="#e6ecf2" stroke="#111318" stroke-width="4"/>
+  <rect x="64" y="510" width="372" height="370" fill="url(#tone)"/>
+  <circle cx="250" cy="695" r="110" fill="none" stroke="#111318" stroke-width="5"/><line x1="250" y1="695" x2="250" y2="605" stroke="#111318" stroke-width="6"/><line x1="250" y1="695" x2="315" y2="715" stroke="#111318" stroke-width="5"/>
+  <rect x="464" y="510" width="372" height="370" fill="#182230" stroke="#111318" stroke-width="4"/>
+  <path d="M464 810 L620 710 L836 790 L836 880 L464 880 Z" fill="#38bdf8" opacity="0.3"/>
+  <ellipse cx="650" cy="610" rx="145" ry="54" fill="#ffffff" stroke="#111318" stroke-width="2.5"/>
+  <text x="650" y="618" text-anchor="middle" fill="#111318" font-family="ui-sans-serif, system-ui, sans-serif" font-size="21" font-weight="700">The tide clock stopped.</text>
+  <!-- Panel 4 -->
+  <rect x="64" y="906" width="772" height="360" fill="#eef2f6" stroke="#111318" stroke-width="4"/>
+  <rect x="64" y="906" width="772" height="360" fill="url(#tone)"/>
+  <path d="M64 1120 Q280 1020 480 1120 T836 1080" fill="none" stroke="#0f172a" stroke-width="6"/><rect x="140" y="960" width="90" height="240" fill="#1e293b"/>
+  <rect x="440" y="1164" width="368" height="74" rx="4" fill="#111318"/>
+  <text x="624" y="1209" text-anchor="middle" fill="#f8fafc" font-family="ui-sans-serif, system-ui, sans-serif" font-size="20" font-weight="600">CHAPTER PREVIEW · ORIGINAL DEMO ART</text>
+  <text x="450" y="1300" text-anchor="middle" fill="#525a66" font-family="ui-monospace, monospace" font-size="14">BUNKO DEMO READER · PAGE 1 / 3</text>
+</svg>

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-label="Tower of Ash &amp; Amber">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1b0d07"/>
+      <stop offset="48%" stop-color="#5c240d"/>
+      <stop offset="100%" stop-color="#05080d"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="72%" cy="38%" r="52%">
+      <stop offset="0%" stop-color="#f97316" stop-opacity="0.42"/>
+      <stop offset="60%" stop-color="#f97316" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#1b0d07" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="24%" cy="76%" r="48%">
+      <stop offset="0%" stop-color="#ffedd5" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#1b0d07" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <rect width="1600" height="900" fill="url(#glow1)"/>
+  <rect width="1600" height="900" fill="url(#glow2)"/>
+  <g opacity="0.1" stroke="#ffedd5" stroke-width="1">
+    <line x1="0" y1="180" x2="1600" y2="180"/>
+    <line x1="0" y1="720" x2="1600" y2="720"/>
+    <line x1="960" y1="0" x2="960" y2="900"/>
+    <line x1="1380" y1="0" x2="1380" y2="900"/>
+  </g>
+  
+        <polygon points="1050,186 1126,241.20000000000002 1146,666 1030,666" fill="#f97316" fill-opacity="0.24" stroke="#ffedd5" stroke-opacity="0.55" stroke-width="1.5"/>
+        <polygon points="1142,396 1194,428 1204,666 1142,666" fill="#f97316" fill-opacity="0.13" stroke="#f97316" stroke-opacity="0.35" stroke-width="1"/>
+        <circle cx="1064" cy="294" r="156" fill="none" stroke="#ffedd5" stroke-opacity="0.28" stroke-width="1.1"/>
+      
+  <g opacity="0.4">
+    <circle cx="1290" cy="170" r="3" fill="#ffedd5"/>
+    <circle cx="1370" cy="240" r="2" fill="#f97316"/>
+    <circle cx="1180" cy="130" r="2.5" fill="#ffedd5"/>
+    <circle cx="1440" cy="340" r="3" fill="#ffedd5"/>
+    <circle cx="1060" cy="220" r="2" fill="#f97316"/>
+  </g>
+</svg>

@@ -44,6 +44,8 @@ import { clearPersistentCache, persistentCache } from '@/lib/client/cache';
 import { getAmbient, getAmbientColor, subscribeAmbient } from '@/lib/client/ambient';
 import { useUniverse } from '@/lib/client/universe';
 import { applyTheme, getTheme, useLook } from '@/lib/client/theme';
+import { isDemoMode } from '@/lib/demo-mode';
+import { DemoExperience } from './demo-experience';
 
 export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => applyTheme(getTheme()), []);
@@ -108,6 +110,7 @@ function AuthGate({ children }: { children: ReactNode }) {
       <div className="pb-24 md:pb-0">{children}</div>
       <TabBar />
       <Toaster />
+      {isDemoMode() && <DemoExperience />}
     </>
   );
 }
