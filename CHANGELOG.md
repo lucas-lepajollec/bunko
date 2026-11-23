@@ -1,6 +1,23 @@
 # Changelog
 
-## Unreleased
+## [Unreleased]
+
+## [1.0.0] - 2026-11-23
+
+First tagged public release of **Bunko**, bringing unified reading and video discovery, built-in CBZ/EPUB/PDF readers, Jellyfin/Emby/Stash playback with WebGL 2 upscaling, lists/duels/tier lists, hardened self-hosted security defaults, and an isolated serverless public demo.
+
+### Added & hardened for 1.0.0
+
+- **Public demo, reproducible captures & flagship README** (#155): zero-SQLite serverless demo mode (`BUNKO_DEMO_MODE=true` / `NEXT_PUBLIC_BUNKO_DEMO=true`) with 28 fictional original works, custom SVG covers, interactive shelves/ratings/tier lists, 3-page sample chapter reader, Pass 9 intro & Reset chip, 3-layer crawler isolation (`robots.ts`, meta robots, `X-Robots-Tag`), reproducible Playwright screenshot generator (`docs/assets/screenshots/` + `manifest.json`), `1280x640` social preview, and rewritten 10-section README.
+- **Self-hosted security & container hardening** (#154): global HTTP security headers (`X-Content-Type-Options`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, `Permissions-Policy`, CSP `frame-ancestors 'self'`), one-time first-start setup code (`/data/setup.code` / `BUNKO_SETUP_CODE`), decoupled `/data/session.key`, opt-in `BUNKO_TRUST_PROXY` & `BUNKO_SECURE_COOKIES` for `Secure` cookies behind TLS proxies, `Sec-Fetch-Site: cross-site` CSRF guard, least-privilege default for new `member` accounts, `requirePermission` enforcement on filtered endpoints, bounded EPUB decompression (20 MiB cap), `scrypt` concurrency semaphore & per-IP login rate limiting, `allowConfiguredHosts: false` default on SSRF guard, streaming byte caps on media/TraDoc proxies, SHA-pinned Trivy container scan in CI, and hardened Node 22 Bookworm runtime stage (0 HIGH / 0 CRITICAL CVEs).
+
+### Upgrading & rollback
+
+- Stop Bunko and back up the entire `/data` volume (`accounts.db`, per-account databases, `settings.key`, `session.key`, `access.token`) together with your media backup before upgrading.
+- Tenant databases migrate automatically to schema **v35** on startup.
+- To roll back, stop Bunko and restore the pre-upgrade `/data` backup alongside the previous container image digest.
+
+### Included in 1.0.0
 
 - News page (`/news`, `GET /api/news`): per kind, or every kind at once, works just announced
   and coming soon with their trailer (AniList, TMDB when a key is set), new volumes from the
@@ -935,5 +952,3 @@ extensionSection}`).
 - Interactive Sonarr/Prowlarr release search and provider-correct grabs.
 - Authenticated API, redacted/encrypted settings, tracked media and automatic chapter checks.
 - Docker source stack and shared frontend contract.
-
-No public release has been published. Version 0.1.0 identifies the initial local implementation.
