@@ -13,8 +13,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const directory = mkdtempSync(path.join(tmpdir(), 'bunko-rename-'));
+const setupCode = 'RENAME-TEST-2026';
 process.env.BUNKO_DATA_DIR = path.join(directory, 'data');
 process.env.BUNKO_WORKER = 'false';
+process.env.BUNKO_SETUP_CODE = setupCode;
 const { accountsDb } = await import('@/lib/accounts-store');
 const { inTenant, tenantPath } = await import('@/lib/tenant-context');
 const { closeTenant, dataDir } = await import('@/lib/db');
@@ -57,12 +59,22 @@ const mediaRoot = async (cookie = member) => {
 };
 beforeAll(async () => {
   process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'initial-library');
-  const r = await setup.POST(req('/api/auth/setup', 'POST', { username: 'Admin', password }, ''));
+  const r = await setup.POST(
+    req('/api/auth/setup', 'POST', { username: 'Admin', password, setupCode }, ''),
+  );
   expect(r.status).toBe(200);
   admin = r.headers.get('set-cookie')!.split(';')[0];
   expect(
-    (await users.POST(req('/api/users', 'POST', { username: 'Member', password, role: 'member' })))
-      .status,
+    (
+      await users.POST(
+        req('/api/users', 'POST', {
+          username: 'Member',
+          password,
+          role: 'member',
+          permissions: ['services', 'extensions', 'downloads', 'translate', 'adult'],
+        }),
+      )
+    ).status,
   ).toBe(201);
   const signedIn = await auth.POST(req('/api/auth', 'POST', { username: 'Member', password }, ''));
   member = signedIn.headers.get('set-cookie')!.split(';')[0];

@@ -35,12 +35,21 @@ check 401 "provider test route exists" -X POST "$base/api/settings/test-provider
 check 401 "content filter override route exists" -X PATCH "$base/api/media/adult"
 credentials='{"username":"SmokeAdmin","password":"synthetic-smoke-password"}'
 check 403 "cross-site setup rejected" -X POST "$base/api/auth/setup" -H 'Content-Type: application/json' -H 'Origin: https://evil.invalid' -d "$credentials"
+check 403 "cross-site Sec-Fetch-Site rejected" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H 'Sec-Fetch-Site: cross-site' -d "$credentials"
 check 403 "cross-site login rejected" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H 'Origin: https://evil.invalid' -d "$credentials"
 check 409 "login requires setup" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H "Origin: $base" -d "$credentials"
-check 200 "first-start setup" -X POST "$base/api/auth/setup" -H 'Content-Type: application/json' -H "Origin: $base" -d "$credentials"
-check 409 "second setup rejected" -X POST "$base/api/auth/setup" -H 'Content-Type: application/json' -H "Origin: $base" -d "$credentials"
+check 401 "first-start setup requires setup code" -X POST "$base/api/auth/setup" -H 'Content-Type: application/json' -H "Origin: $base" -d "$credentials"
+setup_code="$(docker exec "$name" cat /data/setup.code | tr -d '\r\n')"
+setup_body="{\"username\":\"SmokeAdmin\",\"password\":\"synthetic-smoke-password\",\"setupCode\":\"$setup_code\"}"
+check 200 "first-start setup" -X POST "$base/api/auth/setup" -H 'Content-Type: application/json' -H "Origin: $base" -d "$setup_body"
+check 409 "second setup rejected" -X POST "$base/api/auth/setup" -H 'Content-Type: application/json' -H "Origin: $base" -d "$setup_body"
 check 401 "wrong password rejected" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H "Origin: $base" -d '{"username":"SmokeAdmin","password":"wrong-password"}'
 check 200 "account login from same origin" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H "Origin: $base" -d "$credentials"
+# Verify global HTTP security headers on interface responses.
+curl -fsS -D - -o /dev/null "$base/" | grep -qi '^x-frame-options: SAMEORIGIN'
+curl -fsS -D - -o /dev/null "$base/" | grep -qi '^x-content-type-options: nosniff'
+curl -fsS -D - -o /dev/null "$base/" | grep -qi '^referrer-policy: strict-origin-when-cross-origin'
+echo "ok   global HTTP security headers"
 token="$(docker exec "$name" cat /data/access.token)"
 check 200 "releases store responds" -H "Authorization: Bearer $token" "$base/api/releases"
 check 200 "home feed responds" -H "Authorization: Bearer $token" "$base/api/home"
@@ -59,6 +68,9 @@ check 200 "admin own account" -H "Authorization: Bearer $token" "$base/api/me"
 check 201 "create member" -X POST -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"username":"SmokeMember","password":"synthetic-member-password","role":"member"}' "$base/api/users"
 member_cookie="$(curl -fsS -D - -o /dev/null -X POST "$base/api/auth" -H 'Content-Type: application/json' -d '{"username":"SmokeMember","password":"synthetic-member-password"}' | sed -n 's/^[Ss]et-[Cc]ookie: \([^;]*\).*/\1/p' | tr -d '\r')"
 check 200 "member own account" -H "Cookie: $member_cookie" "$base/api/me"
+check 403 "new member adult restricted by default" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"adultContent":true}' "$base/api/me"
+check 403 "new member services restricted by default" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"suwayomiUrl":"http://member-suwayomi.invalid:4567"}' "$base/api/settings"
+check 200 "admin grants member permissions for isolation checks" -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"id":2,"permissions":["services","extensions","downloads","translate","adult"]}' "$base/api/users"
 check 200 "member preferences" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"adultContent":true}' "$base/api/me"
 check 403 "member forbidden users list" -H "Cookie: $member_cookie" "$base/api/users"
 check 403 "member forbidden renaming another account" -X PATCH -H "Cookie: $member_cookie" -H 'Content-Type: application/json' -d '{"id":1,"username":"Hijack"}' "$base/api/users"

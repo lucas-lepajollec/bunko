@@ -14,8 +14,10 @@ vi.mock('node:crypto', async (original) => {
 });
 const { scrypt, timingSafeEqual } = await import('node:crypto');
 const directory = mkdtempSync(path.join(tmpdir(), 'bunko-auth-'));
+const setupCode = 'AUTH-TEST-2026';
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_WORKER = 'false';
+process.env.BUNKO_SETUP_CODE = setupCode;
 const { enterFixtureTenant } = await import('./tenant-fixture');
 enterFixtureTenant(false);
 const { migrateV4 } = await import('@/lib/db');
@@ -29,6 +31,7 @@ const { POST: password } = await import('@/app/api/auth/password/route');
 const { GET: protectedRoute } = await import('@/app/api/settings/route');
 const base = 'http://reader.test:2512';
 const credentials = { username: 'Reader._-1', password: 'synthetic-password' };
+const setupCredentials = { ...credentials, setupCode };
 let clock = Date.now();
 function request(
   pathname = '/api/auth',
@@ -78,7 +81,7 @@ describe('account routes', () => {
       role: null,
     });
     await error(await POST(request('/api/auth', credentials)), 409, 'SETUP_REQUIRED');
-    const created = await setup(request('/api/auth/setup', credentials));
+    const created = await setup(request('/api/auth/setup', setupCredentials));
     expect(created.status).toBe(200);
     expect(await created.json()).toEqual({
       authenticated: true,
@@ -107,7 +110,7 @@ describe('account routes', () => {
       userId: null,
       role: null,
     });
-    await error(await setup(request('/api/auth/setup', credentials)), 409, 'ALREADY_SET_UP');
+    await error(await setup(request('/api/auth/setup', setupCredentials)), 409, 'ALREADY_SET_UP');
     expect(db().prepare('SELECT COUNT(*) AS n FROM users').get()).toEqual({ n: 1 });
     const login = await POST(
       request('/api/auth', { ...credentials, username: credentials.username.toLowerCase() }),
@@ -127,7 +130,7 @@ describe('account routes', () => {
   it('allows exactly one concurrent setup and rejects subsequent calls', async () => {
     const responses = await Promise.all(
       Array.from({ length: 4 }, (_, index) =>
-        setup(request('/api/auth/setup', { ...credentials, username: `Reader${index}` })),
+        setup(request('/api/auth/setup', { ...setupCredentials, username: `Reader${index}` })),
       ),
     );
     expect(responses.map((r) => r.status).sort()).toEqual([200, 409, 409, 409]);
@@ -164,7 +167,7 @@ describe('account routes', () => {
     { token: 'old-token', password: undefined },
   ])('validates setup credentials without creating an account: %j', async (patch) => {
     await error(
-      await setup(request('/api/auth/setup', { ...credentials, ...patch })),
+      await setup(request('/api/auth/setup', { ...setupCredentials, ...patch })),
       400,
       'VALIDATION_ERROR',
     );
@@ -174,7 +177,7 @@ describe('account routes', () => {
 
   it('accepts username/password boundary lengths and stores salted, versioned scrypt hashes', async () => {
     const response = await setup(
-      request('/api/auth/setup', { username: 'a'.repeat(40), password: 'a'.repeat(200) }),
+      request('/api/auth/setup', { username: 'a'.repeat(40), password: 'a'.repeat(200), setupCode }),
     );
     expect(response.status).toBe(200);
     const stored = db().prepare('SELECT password_hash FROM users').get() as {
@@ -191,13 +194,16 @@ describe('account routes', () => {
       "DELETE FROM users; DELETE FROM sqlite_sequence WHERE name='users'; DELETE FROM account_state WHERE key='token_user';",
     );
     expect(
-      (await setup(request('/api/auth/setup', { username: 'abc', password: 'a'.repeat(10) })))
-        .status,
+      (
+        await setup(
+          request('/api/auth/setup', { username: 'abc', password: 'a'.repeat(10), setupCode }),
+        )
+      ).status,
     ).toBe(200);
   });
 
   it('performs the same scrypt work for an unknown user and a wrong password', async () => {
-    await setup(request('/api/auth/setup', credentials));
+    await setup(request('/api/auth/setup', setupCredentials));
     vi.mocked(scrypt).mockClear();
     vi.mocked(timingSafeEqual).mockClear();
     await error(
@@ -225,7 +231,7 @@ describe('account routes', () => {
   });
 
   it('limits each username to 10/minute without a global lockout', async () => {
-    await setup(request('/api/auth/setup', credentials));
+    await setup(request('/api/auth/setup', setupCredentials));
     clock += 61_000;
     for (let i = 0; i < 10; i++)
       await error(
@@ -254,7 +260,7 @@ describe('account routes', () => {
   }, 30_000);
 
   it('rotates the password and epoch, invalidates all old cookies and reissues the current session', async () => {
-    const created = await setup(request('/api/auth/setup', credentials));
+    const created = await setup(request('/api/auth/setup', setupCredentials));
     const second = await POST(request('/api/auth', credentials));
     const old = cookie(created);
     const change = { currentPassword: credentials.password, newPassword: 'replacement-password' };
@@ -302,7 +308,7 @@ describe('account routes', () => {
   });
 
   it('allows only one simultaneous password change and accepts only its replacement password', async () => {
-    const created = await setup(request('/api/auth/setup', credentials));
+    const created = await setup(request('/api/auth/setup', setupCredentials));
     const headers = { Cookie: cookie(created) };
     const replacements = ['replacement-password-one', 'replacement-password-two'];
     const changes = await Promise.all(
@@ -336,7 +342,7 @@ describe('account routes', () => {
     const token = persistentSecret('access.token', 32).toString('hex');
     const headers = { Authorization: `Bearer ${token}` };
     expect((await protectedRoute(request('/api/settings', undefined, headers))).status).toBe(409);
-    const created = await setup(request('/api/auth/setup', credentials));
+    const created = await setup(request('/api/auth/setup', setupCredentials));
     await error(await POST(request('/api/auth', { token })), 400, 'VALIDATION_ERROR');
     await password(
       request(
@@ -358,7 +364,7 @@ describe('account routes', () => {
       new Request('https://reader.test/api/auth/setup', {
         method: 'POST',
         headers: { Origin: 'https://reader.test', 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
+        body: JSON.stringify(setupCredentials),
       }),
     );
     expect(created.headers.get('set-cookie')).toContain('; Secure');
@@ -380,13 +386,13 @@ describe('account routes', () => {
   it('checks origins on setup/login/password/logout before accepting mutations', async () => {
     for (const Origin of ['https://evil.invalid', 'null', 'invalid origin']) {
       await error(
-        await setup(request('/api/auth/setup', credentials, { Origin })),
+        await setup(request('/api/auth/setup', setupCredentials, { Origin })),
         403,
         'FORBIDDEN',
       );
       await error(await POST(request('/api/auth', credentials, { Origin })), 403, 'FORBIDDEN');
     }
-    const created = await setup(request('/api/auth/setup', credentials));
+    const created = await setup(request('/api/auth/setup', setupCredentials));
     for (const Origin of ['https://evil.invalid', 'null']) {
       const headers = { Origin, Cookie: cookie(created), 'X-Forwarded-Host': 'evil.invalid' };
       await error(

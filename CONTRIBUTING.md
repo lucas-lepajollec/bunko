@@ -11,7 +11,7 @@ npm ci
 SUWAYOMI_URL=http://localhost:4567 npm run dev   # http://127.0.0.1:2498
 ```
 
-Sign in with the token generated in `data/access.token`. `data/` and `media/` are local runtime folders and are ignored by Git.
+On first start, use the one-time setup code printed to the console (also saved in `data/setup.code`, or set via `BUNKO_SETUP_CODE`) to create the administrator account at `http://127.0.0.1:2498`. `data/access.token` is reserved for `Authorization: Bearer` API automation and cannot sign browsers in. `data/` and `media/` are local runtime folders and are ignored by Git.
 
 ## Validation
 

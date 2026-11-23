@@ -126,6 +126,7 @@ function addonJson(url: string, path: string, signal?: AbortSignal, timeoutMs = 
   return safeJson(`${addonBase(url)}${path}`, {
     timeoutMs,
     signal: AbortSignal.any([AbortSignal.timeout(timeoutMs + 2000), ...(signal ? [signal] : [])]),
+    allowConfiguredHosts: true,
   });
 }
 

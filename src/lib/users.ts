@@ -13,7 +13,16 @@ import { hashPassword } from './passwords';
 import { AppError } from './errors';
 import type { MyAccount, UserAccount, UserCreate, UserPatch, MyAccountPatch } from '@/types/shared';
 
-export const userCreate = credentials.extend({ role: z.enum(['admin', 'member']) });
+/** Least-privilege defaults: new members cannot change upstream services, extension repos or 18+ until granted. */
+export const DEFAULT_MEMBER_RESTRICTIONS: readonly Permission[] = [
+  'services',
+  'extensions',
+  'adult',
+];
+export const userCreate = credentials.extend({
+  role: z.enum(['admin', 'member']),
+  permissions: z.array(z.enum(PERMISSIONS)).max(PERMISSIONS.length).optional(),
+});
 const granted = (userId: number): Permission[] => {
   const denied = deniedPermissions(userId);
   return PERMISSIONS.filter((p) => !denied.has(p));
@@ -103,19 +112,32 @@ export async function createUser(input: UserCreate) {
   requireAdmin();
   const hash = await hashPassword(input.password);
   try {
-    const id = Number(
-      accountsDb()
-        .prepare(
-          'INSERT INTO users(username,role,password_hash,session_epoch,created_at) VALUES(?,?,?,?,?)',
-        )
-        .run(
-          input.username,
-          input.role,
-          hash,
-          randomBytes(32).toString('hex'),
-          new Date().toISOString(),
-        ).lastInsertRowid,
-    );
+    const id = accountsDb()
+      .transaction(() => {
+        const userId = Number(
+          accountsDb()
+            .prepare(
+              'INSERT INTO users(username,role,password_hash,session_epoch,created_at) VALUES(?,?,?,?,?)',
+            )
+            .run(
+              input.username,
+              input.role,
+              hash,
+              randomBytes(32).toString('hex'),
+              new Date().toISOString(),
+            ).lastInsertRowid,
+        );
+        if (input.role === 'member') {
+          const denied =
+            input.permissions !== undefined
+              ? PERMISSIONS.filter((p) => !input.permissions!.includes(p))
+              : DEFAULT_MEMBER_RESTRICTIONS;
+          const insert = accountsDb().prepare('INSERT INTO user_restrictions VALUES(?,?)');
+          for (const p of denied) insert.run(userId, p);
+        }
+        return userId;
+      })
+      .immediate();
     inTenant(id, () => getSettings());
     return listUsers().find((u) => u.id === id)!;
   } catch (error) {

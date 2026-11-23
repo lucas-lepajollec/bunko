@@ -15,9 +15,11 @@ import { randomUUID } from 'node:crypto';
 import type { DownloadBatch } from '@/types/shared';
 
 const directory = mkdtempSync(path.join(tmpdir(), 'bunko-tenants-'));
+const setupCode = 'MULTI-USER-2026';
 process.env.BUNKO_DATA_DIR = directory;
 process.env.BUNKO_LIBRARY_DIR = path.join(directory, 'library');
 process.env.BUNKO_WORKER = 'false';
+process.env.BUNKO_SETUP_CODE = setupCode;
 const { settleCatalogTasks } = await import('./tenant-fixture');
 const { inTenant, tenantId, tenantContext, tenantPath } = await import('@/lib/tenant-context');
 const { accountsDb } = await import('@/lib/accounts-store');
@@ -104,12 +106,17 @@ function batch(title: string): DownloadBatch {
 }
 beforeAll(async () => {
   const r = await setup.POST(
-    req('/api/auth/setup', 'POST', { username: 'Admin', password: pass }, ''),
+    req('/api/auth/setup', 'POST', { username: 'Admin', password: pass, setupCode }, ''),
   );
   expect(r.status).toBe(200);
   admin = r.headers.get('set-cookie')!.split(';')[0];
   const created = await users.POST(
-    req('/api/users', 'POST', { username: 'Member', password: pass, role: 'member' }),
+    req('/api/users', 'POST', {
+      username: 'Member',
+      password: pass,
+      role: 'member',
+      permissions: ['services', 'extensions', 'downloads', 'translate', 'adult'],
+    }),
   );
   expect(created.status).toBe(201);
   member = (await auth.login(req('/api/auth'), { username: 'Member', password: pass })).split(
@@ -648,13 +655,13 @@ it('lets an admin take permissions away from a member, checked on every request'
   ).split(';')[0];
   const patch = (permissions: string[]) =>
     users.PATCH(req('/api/users', 'PATCH', { id: memberId, permissions }));
-  expect((await patch(['downloads', 'translate'])).status).toBe(200);
   const listed = (await (await users.GET(req('/api/users'))).json()) as {
     id: number;
     permissions: string[];
   }[];
+  // New members default to least privilege (`downloads`, `translate`) before any PATCH.
   expect(listed.find((u) => u.id === memberId)?.permissions).toEqual(['downloads', 'translate']);
-  // Connections, extension repositories and 18+ are now refused for the member…
+  // Connections, extension repositories and 18+ are refused by default for the new member…
   const settingsPatch = (value: object) =>
     settings.PATCH(req('/api/settings', 'PATCH', value, limited));
   expect((await settingsPatch({ kavitaUrl: 'http://other.invalid' })).status).toBe(403);
@@ -664,9 +671,10 @@ it('lets an admin take permissions away from a member, checked on every request'
   expect((await me.PATCH(req('/api/me', 'PATCH', { adultContent: true }, limited))).status).toBe(
     403,
   );
+  expect((await settingsPatch({ hideNsfwSources: false })).status).toBe(403);
   inTenant(memberId, () => expect(getSettings().adultContent).toBe(false));
-  // …personal preferences stay theirs, and admins are never restricted.
-  expect((await settingsPatch({ hideNsfwSources: false })).status).toBe(200);
+  // …personal non-adult preferences stay theirs, and admins are never restricted.
+  expect((await settingsPatch({ updateIntervalMinutes: 20 })).status).toBe(200);
   expect(
     (await settings.PATCH(req('/api/settings', 'PATCH', { hideNsfwSources: true }))).status,
   ).toBe(200);

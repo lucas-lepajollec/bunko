@@ -1,8 +1,11 @@
-import { tenantContext } from '@/lib/tenant-context';
+import { aroundAll, aroundEach } from 'vitest';
+import { inTenant, tenantContext } from '@/lib/tenant-context';
 import { accountsDb } from '@/lib/accounts-store';
 /** Existing integration fixtures exercise one explicitly selected private instance. */
 export function enterFixtureTenant(createAccount = true) {
   tenantContext.enterWith({ id: 1 });
+  aroundAll((run) => inTenant(1, run));
+  aroundEach((run) => inTenant(1, run));
   if (createAccount) {
     accountsDb()
       .prepare(

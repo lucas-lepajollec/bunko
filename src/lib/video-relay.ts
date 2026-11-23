@@ -107,7 +107,7 @@ export function rewritePlaylist(text: string, base: string, link: (url: string) 
     .join('\n');
 }
 
-const PLAYLIST_LIMIT = 8 * 1024 * 1024;
+export const PLAYLIST_LIMIT = 8 * 1024 * 1024;
 const SUBTITLE_LIMIT = 5 * 1024 * 1024;
 /**
  * Relayed bytes come from a third party but are served from Bunko's origin: only media types go
@@ -121,10 +121,12 @@ const SAFE_HEADERS = {
   'Content-Security-Policy': "default-src 'none'; sandbox",
   'Cross-Origin-Resource-Policy': 'same-origin',
 };
-const mediaType = (type: string | null) => {
-  const bare = (type ?? '').split(';')[0].trim();
+export const safeMediaContentType = (type: string | null, allowSubtitles = false) => {
+  const bare = (type ?? '').split(';')[0].trim().toLowerCase();
+  if (allowSubtitles && bare === 'text/vtt') return 'text/vtt; charset=utf-8';
   return MEDIA_TYPE.test(bare) ? bare : 'application/octet-stream';
 };
+const mediaType = (type: string | null) => safeMediaContentType(type, false);
 
 /**
  * Streams relayed at once: per account and for the whole server (each one holds an upstream
@@ -161,6 +163,7 @@ async function fetchTarget(
       ...(init.range ? { Range: init.range } : {}),
     },
     signal: init.signal,
+    allowConfiguredHosts: true,
   });
   if (response.status < 200 || response.status >= 300) {
     response.cancel();

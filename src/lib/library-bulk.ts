@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { requirePermission } from './auth';
 import { db, getTracked, statement, untrack } from './db';
 import type { trackBulk } from './validation';
 import { wakeWorker } from './worker-events';
@@ -9,6 +10,7 @@ import { setAdultOverride } from './adult';
  * account's library are ignored; the answer says how many works changed.
  */
 export function bulkTracked(input: z.infer<typeof trackBulk>): { changed: number } {
+  if (input.action === 'adult' || input.action === 'notAdult') requirePermission('adult');
   const ids = [...new Set(input.ids)].filter((id) =>
     statement('SELECT 1 FROM tracked_media WHERE id=?').get(id),
   );

@@ -5,8 +5,10 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'bunko-root-choice-'));
+const setupCode = 'ROOT-CHOICE-2026';
 process.env.BUNKO_DATA_DIR = path.join(dir, 'data');
 process.env.BUNKO_WORKER = 'false';
+process.env.BUNKO_SETUP_CODE = setupCode;
 const { accountsDb } = await import('@/lib/accounts-store');
 const { closeTenant } = await import('@/lib/db');
 const { inTenant } = await import('@/lib/tenant-context');
@@ -38,7 +40,12 @@ const available = (folder: string, id = 1) =>
 beforeAll(async () => {
   process.env.BUNKO_LIBRARY_DIR = path.join(dir, 'initial');
   const result = await setup.POST(
-    req('/api/auth/setup', 'POST', { username: 'Lucas', password: 'synthetic-root-password' }, ''),
+    req(
+      '/api/auth/setup',
+      'POST',
+      { username: 'Lucas', password: 'synthetic-root-password', setupCode },
+      '',
+    ),
   );
   admin = result.headers.get('set-cookie')!.split(';')[0];
   expect(
@@ -48,6 +55,7 @@ beforeAll(async () => {
           username: 'Alice',
           password: 'synthetic-root-password',
           role: 'member',
+          permissions: ['services', 'downloads', 'translate'],
         }),
       )
     ).status,

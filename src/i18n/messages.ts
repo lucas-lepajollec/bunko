@@ -1544,6 +1544,10 @@ const en: Dictionary = {
   'auth.recoveryHint':
     'Written to recovery.code in Bunko’s data folder when the account was reset.',
   'error.RECOVERY_CODE_INVALID': 'This recovery code is not valid.',
+  'auth.setupCode': 'Setup code',
+  'auth.setupCodeHint':
+    'Shown in Bunko’s startup logs and saved in setup.code in the data folder.',
+  'error.SETUP_CODE_INVALID': 'This setup code is not valid.',
   'catalog.anyGenre': 'All genres',
   'catalog.tags': 'Tags',
   'catalog.tagsCount': 'Tags · {n}',
@@ -3693,6 +3697,10 @@ const fr: Dictionary = {
   'auth.recoveryHint':
     'Écrit dans recovery.code, dans le dossier de données de Bunko, lors de la réinitialisation du compte.',
   'error.RECOVERY_CODE_INVALID': 'Ce code de récupération n’est pas valide.',
+  'auth.setupCode': 'Code d’installation',
+  'auth.setupCodeHint':
+    'Affiché dans les journaux de démarrage de Bunko et enregistré dans setup.code dans le dossier de données.',
+  'error.SETUP_CODE_INVALID': 'Ce code d’installation n’est pas valide.',
   'catalog.anyGenre': 'Tous les genres',
   'catalog.tags': 'Tags',
   'catalog.tagsCount': 'Tags · {n}',
@@ -5837,6 +5845,10 @@ const es: Dictionary = {
   'auth.recoveryHint':
     'Escrito en recovery.code, en la carpeta de datos de Bunko, al restablecer la cuenta.',
   'error.RECOVERY_CODE_INVALID': 'Este código de recuperación no es válido.',
+  'auth.setupCode': 'Código de instalación',
+  'auth.setupCodeHint':
+    'Mostrado en los registros de inicio de Bunko y guardado en setup.code en la carpeta de datos.',
+  'error.SETUP_CODE_INVALID': 'Este código de instalación no es válido.',
   'catalog.anyGenre': 'Todos los géneros',
   'catalog.tags': 'Etiquetas',
   'catalog.tagsCount': 'Etiquetas · {n}',
@@ -7989,6 +8001,10 @@ const de: Dictionary = {
   'auth.recoveryHint':
     'Beim Zurücksetzen des Kontos in recovery.code im Datenordner von Bunko gespeichert.',
   'error.RECOVERY_CODE_INVALID': 'Dieser Wiederherstellungscode ist ungültig.',
+  'auth.setupCode': 'Einrichtungscode',
+  'auth.setupCodeHint':
+    'Wird beim Start in den Bunko-Logs angezeigt und in setup.code im Datenordner gespeichert.',
+  'error.SETUP_CODE_INVALID': 'Dieser Einrichtungscode ist ungültig.',
   'catalog.anyGenre': 'Alle Genres',
   'catalog.tags': 'Tags',
   'catalog.tagsCount': 'Tags · {n}',
@@ -10137,6 +10153,10 @@ const it: Dictionary = {
   'auth.recoveryHint':
     'Scritto in recovery.code, nella cartella dati di Bunko, al ripristino dell’account.',
   'error.RECOVERY_CODE_INVALID': 'Questo codice di recupero non è valido.',
+  'auth.setupCode': 'Codice di configurazione',
+  'auth.setupCodeHint':
+    'Mostrato nei log di avvio di Bunko e salvato in setup.code nella cartella dati.',
+  'error.SETUP_CODE_INVALID': 'Questo codice di configurazione non è valido.',
   'catalog.anyGenre': 'Tutti i generi',
   'catalog.tags': 'Tag',
   'catalog.tagsCount': 'Tag · {n}',

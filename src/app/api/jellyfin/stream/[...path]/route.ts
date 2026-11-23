@@ -4,6 +4,7 @@ import { route } from '@/lib/api';
 import { AppError } from '@/lib/errors';
 import { endpoint } from '@/lib/http';
 import { getSettings } from '@/lib/settings';
+import { safeMediaContentType } from '@/lib/video-relay';
 
 /**
  * Jellyfin video through Bunko: HLS playlists, segments and WebVTT subtitles. The API key stays
@@ -40,11 +41,12 @@ export const GET = route(async (r) => {
     throw new AppError('JELLYFIN_ERROR', `Jellyfin returned HTTP ${upstream.status}`, 502);
   }
   const headers = new Headers({
-    'Content-Type': upstream.headers.get('content-type') ?? 'application/octet-stream',
+    'Content-Type': safeMediaContentType(upstream.headers.get('content-type'), true),
     'Cache-Control': 'no-store',
     // Served from Bunko's origin: never let a browser run what Jellyfin returns as a page.
     'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy': "default-src 'none'; sandbox",
+    'Cross-Origin-Resource-Policy': 'same-origin',
   });
   for (const name of ['content-length', 'content-range', 'accept-ranges']) {
     const value = upstream.headers.get(name);
