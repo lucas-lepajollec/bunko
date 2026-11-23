@@ -3,13 +3,21 @@ import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import { Providers } from '@/components/shell';
 import { PRODUCT_NAME } from '@/lib/client/brand';
+import { isDemoMode } from '@/lib/demo-mode';
 import { THEME_BOOT_SCRIPT } from '@/lib/themes';
 import './globals.css';
 
-export const metadata: Metadata = {
-  title: PRODUCT_NAME,
-  description: 'Discover, download and follow manga, webtoons and light novels into Kavita.',
-};
+export function generateMetadata(): Metadata {
+  const demo = isDemoMode();
+  return {
+    title: demo ? `${PRODUCT_NAME} — Public Demo` : PRODUCT_NAME,
+    description:
+      'Self-hosted reading & media hub for manga, manhwa, comics, light novels, books, anime, series, and movies.',
+    applicationName: PRODUCT_NAME,
+    icons: { icon: '/favicon.svg' },
+    robots: demo ? { index: false, follow: false, nocache: true } : undefined,
+  };
+}
 
 export const viewport: Viewport = { themeColor: '#070b10', colorScheme: 'dark' };
 

@@ -31,6 +31,30 @@ export function interpolate(template: string, variables?: Record<string, string 
 type Dictionary = Record<string, string>;
 
 const en: Dictionary = {
+  'error.DEMO_READ_ONLY': 'This action is disabled in the public demo.',
+  'demo.chip': 'Demo',
+  'demo.public': 'Public demo',
+  'demo.info': 'About this public demo',
+  'demo.reset': 'Reset',
+  'demo.resetAria': 'Reset demo data',
+  'demo.resetting': 'Resetting demo session…',
+  'demo.continue': 'Continue',
+  'demo.look': 'Look',
+  'demo.site': 'Website',
+  'demo.docs': 'Docs',
+  'demo.source': 'Source',
+  'demo.welcome.title': 'Explore Bunko without installing anything',
+  'demo.welcome.lead':
+    'An isolated browser preview with 30 original fictional works across manga, manhwa, comics, light novels, books, anime, series, and films.',
+  'demo.card.tryTitle': 'You can try',
+  'demo.card.tryBody':
+    'Filter the catalog, rate works out of 10, reorder lists & tier lists, open the chapter reader, and switch themes or languages.',
+  'demo.card.simTitle': 'What is simulated',
+  'demo.card.simBody':
+    'Fictional catalog, weekly planning, reading progress, and read-only integration views stored only in this browser tab.',
+  'demo.card.neverTitle': 'What never happens',
+  'demo.card.neverBody':
+    'No external downloads, no private server connections, no account changes, no copyrighted files, and no 18+ content.',
   'continue.at': '{percent} % · {when}',
   'continue.remove': 'Remove {title} from Pick up',
   'continue.removeShort': 'Remove from the row',
@@ -2168,6 +2192,30 @@ const en: Dictionary = {
 };
 
 const fr: Dictionary = {
+  'error.DEMO_READ_ONLY': 'Cette action est désactivée dans la démo publique.',
+  'demo.chip': 'Démo',
+  'demo.public': 'Démo publique',
+  'demo.info': 'À propos de cette démo publique',
+  'demo.reset': 'Réinitialiser',
+  'demo.resetAria': 'Réinitialiser les données de démo',
+  'demo.resetting': 'Réinitialisation de la démo…',
+  'demo.continue': 'Continuer',
+  'demo.look': 'Apparence',
+  'demo.site': 'Site web',
+  'demo.docs': 'Docs',
+  'demo.source': 'Code source',
+  'demo.welcome.title': 'Découvrez Bunko sans rien installer',
+  'demo.welcome.lead':
+    'Un aperçu isolé dans votre navigateur avec 30 œuvres fictives originales : manga, manhwa, BD, light novels, livres, anime, séries et films.',
+  'demo.card.tryTitle': 'Ce que vous pouvez essayer',
+  'demo.card.tryBody':
+    'Filtrer le catalogue, noter sur 10, trier listes et tier lists, ouvrir le lecteur de chapitres et changer de thème ou de langue.',
+  'demo.card.simTitle': 'Ce qui est simulé',
+  'demo.card.simBody':
+    'Catalogue fictif, planning hebdomadaire, avancement et vues d’intégrations en lecture seule enregistrés dans cet onglet.',
+  'demo.card.neverTitle': 'Ce qui n’arrive jamais',
+  'demo.card.neverBody':
+    'Aucun téléchargement externe, aucune connexion serveur, aucune modification de compte, aucun fichier protégé ni contenu 18+.',
   'continue.at': '{percent} % · {when}',
   'continue.remove': 'Retirer {title} de Reprendre',
   'continue.removeShort': 'Retirer de la liste',
@@ -4324,6 +4372,30 @@ const fr: Dictionary = {
 };
 
 const es: Dictionary = {
+  'error.DEMO_READ_ONLY': 'Esta acción está desactivada en la demo pública.',
+  'demo.chip': 'Demo',
+  'demo.public': 'Demo pública',
+  'demo.info': 'Acerca de esta demo pública',
+  'demo.reset': 'Reiniciar',
+  'demo.resetAria': 'Reiniciar los datos de la demo',
+  'demo.resetting': 'Reiniciando la sesión de demo…',
+  'demo.continue': 'Continuar',
+  'demo.look': 'Apariencia',
+  'demo.site': 'Sitio web',
+  'demo.docs': 'Documentación',
+  'demo.source': 'Código fuente',
+  'demo.welcome.title': 'Explora Bunko sin instalar nada',
+  'demo.welcome.lead':
+    'Una vista previa aislada con 30 obras ficticias originales de manga, manhwa, cómics, novelas ligeras, libros, anime, series y películas.',
+  'demo.card.tryTitle': 'Puedes probar',
+  'demo.card.tryBody':
+    'Filtrar el catálogo, puntuar sobre 10, ordenar listas y tier lists, abrir el lector de capítulos y cambiar temas o idiomas.',
+  'demo.card.simTitle': 'Qué está simulado',
+  'demo.card.simBody':
+    'Catálogo ficticio, calendario semanal, progreso e integraciones de solo lectura guardados únicamente en esta pestaña.',
+  'demo.card.neverTitle': 'Qué nunca ocurre',
+  'demo.card.neverBody':
+    'Sin descargas externas, sin conexiones a servidores privados, sin cambios de cuenta, sin archivos con derechos de autor ni contenido +18.',
   'continue.at': '{percent} % · {when}',
   'continue.remove': 'Quitar {title} de Retomar',
   'continue.removeShort': 'Quitar de la lista',
@@ -6471,6 +6543,30 @@ const es: Dictionary = {
 };
 
 const de: Dictionary = {
+  'error.DEMO_READ_ONLY': 'Diese Aktion ist in der öffentlichen Demo deaktiviert.',
+  'demo.chip': 'Demo',
+  'demo.public': 'Öffentliche Demo',
+  'demo.info': 'Über diese öffentliche Demo',
+  'demo.reset': 'Zurücksetzen',
+  'demo.resetAria': 'Demodaten zurücksetzen',
+  'demo.resetting': 'Demo-Sitzung wird zurückgesetzt…',
+  'demo.continue': 'Weiter',
+  'demo.look': 'Design',
+  'demo.site': 'Website',
+  'demo.docs': 'Doku',
+  'demo.source': 'Quellcode',
+  'demo.welcome.title': 'Bunko ohne Installation ausprobieren',
+  'demo.welcome.lead':
+    'Eine isolierte Browser-Vorschau mit 30 frei erfundenen Werken aus Manga, Manhwa, Comics, Light Novels, Büchern, Anime, Serien und Filmen.',
+  'demo.card.tryTitle': 'Das kannst du testen',
+  'demo.card.tryBody':
+    'Katalog filtern, bis 10 bewerten, Listen & Tier-Listen sortieren, den Kapitel-Reader öffnen sowie Design und Sprache wechseln.',
+  'demo.card.simTitle': 'Was simuliert wird',
+  'demo.card.simBody':
+    'Fiktiver Katalog, Wochenplan, Lesefortschritt und schreibgeschützte Integrationsansichten nur in diesem Browser-Tab.',
+  'demo.card.neverTitle': 'Was niemals passiert',
+  'demo.card.neverBody':
+    'Keine externen Downloads, keine privaten Serververbindungen, keine Kontoänderungen, keine geschützten Dateien und keine 18+-Inhalte.',
   'continue.at': '{percent} % · {when}',
   'continue.remove': '{title} aus Weitermachen entfernen',
   'continue.removeShort': 'Aus der Liste entfernen',
@@ -8630,6 +8726,30 @@ const de: Dictionary = {
 };
 
 const it: Dictionary = {
+  'error.DEMO_READ_ONLY': 'Questa azione è disattivata nella demo pubblica.',
+  'demo.chip': 'Demo',
+  'demo.public': 'Demo pubblica',
+  'demo.info': 'Informazioni su questa demo pubblica',
+  'demo.reset': 'Ripristina',
+  'demo.resetAria': 'Ripristina i dati della demo',
+  'demo.resetting': 'Ripristino della sessione demo…',
+  'demo.continue': 'Continua',
+  'demo.look': 'Aspetto',
+  'demo.site': 'Sito web',
+  'demo.docs': 'Documentazione',
+  'demo.source': 'Codice sorgente',
+  'demo.welcome.title': 'Esplora Bunko senza installare nulla',
+  'demo.welcome.lead':
+    'Un’anteprima isolata nel browser con 30 opere fittizie originali tra manga, manhwa, fumetti, light novel, libri, anime, serie e film.',
+  'demo.card.tryTitle': 'Cosa puoi provare',
+  'demo.card.tryBody':
+    'Filtrare il catalogo, dare voti su 10, riordinare liste e tier list, aprire il lettore di capitoli e cambiare tema o lingua.',
+  'demo.card.simTitle': 'Cosa è simulato',
+  'demo.card.simBody':
+    'Catalogo fittizio, calendario settimanale, avanzamento e viste di integrazione in sola lettura salvate solo in questa scheda.',
+  'demo.card.neverTitle': 'Cosa non accade mai',
+  'demo.card.neverBody':
+    'Nessun download esterno, nessuna connessione a server privati, nessuna modifica all’account, nessun file protetto e nessun contenuto 18+.',
   'continue.at': '{percent} % · {when}',
   'continue.remove': 'Togli {title} da Riprendi',
   'continue.removeShort': 'Togli dall’elenco',

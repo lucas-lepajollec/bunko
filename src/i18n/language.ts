@@ -1,4 +1,5 @@
 'use client';
+import { isDemoMode } from '@/lib/demo-mode';
 import { isUiLanguage, type UiLanguage } from './messages';
 
 const listeners = new Set<() => void>();
@@ -7,6 +8,14 @@ let chosen: UiLanguage | null = null;
 /** Shared by React and request transport, including when browser storage is unavailable. */
 export function getUiLanguage(): UiLanguage {
   if (chosen) return chosen;
+  if (typeof window !== 'undefined' && isDemoMode()) {
+    try {
+      const fromQuery = new URLSearchParams(window.location.search).get('lang');
+      if (isUiLanguage(fromQuery)) return (chosen = fromQuery);
+    } catch {
+      /* Ignore malformed query string. */
+    }
+  }
   try {
     const stored =
       localStorage.getItem('bunko.language') ?? localStorage.getItem('kaviseerr.language');

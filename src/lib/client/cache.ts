@@ -1,6 +1,7 @@
 'use client';
 import type { Cache, State } from 'swr';
 import { clearWarmCovers } from '@/components/managed-image';
+import { isDemoMode } from '@/lib/demo-mode';
 
 // One snapshot per build: a new version never reads data cached by an older one.
 const PREFIX = 'bunko.cache.';
@@ -31,7 +32,7 @@ const PERSISTED = /^\/api\/(tracked$|media\?|home(?:$|\?kind=)|lists$|planning(?
  */
 export function persistentCache(): Cache {
   const map = new Map<string, State>();
-  if (typeof window === 'undefined') return map as unknown as Cache;
+  if (typeof window === 'undefined' || isDemoMode()) return map as unknown as Cache;
   epoch = currentEpoch();
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {

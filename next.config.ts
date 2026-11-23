@@ -1,5 +1,5 @@
 import type { NextConfig } from 'next';
-const securityHeaders = [
+const baseSecurityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
@@ -10,7 +10,9 @@ const securityHeaders = [
   },
 ];
 const config: NextConfig = {
-  output: 'standalone',
+  // Docker/self-hosted releases use Next's minimal standalone server. Vercel creates its own
+  // Functions and build output, so omit standalone when VERCEL=1 is provided by the platform.
+  output: process.env.VERCEL === '1' ? undefined : 'standalone',
   serverExternalPackages: ['better-sqlite3', 'adm-zip'],
   poweredByHeader: false,
   devIndicators: false,
@@ -20,7 +22,17 @@ const config: NextConfig = {
     NEXT_PUBLIC_BUNKO_BUILD: String(Date.now()),
   },
   async headers() {
-    return [{ source: '/(.*)', headers: securityHeaders }];
+    const headers = [...baseSecurityHeaders];
+    if (
+      process.env.BUNKO_DEMO_MODE === 'true' ||
+      process.env.NEXT_PUBLIC_BUNKO_DEMO === 'true'
+    ) {
+      headers.push({
+        key: 'X-Robots-Tag',
+        value: 'noindex, nofollow, noarchive',
+      });
+    }
+    return [{ source: '/(.*)', headers }];
   },
 };
 export default config;

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600" viewBox="0 0 400 600" role="img" aria-label="Echoes of the Copper Sea">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5c1a47"/>
+      <stop offset="52%" stop-color="#1c0a17"/>
+      <stop offset="100%" stop-color="#05070a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="55%" cy="32%" r="60%">
+      <stop offset="0%" stop-color="#f472b6" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#1c0a17" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#05070a" stop-opacity="0"/>
+      <stop offset="58%" stop-color="#05070a" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#05070a" stop-opacity="0.92"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="600" fill="url(#bg)"/>
+  <rect width="400" height="600" fill="url(#glow)"/>
+  <g opacity="0.14" stroke="#fce7f3" stroke-width="0.6">
+    <line x1="28" y1="0" x2="28" y2="600"/>
+    <line x1="372" y1="0" x2="372" y2="600"/>
+    <line x1="0" y1="68" x2="400" y2="68"/>
+  </g>
+  
+        <circle cx="208" cy="186" r="66.08000000000001" fill="#f472b6" fill-opacity="0.2" stroke="#fce7f3" stroke-opacity="0.4" stroke-width="1.2"/>
+        <path d="M0 288 Q100 252 200 288 T400 288" fill="none" stroke="#f472b6" stroke-opacity="0.45" stroke-width="2.2"/><path d="M0 335.99999999999994 Q100 300 200 335.99999999999994 T400 335.99999999999994" fill="none" stroke="#fce7f3" stroke-opacity="0.37" stroke-width="1.9000000000000001"/><path d="M0 384 Q100 348 200 384 T400 384" fill="none" stroke="#f472b6" stroke-opacity="0.29000000000000004" stroke-width="1.6"/><path d="M0 432 Q100 395.99999999999994 200 432 T400 432" fill="none" stroke="#fce7f3" stroke-opacity="0.21000000000000002" stroke-width="1.3000000000000003"/>
+      
+  <rect width="400" height="600" fill="url(#fade)"/>
+  <rect x="24" y="24" width="352" height="552" rx="8" fill="none" stroke="#fce7f3" stroke-opacity="0.14" stroke-width="1"/>
+  <rect x="36" y="38" width="96" height="22" rx="11" fill="#f472b6" fill-opacity="0.18" stroke="#f472b6" stroke-opacity="0.45" stroke-width="1"/>
+  <text x="84" y="53" text-anchor="middle" fill="#fce7f3" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="9.5" font-weight="700" letter-spacing="1.6">ANIME</text>
+  <rect x="36" y="398" width="34" height="3" rx="1.5" fill="#f472b6"/>
+  <text x="36" y="438" fill="#f8fafc" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="31" font-weight="800" letter-spacing="-0.6">
+    <tspan x="36" dy="0">Echoes of the</tspan><tspan x="36" dy="35">Copper Sea</tspan>
+  </text>
+  <text x="36" y="556" fill="#fce7f3" fill-opacity="0.7" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" letter-spacing="2.2">STUDIO MARINA</text>
+</svg>

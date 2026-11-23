@@ -1,0 +1,87 @@
+{
+  "commit": "20da87b",
+  "capturedAt": "2026-11-23T20:55:08.221Z",
+  "theme": "cine",
+  "language": "en",
+  "screenshots": [
+    {
+      "file": "bunko-demo-home.jpg",
+      "route": "/?lang=en",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "bytes": 107423,
+      "sha256": "90f57e2faa000023491154c770b95e49b73163219bb2ada94f944e0b54f19c3f"
+    },
+    {
+      "file": "bunko-demo-catalog.jpg",
+      "route": "/catalog?lang=en",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "bytes": 124943,
+      "sha256": "5082b37e7df0cf5c6cf91153ca135ca245953e72fa1b34d57cad95c0adf0d43a"
+    },
+    {
+      "file": "bunko-demo-library.jpg",
+      "route": "/library?lang=en",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "bytes": 154712,
+      "sha256": "a33b8b4be699f2649a8460073990802e3f0108b4a71836b7a8e5604def8d7a1c"
+    },
+    {
+      "file": "bunko-demo-work.jpg",
+      "route": "/title/anilist/900101?lang=en",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "bytes": 127124,
+      "sha256": "26324f389e67d209ac0c29c8fa2da6b0bd28e2851e2f876d6fe10bcac2d6e11b"
+    },
+    {
+      "file": "bunko-demo-lists.jpg",
+      "route": "/lists/3?lang=en",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "bytes": 79982,
+      "sha256": "597fbac2a2d44e0a0ad878fb08cc8fdf1e8ee3ab122ec2085b5cb1ffe2dd562e"
+    },
+    {
+      "file": "bunko-demo-planning.jpg",
+      "route": "/planning?lang=en",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "bytes": 128260,
+      "sha256": "e498f19e0232d0b0746a8e94ed131149acd7d59ec593965c0423de49e0de27f9"
+    },
+    {
+      "file": "bunko-demo-mobile.jpg",
+      "route": "/?lang=en",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "bytes": 112221,
+      "sha256": "23fd5c3a2af530ad9b1bf7b3b97dab249be1e2138b6dd528f1cda99efbaf37f2"
+    }
+  ],
+  "socialPreview": {
+    "file": "../social-preview.png",
+    "dimensions": {
+      "width": 1280,
+      "height": 640
+    },
+    "bytes": 546974,
+    "sha256": "624b123dbab86924ef24a84610af209dbc6e3d3d139942ffba1f3ae85b1cf761"
+  }
+}
