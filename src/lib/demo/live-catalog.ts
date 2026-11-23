@@ -34,18 +34,34 @@ export function sanitizeDemoImageUrl(value: unknown): string | null {
   }
 }
 
+const HTML_ENTITIES: Record<string, string> = {
+  '&quot;': '"',
+  '&#039;': "'",
+  '&#39;': "'",
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+};
+
 function cleanDescription(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
-  const text = raw
-    .replaceAll('<br>', ' ')
-    .replaceAll('<br/>', ' ')
-    .replaceAll('<br />', ' ')
-    .replace(/<[^>]{1,120}>/g, '')
-    .replaceAll('&quot;', '"')
-    .replaceAll('&#039;', "'")
-    .replaceAll('&amp;', '&')
-    .replaceAll('&lt;', '<')
-    .replaceAll('&gt;', '>')
+  // Single-pass linear tag stripper avoids regex backtracking and multi-character sanitization issues.
+  let out = '';
+  let inTag = false;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (ch === '<') {
+      inTag = true;
+      out += ' ';
+    } else if (ch === '>') {
+      inTag = false;
+    } else if (!inTag) {
+      out += ch;
+    }
+  }
+  // Single-pass entity decode never double-unescapes.
+  const text = out
+    .replace(/&(quot|#0?39|amp|lt|gt);/g, (entity) => HTML_ENTITIES[entity] ?? entity)
     .replace(/\s+/g, ' ')
     .trim();
   if (!text) return null;
