@@ -34,12 +34,12 @@ Bunko ships with **no bundled content sources, scrapers, or extension repositori
 
 ## Product preview
 
-All screenshots below are captured reproducibly from Bunko's isolated, fictional [public demo](DEMO.md) ([capture manifest](docs/assets/screenshots/manifest.json)).
+All screenshots below are captured from Bunko's isolated [public demo](DEMO.md) with live public-API catalog metadata ([capture manifest](docs/assets/screenshots/manifest.json)).
 
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/assets/screenshots/bunko-demo-catalog.jpg" alt="Bunko catalog with 12 media kinds, filters, and custom artwork" /><br />
+      <img src="docs/assets/screenshots/bunko-demo-catalog.jpg" alt="Bunko catalog with 13 media kinds, filters, and official public-API covers" /><br />
       <sub><strong>Catalog</strong> — Filter and sort across 12+ reading and video kinds from one unified grid.</sub>
     </td>
     <td width="50%">

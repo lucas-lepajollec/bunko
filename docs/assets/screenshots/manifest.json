@@ -1,6 +1,6 @@
 {
-  "commit": "20da87b",
-  "capturedAt": "2026-11-23T20:55:08.221Z",
+  "commit": "f370a30",
+  "capturedAt": "2026-11-24T00:07:29.720Z",
   "theme": "cine",
   "language": "en",
   "screenshots": [
@@ -11,8 +11,8 @@
         "width": 1440,
         "height": 900
       },
-      "bytes": 107423,
-      "sha256": "90f57e2faa000023491154c770b95e49b73163219bb2ada94f944e0b54f19c3f"
+      "bytes": 194858,
+      "sha256": "a67996bd64d4c9ae2cd3913bc55ed23c9c14a8349e3cbf999806cd9f227aa6f6"
     },
     {
       "file": "bunko-demo-catalog.jpg",
@@ -21,8 +21,8 @@
         "width": 1440,
         "height": 900
       },
-      "bytes": 124943,
-      "sha256": "5082b37e7df0cf5c6cf91153ca135ca245953e72fa1b34d57cad95c0adf0d43a"
+      "bytes": 184009,
+      "sha256": "a355a161447294bce184a766d5fefd9376089204198781a5d3fd4b4bd885bdde"
     },
     {
       "file": "bunko-demo-library.jpg",
@@ -31,8 +31,8 @@
         "width": 1440,
         "height": 900
       },
-      "bytes": 154712,
-      "sha256": "a33b8b4be699f2649a8460073990802e3f0108b4a71836b7a8e5604def8d7a1c"
+      "bytes": 257859,
+      "sha256": "4292dc401927d7b80084455e7f429888d17f857efb844c1c3fc9f588b80f3cce"
     },
     {
       "file": "bunko-demo-work.jpg",
@@ -41,8 +41,8 @@
         "width": 1440,
         "height": 900
       },
-      "bytes": 127124,
-      "sha256": "26324f389e67d209ac0c29c8fa2da6b0bd28e2851e2f876d6fe10bcac2d6e11b"
+      "bytes": 226179,
+      "sha256": "ff6e0029becc39bcbcf55bbb4ff6e8ca78215adc809040931fd440e35575d2de"
     },
     {
       "file": "bunko-demo-lists.jpg",
@@ -51,8 +51,8 @@
         "width": 1440,
         "height": 900
       },
-      "bytes": 79982,
-      "sha256": "597fbac2a2d44e0a0ad878fb08cc8fdf1e8ee3ab122ec2085b5cb1ffe2dd562e"
+      "bytes": 116290,
+      "sha256": "a5dbfb0f0f9be484763bd0bc14041941d30840458dcc65dfc1147e5f9a85cbdf"
     },
     {
       "file": "bunko-demo-planning.jpg",
@@ -61,8 +61,8 @@
         "width": 1440,
         "height": 900
       },
-      "bytes": 128260,
-      "sha256": "e498f19e0232d0b0746a8e94ed131149acd7d59ec593965c0423de49e0de27f9"
+      "bytes": 158696,
+      "sha256": "bd666a375f55c42d31b75e360aa3a955e5cc2680f52dc32dd6deedba00174983"
     },
     {
       "file": "bunko-demo-mobile.jpg",
@@ -71,8 +71,8 @@
         "width": 390,
         "height": 844
       },
-      "bytes": 112221,
-      "sha256": "23fd5c3a2af530ad9b1bf7b3b97dab249be1e2138b6dd528f1cda99efbaf37f2"
+      "bytes": 244267,
+      "sha256": "48c70edd01315276eeb2c6e94bbc53ec7b4c189dd7ada3f199b103f73c6fee94"
     }
   ],
   "socialPreview": {
