@@ -950,24 +950,48 @@ function TabBar() {
   const { t } = useI18n();
   const pathname = usePathname();
   return (
-    <nav
-      aria-label={t('nav.label')}
-      className="app-tabbar border-line fixed inset-x-0 bottom-0 z-40 grid auto-cols-fr grid-flow-col border-t bg-panel/95 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),12px)] backdrop-blur-md md:hidden"
-    >
-      <UniverseTab />
-      {TABS.map((tab) => {
-        const active = isActive(pathname, tab.href);
-        if (tab.href === '/search')
+    <div className="app-tabbar-wrap pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center md:hidden">
+      <nav
+        aria-label={t('nav.label')}
+        className="app-tabbar app-tabbar-glass pointer-events-auto relative grid w-full max-w-[420px] auto-cols-fr grid-flow-col items-center gap-0.5 rounded-full p-1.5"
+      >
+        <UniverseTab />
+        {TABS.map((tab) => {
+          const active = isActive(pathname, tab.href);
+          if (tab.href === '/search')
+            return (
+              <button
+                key={tab.href}
+                type="button"
+                onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
+                className="app-tabbar-item text-muted"
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d={tab.icon} />
+                </svg>
+                <span className="max-w-full truncate">{t(tab.key)}</span>
+              </button>
+            );
           return (
-            <button
+            <Link
               key={tab.href}
-              type="button"
-              onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
-              className="relative flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] text-muted"
+              href={tab.href}
+              aria-current={active ? 'page' : undefined}
+              className={cx('app-tabbar-item', active ? 'text-white' : 'text-muted')}
             >
               <svg
-                width="22"
-                height="22"
+                width="20"
+                height="20"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -978,37 +1002,12 @@ function TabBar() {
               >
                 <path d={tab.icon} />
               </svg>
-              {t(tab.key)}
-            </button>
+              <span className="max-w-full truncate">{t(tab.key)}</span>
+            </Link>
           );
-        return (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            aria-current={active ? 'page' : undefined}
-            className={cx(
-              'relative flex min-h-11 flex-col items-center justify-center gap-1 text-[11px]',
-              active ? 'font-semibold text-white' : 'text-muted',
-            )}
-          >
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d={tab.icon} />
-            </svg>
-            {t(tab.key)}
-          </Link>
-        );
-      })}
-    </nav>
+        })}
+      </nav>
+    </div>
   );
 }
 

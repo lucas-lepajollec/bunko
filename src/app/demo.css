@@ -240,6 +240,6 @@
   }
   .bk-demo-chip {
     right: 12px;
-    bottom: calc(max(env(safe-area-inset-bottom), 12px) + 68px);
+    bottom: calc(max(10px, calc(env(safe-area-inset-bottom) - 10px)) + 70px);
   }
 }

@@ -14,12 +14,28 @@ export function generateMetadata(): Metadata {
     description:
       'Self-hosted reading & media hub for manga, manhwa, comics, light novels, books, anime, series, and movies.',
     applicationName: PRODUCT_NAME,
-    icons: { icon: '/favicon.svg' },
+    manifest: '/manifest.webmanifest',
+    appleWebApp: {
+      capable: true,
+      title: PRODUCT_NAME,
+      statusBarStyle: 'black-translucent',
+    },
+    icons: {
+      icon: [
+        { url: '/favicon.svg', type: 'image/svg+xml' },
+        { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      ],
+      apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+    },
     robots: demo ? { index: false, follow: false, nocache: true } : undefined,
   };
 }
 
-export const viewport: Viewport = { themeColor: '#070b10', colorScheme: 'dark' };
+export const viewport: Viewport = {
+  themeColor: '#070b10',
+  colorScheme: 'dark',
+  viewportFit: 'cover',
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
