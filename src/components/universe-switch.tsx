@@ -217,10 +217,10 @@ export function UniverseTab() {
   if (options.length < 2 && !universe.adultAllowed) return null;
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger className="relative flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] text-muted">
+      <Dialog.Trigger className="app-tabbar-item text-muted">
         <svg
-          width="22"
-          height="22"
+          width="20"
+          height="20"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
