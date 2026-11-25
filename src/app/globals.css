@@ -271,59 +271,11 @@ input[type='search']::-webkit-search-cancel-button {
   }
 }
 
-/* Mobile floating Liquid Glass bottom navigation capsule (browser + iOS/Android PWA). */
-.app-tabbar-wrap {
-  padding-top: 8px;
-  padding-left: max(12px, env(safe-area-inset-left));
-  padding-right: max(12px, env(safe-area-inset-right));
-  padding-bottom: max(10px, calc(env(safe-area-inset-bottom) - 10px));
-}
-.app-tabbar-wrap::before {
-  content: '';
-  position: absolute;
-  inset: -16px 0 0;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    color-mix(in oklab, var(--color-bg) 52%, transparent) 58%,
-    color-mix(in oklab, var(--color-bg) 82%, transparent) 100%
-  );
-}
-.app-tabbar-glass {
-  isolation: isolate;
-  overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 0.2);
-  background: linear-gradient(
-    180deg,
-    rgb(255 255 255 / 0.13) 0%,
-    color-mix(in oklab, var(--color-panel) 66%, transparent) 26%,
-    color-mix(in oklab, var(--color-bg) 78%, transparent) 100%
-  );
-  -webkit-backdrop-filter: blur(28px) saturate(1.9) brightness(1.06);
-  backdrop-filter: blur(28px) saturate(1.9) brightness(1.06);
-  box-shadow:
-    inset 0 1px 0.5px rgb(255 255 255 / 0.34),
-    inset 0 -1px 0.5px rgb(255 255 255 / 0.08),
-    0 14px 36px -8px rgb(0 0 0 / 0.62),
-    0 2px 10px rgb(0 0 0 / 0.34);
-}
-.app-tabbar-glass::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    rgb(255 255 255 / 0.14) 0%,
-    rgb(255 255 255 / 0.02) 44%,
-    transparent 100%
-  );
+.app-tabbar {
+  padding: 6px max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom))
+    max(8px, env(safe-area-inset-left));
 }
 .app-tabbar-item {
-  position: relative;
-  z-index: 1;
   display: flex;
   min-width: 0;
   min-height: 46px;
@@ -331,27 +283,12 @@ input[type='search']::-webkit-search-cancel-button {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  border-radius: 9999px;
-  padding: 4px 4px;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.15;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    color 180ms ease,
-    background-color 180ms ease,
-    box-shadow 180ms ease,
-    transform 140ms ease;
-}
-.app-tabbar-item:active {
-  transform: scale(0.94);
+  padding: 2px;
+  color: var(--color-mid);
+  font-size: 11px;
+  line-height: 1.2;
 }
 .app-tabbar-item[aria-current='page'] {
-  color: #fff;
-  font-weight: 600;
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.22) 0%, rgb(255 255 255 / 0.11) 100%);
-  box-shadow:
-    inset 0 1px 0.5px rgb(255 255 255 / 0.36),
-    inset 0 -0.5px 0 rgb(255 255 255 / 0.08),
-    0 3px 10px -2px rgb(0 0 0 / 0.28);
+  color: var(--color-fg);
+  font-weight: 700;
 }

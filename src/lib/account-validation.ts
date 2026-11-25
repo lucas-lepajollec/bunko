@@ -1,11 +1,8 @@
 import { z } from 'zod';
-export const password = z.string().min(10).max(200);
+import { PASSWORD_MAX, PASSWORD_MIN, USERNAME_PATTERN } from '@/domain/account-rules';
+export const password = z.string().min(PASSWORD_MIN).max(PASSWORD_MAX);
 export const credentials = z.strictObject({
-  username: z
-    .string()
-    .min(3)
-    .max(40)
-    .regex(/^[A-Za-z0-9._-]+$/),
+  username: z.string().regex(USERNAME_PATTERN),
   password,
 });
 export const passwordChange = z.strictObject({ currentPassword: password, newPassword: password });

@@ -11,7 +11,14 @@ import { deniedPermissions, requireAdmin } from './auth';
 import { PERMISSIONS, type Permission } from '@/types/shared';
 import { hashPassword } from './passwords';
 import { AppError } from './errors';
-import type { MyAccount, UserAccount, UserCreate, UserPatch, MyAccountPatch } from '@/types/shared';
+import type {
+  MyAccount,
+  MyAccountPatch,
+  UserAccount,
+  UserCreate,
+  UserDelete,
+  UserPatch,
+} from '@/types/shared';
 
 /** Least-privilege defaults: new members cannot change upstream services, extension repos or 18+ until granted. */
 export const DEFAULT_MEMBER_RESTRICTIONS: readonly Permission[] = [
@@ -41,7 +48,7 @@ export const myAccountPatch = z.strictObject({
 export const userDelete = z.strictObject({
   id: z.number().int().positive(),
   confirmDeleteData: z.literal(true),
-});
+}) satisfies z.ZodType<UserDelete>;
 export function myAccount(): MyAccount {
   const identity = currentUser();
   const user =

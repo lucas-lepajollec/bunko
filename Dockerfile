@@ -13,6 +13,7 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=2512 HOSTNAME=0.0.0.0 BUN
 RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/* \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn* /usr/local/bin/yarn /usr/local/bin/yarnpkg
 COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 RUN mkdir -p /data /library && chown node:node /data /library
 USER node

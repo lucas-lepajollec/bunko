@@ -22,6 +22,9 @@ check() { # expected-status description curl-args...
 }
 check 200 "health" "$base/api/health"
 check 200 "interface" "$base/"
+for asset in manifest.webmanifest apple-touch-icon.png icons/icon-192.png icons/icon-512.png icons/icon-512-maskable.png; do
+  check 200 "home screen asset /$asset" "$base/$asset"
+done
 check 401 "API requires authentication" "$base/api/settings"
 # Every API route must be present in the image (an ignored folder once dropped one silently).
 check 200 "public auth state" "$base/api/auth"
@@ -46,9 +49,10 @@ check 409 "second setup rejected" -X POST "$base/api/auth/setup" -H 'Content-Typ
 check 401 "wrong password rejected" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H "Origin: $base" -d '{"username":"SmokeAdmin","password":"wrong-password"}'
 check 200 "account login from same origin" -X POST "$base/api/auth" -H 'Content-Type: application/json' -H "Origin: $base" -d "$credentials"
 # Verify global HTTP security headers on interface responses.
-curl -fsS -D - -o /dev/null "$base/" | grep -qi '^x-frame-options: SAMEORIGIN'
-curl -fsS -D - -o /dev/null "$base/" | grep -qi '^x-content-type-options: nosniff'
-curl -fsS -D - -o /dev/null "$base/" | grep -qi '^referrer-policy: strict-origin-when-cross-origin'
+headers="$(curl -fsS -D - -o /dev/null "$base/")"
+grep -qi '^x-frame-options: SAMEORIGIN' <<<"$headers"
+grep -qi '^x-content-type-options: nosniff' <<<"$headers"
+grep -qi '^referrer-policy: strict-origin-when-cross-origin' <<<"$headers"
 echo "ok   global HTTP security headers"
 token="$(docker exec "$name" cat /data/access.token)"
 check 200 "releases store responds" -H "Authorization: Bearer $token" "$base/api/releases"
