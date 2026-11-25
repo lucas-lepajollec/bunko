@@ -59,8 +59,12 @@
   color-scheme: dark;
   --app-safe-top: env(safe-area-inset-top, 0px);
   --app-safe-bottom: env(safe-area-inset-bottom, 0px);
-  --app-tabbar-bottom: calc(var(--app-safe-bottom) + 8px);
-  --app-tabbar-height: 56px;
+  /* Phones with rounded screens (a home indicator below): the bar sits as far from the sides as
+     from the bottom, just above the indicator, so its round ends follow the screen's corners.
+     Square screens keep a 12px margin. */
+  --app-tabbar-inset: clamp(12px, var(--app-safe-bottom), 22px);
+  --app-tabbar-bottom: var(--app-tabbar-inset);
+  --app-tabbar-height: max(56px, calc(var(--app-tabbar-inset) + 42px));
   --app-tabbar-edge: calc(var(--app-tabbar-bottom) + var(--app-tabbar-height));
   --accent: #e2dbd0;
   /* The theme's own colour (themes/tones); the default theme stays neutral. */
@@ -307,23 +311,53 @@ input[type='search']::-webkit-search-cancel-button {
   font-weight: 700;
 }
 .app-tabbar {
-  right: max(12px, env(safe-area-inset-right));
+  right: max(var(--app-tabbar-inset), env(safe-area-inset-right));
   bottom: var(--app-tabbar-bottom);
-  left: max(12px, env(safe-area-inset-left));
+  left: max(var(--app-tabbar-inset), env(safe-area-inset-left));
   height: var(--app-tabbar-height);
-  background: color-mix(in srgb, var(--color-panel) 92%, transparent);
+  /* Frosted like the desktop pill: one small fixed layer, cheap enough for phones. */
+  background: color-mix(in srgb, var(--color-panel) 72%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
 }
 .app-tabbar-item {
   display: flex;
-  min-width: 0;
+  min-width: 40px;
   min-height: 44px;
-  flex-direction: column;
+  flex: 1 1 0;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 7px;
+  overflow: hidden;
   border-radius: 9999px;
-  padding: 2px;
+  padding: 0 10px;
   color: var(--color-mid);
-  font-size: 11px;
-  line-height: 1.2;
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+.app-tabbar-item > svg {
+  flex-shrink: 0;
+}
+.app-tabbar-item > span {
+  display: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The open tab takes the width of its name; the others share what is left. */
+.app-tabbar-item[aria-current='page'] {
+  flex: 0 1 auto;
+  padding: 0 16px;
+}
+.app-tabbar-item[aria-current='page'] > span {
+  display: block;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-tabbar-item {
+    transition: none;
+  }
 }
