@@ -1,4 +1,5 @@
 'use client';
+import { PASSWORD_MAX, PASSWORD_MIN, USERNAME_PATTERN } from '@/domain/account-rules';
 import { setVideoServer } from '@/i18n/video-server';
 import { SlidingHighlight } from './sliding-highlight';
 import { TypesPanel, UniverseMenu, UniverseTab, activeLabel } from './universe-switch';
@@ -225,6 +226,8 @@ function AuthScreen({
             required
             minLength={setup ? 3 : 1}
             maxLength={40}
+            pattern={setup ? USERNAME_PATTERN.source : undefined}
+            title={setup ? t('auth.usernameRule') : undefined}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             className={cx(field, 'h-12 text-base')}
@@ -236,8 +239,8 @@ function AuthScreen({
             type="password"
             autoComplete={setup ? 'new-password' : 'current-password'}
             required
-            minLength={setup ? 10 : 1}
-            maxLength={200}
+            minLength={setup ? PASSWORD_MIN : 1}
+            maxLength={PASSWORD_MAX}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className={cx(field, 'h-12 text-base')}
@@ -950,64 +953,35 @@ function TabBar() {
   const { t } = useI18n();
   const pathname = usePathname();
   return (
-    <div className="app-tabbar-wrap pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center md:hidden">
-      <nav
-        aria-label={t('nav.label')}
-        className="app-tabbar app-tabbar-glass pointer-events-auto relative grid w-full max-w-[420px] auto-cols-fr grid-flow-col items-center gap-0.5 rounded-full p-1.5"
-      >
-        <UniverseTab />
-        {TABS.map((tab) => {
-          const active = isActive(pathname, tab.href);
-          if (tab.href === '/search')
-            return (
-              <button
-                key={tab.href}
-                type="button"
-                onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
-                className="app-tabbar-item text-muted"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  <path d={tab.icon} />
-                </svg>
-                <span className="max-w-full truncate">{t(tab.key)}</span>
-              </button>
-            );
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              aria-current={active ? 'page' : undefined}
-              className={cx('app-tabbar-item', active ? 'text-white' : 'text-muted')}
-            >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d={tab.icon} />
-              </svg>
-              <span className="max-w-full truncate">{t(tab.key)}</span>
-            </Link>
-          );
-        })}
-      </nav>
-    </div>
+    <nav
+      aria-label={t('nav.label')}
+      className="app-tabbar border-line bg-panel fixed inset-x-0 bottom-0 z-40 grid auto-cols-fr grid-flow-col gap-1 border-t md:hidden"
+    >
+      <UniverseTab />
+      {TABS.map((tab) => (
+        <Link
+          key={tab.href}
+          href={tab.href}
+          aria-current={isActive(pathname, tab.href) ? 'page' : undefined}
+          className="app-tabbar-item"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d={tab.icon} />
+          </svg>
+          <span className="max-w-full truncate">{t(tab.key)}</span>
+        </Link>
+      ))}
+    </nav>
   );
 }
 

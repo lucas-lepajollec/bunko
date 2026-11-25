@@ -1,4 +1,5 @@
 'use client';
+import { PASSWORD_MAX, PASSWORD_MIN, USERNAME_PATTERN } from '@/domain/account-rules';
 import { Select } from '@/components/select';
 import { clearPersistentCache } from '@/lib/client/cache';
 import Link from 'next/link';
@@ -13,6 +14,7 @@ import type {
   MyAccountPatch,
   UserAccount,
   UserCreate,
+  UserDelete,
   UserPatch,
   UserRole,
   KavitaLibrary,
@@ -1590,7 +1592,9 @@ function Account() {
             onChange={(e) => setNewName(e.target.value)}
             placeholder={auth.data?.username ?? ''}
             minLength={3}
-            maxLength={64}
+            maxLength={40}
+            pattern={USERNAME_PATTERN.source}
+            title={t('auth.usernameRule')}
             autoComplete="username"
             aria-label={t('account.rename')}
             className={field}
@@ -1651,8 +1655,8 @@ function Account() {
               <input
                 type="password"
                 required
-                minLength={key === 'current' ? 1 : 10}
-                maxLength={200}
+                minLength={key === 'current' ? 1 : PASSWORD_MIN}
+                maxLength={PASSWORD_MAX}
                 autoComplete={ac}
                 value={value}
                 onChange={(e) => set(e.target.value)}
@@ -1751,6 +1755,10 @@ function Users() {
                   const username = window
                     .prompt(t('users.renamePrompt', { name: u.username }), u.username)
                     ?.trim();
+                  if (username && !USERNAME_PATTERN.test(username)) {
+                    toast({ tone: 'bad', text: t('auth.usernameRule') });
+                    return;
+                  }
                   if (username && username !== u.username)
                     void act(
                       async () => {
@@ -1772,6 +1780,13 @@ function Users() {
                 disabled={busy}
                 onClick={() => {
                   const password = window.prompt(t('users.resetPrompt', { name: u.username }));
+                  if (
+                    password &&
+                    (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX)
+                  ) {
+                    toast({ tone: 'bad', text: t('auth.passwordRule') });
+                    return;
+                  }
                   if (password)
                     void act(
                       () => send('/api/users', 'PATCH', { id: u.id, password } satisfies UserPatch),
@@ -1816,7 +1831,14 @@ function Users() {
                   disabled={busy}
                   onClick={() =>
                     window.confirm(t('users.deleteConfirm', { name: u.username })) &&
-                    act(() => send('/api/users', 'DELETE', { id: u.id }), t('users.deleted'))
+                    act(
+                      () =>
+                        send('/api/users', 'DELETE', {
+                          id: u.id,
+                          confirmDeleteData: true,
+                        } satisfies UserDelete),
+                      t('users.deleted'),
+                    )
                   }
                   className="text-bad h-9 rounded-full px-3 hover:bg-white/[0.06]"
                 >
@@ -1842,7 +1864,9 @@ function Users() {
             <input
               required
               minLength={3}
-              maxLength={64}
+              maxLength={40}
+              pattern={USERNAME_PATTERN.source}
+              title={t('auth.usernameRule')}
               autoComplete="off"
               value={draft.username}
               onChange={(e) => setDraft((d) => ({ ...d, username: e.target.value }))}
@@ -1854,8 +1878,8 @@ function Users() {
             <input
               type="password"
               required
-              minLength={10}
-              maxLength={200}
+              minLength={PASSWORD_MIN}
+              maxLength={PASSWORD_MAX}
               autoComplete="new-password"
               value={draft.password}
               onChange={(e) => setDraft((d) => ({ ...d, password: e.target.value }))}

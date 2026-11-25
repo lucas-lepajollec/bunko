@@ -1714,7 +1714,12 @@ export interface UserCreate {
   /** Optional initial permissions for members (defaults to `['downloads', 'translate']`). */
   permissions?: Permission[];
 }
-/** PATCH /api/users (admin): change role or set a new password; DELETE /api/users {id}. */
+/** DELETE /api/users (admin), after confirming deletion of the account and its data. */
+export interface UserDelete {
+  id: number;
+  confirmDeleteData: true;
+}
+/** PATCH /api/users (admin). */
 export interface UserPatch {
   id: number;
   role?: UserRole;
