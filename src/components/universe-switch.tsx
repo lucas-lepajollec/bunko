@@ -84,7 +84,7 @@ export function UniverseMenu() {
     );
   };
   return (
-    <div ref={root} className="relative hidden md:block">
+    <div ref={root} className="relative hidden desktop-nav:block">
       {/* Looks like the other header links; the panel opens on click or keyboard. */}
       <button
         type="button"

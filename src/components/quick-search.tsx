@@ -11,6 +11,7 @@ import { ArrowLeft, X } from 'lucide-react';
 import { useLook } from '@/lib/client/theme';
 
 export const OPEN_SEARCH_EVENT = 'bunko:open-search';
+export const DESKTOP_NAV_QUERY = '(min-width: 48rem) and (min-height: 30rem)';
 /** Pages whose own content the search field filters. */
 const SCOPES: Record<string, 'library' | 'planning'> = {
   '/library': 'library',
@@ -90,7 +91,7 @@ export function QuickSearch({
   useEffect(() => {
     // Ciné opens its navigation bar from tablets up; the default look its inline field on wide
     // screens. Smaller screens get the full-screen overlay.
-    const wide = look === 'cine' ? '(min-width: 768px)' : '(min-width: 1280px)';
+    const wide = look === 'cine' ? DESKTOP_NAV_QUERY : '(min-width: 1280px)';
     const onOpen = () => {
       if (variant === 'bar') return;
       if (variant === 'overlay' && window.matchMedia(wide).matches) return;
@@ -357,8 +358,8 @@ export function QuickSearch({
       aria-modal="true"
       aria-label={t('nav.search')}
       className={cx(
-        'bg-bg fixed inset-0 z-50 flex flex-col px-4 pt-4',
-        look === 'cine' ? 'md:hidden' : 'xl:hidden',
+        'bg-bg fixed inset-0 z-50 flex flex-col pt-[calc(1rem+var(--app-safe-top))] pr-[max(1rem,env(safe-area-inset-right))] pb-[var(--app-safe-bottom)] pl-[max(1rem,env(safe-area-inset-left))]',
+        look === 'cine' ? 'desktop-nav:hidden' : 'xl:hidden',
       )}
     >
       <div className="flex items-center gap-2">
