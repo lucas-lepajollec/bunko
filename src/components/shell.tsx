@@ -23,7 +23,7 @@ import { I18nProvider, useI18n } from '@/i18n/I18nProvider';
 import { UI_LANGUAGES, type UiLanguage } from '@/i18n/messages';
 import { UNAUTHORIZED_EVENT, send, useApi, batchesInterval } from '@/lib/client/api';
 import { cx, errorText, field, primaryButton, Skeleton } from './ui';
-import { OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
+import { DESKTOP_NAV_QUERY, OPEN_SEARCH_EVENT, QuickSearch } from './quick-search';
 import { ActivityBell, ActivityCenter, ActivityPanel } from './activity';
 import { Toaster } from './notify';
 import { ScrollMemory } from './scroll-memory';
@@ -69,7 +69,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   // A neutral frame while the session is checked: no private data, but no blank page either.
   if (isLoading)
     return (
-      <div className="min-h-dvh" aria-busy="true">
+      <div className="min-h-dvh pt-[var(--app-safe-top)]" aria-busy="true">
         <div className="flex h-14 items-center gap-2.5 px-4 text-white md:h-20 md:px-[max(2.5rem,calc((100%-1760px)/2+2.5rem))]">
           <Logo />
           <span className="font-display text-[19px] font-extrabold tracking-[-0.03em] md:text-[21px]">
@@ -108,7 +108,9 @@ function AuthGate({ children }: { children: ReactNode }) {
       <Suspense>
         <ScrollMemory />
       </Suspense>
-      <div className="pb-24 md:pb-0">{children}</div>
+      <div className="pt-[var(--app-safe-top)] pb-[calc(var(--app-tabbar-edge)+1.5rem)] desktop-nav:pb-0">
+        {children}
+      </div>
       <TabBar />
       <Toaster />
       {isDemoMode() && <DemoExperience />}
@@ -205,7 +207,7 @@ function AuthScreen({
         // A radial gradient looks like a blurred glow without a costly blur filter.
         className="absolute -top-40 -left-40 size-[620px] bg-[radial-gradient(closest-side,rgba(122,162,255,0.09),transparent)]"
       />
-      <div className="absolute top-4 right-4">
+      <div className="absolute top-[calc(var(--app-safe-top)+1rem)] right-[max(1rem,env(safe-area-inset-right))]">
         <LanguageSelect />
       </div>
       <form onSubmit={submit} className="relative flex w-full max-w-md flex-col gap-5">
@@ -360,11 +362,10 @@ function CineHeader() {
   }
   useEffect(() => {
     // Ctrl+K and the other "search" entry points open the bar on tablets and up.
-    const onOpen = () => window.matchMedia('(min-width: 768px)').matches && setSearching(true);
+    const onOpen = () => window.matchMedia(DESKTOP_NAV_QUERY).matches && setSearching(true);
     window.addEventListener(OPEN_SEARCH_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_SEARCH_EVENT, onOpen);
   }, []);
-  const pill = 'h-[50px] rounded-full border border-white/12 bg-white/[0.07] backdrop-blur-xl';
   const tool =
     'relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.1]';
   const {
@@ -384,14 +385,14 @@ function CineHeader() {
     <header
       ref={header}
       data-solid={solid}
-      className="app-header fixed inset-x-0 top-0 z-40 grid h-16 grid-cols-[1fr_auto] items-center gap-4 px-4 md:h-24 md:grid-cols-[1fr_auto_1fr] md:px-[max(2.5rem,calc((100%-1760px)/2+2.5rem))]"
+      className="app-header fixed inset-x-0 top-0 z-40 grid grid-cols-[1fr_auto] items-center gap-4 [--app-header-height:4rem] desktop-nav:grid-cols-[1fr_auto_1fr] desktop-nav:[--app-header-height:6rem]"
     >
       {/* Over the page: a blur that fades out downwards (no bar, no edge), shown once scrolled;
           before that, a light shade for the artwork. */}
       <div
         aria-hidden
         data-on={solid}
-        className="header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-[86px] md:h-32"
+        className="header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-[calc(100%+22px)] desktop-nav:h-[calc(100%+32px)]"
       >
         <span />
         <span />
@@ -400,7 +401,7 @@ function CineHeader() {
       <div
         aria-hidden
         className={cx(
-          'pointer-events-none absolute inset-x-0 top-0 -z-10 h-28 bg-gradient-to-b from-black/50 to-transparent transition-opacity duration-500 ease-out md:h-36',
+          'pointer-events-none absolute inset-x-0 top-0 -z-10 h-[calc(100%+48px)] bg-gradient-to-b from-black/50 to-transparent transition-opacity duration-500 ease-out',
           solid ? 'opacity-0' : 'opacity-100',
         )}
       />
@@ -419,7 +420,7 @@ function CineHeader() {
             aria-expanded={menuOpen === 'types'}
             onClick={() => toggle('types')}
             className={cx(
-              'hidden h-[50px] items-center gap-2 rounded-full border px-5 text-[15px] backdrop-blur-xl transition-colors md:flex',
+              'hidden h-[50px] items-center gap-2 rounded-full border px-5 text-[15px] backdrop-blur-xl transition-colors desktop-nav:flex',
               menuOpen === 'types'
                 ? 'border-white/25 bg-white/[0.14] text-white'
                 : 'text-mid border-white/12 bg-white/[0.07] hover:text-white',
@@ -440,8 +441,7 @@ function CineHeader() {
       <nav
         aria-label={t('nav.label')}
         className={cx(
-          pill,
-          'relative hidden items-center gap-0.5 p-1 text-[14px] md:flex lg:text-[15px]',
+          'app-nav-pill relative hidden h-[50px] items-center gap-0.5 p-1 text-[14px] backdrop-blur-xl desktop-nav:flex lg:text-[15px]',
           searching && 'w-[min(640px,calc(100vw-560px))] min-w-[380px]',
         )}
       >
@@ -455,12 +455,7 @@ function CineHeader() {
                 key={n.href}
                 href={n.href}
                 aria-current={isActive(pathname, n.href) ? 'page' : undefined}
-                className={cx(
-                  'rounded-full px-3.5 py-2.5 transition-colors lg:px-4',
-                  isActive(pathname, n.href)
-                    ? 'bg-white font-bold text-[#070b10]'
-                    : 'text-mid hover:text-white',
-                )}
+                className="text-mid rounded-full px-3.5 py-2.5 transition-colors hover:text-white lg:px-4"
               >
                 {t(n.key)}
               </Link>
@@ -478,7 +473,7 @@ function CineHeader() {
           </>
         )}
       </nav>
-      <div className="flex items-center justify-self-end md:h-[50px] md:rounded-full md:border md:border-white/12 md:bg-white/[0.07] md:px-1 md:backdrop-blur-xl">
+      <div className="flex items-center justify-self-end desktop-nav:h-[50px] desktop-nav:rounded-full desktop-nav:border desktop-nav:border-white/12 desktop-nav:bg-white/[0.07] desktop-nav:px-1 desktop-nav:backdrop-blur-xl">
         <span ref={bell} className="flex">
           <ActivityBell open={menuOpen === 'activity'} onClick={() => toggle('activity')} />
         </span>
@@ -486,7 +481,7 @@ function CineHeader() {
           type="button"
           aria-label={t('nav.search')}
           onClick={() => window.dispatchEvent(new Event(OPEN_SEARCH_EVENT))}
-          className={cx(tool, 'md:hidden')}
+          className={cx(tool, 'desktop-nav:hidden')}
         >
           <SearchIcon size={20} />
         </button>
@@ -497,7 +492,7 @@ function CineHeader() {
               ? t('nav.downloadsActive', { count: activity.active })
               : t('nav.downloads')
           }
-          className="hidden md:flex"
+          className="hidden desktop-nav:flex"
         >
           <DownloadIcon />
           {activity.active > 0 && (
@@ -513,17 +508,17 @@ function CineHeader() {
               ? t('nav.sourcesUpdates', { count: activity.updates })
               : t('nav.sources')
           }
-          className="hidden md:flex"
+          className="hidden desktop-nav:flex"
         >
           <PuzzleIcon />
           {activity.updates > 0 && (
             <span className="bg-warn absolute top-2.5 right-2.5 size-2 rounded-full" />
           )}
         </IconLink>
-        <IconLink href="/profile" label={t('profile.title')} className="hidden md:flex">
+        <IconLink href="/profile" label={t('profile.title')} className="hidden desktop-nav:flex">
           <UserRound className="size-[19px]" aria-hidden />
         </IconLink>
-        <IconLink href="/settings" label={t('nav.settings')} className="hidden md:flex">
+        <IconLink href="/settings" label={t('nav.settings')} className="hidden desktop-nav:flex">
           <SlidersIcon />
         </IconLink>
         <MobileMenu />
@@ -692,7 +687,7 @@ function HeaderPanel({
           ref={content}
           key={shown}
           className="header-panel-content flex flex-col"
-          style={{ maxHeight: 'min(76vh, calc(100dvh - 120px))' }}
+          style={{ maxHeight: 'min(76vh, calc(100dvh - 120px - var(--app-safe-top)))' }}
         >
           {shown === 'types' ? <TypesPanel onDone={onClose} /> : <ActivityPanel />}
         </div>
@@ -712,7 +707,7 @@ function DefaultHeader() {
       className={cx(
         'app-header',
         // Content aligns with the 1760px page column on wide screens; no hard edge under the bar.
-        'fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-6 px-4 transition-[background-color,backdrop-filter] duration-300 md:h-20 md:gap-5 xl:gap-11 md:px-[max(2.5rem,calc((100%-1760px)/2+2.5rem))]',
+        'fixed inset-x-0 top-0 z-40 flex items-center gap-6 transition-[background-color,backdrop-filter] duration-300 [--app-header-height:3.5rem] md:gap-5 desktop-nav:[--app-header-height:5rem] xl:gap-11',
         solid ? 'bg-bg/90 backdrop-blur-md' : 'bg-gradient-to-b from-black/45 to-transparent',
       )}
     >
@@ -725,7 +720,7 @@ function DefaultHeader() {
       <UniverseMenu />
       <nav
         aria-label={t('nav.label')}
-        className="app-nav hidden gap-4 text-[13px] md:flex xl:gap-7 xl:text-[15px]"
+        className="app-nav hidden gap-4 text-[13px] desktop-nav:flex xl:gap-7 xl:text-[15px]"
       >
         {NAV.map((n) => (
           <Link
@@ -759,7 +754,7 @@ function DefaultHeader() {
               ? t('nav.downloadsActive', { count: activity.active })
               : t('nav.downloads')
           }
-          className="hidden md:flex"
+          className="hidden desktop-nav:flex"
         >
           <DownloadIcon />
           {activity.active > 0 && (
@@ -775,17 +770,17 @@ function DefaultHeader() {
               ? t('nav.sourcesUpdates', { count: activity.updates })
               : t('nav.sources')
           }
-          className="hidden md:flex"
+          className="hidden desktop-nav:flex"
         >
           <PuzzleIcon />
           {activity.updates > 0 && (
             <span className="bg-warn absolute top-2.5 right-2.5 size-2 rounded-full" />
           )}
         </IconLink>
-        <IconLink href="/profile" label={t('profile.title')} className="hidden md:flex">
+        <IconLink href="/profile" label={t('profile.title')} className="hidden desktop-nav:flex">
           <UserRound className="size-[19px]" aria-hidden />
         </IconLink>
-        <IconLink href="/settings" label={t('nav.settings')} className="hidden md:flex">
+        <IconLink href="/settings" label={t('nav.settings')} className="hidden desktop-nav:flex">
           <SlidersIcon />
         </IconLink>
         <MobileMenu />
@@ -823,7 +818,7 @@ function MobileMenu() {
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger
         aria-label={t('nav.menu')}
-        className="relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08] md:hidden"
+        className="relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08] desktop-nav:hidden"
       >
         <Menu className="size-5" aria-hidden />
         {badge > 0 && (
@@ -955,7 +950,7 @@ function TabBar() {
   return (
     <nav
       aria-label={t('nav.label')}
-      className="app-tabbar border-line bg-panel fixed inset-x-0 bottom-0 z-40 grid auto-cols-fr grid-flow-col gap-1 border-t md:hidden"
+      className="app-nav-pill app-tabbar fixed z-40 mx-auto grid max-w-[420px] auto-cols-fr grid-flow-col gap-1 p-1 desktop-nav:hidden"
     >
       <UniverseTab />
       {TABS.map((tab) => (

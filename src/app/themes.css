@@ -164,10 +164,8 @@
     transition: none;
   }
 }
-:root[data-theme='cine'] .app-tabbar-item[aria-current='page'] {
-  border-radius: 9999px;
-  background: var(--color-fg);
-  color: var(--color-bg);
+:root[data-theme='cine'] .app-nav-pill a[aria-current='page'] {
+  background: white;
 }
 
 /* ───────────────────────── Controls ───────────────────────── */

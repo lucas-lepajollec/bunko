@@ -238,8 +238,11 @@
   .bk-demo-inner {
     padding: 20px 18px 18px;
   }
+}
+
+@media (width < 48rem) or (height < 30rem) {
   .bk-demo-chip {
-    right: 12px;
-    bottom: calc(max(6px, env(safe-area-inset-bottom)) + 64px);
+    right: max(12px, env(safe-area-inset-right));
+    bottom: calc(var(--app-tabbar-edge) + 12px);
   }
 }

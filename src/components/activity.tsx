@@ -373,7 +373,7 @@ export function ActivityCenter() {
     <div ref={root} className="relative">
       <ActivityBell open={open} onClick={() => setOpen((o) => !o)} />
       {open && (
-        <div className="ui-panel anim-pop border-line fixed inset-x-3 top-[68px] z-50 flex max-h-[calc(100dvh-68px-7rem-env(safe-area-inset-bottom))] touch-pan-y flex-col overflow-hidden rounded-[22px] border bg-panel text-sm shadow-[0_24px_60px_rgba(0,0,0,0.55)] md:absolute md:inset-x-auto md:top-full md:right-0 md:mt-3 md:max-h-[min(76vh,calc(100dvh-110px))] md:w-[440px]">
+        <div className="ui-panel anim-pop border-line fixed top-[calc(68px+var(--app-safe-top))] right-[max(12px,env(safe-area-inset-right))] left-[max(12px,env(safe-area-inset-left))] z-50 flex max-h-[calc(100dvh-68px-7rem-var(--app-safe-top)-var(--app-safe-bottom))] touch-pan-y flex-col overflow-hidden rounded-[22px] border bg-panel text-sm shadow-[0_24px_60px_rgba(0,0,0,0.55)] desktop-nav:absolute desktop-nav:inset-x-auto desktop-nav:top-full desktop-nav:right-0 desktop-nav:mt-3 desktop-nav:max-h-[min(76vh,calc(100dvh-110px))] desktop-nav:w-[440px]">
           <ActivityPanel />
         </div>
       )}

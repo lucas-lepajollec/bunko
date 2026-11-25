@@ -7,6 +7,13 @@
 @import '@fontsource-variable/dm-sans/index.css';
 @import './themes.css';
 
+/* Keep the compact navigation on phones held in landscape. */
+@custom-variant desktop-nav {
+  @media (min-width: 48rem) and (min-height: 30rem) {
+    @slot;
+  }
+}
+
 /*
  * "Cinéma × Librairie": full-bleed artwork and bold display titles, organised like a bookshop
  * (numbered shelves, serif asides, tables of contents). Chrome stays neutral; colour comes from
@@ -50,6 +57,11 @@
 
 :root {
   color-scheme: dark;
+  --app-safe-top: env(safe-area-inset-top, 0px);
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --app-tabbar-bottom: calc(var(--app-safe-bottom) + 8px);
+  --app-tabbar-height: 56px;
+  --app-tabbar-edge: calc(var(--app-tabbar-bottom) + var(--app-tabbar-height));
   --accent: #e2dbd0;
   /* The theme's own colour (themes/tones); the default theme stays neutral. */
   --tone: #e2dbd0;
@@ -271,24 +283,47 @@ input[type='search']::-webkit-search-cancel-button {
   }
 }
 
+.app-header {
+  --app-header-gutter: 1rem;
+  height: calc(var(--app-header-height) + var(--app-safe-top));
+  padding-top: var(--app-safe-top);
+  padding-left: max(var(--app-header-gutter), env(safe-area-inset-left));
+  padding-right: max(var(--app-header-gutter), env(safe-area-inset-right));
+}
+@media (min-width: 48rem) and (min-height: 30rem) {
+  .app-header {
+    --app-header-gutter: max(2.5rem, calc((100% - 1760px) / 2 + 2.5rem));
+  }
+}
+
+.app-nav-pill {
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.07);
+}
+.app-nav-pill a[aria-current='page'] {
+  background: var(--color-fg);
+  color: var(--color-bg);
+  font-weight: 700;
+}
 .app-tabbar {
-  padding: 6px max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom))
-    max(8px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+  bottom: var(--app-tabbar-bottom);
+  left: max(12px, env(safe-area-inset-left));
+  height: var(--app-tabbar-height);
+  background: color-mix(in srgb, var(--color-panel) 92%, transparent);
 }
 .app-tabbar-item {
   display: flex;
   min-width: 0;
-  min-height: 46px;
+  min-height: 44px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
+  border-radius: 9999px;
   padding: 2px;
   color: var(--color-mid);
   font-size: 11px;
   line-height: 1.2;
-}
-.app-tabbar-item[aria-current='page'] {
-  color: var(--color-fg);
-  font-weight: 700;
 }
