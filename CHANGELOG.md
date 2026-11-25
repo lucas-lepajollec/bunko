@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-25
+
+The phone menu becomes a bubble like the desktop menus, and the type selector returns to the
+bottom bar.
+
+### Changed
+
+- Phone menu (☰): a bubble under the button, like the desktop header menus, instead of a sheet
+  from the bottom. Your name and role at the top, one row per entry with its icon, the current
+  page highlighted, sign out at the bottom. Lists move back into it.
+- The type selector returns to the bottom bar, as its last tab (an icon, lit while its sheet is
+  open, with a dot in 18+ mode). The header keeps the logo and its name on every phone.
+
+### Upgrading
+
+- No schema change. Pull the new image and restart.
+
 ## [1.1.0] - 2026-11-25
 
 Phones get a navigation bar shaped like the desktop one, installed apps respect the screen's

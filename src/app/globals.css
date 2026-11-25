@@ -356,6 +356,11 @@ input[type='search']::-webkit-search-cancel-button {
 .app-tabbar-item[aria-current='page'] > span {
   display: block;
 }
+/* The type picker is not a page: it only lights up while its sheet is open. */
+.app-tabbar-item[data-state='open'] {
+  background: rgb(255 255 255 / 0.14);
+  color: var(--color-fg);
+}
 @media (prefers-reduced-motion: reduce) {
   .app-tabbar-item {
     transition: none;

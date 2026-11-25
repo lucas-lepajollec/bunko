@@ -32,13 +32,13 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  ListOrdered,
   LogOut,
   Menu,
   Newspaper,
   Puzzle,
   Settings2,
   UserRound,
-  X,
 } from 'lucide-react';
 import { clearPersistentCache, persistentCache } from '@/lib/client/cache';
 import { getAmbient, getAmbientColor, subscribeAmbient } from '@/lib/client/ambient';
@@ -404,11 +404,10 @@ function CineHeader() {
           solid ? 'opacity-0' : 'opacity-100',
         )}
       />
-      <div className="flex min-w-0 items-center gap-3 desktop-nav:gap-4 lg:gap-5">
+      <div className="flex min-w-0 items-center gap-4 lg:gap-5">
         <Link href="/" className="app-brand flex shrink-0 items-center gap-2.5 text-white">
           <Logo size={30} />
-          {/* The smallest phones keep the logo alone, so the type pill keeps its name. */}
-          <span className="font-display text-[26px] leading-none max-[379px]:hidden md:text-[30px]">
+          <span className="font-display text-[26px] leading-none md:text-[30px]">
             {PRODUCT_NAME}
           </span>
         </Link>
@@ -437,7 +436,6 @@ function CineHeader() {
             />
           </button>
         )}
-        <UniverseTab />
       </div>
       <nav
         aria-label={t('nav.label')}
@@ -708,18 +706,17 @@ function DefaultHeader() {
       className={cx(
         'app-header',
         // Content aligns with the 1760px page column on wide screens; no hard edge under the bar.
-        'fixed inset-x-0 top-0 z-40 flex items-center gap-3 transition-[background-color,backdrop-filter] duration-300 [--app-header-height:3.5rem] md:gap-5 desktop-nav:[--app-header-height:5rem] xl:gap-11',
+        'fixed inset-x-0 top-0 z-40 flex items-center gap-6 transition-[background-color,backdrop-filter] duration-300 [--app-header-height:3.5rem] md:gap-5 desktop-nav:[--app-header-height:5rem] xl:gap-11',
         solid ? 'bg-bg/90 backdrop-blur-md' : 'bg-gradient-to-b from-black/45 to-transparent',
       )}
     >
       <Link href="/" className="app-brand flex shrink-0 items-center gap-2.5 text-white">
         <Logo />
-        <span className="font-display text-[19px] font-extrabold tracking-[-0.03em] max-[379px]:hidden md:text-[21px]">
+        <span className="font-display text-[19px] font-extrabold tracking-[-0.03em] md:text-[21px]">
           {PRODUCT_NAME}
         </span>
       </Link>
       <UniverseMenu />
-      <UniverseTab />
       <nav
         aria-label={t('nav.label')}
         className="app-nav hidden gap-4 text-[13px] desktop-nav:flex xl:gap-7 xl:text-[15px]"
@@ -791,13 +788,20 @@ function DefaultHeader() {
   );
 }
 
-/** Phones: one menu for everything that does not fit the tab bar (settings, downloads, sources…). */
+/**
+ * Phones: everything that does not fit the tab bar, in a bubble under the ☰ button, like the
+ * desktop header menus.
+ */
 function MobileMenu() {
   const { t } = useI18n();
   const pathname = usePathname();
   const auth = useApi<AuthState>('/api/auth');
   const { mutate } = useSWRConfig();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const bubble = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  // Measured from the button when the menu opens: the bubble hangs under it, its caret on it.
+  const [anchor, setAnchor] = useState({ top: 58, right: 12, caret: 19 });
   // Navigating closes the menu.
   const [lastPath, setLastPath] = useState(pathname);
   if (lastPath !== pathname) {
@@ -810,16 +814,31 @@ function MobileMenu() {
   const links = [
     { href: '/profile', label: t('profile.title'), Icon: UserRound },
     { href: '/news', label: t('nav.news'), Icon: Newspaper },
+    { href: '/lists', label: t('nav.lists'), Icon: ListOrdered },
     { href: '/downloads', label: t('nav.downloads'), badge, Icon: Download },
     { href: '/sources', label: t('nav.sources'), Icon: Puzzle },
     { href: '/settings', label: t('nav.settings'), Icon: Settings2 },
   ];
   const name = auth.data?.username ?? '';
+  const row = 'flex min-h-12 items-center gap-3 rounded-2xl px-2.5 text-[15.5px]';
+  const tile = 'flex size-[34px] shrink-0 items-center justify-center rounded-[11px]';
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Root
+      open={open}
+      onOpenChange={(next) => {
+        const box = trigger.current?.getBoundingClientRect();
+        if (next && box) {
+          const right = Math.max(8, window.innerWidth - box.right - 4);
+          const caret = window.innerWidth - (box.left + box.width / 2) - right;
+          setAnchor({ top: box.bottom + 6, right, caret });
+        }
+        setOpen(next);
+      }}
+    >
       <Dialog.Trigger
+        ref={trigger}
         aria-label={t('nav.menu')}
-        className="relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08] desktop-nav:hidden"
+        className="relative flex size-11 items-center justify-center rounded-full text-white hover:bg-white/[0.08] data-[state=open]:bg-white/[0.14] desktop-nav:hidden"
       >
         <Menu className="size-5" aria-hidden />
         {badge > 0 && (
@@ -830,70 +849,104 @@ function MobileMenu() {
         )}
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="sheet-overlay fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px]" />
-        {/* A sheet from the bottom, as on phones' own menus: reachable with the thumb. */}
-        <Dialog.Content className="ui-panel sheet-mobile fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] flex-col gap-4 overflow-y-auto rounded-t-[28px] bg-panel px-4 pt-2.5 pb-[max(env(safe-area-inset-bottom),16px)] outline-none">
-          <span aria-hidden className="mx-auto h-1 w-9 rounded-full bg-white/20" />
-          <div className="flex items-center gap-3 px-1">
-            <span
-              aria-hidden
-              className="bg-fg text-bg flex size-11 shrink-0 items-center justify-center rounded-full text-lg font-bold uppercase"
-            >
-              {name.slice(0, 1) || '·'}
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col">
-              <Dialog.Title className="truncate text-[17px] font-semibold">
-                {name || PRODUCT_NAME}
-              </Dialog.Title>
-              <Dialog.Description className="text-muted text-[13px]">
-                {auth.data?.role ? t(`users.role.${auth.data.role}`) : PRODUCT_NAME}
-              </Dialog.Description>
-            </span>
-            <Dialog.Close
-              aria-label={t('common.close')}
-              className="text-mid flex size-9 items-center justify-center rounded-full bg-white/[0.07] hover:text-white"
-            >
-              <X className="size-4" aria-hidden />
-            </Dialog.Close>
-          </div>
-          <nav
-            className="flex flex-col overflow-hidden rounded-2xl bg-white/[0.05]"
-            aria-label={t('nav.menu')}
+        <Dialog.Overlay className="sheet-overlay fixed inset-0 z-50 bg-black/35" />
+        <Dialog.Content
+          ref={bubble}
+          onOpenAutoFocus={(e) => {
+            // Opened by touch: no focus ring on the first entry, keyboard users tab from here.
+            e.preventDefault();
+            bubble.current?.focus();
+          }}
+          className="ui-panel mobile-menu fixed z-50 flex w-[min(366px,calc(100vw-24px))] flex-col rounded-[24px] border border-white/10 bg-panel outline-none"
+          style={{
+            top: anchor.top,
+            right: anchor.right,
+            maxHeight: `calc(100dvh - ${anchor.top}px - var(--app-tabbar-edge) - 12px)`,
+            transformOrigin: `calc(100% - ${anchor.caret}px) top`,
+          }}
+        >
+          <svg
+            aria-hidden
+            width="14"
+            height="7"
+            viewBox="0 0 14 7"
+            className="pointer-events-none absolute -top-[7px] block"
+            style={{ right: anchor.caret - 8 }}
           >
-            {links.map(({ href, label, Icon, ...l }) => (
-              <Link
-                key={href}
-                href={href}
-                aria-current={isActive(pathname, href) ? 'page' : undefined}
-                className={cx(
-                  'border-line flex min-h-[52px] items-center gap-3.5 border-b px-4 text-[16px] last:border-b-0 active:bg-white/[0.06]',
-                  isActive(pathname, href) ? 'font-semibold text-white' : 'text-white/85',
-                )}
+            <path
+              d="M0 7 L6.2 0.8 Q7 0 7.8 0.8 L14 7 Z"
+              fill="color-mix(in oklab, var(--color-panel) 96%, transparent)"
+            />
+            <path
+              d="M0.5 7 L6.2 1.3 Q7 0.5 7.8 1.3 L13.5 7"
+              fill="none"
+              stroke="rgba(255,255,255,0.1)"
+              strokeWidth="1"
+            />
+          </svg>
+          <div className="flex min-h-0 flex-col overflow-y-auto overscroll-contain rounded-[24px]">
+            <div className="flex items-center gap-3 px-[18px] pt-4 pb-3">
+              <span
+                aria-hidden
+                className="bg-fg text-bg flex size-10 shrink-0 items-center justify-center rounded-full text-[17px] font-bold uppercase"
               >
-                <Icon className="text-mid size-[19px] shrink-0" aria-hidden />
-                <span className="flex-1">{label}</span>
-                {'badge' in l && Boolean(l.badge) && (
-                  <span className="bg-fg text-bg flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold">
-                    {l.badge}
+                {name.slice(0, 1) || '·'}
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <Dialog.Title className="truncate text-[17px] font-bold">
+                  {name || PRODUCT_NAME}
+                </Dialog.Title>
+                <Dialog.Description className="text-muted text-[12.5px]">
+                  {auth.data?.role ? t(`users.role.${auth.data.role}`) : PRODUCT_NAME}
+                </Dialog.Description>
+              </span>
+            </div>
+            <nav className="flex flex-col gap-0.5 px-3 pb-2" aria-label={t('nav.menu')}>
+              {links.map(({ href, label, Icon, ...l }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-current={isActive(pathname, href) ? 'page' : undefined}
+                  className={cx(
+                    row,
+                    'active:bg-white/[0.06]',
+                    isActive(pathname, href)
+                      ? 'bg-white/[0.08] font-semibold text-white'
+                      : 'text-white/85',
+                  )}
+                >
+                  <span aria-hidden className={cx(tile, 'text-mid bg-white/[0.06]')}>
+                    <Icon className="size-[18px]" />
                   </span>
-                )}
-                <ChevronRight className="text-muted size-4 shrink-0" aria-hidden />
-              </Link>
-            ))}
-          </nav>
-          <button
-            type="button"
-            onClick={async () => {
-              await send('/api/auth', 'DELETE').catch(() => undefined);
-              clearPersistentCache();
-              setOpen(false);
-              await mutate('/api/auth');
-            }}
-            className="text-bad flex min-h-[52px] items-center gap-3.5 rounded-2xl bg-white/[0.05] px-4 text-[16px] active:bg-white/[0.08]"
-          >
-            <LogOut className="size-[19px] shrink-0" aria-hidden />
-            {t('settings.signOut')}
-          </button>
+                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  {'badge' in l && Boolean(l.badge) && (
+                    <span className="bg-fg text-bg flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold">
+                      {l.badge}
+                    </span>
+                  )}
+                  <ChevronRight className="text-muted size-4 shrink-0" aria-hidden />
+                </Link>
+              ))}
+            </nav>
+            <span aria-hidden className="bg-line mx-3 h-px shrink-0" />
+            <div className="px-3 pt-2 pb-3">
+              <button
+                type="button"
+                onClick={async () => {
+                  await send('/api/auth', 'DELETE').catch(() => undefined);
+                  clearPersistentCache();
+                  setOpen(false);
+                  await mutate('/api/auth');
+                }}
+                className={cx(row, 'text-bad w-full text-left active:bg-white/[0.06]')}
+              >
+                <span aria-hidden className={cx(tile, 'bg-bad/10')}>
+                  <LogOut className="size-[18px]" />
+                </span>
+                {t('settings.signOut')}
+              </button>
+            </div>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -943,11 +996,6 @@ const TABS = [
     key: 'nav.libraryShort',
     icon: 'M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2Zm4-12h6',
   },
-  {
-    href: '/lists',
-    key: 'nav.lists',
-    icon: 'M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1',
-  },
 ];
 
 function TabBar() {
@@ -958,7 +1006,8 @@ function TabBar() {
       aria-label={t('nav.label')}
       className="app-nav-pill app-tabbar fixed z-40 mx-auto flex max-w-[420px] gap-0.5 p-1 desktop-nav:hidden"
     >
-      {/* Icons only; the current page's tab opens into a white pill with its name. */}
+      {/* Icons only; the current page's tab opens into a white pill with its name. The type
+          picker closes the bar. */}
       {TABS.map((tab) => (
         <Link
           key={tab.href}
@@ -983,6 +1032,7 @@ function TabBar() {
           <span aria-hidden>{t(tab.key)}</span>
         </Link>
       ))}
+      <UniverseTab />
     </nav>
   );
 }

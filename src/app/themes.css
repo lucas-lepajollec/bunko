@@ -332,6 +332,19 @@
 .header-panel-content {
   animation: header-content-in 200ms ease both;
 }
+/* Phone ☰ menu: the same bubble, grown from its button and faded out on close. */
+@keyframes mobile-menu-out {
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+.mobile-menu[data-state='open'] {
+  animation: header-panel-in 180ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.mobile-menu[data-state='closed'] {
+  animation: mobile-menu-out 140ms ease forwards;
+}
 
 /* Player: the source panel slides in (from the right on wide screens, from below on phones). */
 @keyframes sheet-up {
