@@ -47,7 +47,13 @@ export function Backdrop({
   return (
     <div
       aria-hidden
-      className={cx('pointer-events-none absolute inset-x-0 top-0 overflow-hidden', className)}
+      // Reaches up under the status bar of installed apps (the page itself starts below it),
+      // without moving its bottom edge: the artwork fills the top of the screen, with no band.
+      className={cx(
+        'pointer-events-none absolute inset-x-0 box-content overflow-hidden',
+        className,
+      )}
+      style={{ top: 'calc(-1 * var(--app-safe-top))', paddingTop: 'var(--app-safe-top)' }}
     >
       <div
         className="absolute inset-0"

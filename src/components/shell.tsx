@@ -32,7 +32,6 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
-  ListOrdered,
   LogOut,
   Menu,
   Newspaper,
@@ -392,7 +391,7 @@ function CineHeader() {
       <div
         aria-hidden
         data-on={solid}
-        className="header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-[calc(100%+22px)] desktop-nav:h-[calc(100%+32px)]"
+        className="header-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-[calc(100%+32px)]"
       >
         <span />
         <span />
@@ -405,10 +404,11 @@ function CineHeader() {
           solid ? 'opacity-0' : 'opacity-100',
         )}
       />
-      <div className="flex min-w-0 items-center gap-4 lg:gap-5">
+      <div className="flex min-w-0 items-center gap-3 desktop-nav:gap-4 lg:gap-5">
         <Link href="/" className="app-brand flex shrink-0 items-center gap-2.5 text-white">
           <Logo size={30} />
-          <span className="font-display text-[26px] leading-none md:text-[30px]">
+          {/* The smallest phones keep the logo alone, so the type pill keeps its name. */}
+          <span className="font-display text-[26px] leading-none max-[379px]:hidden md:text-[30px]">
             {PRODUCT_NAME}
           </span>
         </Link>
@@ -437,6 +437,7 @@ function CineHeader() {
             />
           </button>
         )}
+        <UniverseTab />
       </div>
       <nav
         aria-label={t('nav.label')}
@@ -707,17 +708,18 @@ function DefaultHeader() {
       className={cx(
         'app-header',
         // Content aligns with the 1760px page column on wide screens; no hard edge under the bar.
-        'fixed inset-x-0 top-0 z-40 flex items-center gap-6 transition-[background-color,backdrop-filter] duration-300 [--app-header-height:3.5rem] md:gap-5 desktop-nav:[--app-header-height:5rem] xl:gap-11',
+        'fixed inset-x-0 top-0 z-40 flex items-center gap-3 transition-[background-color,backdrop-filter] duration-300 [--app-header-height:3.5rem] md:gap-5 desktop-nav:[--app-header-height:5rem] xl:gap-11',
         solid ? 'bg-bg/90 backdrop-blur-md' : 'bg-gradient-to-b from-black/45 to-transparent',
       )}
     >
-      <Link href="/" className="app-brand flex items-center gap-2.5 text-white">
+      <Link href="/" className="app-brand flex shrink-0 items-center gap-2.5 text-white">
         <Logo />
-        <span className="font-display text-[19px] font-extrabold tracking-[-0.03em] md:text-[21px]">
+        <span className="font-display text-[19px] font-extrabold tracking-[-0.03em] max-[379px]:hidden md:text-[21px]">
           {PRODUCT_NAME}
         </span>
       </Link>
       <UniverseMenu />
+      <UniverseTab />
       <nav
         aria-label={t('nav.label')}
         className="app-nav hidden gap-4 text-[13px] desktop-nav:flex xl:gap-7 xl:text-[15px]"
@@ -808,7 +810,6 @@ function MobileMenu() {
   const links = [
     { href: '/profile', label: t('profile.title'), Icon: UserRound },
     { href: '/news', label: t('nav.news'), Icon: Newspaper },
-    { href: '/lists', label: t('nav.lists'), Icon: ListOrdered },
     { href: '/downloads', label: t('nav.downloads'), badge, Icon: Download },
     { href: '/sources', label: t('nav.sources'), Icon: Puzzle },
     { href: '/settings', label: t('nav.settings'), Icon: Settings2 },
@@ -942,6 +943,11 @@ const TABS = [
     key: 'nav.libraryShort',
     icon: 'M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2Zm4-12h6',
   },
+  {
+    href: '/lists',
+    key: 'nav.lists',
+    icon: 'M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1',
+  },
 ];
 
 function TabBar() {
@@ -950,13 +956,14 @@ function TabBar() {
   return (
     <nav
       aria-label={t('nav.label')}
-      className="app-nav-pill app-tabbar fixed z-40 mx-auto grid max-w-[420px] auto-cols-fr grid-flow-col gap-1 p-1 desktop-nav:hidden"
+      className="app-nav-pill app-tabbar fixed z-40 mx-auto flex max-w-[420px] gap-0.5 p-1 desktop-nav:hidden"
     >
-      <UniverseTab />
+      {/* Icons only; the current page's tab opens into a white pill with its name. */}
       {TABS.map((tab) => (
         <Link
           key={tab.href}
           href={tab.href}
+          aria-label={t(tab.key)}
           aria-current={isActive(pathname, tab.href) ? 'page' : undefined}
           className="app-tabbar-item"
         >
@@ -973,7 +980,7 @@ function TabBar() {
           >
             <path d={tab.icon} />
           </svg>
-          <span className="max-w-full truncate">{t(tab.key)}</span>
+          <span aria-hidden>{t(tab.key)}</span>
         </Link>
       ))}
     </nav>

@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-25
+
+Phones get a navigation bar shaped like the desktop one, installed apps respect the screen's
+safe areas, and the public demo shows official artwork.
+
+### Changed
+
+- Phone navigation bar: the desktop pill at the bottom of the screen. Tabs are icons; the
+  current page's tab opens into a white pill with its name. Lists join the bar. On phones with
+  rounded screens the bar sits as far from the sides as from the bottom, just above the home
+  indicator, so its ends follow the screen's corners. It is frosted like the desktop pill.
+- The type selector moves from the bottom bar to the header, as on desktop: a pill next to the
+  logo that opens the types sheet. The smallest phones keep the logo without its name so the
+  pill stays readable.
+- Installed app (PWA) header: the artwork of the home hero and of a work now reaches up under
+  the status bar instead of leaving a band above it, and the shade behind the header covers
+  the whole header row when the page scrolls under it.
+- Installed app safe areas: header, sheets and menus respect the notch and the home
+  indicator; mobile sheets close cleanly on short viewports (#161).
+- Mobile navigation alignment, account deletion asks for confirmation, install icons for iOS
+  and Android (#159, #160).
+
+### Added
+
+- Public demo: official posters and metadata from public catalog APIs (AniList, TVMaze, Open
+  Library, Wikimedia) and refreshed README screenshots (#157, #158).
+
+### Upgrading
+
+- No schema change. Pull the new image and restart; back up `/data` first as usual.
+
 ## [1.0.0] - 2026-11-23
 
 First tagged public release of **Bunko**, bringing unified reading and video discovery, built-in CBZ/EPUB/PDF readers, Jellyfin/Emby/Stash playback with WebGL 2 upscaling, lists/duels/tier lists, hardened self-hosted security defaults, and an isolated serverless public demo.
