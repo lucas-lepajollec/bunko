@@ -395,6 +395,13 @@
   animation: overlay-out 180ms ease-in forwards;
 }
 
+@media (height < 30rem), (prefers-reduced-motion: reduce) {
+  .sheet-mobile[data-state],
+  .sheet-overlay[data-state] {
+    animation: none;
+  }
+}
+
 /* Ciné fields: a quiet glass well, brighter when focused (no dark blue boxes). */
 :root[data-theme='cine'] .ui-field {
   background: rgb(255 255 255 / 0.06);
@@ -456,7 +463,7 @@
 
 /* Phones: menus, sheets, overlays and ambient avoid live GPU blur filters; a full-viewport blurred
    layer behind sheets and page transitions is the costliest thing a phone compositor can draw. */
-@media (max-width: 767px) {
+@media (width < 48rem) or (height < 30rem) {
   :root[data-theme='cine'] .ambient img {
     display: none;
   }
