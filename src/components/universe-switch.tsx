@@ -9,7 +9,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { announceMenu, onMenuOpened } from './select';
 import { Cover, cx } from './ui';
 import { useApi } from '@/lib/client/api';
-import { Check, ChevronDown, Puzzle } from 'lucide-react';
+import { Check, Puzzle } from 'lucide-react';
 import { useLook } from '@/lib/client/theme';
 import { SlidingHighlight } from './sliding-highlight';
 
@@ -217,13 +217,32 @@ export function UniverseTab() {
   if (options.length < 2 && !universe.adultAllowed) return null;
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
-      {/* Phones: the same pill as the desktop header's type button, next to the logo. */}
-      <Dialog.Trigger className="text-mid flex h-9 min-w-0 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.07] px-3.5 text-[14px] transition-colors hover:text-white data-[state=open]:border-white/25 data-[state=open]:bg-white/[0.14] data-[state=open]:text-white desktop-nav:hidden">
-        <span className="min-w-8 truncate">{activeLabel(t, universe)}</span>
+      {/* Phones: the last tab of the bar, an icon like the others; its name says the type shown. */}
+      <Dialog.Trigger
+        aria-label={`${t('universe.label')} · ${activeLabel(t, universe)}${universe.adultMode ? ' · 18+' : ''}`}
+        className="app-tabbar-item relative"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          aria-hidden
+        >
+          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        </svg>
         {universe.adultMode && (
-          <span className="text-warn shrink-0 text-[11px] font-semibold">18+</span>
+          <span
+            aria-hidden
+            className="bg-warn absolute top-2.5 right-[calc(50%-15px)] size-2 rounded-full"
+          />
         )}
-        <ChevronDown className="size-3.5 shrink-0" aria-hidden />
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="sheet-overlay fixed inset-0 z-50 bg-black/70" />
