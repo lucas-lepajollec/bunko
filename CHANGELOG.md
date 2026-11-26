@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Security
+
+- Book pages: script removal now repeats until nothing changes and catches closing tags with
+  attributes, so a crafted EPUB cannot rebuild a `<script>` from the leftovers. The book CSP
+  already blocked scripts; this is defence in depth.
+- Provider synopses and news: nested tags are removed completely, and entities are decoded once
+  (`&amp;lt;` stays the text `&lt;`).
+- The AniList rate limiter matches the exact host instead of a URL prefix, and the inline theme
+  script escapes its JSON.
+
 ## [1.1.5] - 2026-11-26
 
 ### Changed

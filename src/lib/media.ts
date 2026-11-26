@@ -1,4 +1,5 @@
 import type { MediaFormat, MediaType, UnifiedMedia } from '@/types/shared';
+import { decodeEntities, stripTags } from './html-text';
 export function emptyMedia(id: string, title: string, type: MediaType): UnifiedMedia {
   return {
     id,
@@ -128,15 +129,7 @@ export function authorsMatch(left: readonly string[], right: readonly string[]):
 /** Provider synopses carry HTML fragments, entities and trailing source credits. */
 export function cleanSynopsis(value: string | null | undefined): string | null {
   if (!value) return null;
-  const text = value
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&quot;/g, '"')
-    .replace(/&#0?39;|&apos;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&nbsp;/g, ' ')
+  const text = decodeEntities(stripTags(value.replace(/<br\s*\/?>/gi, '\n')))
     .replace(/\n?\s*\((?:source|from)[^)]*\)\s*$/i, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();

@@ -26,8 +26,14 @@ state.observedAt ??= 0;
 
 /** Fixtures fake AniList 429s on purpose: the shared block stays off in tests unless asked. */
 const active = () => !process.env.VITEST || process.env.BUNKO_TEST_ANILIST_LIMIT === '1';
-export const isAniList = (url: string | URL) =>
-  String(url).startsWith('https://graphql.anilist.co');
+export const isAniList = (url: string | URL) => {
+  try {
+    const parsed = new URL(String(url));
+    return parsed.protocol === 'https:' && parsed.host === 'graphql.anilist.co';
+  } catch {
+    return false;
+  }
+};
 
 export function aniListBlockedFor() {
   return Math.max(0, state.blockedUntil - Date.now());

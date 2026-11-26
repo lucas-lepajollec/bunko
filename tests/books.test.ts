@@ -267,6 +267,11 @@ it('leaves helpers safe on hostile input', () => {
   expect(books.stripScripts('<a onclick="x" href="y">z</a><script src="s"/><iframe src="q">')).toBe(
     '<a href="y">z</a>',
   );
+  // A removal must not reassemble a script, and an odd closing tag still closes it.
+  expect(books.stripScripts('<scr<script>x</script>ipt>alert(1)</script >')).not.toMatch(
+    /<script/i,
+  );
+  expect(books.stripScripts('<script>a</script foo="bar">b')).toBe('b');
 });
 
 it('rejects EPUB zip bombs with oversized declared entries or spoofed headers', async () => {

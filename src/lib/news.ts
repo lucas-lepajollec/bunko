@@ -11,6 +11,7 @@ import { readCapped, safeFetch } from './safe-fetch';
 import { getSettings } from './settings';
 import { preferredSourceLanguage } from './source-preferences';
 import { fromTmdb, isAnime, tmdbConfigured, tmdbJson, type TmdbKind } from './tmdb';
+import { decodeEntities, stripTags } from './html-text';
 
 const HOUR = 3600_000;
 const DAY = 24 * HOUR;
@@ -254,16 +255,7 @@ function editionNews(kind: Kind): NewsItem[] {
 }
 
 const stripHtml = (value: string) =>
-  value
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&(?:nbsp|#160);/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#0?39;|&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
-    .trim();
+  decodeEntities(stripTags(value, ' ')).replace(/\s+/g, ' ').trim();
 const child = (node: XmlNode, name: string) => node.children.find((c) => c.name === name);
 const webAddress = (value: string | undefined | null) => {
   if (!value) return null;

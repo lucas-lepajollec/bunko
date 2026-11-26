@@ -31,12 +31,19 @@ export function normalizeTheme(value: unknown): ThemeChoice {
   return { theme: theme.id, tone: tones.includes(v.tone ?? '') ? v.tone! : tones[0] };
 }
 
+/** JSON safe inside an inline <script>: no `</script>`, `<!--` or line separators can end it. */
+const scriptJson = (value: unknown) =>
+  JSON.stringify(value).replace(
+    /[<>/\u2028\u2029]/g,
+    (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'),
+  );
+
 /**
  * Runs before the first paint (inline in the document head) so a page never flashes the other
  * look. Kept dependency-free and in sync with `normalizeTheme` / `applyTheme`.
  */
-export const THEME_BOOT_SCRIPT = `(function(){try{var c=JSON.parse(localStorage.getItem('${THEME_KEY}')||'null');var T=${JSON.stringify(
+export const THEME_BOOT_SCRIPT = `(function(){try{var c=JSON.parse(localStorage.getItem('${THEME_KEY}')||'null');var T=${scriptJson(
   Object.fromEntries(THEMES.map((t) => [t.id, t.tones])),
-)};var S=${JSON.stringify(
+)};var S=${scriptJson(
   Object.fromEntries(THEMES.map((t) => [t.id, t.light ? 'light' : 'dark'])),
 )};var id=c&&T[c.theme]?c.theme:'${DEFAULT_THEME.theme}';var tone=c&&T[id].indexOf(c.tone)>=0?c.tone:T[id][0];var d=document.documentElement;if(id==='bunko'){delete d.dataset.theme;delete d.dataset.tone;}else{d.dataset.theme=id;d.dataset.tone=tone;}d.style.colorScheme=S[id];}catch(e){}})();`;
