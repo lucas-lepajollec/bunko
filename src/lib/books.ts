@@ -399,13 +399,22 @@ const TYPES: Record<string, string> = {
 const BOOK_CSP =
   "default-src 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; media-src 'self'; script-src 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'self'; base-uri 'none'";
 
-/** Removes scripts and inline handlers (the CSP blocks them too). */
+/**
+ * Removes scripts, embeds and inline handlers (the CSP blocks them too). A removed tag leaves a
+ * space, so its neighbours cannot join into a new `<script`; handler removal repeats until
+ * nothing changes for the same reason.
+ */
 export function stripScripts(html: string) {
-  return html
-    .replace(/<script\b[\s\S]*?<\/script\s*>/gi, '')
-    .replace(/<script\b[^>]*\/>/gi, '')
-    .replace(/<(?:iframe|object|embed|base|meta\s+http-equiv)\b[^>]*>/gi, '')
-    .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  let out = html;
+  for (let previous = ''; out !== previous;) {
+    previous = out;
+    out = out
+      .replace(/<script\b[\s\S]*?<\/script\b[^>]*>/gi, ' ')
+      .replace(/<\/?script\b[^>]*>/gi, ' ')
+      .replace(/<(?:iframe|object|embed|base|meta\s+http-equiv)\b[^>]*>/gi, ' ')
+      .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  }
+  return out;
 }
 
 /** One file of an EPUB, or the whole book file when no inner path is given. */

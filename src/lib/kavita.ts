@@ -1,3 +1,4 @@
+import { stripTags } from './html-text';
 import { ownedStock } from './owned-chapters';
 import { registerReaderArchive } from './reader-archives';
 import { chapterVolume } from './chapter-volume';
@@ -57,7 +58,7 @@ export function comicInfo(
     Series: media.title,
     ...(number !== null ? { Number: String(number) } : { Format: 'Special' }),
     Title: title,
-    Summary: (media.synopsis ?? '').replace(/<[^>]+>/g, ''),
+    Summary: stripTags(media.synopsis ?? ''),
     Writer: media.authors.join(', '),
     Genre: media.genres.join(', '),
     Web: media.webUrl ?? '',
