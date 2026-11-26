@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-11-26
+
+### Fixed
+
+- Installed app on iPhone: iOS laid a frosted edge over the top of the app, under the status bar
+  and a little below it, blurring the header and the reader and player titles. An opaque band
+  now sits exactly under the status bar, so iOS tints it with the app's colour instead of
+  blurring what is below.
+
+### Upgrading
+
+- No schema change. Pull the new image and restart.
+
 ## [1.1.2] - 2026-11-26
 
 Installed iPhone apps keep their top controls below the status bar again.
