@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [1.1.5] - 2026-11-26
+
+### Changed
+
+- Phones: the header scrolls away with the page instead of staying on screen over a dark shade.
+  A short fade under the status bar blends the page into it, so content never stops at a hard
+  edge there.
+
+### Upgrading
+
+- No schema change. Pull the new image and restart.
+
 ## [1.1.4] - 2026-11-26
 
 ### Fixed

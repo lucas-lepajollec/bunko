@@ -103,6 +103,7 @@ function AuthGate({ children }: { children: ReactNode }) {
     <>
       <Ambient />
       <Header />
+      <div aria-hidden className="status-fade" />
       <Shortcuts />
       <Suspense>
         <ScrollMemory />

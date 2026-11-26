@@ -300,6 +300,37 @@ input[type='search']::-webkit-search-cancel-button {
   }
 }
 
+/* A soft fade under the status bar, from its colour (theme-color follows --color-bg) into the
+   page, so content never stops at a hard edge there. Phones only. */
+.status-fade {
+  display: none;
+}
+@media (width < 48rem) or (height < 30rem) {
+  /* Phones: the header scrolls away with the page instead of staying over it on a shade. */
+  .app-header {
+    position: absolute;
+  }
+  .app-header[data-solid='true'] {
+    background-color: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .status-fade {
+    display: block;
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 39;
+    height: 28px;
+    pointer-events: none;
+    background: linear-gradient(
+      180deg,
+      var(--color-bg) 0%,
+      color-mix(in oklab, var(--color-bg) 70%, transparent) 40%,
+      transparent 100%
+    );
+  }
+}
+
 .app-nav-pill {
   border: 1px solid rgb(255 255 255 / 0.12);
   border-radius: 9999px;
