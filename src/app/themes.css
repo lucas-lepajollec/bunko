@@ -489,20 +489,9 @@
       ),
       linear-gradient(180deg, transparent 45%, rgb(7 11 16 / 0.65) 100%);
   }
-  .header-fade > span {
+  /* Phones: the header scrolls away with the page, with no shade behind it (globals.css). */
+  .header-fade {
     display: none;
-  }
-  /* Without the blur layers, the shade alone hides what scrolls under the header: even behind
-     the whole header row (status bar included), then a short fade below it. */
-  .header-fade::before {
-    background: linear-gradient(
-      180deg,
-      rgb(5 6 8 / 0.86) 0%,
-      rgb(5 6 8 / 0.8) calc(100% - 52px),
-      rgb(5 6 8 / 0.45) calc(100% - 30px),
-      rgb(5 6 8 / 0.15) calc(100% - 12px),
-      transparent 100%
-    );
   }
   :root[data-theme='cine'] .ui-panel {
     -webkit-backdrop-filter: none;
