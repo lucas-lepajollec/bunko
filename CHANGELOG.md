@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-11-26
+
+### Fixed
+
+- Installed app on iPhone: the blur over the top of every screen is gone. It came from the
+  deprecated `black-translucent` status bar style, which on iOS 26 and later lays a system blur
+  over the top of Home Screen apps (Apple recommends removing it). The status bar is now
+  opaque in the page's colour, and the app starts right below it. The video player and the
+  readers paint it with their own background while they are open. The workarounds from 1.1.2
+  and 1.1.3 (status bar height guess, dark band) are removed.
+
+### Upgrading
+
+- No schema change. Pull the new image and restart. **On iPhone, remove Bunko from the Home
+  Screen and add it again**: iOS only reads the status bar style when the app is added.
+
 ## [1.1.3] - 2026-11-26
 
 ### Fixed

@@ -1,5 +1,5 @@
 'use client';
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import {
   DEFAULT_THEME,
   THEME_KEY,
@@ -43,6 +43,22 @@ export function applyTheme(choice: ThemeChoice) {
   const meta = document.querySelector('meta[name="theme-color"]');
   const bg = getComputedStyle(root).getPropertyValue('--color-bg').trim();
   if (meta && bg) meta.setAttribute('content', bg);
+}
+
+/**
+ * Full-screen views (player, readers) paint the status bar of installed apps and the mobile
+ * browser chrome with their own background while they are open, then give back the page's.
+ */
+export function useStatusBarColor(color: string) {
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) return;
+    const previous = meta.getAttribute('content');
+    meta.setAttribute('content', color);
+    return () => {
+      if (previous) meta.setAttribute('content', previous);
+    };
+  }, [color]);
 }
 
 export function setTheme(next: Partial<ThemeChoice>) {

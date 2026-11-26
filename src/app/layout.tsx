@@ -5,7 +5,6 @@ import { Providers } from '@/components/shell';
 import { PRODUCT_NAME } from '@/lib/client/brand';
 import { isDemoMode } from '@/lib/demo-mode';
 import { THEME_BOOT_SCRIPT } from '@/lib/themes';
-import { SAFE_AREA_BOOT_SCRIPT } from '@/lib/safe-area';
 import './globals.css';
 
 export function generateMetadata(): Metadata {
@@ -19,7 +18,6 @@ export function generateMetadata(): Metadata {
     appleWebApp: {
       capable: true,
       title: PRODUCT_NAME,
-      statusBarStyle: 'black-translucent',
     },
     icons: {
       icon: [
@@ -50,12 +48,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
-        <script dangerouslySetInnerHTML={{ __html: SAFE_AREA_BOOT_SCRIPT }} />
       </head>
       <body className="font-sans">
-        {/* An opaque band under the status bar: iOS then extends its colour there instead of
-            laying its frosted edge over the top of the app (see globals.css). */}
-        <div aria-hidden className="status-bar-cap" />
         <Providers>{children}</Providers>
       </body>
     </html>

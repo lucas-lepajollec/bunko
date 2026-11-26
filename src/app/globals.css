@@ -287,22 +287,6 @@ input[type='search']::-webkit-search-cancel-button {
   }
 }
 
-/*
- * iOS 26 draws a frosted edge over the top of the page, under the status bar and a little
- * below it, wherever the page there is transparent; it blurs the header and the reader and
- * player bars. A fixed, opaque band exactly under the status bar makes iOS use its colour
- * instead (the system's own tinting), so nothing below it is blurred. It has no height where
- * there is no status bar inset.
- */
-.status-bar-cap {
-  position: fixed;
-  inset: 0 0 auto;
-  z-index: 2147483000;
-  height: var(--app-safe-top);
-  background-color: var(--color-bg);
-  pointer-events: none;
-}
-
 .app-header {
   --app-header-gutter: 1rem;
   height: calc(var(--app-header-height) + var(--app-safe-top));

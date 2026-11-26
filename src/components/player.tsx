@@ -28,6 +28,7 @@ import {
   savedBitrate,
 } from '@/lib/client/device-profile';
 import { useI18n } from '@/i18n/I18nProvider';
+import { useStatusBarColor } from '@/lib/client/theme';
 import { LADDER, LEVELS, needsFloat } from '@/lib/client/enhance/levels';
 import type { EnhanceState } from '@/lib/client/enhance/playback';
 import Link from 'next/link';
@@ -230,6 +231,7 @@ export function Player({
   onNext?: () => void;
 }) {
   const { t, language } = useI18n();
+  useStatusBarColor('#000000');
   const [source, setSource] = useState<PlaySource | null>(
     episode.jellyfinItemId ? { kind: 'jellyfin', itemId: episode.jellyfinItemId } : null,
   );

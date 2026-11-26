@@ -18,6 +18,7 @@ import type { BookManifest, ContinueUpdate, MediaDetail } from '@/types/shared';
 import { api, mediaHref, useApi } from '@/lib/client/api';
 import { BOOK_THEMES, useBookSettings, type BookSettings } from '@/lib/client/book-settings';
 import { useI18n } from '@/i18n/I18nProvider';
+import { useStatusBarColor } from '@/lib/client/theme';
 import { EpubView, type BookNav, type BookPosition } from '@/components/epub-view';
 import { PdfView } from '@/components/pdf-view';
 import { ErrorNote, Spinner, cx } from '@/components/ui';
@@ -74,6 +75,7 @@ function BookReader({ manifest, media }: { manifest: BookManifest; media: string
   const { mutate } = useSWRConfig();
   const [settings, update] = useBookSettings();
   const theme = BOOK_THEMES[settings.theme];
+  useStatusBarColor(theme.bg);
   const sheet = useApi<MediaDetail>(`/api/media?id=${encodeURIComponent(media)}`);
   const nav = useRef<BookNav>(null);
   const [chrome, setChrome] = useState(true);
