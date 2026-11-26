@@ -53,6 +53,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: SAFE_AREA_BOOT_SCRIPT }} />
       </head>
       <body className="font-sans">
+        {/* An opaque band under the status bar: iOS then extends its colour there instead of
+            laying its frosted edge over the top of the app (see globals.css). */}
+        <div aria-hidden className="status-bar-cap" />
         <Providers>{children}</Providers>
       </body>
     </html>
