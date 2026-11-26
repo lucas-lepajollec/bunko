@@ -16,6 +16,7 @@ import { useSWRConfig } from 'swr';
 import { api, mediaHref, send, useApi } from '@/lib/client/api';
 import { ReaderProgressWriter } from '@/lib/client/reader-progress';
 import { useI18n } from '@/i18n/I18nProvider';
+import { useStatusBarColor } from '@/lib/client/theme';
 import { ErrorNote, Spinner, cx } from '@/components/ui';
 
 type Mode = 'rtl' | 'ltr' | 'vertical';
@@ -32,6 +33,7 @@ export default function ReaderPage() {
 }
 
 function Reader() {
+  useStatusBarColor('#000000');
   const { chapter } = useParams<{ chapter: string }>();
   const params = useSearchParams();
   const media = params.get('media');
