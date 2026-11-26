@@ -186,7 +186,7 @@ function BookReader({ manifest, media }: { manifest: BookManifest; media: string
     >
       <header
         className={cx(
-          'absolute inset-x-0 top-0 z-10 flex h-14 items-center gap-1 border-b px-2 backdrop-blur-md transition-transform duration-200 md:px-4',
+          'absolute inset-x-0 top-0 z-10 flex h-[calc(3.5rem+var(--app-safe-top))] items-center gap-1 border-b pt-[var(--app-safe-top)] pr-[max(0.5rem,env(safe-area-inset-right))] pl-[max(0.5rem,env(safe-area-inset-left))] backdrop-blur-md transition-transform duration-200 md:px-4',
           !chrome && '-translate-y-full',
         )}
         style={bar}
@@ -259,7 +259,7 @@ function BookReader({ manifest, media }: { manifest: BookManifest; media: string
           'relative min-h-0 flex-1',
           manifest.format === 'epub' &&
             settings.mode === 'paged' &&
-            'pt-14 pb-[calc(58px+env(safe-area-inset-bottom))]',
+            'pt-[calc(3.5rem+var(--app-safe-top))] pb-[calc(58px+env(safe-area-inset-bottom))]',
         )}
       >
         {failed ? (
@@ -382,7 +382,7 @@ function BookReader({ manifest, media }: { manifest: BookManifest; media: string
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-[90] bg-black/50" />
           <Dialog.Content
-            className="theme-lock fixed inset-y-0 left-0 z-[90] flex w-[min(380px,88vw)] flex-col gap-2 p-4 outline-none"
+            className="theme-lock fixed inset-y-0 left-0 z-[90] flex w-[min(380px,88vw)] flex-col gap-2 p-4 pt-[max(1rem,var(--app-safe-top))] pb-[max(1rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] outline-none"
             style={{ background: theme.bg, color: theme.fg }}
           >
             <Dialog.Title className="font-display px-2 pt-2 text-[22px] font-extrabold">
@@ -528,7 +528,7 @@ function SettingsPanel({
       ref={box}
       role="dialog"
       aria-label={t('book.settings')}
-      className="absolute top-16 right-2 z-30 flex w-[min(340px,calc(100vw-16px))] flex-col gap-4 rounded-3xl border p-4 shadow-[0_24px_60px_rgba(0,0,0,0.45)] md:right-4"
+      className="absolute top-[calc(4rem+var(--app-safe-top))] right-[max(0.5rem,env(safe-area-inset-right))] z-30 flex w-[min(340px,calc(100vw-16px))] flex-col gap-4 rounded-3xl border p-4 shadow-[0_24px_60px_rgba(0,0,0,0.45)] md:right-4"
       style={{ background: theme.bg, color: theme.fg, borderColor: `${theme.soft}33` }}
     >
       {row(
