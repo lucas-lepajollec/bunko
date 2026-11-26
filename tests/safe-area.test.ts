@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SAFE_AREA_BOOT_SCRIPT, statusBarFallback } from '@/lib/safe-area';
+import { IPHONE_STATUS_BAR, SAFE_AREA_BOOT_SCRIPT, statusBarFallback } from '@/lib/safe-area';
 
 /** Runs the boot script against a fake installed-app window; returns the inset it sets. */
 function boot({
@@ -51,6 +51,13 @@ describe('iOS status bar fallback', () => {
     expect(statusBarFallback(844)).toBe(47);
     expect(statusBarFallback(667)).toBe(20);
     expect(statusBarFallback(900)).toBe(59);
+  });
+
+  it('boots with the same table', () => {
+    for (const [side, bar] of Object.entries(IPHONE_STATUS_BAR)) {
+      const s = { width: 400, height: Number(side) };
+      expect(boot({ screen: s, inner: s }).inset).toBe(`${bar}px`);
+    }
   });
 
   it('fills in the inset when an installed app reports none', () => {
