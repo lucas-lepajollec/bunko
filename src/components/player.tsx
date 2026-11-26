@@ -424,7 +424,7 @@ function SearchingScreen({ episode, onClose }: { episode: PlayerEpisode; onClose
         type="button"
         onClick={onClose}
         aria-label={t('player.back')}
-        className="absolute top-4 left-4 flex size-11 items-center justify-center rounded-full bg-white/[0.12] backdrop-blur-md hover:bg-white/[0.2] md:top-6 md:left-6"
+        className="absolute top-[max(1rem,var(--app-safe-top))] left-[max(1rem,env(safe-area-inset-left))] flex size-11 items-center justify-center rounded-full bg-white/[0.12] backdrop-blur-md hover:bg-white/[0.2] md:top-[max(1.5rem,var(--app-safe-top))] md:left-6"
       >
         <svg
           width="20"
@@ -1625,7 +1625,7 @@ function Screen({
       {/* Top: back, what is playing, and where it comes from. */}
       <div
         className={cx(
-          'absolute inset-x-0 top-0 flex items-center gap-3 bg-gradient-to-b from-black/80 to-transparent p-4 pb-16 transition-opacity duration-300 md:p-6',
+          'absolute inset-x-0 top-0 flex items-center gap-3 bg-gradient-to-b from-black/80 to-transparent px-[max(1rem,env(safe-area-inset-left),env(safe-area-inset-right))] pt-[max(1rem,var(--app-safe-top))] pb-16 transition-opacity duration-300 md:px-6 md:pt-[max(1.5rem,var(--app-safe-top))]',
           shown ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
       >

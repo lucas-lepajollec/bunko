@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-11-26
+
+Installed iPhone apps keep their top controls below the status bar again.
+
+### Fixed
+
+- Installed app on iOS 26.1 and later: iOS covers the status bar with a frosted layer but
+  reports no top safe area (WebKit bug 301994), so the header, the reader and player bars sat
+  under the status bar, blurred and out of reach. Bunko now uses the status bar height of the
+  device in that case.
+- Book reader, video player and the download search dialog follow the top safe area (and the
+  side ones in landscape) like the rest of the app.
+
+### Upgrading
+
+- No schema change. Pull the new image and restart.
+
 ## [1.1.1] - 2026-11-25
 
 The phone menu becomes a bubble like the desktop menus, and the type selector returns to the

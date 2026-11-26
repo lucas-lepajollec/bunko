@@ -5,6 +5,7 @@ import { Providers } from '@/components/shell';
 import { PRODUCT_NAME } from '@/lib/client/brand';
 import { isDemoMode } from '@/lib/demo-mode';
 import { THEME_BOOT_SCRIPT } from '@/lib/themes';
+import { SAFE_AREA_BOOT_SCRIPT } from '@/lib/safe-area';
 import './globals.css';
 
 export function generateMetadata(): Metadata {
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: SAFE_AREA_BOOT_SCRIPT }} />
       </head>
       <body className="font-sans">
         <Providers>{children}</Providers>
